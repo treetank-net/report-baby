@@ -1,0 +1,26 @@
+{
+  "name": "report-baby",
+  "version": "0.1.1",
+  "description": "Render HTML/data into polished PDF/PNG reports via headless Chromium.",
+  "author": {
+    "name": "Jacek Marianski",
+    "url": "https://treetank.net"
+  },
+  "license": "MIT",
+  "keywords": ["report", "pdf", "png", "chromium", "mcp", "render"],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Report Baby",
+    "shortDescription": "Render polished PDF/PNG reports from HTML or structured data.",
+    "longDescription": "Local report rendering MCP server for turning HTML, URLs, or built-in templates into client-facing PDF and PNG deliverables.",
+    "developerName": "Jacek Marianski",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read"],
+    "defaultPrompt": [
+      "Render this HTML report to PDF.",
+      "Create a polished report from this data.",
+      "Export this page as a PNG screenshot."
+    ],
+    "brandColor": "#14532D"
+  }
+}

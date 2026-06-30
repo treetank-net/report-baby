@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "report": {
+      "command": "node",
+      "args": ["scripts/start-mcp.js"],
+      "cwd": ".",
+      "env": {
+        "REPORT_BABY_DATA": "${REPORT_BABY_DATA:-}",
+        "REPORT_BABY_CHROMIUM_CHANNEL": "${REPORT_BABY_CHROMIUM_CHANNEL:-}"
+      }
+    }
+  }
+}

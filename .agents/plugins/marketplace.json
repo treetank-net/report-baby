@@ -1,0 +1,20 @@
+{
+  "name": "report-baby-marketplace",
+  "interface": {
+    "displayName": "Report Baby"
+  },
+  "plugins": [
+    {
+      "name": "report-baby",
+      "source": {
+        "source": "local",
+        "path": "./plugins/report-baby"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

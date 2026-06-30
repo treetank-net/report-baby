@@ -1,0 +1,23 @@
+{
+  "name": "report-baby",
+  "description": "Render HTML/data into polished PDF/PNG reports via headless Chromium. Pure local render engine — no accounts, no auth. Returns file paths. Feedback & bug reports: Jacek Mariański (jmarianski@trans.eu)",
+  "version": "0.1.1",
+  "author": {
+    "name": "Jacek Mariański",
+    "email": "jmarianski@trans.eu",
+    "url": "https://treetank.net"
+  },
+  "license": "MIT",
+  "keywords": ["report", "pdf", "png", "chromium", "render", "mcp"],
+  "mcpServers": {
+    "report": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/start-mcp.js"],
+      "env": {
+        "CLAUDE_PLUGIN_DATA": "${CLAUDE_PLUGIN_DATA}",
+        "REPORT_BABY_DATA": "${REPORT_BABY_DATA:-}",
+        "REPORT_BABY_CHROMIUM_CHANNEL": "${REPORT_BABY_CHROMIUM_CHANNEL:-}"
+      }
+    }
+  }
+}

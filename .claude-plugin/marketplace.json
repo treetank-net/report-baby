@@ -1,0 +1,17 @@
+{
+  "name": "report-baby-marketplace",
+  "metadata": {
+    "description": "Report rendering plugins by Treetank."
+  },
+  "owner": {
+    "name": "treetank"
+  },
+  "plugins": [
+    {
+      "description": "Render HTML/data into polished PDF/PNG reports via headless Chromium. Pure local render engine — no accounts, no auth. Returns file paths.",
+      "name": "report-baby",
+      "source": "./",
+      "version": "0.1.1"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "report-baby",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "Headless-Chromium HTML/data → PDF/PNG render MCP server.",
+  "author": "Jacek Marianski <jmarianski@trans.eu>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/treetank-net/report-baby"
+  },
+  "private": true
+}
