@@ -1,131 +1,48 @@
-import type { ReportConfig } from './config.js';
-import { mkdir } from 'fs/promises';
-import { dirname } from 'path';
-import { chromium, type Browser } from 'playwright';
+import { initWasm, Resvg } from '@resvg/resvg-wasm';
+import { jsPDF } from 'jspdf';
+import { applyPlugin } from 'jspdf-autotable';
+import wasmBinary from '@resvg/resvg-wasm/index_bg.wasm';
+import fontRegular from './assets/font.ttf';
+import fontBold from './assets/font-bold.ttf';
+import { FONT_FAMILY } from './svg.js';
 
-export interface PdfOptions {
-  format?: string;
-  landscape?: boolean;
-  margin?: { top?: string; right?: string; bottom?: string; left?: string };
-  printBackground?: boolean;
+applyPlugin(jsPDF);
+
+const fontRegularBase64 = Buffer.from(fontRegular).toString('base64');
+const fontBoldBase64 = Buffer.from(fontBold).toString('base64');
+
+let wasmReady: Promise<void> | null = null;
+
+function ensureWasm(): Promise<void> {
+  if (!wasmReady) wasmReady = initWasm(wasmBinary);
+  return wasmReady;
 }
 
-export interface ImageOptions {
-  width?: number;
-  height?: number;
-  deviceScaleFactor?: number;
-  fullPage?: boolean;
-  type?: 'png' | 'jpeg';
+export async function renderSvgToPng(svg: string, width?: number): Promise<Buffer> {
+  await ensureWasm();
+  const options: ConstructorParameters<typeof Resvg>[1] = {
+    font: {
+      fontBuffers: [fontRegular, fontBold],
+      defaultFontFamily: FONT_FAMILY,
+      loadSystemFonts: false,
+    },
+  };
+  if (width) options.fitTo = { mode: 'width', value: width };
+  const resvg = new Resvg(svg, options);
+  const png = resvg.render().asPng();
+  return Buffer.from(png);
 }
 
-export async function launchBrowser(cfg: ReportConfig): Promise<Browser> {
-  return chromium.launch({
-    channel: cfg.chromiumChannel,
-    headless: true,
-    args: ['--disable-crash-reporter', '--disable-crashpad'],
-  });
+export function newPdf(orientation: 'portrait' | 'landscape' = 'portrait'): jsPDF {
+  const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+  doc.addFileToVFS('DejaVuSans.ttf', fontRegularBase64);
+  doc.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
+  doc.addFileToVFS('DejaVuSans-Bold.ttf', fontBoldBase64);
+  doc.addFont('DejaVuSans-Bold.ttf', 'DejaVu', 'bold');
+  doc.setFont('DejaVu', 'normal');
+  return doc;
 }
 
-export async function renderHtmlToPdf(
-  cfg: ReportConfig,
-  html: string,
-  outputPath: string,
-  options: PdfOptions = {},
-): Promise<string> {
-  await mkdir(dirname(outputPath), { recursive: true });
-  const browser = await launchBrowser(cfg);
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle' });
-    await page.pdf({
-      path: outputPath,
-      format: options.format,
-      landscape: options.landscape,
-      margin: options.margin,
-      printBackground: options.printBackground ?? true,
-    });
-    return outputPath;
-  } finally {
-    await browser.close();
-  }
-}
-
-export async function renderHtmlToImage(
-  cfg: ReportConfig,
-  html: string,
-  outputPath: string,
-  options: ImageOptions = {},
-): Promise<string> {
-  await mkdir(dirname(outputPath), { recursive: true });
-  const browser = await launchBrowser(cfg);
-  try {
-    const page = await browser.newPage({
-      viewport: {
-        width: options.width ?? 1280,
-        height: options.height ?? 900,
-      },
-      deviceScaleFactor: options.deviceScaleFactor ?? 1,
-    });
-    await page.setContent(html, { waitUntil: 'networkidle' });
-    await page.screenshot({
-      path: outputPath,
-      fullPage: options.fullPage ?? true,
-      type: options.type ?? 'png',
-    });
-    return outputPath;
-  } finally {
-    await browser.close();
-  }
-}
-
-export async function renderUrlToPdf(
-  cfg: ReportConfig,
-  url: string,
-  outputPath: string,
-  options: PdfOptions = {},
-): Promise<string> {
-  await mkdir(dirname(outputPath), { recursive: true });
-  const browser = await launchBrowser(cfg);
-  try {
-    const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'networkidle' });
-    await page.pdf({
-      path: outputPath,
-      format: options.format,
-      landscape: options.landscape,
-      margin: options.margin,
-      printBackground: options.printBackground ?? true,
-    });
-    return outputPath;
-  } finally {
-    await browser.close();
-  }
-}
-
-export async function renderUrlToImage(
-  cfg: ReportConfig,
-  url: string,
-  outputPath: string,
-  options: ImageOptions = {},
-): Promise<string> {
-  await mkdir(dirname(outputPath), { recursive: true });
-  const browser = await launchBrowser(cfg);
-  try {
-    const page = await browser.newPage({
-      viewport: {
-        width: options.width ?? 1280,
-        height: options.height ?? 900,
-      },
-      deviceScaleFactor: options.deviceScaleFactor ?? 1,
-    });
-    await page.goto(url, { waitUntil: 'networkidle' });
-    await page.screenshot({
-      path: outputPath,
-      fullPage: options.fullPage ?? true,
-      type: options.type ?? 'png',
-    });
-    return outputPath;
-  } finally {
-    await browser.close();
-  }
+export function pdfFont(): string {
+  return 'DejaVu';
 }

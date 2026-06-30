@@ -2,7 +2,6 @@ import { join } from 'path';
 
 export interface ReportConfig {
   outputDir: string;
-  chromiumChannel?: string;
 }
 
 function isValidEnv(val: string | undefined): val is string {
@@ -27,9 +26,7 @@ export function getOutputDir(): string {
 }
 
 export function configFromEnv(): ReportConfig {
-  const chromiumChannel = env('REPORT_BABY_CHROMIUM_CHANNEL');
   return {
     outputDir: getOutputDir(),
-    chromiumChannel: chromiumChannel || undefined,
   };
 }

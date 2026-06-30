@@ -8,10 +8,10 @@
   },
   "plugins": [
     {
-      "description": "Render HTML/data into polished PDF/PNG reports via headless Chromium. Pure local render engine — no accounts, no auth. Returns file paths.",
+      "description": "Render structured data into polished PNG charts and PDF reports locally — self-contained SVG+PDF engine, no browser, no accounts, no auth. Returns file paths.",
       "name": "report-baby",
       "source": "./",
-      "version": "0.1.1"
+      "version": "0.2.0"
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "name": "report-baby",
-  "version": "0.1.1",
-  "description": "Render HTML/data into polished PDF/PNG reports via headless Chromium.",
+  "version": "0.2.0",
+  "description": "Render structured data into polished PNG charts and PDF reports locally — self-contained SVG+PDF engine, no browser.",
   "author": {
     "name": "treetank",
     "url": "https://treetank.net"
@@ -9,19 +9,19 @@
   "homepage": "https://github.com/treetank-net/report-baby",
   "repository": "https://github.com/treetank-net/report-baby",
   "license": "MIT",
-  "keywords": ["report", "pdf", "png", "chromium", "mcp", "render"],
+  "keywords": ["report", "pdf", "png", "chart", "svg", "mcp", "render"],
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Report Baby",
-    "shortDescription": "Render polished PDF/PNG reports from HTML or structured data.",
-    "longDescription": "Local report rendering MCP server for turning HTML, URLs, or built-in templates into client-facing PDF and PNG deliverables.",
+    "shortDescription": "Render polished PNG charts and PDF reports from structured data.",
+    "longDescription": "Local, self-contained render MCP server: turns data into PNG charts, metric cards, and multi-page PDF reports. No browser, no accounts, no auth — returns file paths.",
     "developerName": "treetank",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read"],
     "defaultPrompt": [
-      "Render this HTML report to PDF.",
-      "Create a polished report from this data.",
-      "Export this page as a PNG screenshot."
+      "Render a bar chart of this data as a PNG.",
+      "Create a polished PDF report from this data.",
+      "Make KPI metric cards I can paste into a deck."
     ],
     "brandColor": "#14532D"
   }

@@ -1,189 +1,109 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { mkdir, readFile } from 'fs/promises';
-import { extname, join } from 'path';
+import { mkdir, writeFile } from 'fs/promises';
+import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import type { ReportConfig } from '../config.js';
-import { listTemplates, renderTemplate } from '../templates.js';
-import {
-  renderHtmlToImage,
-  renderHtmlToPdf,
-  renderUrlToImage,
-  renderUrlToPdf,
-  type ImageOptions,
-  type PdfOptions,
-} from '../render.js';
+import { listTemplates, renderReportPdf, type ReportData } from '../templates.js';
+import { renderChart, metricCards, type ChartType } from '../svg.js';
+import { renderSvgToPng } from '../render.js';
 
-const pdfOptionsSchema = z
-  .object({
-    format: z.string().optional(),
-    landscape: z.boolean().optional(),
-    margin: z.string().optional(),
-    print_background: z.boolean().optional(),
-  })
-  .optional();
+const datumSchema = z.object({
+  label: z.string(),
+  value: z.number(),
+  color: z.string().optional(),
+});
 
-const imageOptionsSchema = z
-  .object({
-    width: z.number().optional(),
-    height: z.number().optional(),
-    device_scale_factor: z.number().optional(),
-    full_page: z.boolean().optional(),
-    type: z.enum(['png', 'jpeg']).optional(),
-  })
-  .optional();
-
-function requireHtmlXor(html?: string, htmlPath?: string) {
-  const hasHtml = typeof html === 'string' && html.length > 0;
-  const hasPath = typeof htmlPath === 'string' && htmlPath.length > 0;
-  if (hasHtml === hasPath) {
-    throw new Error('Provide exactly one of html or html_path.');
-  }
-}
+const cardSchema = z.object({
+  label: z.string(),
+  value: z.union([z.string(), z.number()]),
+  delta: z.string().optional(),
+  trend: z.enum(['up', 'down', 'flat']).optional(),
+  note: z.string().optional(),
+});
 
 function outputPath(cfg: ReportConfig, explicit: string | undefined, ext: string): string {
   if (explicit && explicit.length > 0) return explicit;
-  return join(cfg.outputDir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}.${ext}`);
+  return join(cfg.outputDir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}.${ext}`);
 }
 
-function pdfOptions(options: z.infer<NonNullable<typeof pdfOptionsSchema>>): PdfOptions {
-  const margin = options?.margin
-    ? { top: options.margin, right: options.margin, bottom: options.margin, left: options.margin }
-    : undefined;
-  return {
-    format: options?.format,
-    landscape: options?.landscape,
-    margin,
-    printBackground: options?.print_background,
-  };
-}
-
-function imageOptions(options: z.infer<NonNullable<typeof imageOptionsSchema>>): ImageOptions {
-  return {
-    width: options?.width,
-    height: options?.height,
-    deviceScaleFactor: options?.device_scale_factor,
-    fullPage: options?.full_page,
-    type: options?.type,
-  };
-}
-
-async function htmlInput(html?: string, htmlPath?: string): Promise<string> {
-  if (html) return html;
-  if (!htmlPath) throw new Error('Provide html or html_path.');
-  return readFile(htmlPath, 'utf-8');
-}
-
-async function fileResponse(path: string, returnImage = false, type: 'png' | 'jpeg' = 'png') {
-  const content: any[] = [{ type: 'text' as const, text: path }];
-  if (returnImage) {
-    const data = await readFile(path);
-    content.push({
-      type: 'image' as const,
-      data: data.toString('base64'),
-      mimeType: type === 'jpeg' ? 'image/jpeg' : 'image/png',
-    });
-  }
+async function writePng(cfg: ReportConfig, svg: string, width: number | undefined, explicit: string | undefined, returnImage: boolean) {
+  await mkdir(cfg.outputDir, { recursive: true });
+  const out = outputPath(cfg, explicit, 'png');
+  const png = await renderSvgToPng(svg, width);
+  await writeFile(out, png);
+  const content: any[] = [{ type: 'text' as const, text: out }];
+  if (returnImage) content.push({ type: 'image' as const, data: png.toString('base64'), mimeType: 'image/png' });
   return { content };
-}
-
-function imageExt(explicit: string | undefined, options: z.infer<NonNullable<typeof imageOptionsSchema>>): 'png' | 'jpeg' {
-  if (options?.type) return options.type;
-  const ext = explicit ? extname(explicit).toLowerCase() : '';
-  return ext === '.jpg' || ext === '.jpeg' ? 'jpeg' : 'png';
 }
 
 export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
   server.tool(
-    'render_html_to_pdf',
-    'Render an HTML string or HTML file to a PDF via headless Chromium. Returns the path to the written PDF file (not the file content).',
+    'render_chart',
+    'Render a bar, line, or pie chart to a standalone PNG from data values. Returns the path to the written PNG. This is the primary tool for charts to paste into a report or document.',
     {
-      html: z.string().optional(),
-      html_path: z.string().optional(),
+      type: z.enum(['bar', 'line', 'pie']),
+      data: z.array(datumSchema).min(1),
+      title: z.string().optional(),
+      subtitle: z.string().optional(),
+      prefix: z.string().optional(),
+      suffix: z.string().optional(),
+      width: z.number().optional(),
       output_path: z.string().optional(),
-      options: pdfOptionsSchema,
-    },
-    async ({ html, html_path, output_path, options }) => {
-      requireHtmlXor(html, html_path);
-      const out = outputPath(cfg, output_path, 'pdf');
-      const rendered = await renderHtmlToPdf(cfg, await htmlInput(html, html_path), out, pdfOptions(options));
-      return fileResponse(rendered);
-    },
-  );
-
-  server.tool(
-    'render_html_to_image',
-    'Render an HTML string or HTML file to a PNG/JPEG via headless Chromium. Returns the path to the written image file. Set return_image to also include the image in the response (only when the LLM must judge layout/aesthetics).',
-    {
-      html: z.string().optional(),
-      html_path: z.string().optional(),
-      output_path: z.string().optional(),
-      options: imageOptionsSchema,
       return_image: z.boolean().optional().default(false),
     },
-    async ({ html, html_path, output_path, options, return_image }) => {
-      requireHtmlXor(html, html_path);
-      const ext = imageExt(output_path, options);
-      const out = outputPath(cfg, output_path, ext === 'jpeg' ? 'jpg' : 'png');
-      const rendered = await renderHtmlToImage(cfg, await htmlInput(html, html_path), out, imageOptions({ ...options, type: ext }));
-      return fileResponse(rendered, return_image, ext);
+    async ({ type, data, title, subtitle, prefix, suffix, width, output_path, return_image }) => {
+      const svg = renderChart(type as ChartType, { data, title, subtitle, prefix, suffix });
+      return writePng(cfg, svg, width, output_path, return_image);
     },
   );
 
   server.tool(
-    'render_url_to_pdf',
-    'Navigate to a URL and render it to a PDF via headless Chromium. Returns the path to the written PDF file.',
+    'render_metric_cards',
+    'Render a grid of KPI / metric cards (label, big value, optional delta with up/down trend color) to a standalone PNG. Returns the path to the written PNG.',
     {
-      url: z.string().url(),
+      cards: z.array(cardSchema).min(1),
+      title: z.string().optional(),
+      subtitle: z.string().optional(),
+      columns: z.number().optional(),
+      width: z.number().optional(),
       output_path: z.string().optional(),
-      options: pdfOptionsSchema,
-    },
-    async ({ url, output_path, options }) => {
-      const out = outputPath(cfg, output_path, 'pdf');
-      const rendered = await renderUrlToPdf(cfg, url, out, pdfOptions(options));
-      return fileResponse(rendered);
-    },
-  );
-
-  server.tool(
-    'render_url_to_image',
-    'Navigate to a URL and render it to a PNG/JPEG via headless Chromium. Returns the path to the written image file. Set return_image to also include the image in the response (only when the LLM must judge layout/aesthetics).',
-    {
-      url: z.string().url(),
-      output_path: z.string().optional(),
-      options: imageOptionsSchema,
       return_image: z.boolean().optional().default(false),
     },
-    async ({ url, output_path, options, return_image }) => {
-      const ext = imageExt(output_path, options);
-      const out = outputPath(cfg, output_path, ext === 'jpeg' ? 'jpg' : 'png');
-      const rendered = await renderUrlToImage(cfg, url, out, imageOptions({ ...options, type: ext }));
-      return fileResponse(rendered, return_image, ext);
+    async ({ cards, title, subtitle, columns, width, output_path, return_image }) => {
+      const svg = metricCards({ cards, title, subtitle, columns, width });
+      return writePng(cfg, svg, width, output_path, return_image);
+    },
+  );
+
+  server.tool(
+    'render_svg',
+    'Rasterize an arbitrary SVG string to a PNG (escape hatch for fully custom graphics). Text needs font-family="DejaVu Sans" to render. Returns the path to the written PNG.',
+    {
+      svg: z.string(),
+      width: z.number().optional(),
+      output_path: z.string().optional(),
+      return_image: z.boolean().optional().default(false),
+    },
+    async ({ svg, width, output_path, return_image }) => {
+      return writePng(cfg, svg, width, output_path, return_image);
     },
   );
 
   server.tool(
     'render_report',
-    'Opinionated end-of-task deliverable: feed a built-in styled template plus your data and get a polished PDF/PNG report file. Returns the path to the written file. Use this for the "nice client-facing report" at the end.',
+    'Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished multi-page A4 PDF (branded header, KPI grid, embedded charts, narrative sections, data table, highlights, footer). Returns the path to the written PDF. Use this for the final client-facing report.',
     {
       template: z.string().optional().default('default-report'),
       data: z.record(z.any()),
       output_path: z.string().optional(),
-      format: z.enum(['pdf', 'png']).optional().default('pdf'),
-      options: z.union([pdfOptionsSchema, imageOptionsSchema]).optional(),
-      return_image: z.boolean().optional().default(false),
     },
-    async ({ template, data, output_path, format, options, return_image }) => {
+    async ({ template, data, output_path }) => {
       await mkdir(cfg.outputDir, { recursive: true });
-      const html = renderTemplate(template, data);
-      if (format === 'png') {
-        const out = outputPath(cfg, output_path, 'png');
-        const rendered = await renderHtmlToImage(cfg, html, out, imageOptions({ ...(options as any), type: 'png' }));
-        return fileResponse(rendered, return_image, 'png');
-      }
       const out = outputPath(cfg, output_path, 'pdf');
-      const rendered = await renderHtmlToPdf(cfg, html, out, pdfOptions(options as any));
-      return fileResponse(rendered);
+      const pdf = await renderReportPdf(template, data as ReportData);
+      await writeFile(out, pdf);
+      return { content: [{ type: 'text' as const, text: out }] };
     },
   );
 

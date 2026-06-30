@@ -7,13 +7,13 @@ import { registerAuthTools } from './tools/auth.js';
 async function main() {
   const server = new McpServer({
     name: 'report-baby',
-    version: '0.1.1',
+    version: '0.2.0',
   }, {
     instructions: [
-      'This server renders HTML into polished PDF/PNG files via headless Chromium. It is a pure render engine: no accounts, no auth, no external mutations.',
-      'For a final, human-facing deliverable (e.g. a client report) generate complete, self-contained HTML and render it with render_html_to_pdf, or use render_report with the built-in styled template plus your data.',
-      'Render tools return the PATH to the written file, not the file itself. Do NOT pull rendered images into context to read numbers — you have the source data already. Only pass return_image: true when you must visually judge layout or aesthetics.',
-      'Charts are out of scope for this server: embed inline Chart.js or pre-rendered SVG in the HTML you pass; report-baby only rasterizes/paginates it.',
+      'This server is a self-contained render engine: it turns structured data into polished PNG charts and PDF reports locally. No accounts, no auth, no network, no headless browser — pure compute, fully bundled.',
+      'Charts (render_chart) and metric cards (render_metric_cards) produce standalone PNGs to paste into a document or chat. render_report produces a multi-page A4 PDF as the final client-facing deliverable.',
+      'For a chart, pass the raw data values (label/value pairs) — do NOT hand-build SVG unless you need something the chart types do not cover (then use render_svg; text needs font-family="DejaVu Sans").',
+      'Render tools return the PATH to the written file. Do NOT pull rendered images into context to read numbers — you already have the source data. Only pass return_image: true when you must visually judge layout or aesthetics.',
     ].join(' '),
   });
 

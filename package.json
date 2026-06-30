@@ -1,9 +1,9 @@
 {
   "name": "report-baby",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Headless-Chromium HTML/data → PDF/PNG render MCP server.",
-  "author": "Jacek Marianski <jmarianski@trans.eu>",
+  "description": "Self-contained data → PNG charts / PDF reports render MCP server (resvg-wasm + jsPDF).",
+  "author": "Jacek Mariański <jmarianski@trans.eu>",
   "license": "MIT",
   "repository": {
     "type": "git",

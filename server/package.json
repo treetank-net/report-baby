@@ -1,21 +1,24 @@
 {
   "name": "report-baby-server",
-  "version": "0.1.1",
-  "description": "Headless-Chromium HTML/data → PDF/PNG render MCP server",
+  "version": "0.2.0",
+  "description": "Self-contained SVG/data → PNG/PDF render MCP server (resvg-wasm + jsPDF, zero runtime deps)",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "bundle.cjs",
   "scripts": {
-    "build": "tsc && npx esbuild dist/index.js --bundle --platform=node --target=node18 --format=cjs --minify --external:playwright --outfile=bundle.cjs",
-    "dev": "tsc --watch",
+    "build": "tsc --noEmit && npx esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=bundle.cjs",
+    "dev": "tsc --watch --noEmit",
     "start": "node bundle.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
-    "playwright": "^1.48.0",
+    "@resvg/resvg-wasm": "^2.6.2",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4",
     "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
+    "esbuild": "^0.24.0",
     "typescript": "^5.9.3"
   },
   "engines": {
