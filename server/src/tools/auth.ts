@@ -70,7 +70,7 @@ async function fetchChangelog(fromVer: string, toVer: string): Promise<string> {
 
 export function registerAuthTools(server: McpServer, _cfg: ReportConfig) {
   server.tool(
-    'check_update',
+    'update_plugin',
     'Check for plugin updates and install them. After updating, the user must restart the session for changes to take effect.',
     {},
     async () => {

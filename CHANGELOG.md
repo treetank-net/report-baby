@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.3.0
+- Renamed the self-update MCP tool from `check_update` to `update_plugin` and updated docs to match the exposed tool name.
+
 ## v0.2.0
 - Replaced the headless-Chromium/Playwright engine with a fully self-contained one: `resvg-wasm` (SVG → PNG) + `jsPDF`/`jspdf-autotable` (PDF), with DejaVu Sans embedded for full diacritics. The bundle now has zero runtime dependencies — no browser download, no `npm install` on first run. This fixes the startup crash on machines without Playwright/Chromium.
 - New native chart engine (`svg.ts`): bar, line (with area), and donut charts plus KPI metric cards, rendered straight from data values — no HTML, no external chart library.
@@ -17,4 +20,4 @@
 - Render tools return file paths (deliverable for humans), not images pulled into context.
 - Optional `return_image` flag for layout/aesthetics review.
 - Opinionated `render_report` tool with a built-in styled `default-report` template.
-- `check_update` self-update tool; `start-mcp.js` auto-update + Chromium detection.
+- `update_plugin` self-update tool; `start-mcp.js` auto-update + Chromium detection.

@@ -41,7 +41,7 @@ assets/
 
 tools/
   render.ts         — registerRenderTools(): render_chart, render_metric_cards, render_svg, render_report, list_templates
-  auth.ts           — registerAuthTools(): check_update (self-update + changelog). BRAK setup_auth — nie ma OAuth.
+  auth.ts           — registerAuthTools(): update_plugin (self-update + changelog). BRAK setup_auth — nie ma OAuth.
 ```
 
 ### Toole
@@ -50,7 +50,7 @@ tools/
 - `render_svg` { svg, width?, output_path?, return_image? } — dowolny SVG → PNG (escape hatch; tekst wymaga `font-family="DejaVu Sans"`).
 - `render_report` { template?='default-report', data, output_path? } — OPINIONATED: szablon + dane → wielostronicowy PDF. To "ładne raporty na koniec".
 - `list_templates` {} — lista szablonów (`default-report`, `campaign-summary`).
-- `check_update` {} — sprawdź/zainstaluj aktualizacje pluginu.
+- `update_plugin` {} — sprawdź/zainstaluj aktualizacje pluginu.
 
 ### Kształt danych `render_report`
 `{ brand?, title?, subtitle?, period?, intro?, kpis?: [{label,value,delta?,trend?,note?}], charts?: [{type,title?,subtitle?,prefix?,suffix?,data}], sections?: [{heading,body}], table?: {head,body,caption?}, highlights?: string[], footer? }`.
@@ -100,7 +100,7 @@ i jsPDF bundlują się w całości esbuildem, font wchodzi binarnie do bundla. E
 ## Repo & CI
 - GitLab: `treetank/report-baby` (origin, primary).
 - GitHub: `treetank-net/report-baby` (mirror, remote `gh`, branch `main`).
-- REPO_RAW (`start-mcp.js`, `check_update`): `https://raw.githubusercontent.com/treetank-net/report-baby/main`.
+- REPO_RAW (`start-mcp.js`, `update_plugin`): `https://raw.githubusercontent.com/treetank-net/report-baby/main`.
 
 ## Commands
 - `cd server && npm install && npm run build` — zależności (dev) + typecheck + bundle.
