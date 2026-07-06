@@ -13,7 +13,7 @@
 - [ ] Wykres liniowy z wieloma seriami + legendą.
 - [ ] Wykres poziomy (horizontal bar) dla długich etykiet kategorii.
 - [ ] Kolejne szablony raportów (one-pager, comparison, dashboard-grid).
-- [ ] Walidacja danych szablonu/wykresu (zod) zamiast luźnego `record`.
+- [x] Walidacja danych szablonu/wykresu (zod) zamiast luźnego `record` (v0.3.1).
 
 ## Faza 3 — branding i layout
 - [ ] Logo klienta (PNG/SVG data URI) w nagłówku raportu.

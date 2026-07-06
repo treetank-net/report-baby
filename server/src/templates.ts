@@ -58,6 +58,7 @@ const PAGE_W = 210;
 const PAGE_H = 297;
 const MARGIN = 18;
 const CONTENT_W = PAGE_W - MARGIN * 2;
+const USABLE_H = PAGE_H - MARGIN * 2;
 
 class Cursor {
   y = MARGIN;
@@ -67,6 +68,25 @@ class Cursor {
       this.doc.addPage();
       this.y = MARGIN;
     }
+  }
+  keepTogether(blockHeight: number, minLeadHeight: number): void {
+    this.ensure(blockHeight <= USABLE_H ? blockHeight : minLeadHeight);
+  }
+  breakPage(): void {
+    this.doc.addPage();
+    this.y = MARGIN;
+  }
+}
+
+function drawParagraph(doc: jsPDF, cur: Cursor, lines: string[], lineHeight: number, x = MARGIN): void {
+  let remaining = lines;
+  while (remaining.length > 0) {
+    const fit = Math.max(1, Math.floor((PAGE_H - MARGIN - cur.y) / lineHeight));
+    const chunk = remaining.slice(0, fit);
+    doc.text(chunk, x, cur.y);
+    cur.y += chunk.length * lineHeight;
+    remaining = remaining.slice(chunk.length);
+    if (remaining.length > 0) cur.breakPage();
   }
 }
 
@@ -118,9 +138,9 @@ function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData): void {
   doc.setFontSize(11);
   doc.setTextColor(51, 65, 85);
   const lines = doc.splitTextToSize(data.intro, CONTENT_W);
-  cur.ensure(lines.length * 5.2 + 6);
-  doc.text(lines, MARGIN, cur.y);
-  cur.y += lines.length * 5.2 + 8;
+  cur.keepTogether(lines.length * 5.2 + 6, 5.2 * 3);
+  drawParagraph(doc, cur, lines, 5.2);
+  cur.y += 8;
 }
 
 function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData): void {
@@ -194,29 +214,38 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData): void {
   for (const s of data.sections ?? []) {
     doc.setFont(font, 'bold');
     doc.setFontSize(13);
+    const headingLines = doc.splitTextToSize(s.heading, CONTENT_W);
+    const headingH = headingLines.length * 6;
+    doc.setFont(font, 'normal');
+    doc.setFontSize(10.5);
     const bodyLines = doc.splitTextToSize(s.body, CONTENT_W);
-    cur.ensure(8 + bodyLines.length * 5);
+    cur.keepTogether(headingH + 2 + bodyLines.length * 5, headingH + 2 + 3 * 5);
+    doc.setFont(font, 'bold');
+    doc.setFontSize(13);
     doc.setTextColor(...INK);
-    doc.text(s.heading, MARGIN, cur.y);
-    cur.y += 6;
+    doc.text(headingLines, MARGIN, cur.y);
+    cur.y += headingH;
     doc.setFont(font, 'normal');
     doc.setFontSize(10.5);
     doc.setTextColor(51, 65, 85);
-    doc.text(bodyLines, MARGIN, cur.y);
-    cur.y += bodyLines.length * 5 + 6;
+    drawParagraph(doc, cur, bodyLines, 5);
+    cur.y += 6;
   }
 }
 
 function renderTable(doc: jsPDF, cur: Cursor, data: ReportData): void {
   if (!data.table) return;
   const font = pdfFont();
+  const firstRowsH = 20;
   if (data.table.caption) {
     doc.setFont(font, 'bold');
     doc.setFontSize(13);
     doc.setTextColor(...INK);
-    cur.ensure(10);
+    cur.ensure(10 + firstRowsH);
     doc.text(data.table.caption, MARGIN, cur.y);
     cur.y += 4;
+  } else {
+    cur.ensure(firstRowsH);
   }
   const tableOptions: UserOptions = {
     head: [data.table.head],
@@ -235,10 +264,13 @@ function renderHighlights(doc: jsPDF, cur: Cursor, data: ReportData): void {
   const highlights = data.highlights ?? [];
   if (highlights.length === 0) return;
   const font = pdfFont();
+  doc.setFont(font, 'normal');
+  doc.setFontSize(10.5);
+  const firstLines = doc.splitTextToSize(highlights[0], CONTENT_W - 6);
   doc.setFont(font, 'bold');
   doc.setFontSize(13);
   doc.setTextColor(...INK);
-  cur.ensure(10);
+  cur.ensure(10 + firstLines.length * 5 + 2);
   doc.text('Highlights', MARGIN, cur.y);
   cur.y += 6;
   doc.setFont(font, 'normal');

@@ -93,6 +93,11 @@ i jsPDF bundlują się w całości esbuildem, font wchodzi binarnie do bundla. E
   QuickChart/AntV to sieć w runtime. My generujemy SVG sami — self-contained, deterministyczne, offline.
 - **Artifact na claude.ai** — ładne HTML, ale tylko wewnątrz Claude. My chcemy cross-client render do pliku na dysku.
 
+## Skills
+- `skills/report-authoring/SKILL.md` — instrukcja komponowania raportów: wybór toola, pełny przykład `data`,
+  guardraile layoutu (limity długości etykiet, kształt table/charts), typowe błędy. Ładowany przez Claude Code
+  z rootu pluginu; aktualizuj przy KAŻDEJ zmianie kształtu danych `render_report` lub layoutu szablonów.
+
 ## Plugin Manifests
 - Claude Code: `.claude-plugin/plugin.json` (BEZ `hooks` — nie ma safety) + `.claude-plugin/marketplace.json`.
 - Codex: `.codex-plugin/plugin.json` + `.mcp.json`; marketplace `.agents/plugins/marketplace.json` → `./plugins/report-baby` (wrapper z osobnym `start-mcp.js` pobierającym bundle do `~/.report-baby`).

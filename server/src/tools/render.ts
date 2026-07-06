@@ -22,6 +22,35 @@ const cardSchema = z.object({
   note: z.string().optional(),
 });
 
+const reportChartSchema = z.object({
+  type: z.enum(['bar', 'line', 'pie']),
+  title: z.string().optional(),
+  subtitle: z.string().optional(),
+  prefix: z.string().optional().describe('Prepended to values, e.g. "$"'),
+  suffix: z.string().optional().describe('Appended to values, e.g. "%"'),
+  data: z.array(datumSchema).min(1),
+});
+
+const reportDataSchema = z.object({
+  title: z.string().optional(),
+  subtitle: z.string().optional(),
+  brand: z.string().optional().describe('Client/company name shown in the top-left corner'),
+  period: z.string().optional().describe('Reporting period shown in the top-right corner; keep short'),
+  intro: z.string().optional().describe('Lead paragraph under the title'),
+  kpis: z.array(cardSchema).optional().describe('KPI cards; keep labels under ~28 chars to avoid clipping'),
+  charts: z.array(reportChartSchema).optional(),
+  sections: z.array(z.object({ heading: z.string(), body: z.string() })).optional().describe('Narrative sections; heading stays on the same page as the body'),
+  table: z
+    .object({
+      head: z.array(z.string()).min(1),
+      body: z.array(z.array(z.union([z.string(), z.number()]))),
+      caption: z.string().optional(),
+    })
+    .optional(),
+  highlights: z.array(z.string()).optional().describe('Bullet list rendered under a "Highlights" heading'),
+  footer: z.string().optional().describe('Shown on every page; keep under ~120 chars'),
+});
+
 function outputPath(cfg: ReportConfig, explicit: string | undefined, ext: string): string {
   if (explicit && explicit.length > 0) return explicit;
   return join(cfg.outputDir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}.${ext}`);
@@ -92,10 +121,10 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
 
   server.tool(
     'render_report',
-    'Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished multi-page A4 PDF (branded header, KPI grid, embedded charts, narrative sections, data table, highlights, footer). Returns the path to the written PDF. Use this for the final client-facing report.',
+    'Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished multi-page A4 PDF (branded header, KPI grid, embedded charts, narrative sections, data table, highlights, footer). All data fields are optional — only present blocks render, in the order: header, intro, kpis, charts, sections, table, highlights. Returns the path to the written PDF. Use this for the final client-facing report.',
     {
       template: z.string().optional().default('default-report'),
-      data: z.record(z.any()),
+      data: reportDataSchema,
       output_path: z.string().optional(),
     },
     async ({ template, data, output_path }) => {

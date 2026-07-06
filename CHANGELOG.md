@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.1
+- PDF page-break control in `render_report`: section headings, the table caption, and the "Highlights" heading are never orphaned at the bottom of a page — each block moves to the next page whole when it fits, and text longer than a page now flows across pages instead of overflowing past the bottom margin.
+- `render_report` now declares the full `data` schema (kpis, charts, sections, table, highlights…) instead of an opaque object, so MCP clients see the exact shape and malformed input fails with a clear validation error instead of a runtime crash.
+- New `report-authoring` skill: tool selection, full data example, layout guardrails (label length limits, table/chart data shape), and common mistakes.
+
 ## v0.3.0
 - Renamed the self-update MCP tool from `check_update` to `update_plugin` and updated docs to match the exposed tool name.
 
