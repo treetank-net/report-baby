@@ -1,6 +1,6 @@
 {
   "name": "report-baby-server",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Self-contained SVG/data → PNG/PDF render MCP server (resvg-wasm + jsPDF, zero runtime deps)",
   "type": "module",
   "main": "bundle.cjs",

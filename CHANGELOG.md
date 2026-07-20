@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.2
+- Updated `jspdf` to 4.2.1, `jspdf-autotable` to 5.0.8, and transitive `dompurify` to 3.4.12, clearing the production dependency audit.
+- Added an MCP-level public behavior gate for chart text escaping and multi-page PDF generation.
+
 ## v0.3.1
 - PDF page-break control in `render_report`: section headings, the table caption, and the "Highlights" heading are never orphaned at the bottom of a page — each block moves to the next page whole when it fits, and text longer than a page now flows across pages instead of overflowing past the bottom margin.
 - `render_report` now declares the full `data` schema (kpis, charts, sections, table, highlights…) instead of an opaque object, so MCP clients see the exact shape and malformed input fails with a clear validation error instead of a runtime crash.
