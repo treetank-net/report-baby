@@ -6,6 +6,7 @@
   "main": "bundle.cjs",
   "scripts": {
     "build": "tsc --noEmit && npx esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=bundle.cjs",
+    "test": "node scripts/test-public-behavior.mjs",
     "dev": "tsc --watch --noEmit",
     "start": "node bundle.cjs"
   },
