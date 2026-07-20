@@ -13,8 +13,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
     "@resvg/resvg-wasm": "^2.6.2",
-    "jspdf": "^2.5.2",
-    "jspdf-autotable": "^3.8.4",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "zod": "^3.25.0"
   },
   "devDependencies": {
