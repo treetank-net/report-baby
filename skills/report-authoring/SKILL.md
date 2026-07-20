@@ -1,6 +1,6 @@
 ---
 name: report-authoring
-description: How to compose polished PDF reports and PNG charts with the report-baby render tools (render_report, render_chart, render_metric_cards). Use when building a client-facing report or deliverable from marketing/analytics data.
+description: How to compose polished A4 reports, 16:9 presentations, editable PPTX files, and PNG charts with report-baby. Use when building a client-facing report or presentation deliverable from marketing/analytics data.
 ---
 
 # Authoring reports with report-baby
@@ -11,6 +11,9 @@ description: How to compose polished PDF reports and PNG charts with the report-
 - **`render_chart`** — one standalone PNG chart (bar / line / pie) to paste into chat or a doc.
 - **`render_metric_cards`** — one PNG grid of KPI cards.
 - **`render_svg`** — escape hatch for fully custom graphics; every text node needs `font-family="DejaVu Sans"`.
+- **`render_slides_pdf`** — complete local 16:9 presentation from the shared slide model.
+- **`render_slides_png`** — all slides or one `slide_index` as deterministic 1600×900 PNG files.
+- **`render_slides_pptx`** — editable PPTX from the same model; charts are images, while text, KPI cards, tables, and shapes remain editable.
 
 All tools return the PATH to the written file. Never pull the rendered file back into context to read numbers — you already have the source data. Visually inspect (Read on PDF pages, `return_image: true` on PNGs) only when you must judge layout or aesthetics.
 
@@ -62,6 +65,28 @@ Only present blocks render, in this fixed order: header → intro → kpis → c
 - `period` and `brand` share one line — keep both short.
 - `sections[].body` and `intro` — plain prose only; markdown syntax (`**`, `##`, `-`) prints literally. Length is fine: text flows across pages, and headings always stay with their body (never orphaned at a page bottom).
 - `table` — any column count, but past ~6 columns cells get cramped; prefer splitting into two tables.
+
+## Shared slide model
+
+Use one `data` object for all three presentation formats. Keep the model bounded to `title`, `metrics`, `chart`, `table`, `narrative`, and `conclusions` slide types. Do not create a second planning path per format.
+
+```json
+{
+  "title": "Quarterly results",
+  "brand": "Client name",
+  "footer": "Source: verified analytics data",
+  "slides": [
+    { "type": "title", "title": "Quarterly results", "subtitle": "Management summary" },
+    { "type": "metrics", "title": "Key KPIs", "metrics": [{ "label": "Revenue", "value": "1.2M zł", "delta": "+12%", "trend": "up" }] },
+    { "type": "chart", "title": "Revenue trend", "chart": { "type": "bar", "data": [{ "label": "May", "value": 30 }, { "label": "June", "value": 42 }] } },
+    { "type": "table", "title": "Channel detail", "head": ["Channel", "Result"], "body": [["SEO", 42], ["Ads", 37]] },
+    { "type": "narrative", "title": "Interpretation", "body": "Plain prose.", "highlights": ["One short emphasis"] },
+    { "type": "conclusions", "title": "Next actions", "items": ["Scale the winning channel"] }
+  ]
+}
+```
+
+Keep metric slides to 6 cards, narrative highlights to 4, conclusions to 7, and visible table rows to 10. Use `slide_index` (zero-based) to regenerate one PNG without touching unrelated slides. Preserve the same source object when producing PDF, PNG, and PPTX so content and ordering stay aligned.
 
 ## Common mistakes
 

@@ -11,6 +11,7 @@ zero API kont reklamowych, zero przeglądarki w runtime.** Podajesz dane, dostaj
 - Render wykresów i kart metryk do PNG bez zewnętrznych usług.
 - Rasteryzacja własnego SVG do PNG.
 - Opinionated `render_report` — wbudowany ostylowany szablon + Twoje dane → wielostronicowy raport PDF dla klienta.
+- Jeden ograniczony model slajdów → PDF 16:9, PNG całej prezentacji lub jednego slajdu oraz edytowalny PPTX.
 - Zwraca **ścieżkę do pliku**, nie obraz do kontekstu (deliverable dla człowieka). Opcjonalny
   `return_image` w toolach PNG tylko gdy LLM ma ocenić layout.
 
@@ -22,6 +23,9 @@ zero API kont reklamowych, zero przeglądarki w runtime.** Podajesz dane, dostaj
 | `render_metric_cards` | KPI → siatka kart PNG |
 | `render_svg` | dowolny SVG → PNG (`return_image` opcjonalnie) |
 | `render_report` | szablon + dane → wielostronicowy raport PDF |
+| `render_slides_pdf` | wspólny model slajdów → PDF 16:9 |
+| `render_slides_png` | cała prezentacja lub wybrany slajd → PNG 1600×900 |
+| `render_slides_pptx` | wspólny model slajdów → edytowalny PPTX |
 | `list_templates` | lista wbudowanych szablonów |
 | `update_plugin` | aktualizacja pluginu |
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.0
+- Added one bounded slide model covering title, KPI, chart, table, narrative, and conclusion slides while preserving the existing A4 `render_report` contract.
+- Added local 16:9 `render_slides_pdf` and deterministic 1600×900 `render_slides_png`, including selected-slide rendering.
+- Added `render_slides_pptx`; text, KPI cards, tables, and basic shapes remain editable, while charts are embedded as deterministic images.
+- Added public MCP behavior coverage for A4 compatibility and all PDF/PNG/PPTX slide outputs.
+
 ## v0.3.2
 - Updated `jspdf` to 4.2.1, `jspdf-autotable` to 5.0.8, and transitive `dompurify` to 3.4.12, clearing the production dependency audit.
 - Added an MCP-level public behavior gate for chart text escaping and multi-page PDF generation.

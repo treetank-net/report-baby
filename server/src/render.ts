@@ -33,8 +33,8 @@ export async function renderSvgToPng(svg: string, width?: number): Promise<Buffe
   return Buffer.from(png);
 }
 
-export function newPdf(orientation: 'portrait' | 'landscape' = 'portrait'): jsPDF {
-  const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+export function newPdf(orientation: 'portrait' | 'landscape' = 'portrait', format: string | [number, number] = 'a4'): jsPDF {
+  const doc = new jsPDF({ orientation, unit: 'mm', format });
   doc.addFileToVFS('DejaVuSans.ttf', fontRegularBase64);
   doc.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
   doc.addFileToVFS('DejaVuSans-Bold.ttf', fontBoldBase64);

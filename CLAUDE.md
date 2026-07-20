@@ -1,6 +1,6 @@
 # report-baby
 
-Claude Code plugin: MCP server do renderowania ładnych grafik i raportów — dane → PNG (wykresy, karty metryk) / PDF.
+Claude Code plugin: MCP server do renderowania ładnych grafik, raportów A4 i prezentacji — dane → PNG / PDF / PPTX.
 Członek rodziny pluginów `*-baby` (obok `google-ads-baby`, `meta-ads-baby`, `google-analytics-baby`).
 Najprostszy, najczystszy członek rodziny: czysty compute renderujący, działa lokalnie, bez sieci.
 
@@ -35,6 +35,7 @@ assets.d.ts         — declare module '*.wasm' / '*.ttf' → Uint8Array (dla ts
 svg.ts              — silnik wykresów: barChart/lineChart/pieChart/metricCards/renderChart → SVG string. Paleta, typografia, FONT_FAMILY.
 render.ts           — silnik niskopoziomowy: ensureWasm()+renderSvgToPng() (resvg), newPdf()+pdfFont() (jsPDF z osadzonym fontem). applyPlugin(jsPDF) dla autotable.
 templates.ts        — listTemplates(), renderReportPdf(name, data) → Buffer (multi-page PDF z sekcji: header/KPI/charts/sections/table/highlights/footer)
+slides.ts           — ograniczony wspólny model slajdów oraz renderery PDF 16:9, PNG 1600×900 i edytowalnego PPTX
 assets/
   font.ttf          — DejaVu Sans regular (osadzany w bundlu)
   font-bold.ttf     — DejaVu Sans bold
@@ -49,6 +50,9 @@ tools/
 - `render_metric_cards` { cards: [{label,value,delta?,trend?,note?}], title?, subtitle?, columns?, width?, output_path?, return_image? } — siatka kart KPI → PNG.
 - `render_svg` { svg, width?, output_path?, return_image? } — dowolny SVG → PNG (escape hatch; tekst wymaga `font-family="DejaVu Sans"`).
 - `render_report` { template?='default-report', data, output_path? } — OPINIONATED: szablon + dane → wielostronicowy PDF. To "ładne raporty na koniec".
+- `render_slides_pdf` { data, output_path? } — wspólny model slajdów → lokalny PDF 16:9.
+- `render_slides_png` { data, slide_index?, output_dir?, filename_prefix? } — wszystkie slajdy albo jeden wybrany slajd → PNG 1600×900.
+- `render_slides_pptx` { data, output_path? } — ten sam model → PPTX; tekst/KPI/tabele/kształty są edytowalne, wykresy są obrazami.
 - `list_templates` {} — lista szablonów (`default-report`, `campaign-summary`).
 - `update_plugin` {} — sprawdź/zainstaluj aktualizacje pluginu.
 

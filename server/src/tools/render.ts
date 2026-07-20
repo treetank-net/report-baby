@@ -1,12 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mkdir, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import type { ReportConfig } from '../config.js';
 import { listTemplates, renderReportPdf, type ReportData } from '../templates.js';
 import { renderChart, metricCards, type ChartType } from '../svg.js';
 import { renderSvgToPng } from '../render.js';
+import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, type SlideDeck } from '../slides.js';
 
 const datumSchema = z.object({
   label: z.string(),
@@ -51,6 +52,31 @@ const reportDataSchema = z.object({
   footer: z.string().optional().describe('Shown on every page; keep under ~120 chars'),
 });
 
+const slideCommonSchema = {
+  title: z.string(),
+  subtitle: z.string().optional(),
+};
+
+const slideSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('title'), ...slideCommonSchema, eyebrow: z.string().optional() }),
+  z.object({ type: z.literal('metrics'), ...slideCommonSchema, metrics: z.array(cardSchema).min(1).max(6) }),
+  z.object({
+    type: z.literal('chart'),
+    ...slideCommonSchema,
+    chart: z.object({ type: z.enum(['bar', 'line', 'pie']), data: z.array(datumSchema).min(1), prefix: z.string().optional(), suffix: z.string().optional() }),
+  }),
+  z.object({ type: z.literal('table'), ...slideCommonSchema, head: z.array(z.string()).min(1), body: z.array(z.array(z.union([z.string(), z.number()]))) }),
+  z.object({ type: z.literal('narrative'), ...slideCommonSchema, body: z.string(), highlights: z.array(z.string()).max(4).optional() }),
+  z.object({ type: z.literal('conclusions'), ...slideCommonSchema, items: z.array(z.string()).min(1).max(7) }),
+]);
+
+const slideDeckSchema = z.object({
+  title: z.string().optional(),
+  brand: z.string().optional(),
+  footer: z.string().optional(),
+  slides: z.array(slideSchema).min(1),
+});
+
 function outputPath(cfg: ReportConfig, explicit: string | undefined, ext: string): string {
   if (explicit && explicit.length > 0) return explicit;
   return join(cfg.outputDir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}.${ext}`);
@@ -64,6 +90,11 @@ async function writePng(cfg: ReportConfig, svg: string, width: number | undefine
   const content: any[] = [{ type: 'text' as const, text: out }];
   if (returnImage) content.push({ type: 'image' as const, data: png.toString('base64'), mimeType: 'image/png' });
   return { content };
+}
+
+async function writeArtifact(path: string, data: Buffer): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, data);
 }
 
 export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
@@ -84,6 +115,47 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
     async ({ type, data, title, subtitle, prefix, suffix, width, output_path, return_image }) => {
       const svg = renderChart(type as ChartType, { data, title, subtitle, prefix, suffix });
       return writePng(cfg, svg, width, output_path, return_image);
+    },
+  );
+
+  server.tool(
+    'render_slides_pdf',
+    'Render a complete presentation as a local 16:9 PDF from a bounded shared slide model. Existing render_report A4 behavior is unchanged. Returns the PDF path.',
+    { data: slideDeckSchema, output_path: z.string().optional() },
+    async ({ data, output_path }) => {
+      const out = outputPath(cfg, output_path, 'pdf');
+      await writeArtifact(out, await renderSlidesPdf(data as SlideDeck));
+      return { content: [{ type: 'text' as const, text: out }] };
+    },
+  );
+
+  server.tool(
+    'render_slides_png',
+    'Render the shared slide model to deterministic 1600x900 PNG files. Optionally render one zero-based slide_index without regenerating unrelated slides. Returns the written paths.',
+    { data: slideDeckSchema, slide_index: z.number().int().nonnegative().optional(), output_dir: z.string().optional(), filename_prefix: z.string().optional().default('slide') },
+    async ({ data, slide_index, output_dir, filename_prefix }) => {
+      const directory = output_dir ?? cfg.outputDir;
+      await mkdir(directory, { recursive: true });
+      const buffers = await renderSlidesPng(data as SlideDeck, slide_index);
+      const indexes = slide_index === undefined ? data.slides.map((_, index) => index) : [slide_index];
+      const paths: string[] = [];
+      for (let index = 0; index < buffers.length; index++) {
+        const path = join(directory, `${filename_prefix}-${String(indexes[index] + 1).padStart(2, '0')}.png`);
+        await writeFile(path, buffers[index]);
+        paths.push(path);
+      }
+      return { content: [{ type: 'text' as const, text: paths.join('\n') }] };
+    },
+  );
+
+  server.tool(
+    'render_slides_pptx',
+    'Render the shared slide model to an editable 16:9 PPTX. Text, KPI cards, tables, and basic shapes stay editable; charts are embedded as deterministic images. Returns the PPTX path.',
+    { data: slideDeckSchema, output_path: z.string().optional() },
+    async ({ data, output_path }) => {
+      const out = outputPath(cfg, output_path, 'pptx');
+      await writeArtifact(out, await renderSlidesPptx(data as SlideDeck));
+      return { content: [{ type: 'text' as const, text: out }] };
     },
   );
 
