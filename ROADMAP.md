@@ -24,3 +24,7 @@
 ## Faza 4 — integracje
 - [ ] Wejście danych wprost z `google-ads-baby` / `google-analytics-baby` (closed-loop raport).
 - [ ] Eksport pojedynczego wykresu również do SVG (wektor do dalszej edycji), nie tylko PNG.
+
+## Faza 5 — prezentacje
+- [x] Wspólny ograniczony model slajdów + `render_slides_pdf` / `render_slides_png` / `render_slides_pptx` (v0.4.0).
+- [ ] Wektorowy `render_slides_pdf`. Dziś każdy slajd trafia do PDF jako jeden pełnostronicowy raster 1600×900, czyli ~102 DPI na stronie 400×225 mm: tekst nie jest zaznaczalny ani wyszukiwalny, a przy zoomie i w druku mięknie. Rysować tekst, kształty, KPI i tabele wprost przez jsPDF (tak jak `templates.ts` robi to dla A4), a rastrować wyłącznie same wykresy. PNG i PPTX zostają bez zmian.
