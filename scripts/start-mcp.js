@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
@@ -19,8 +19,15 @@ function localVersion() {
 async function download(remotePath, localPath) {
   const res = await fetch(`${REPO_RAW}/${remotePath}`);
   if (!res.ok) return false;
-  writeFileSync(localPath, Buffer.from(await res.arrayBuffer()));
-  return true;
+  const staging = `${localPath}.download`;
+  try {
+    writeFileSync(staging, Buffer.from(await res.arrayBuffer()));
+    renameSync(staging, localPath);
+    return true;
+  } catch {
+    rmSync(staging, { force: true });
+    return false;
+  }
 }
 
 async function autoUpdate() {

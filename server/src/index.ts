@@ -3,11 +3,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { configFromEnv } from './config.js';
 import { registerRenderTools } from './tools/render.js';
 import { registerAuthTools } from './tools/auth.js';
+import { SERVER_VERSION } from './version.js';
 
 async function main() {
   const server = new McpServer({
     name: 'report-baby',
-    version: '0.4.2',
+    version: SERVER_VERSION,
   }, {
     instructions: [
       'This server is a self-contained render engine: it turns structured data into polished PNG charts and PDF reports locally. No accounts, no auth, no network, no headless browser — pure compute, fully bundled.',

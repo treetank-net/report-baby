@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.3
+- `update_plugin` now reports the version installed on disk separately from the version the process is actually running. A running MCP server cannot swap its own bundle — Node keeps the loaded module in memory — so a download that has not been activated yet says so instead of reading as done. The server version is compiled into the bundle (`version.ts`), which is what makes the two comparable.
+- Downloads are now atomic: each file lands in `<name>.download` and is renamed into place, so an interrupted update leaves the previous working file instead of a truncated one. Applies to both `update_plugin` and the auto-update in `scripts/start-mcp.js`.
+
 ## v0.4.2
 - Dependency audit: patched the five fixable advisories in the dependency tree — `dompurify` 3.4.12 → 3.4.13 (the only one that actually reaches the shipped bundle, via `jspdf`), plus `hono`, `@hono/node-server`, `fast-uri`, and `ip-address` under `@modelcontextprotocol/sdk`, none of which are bundled because the stdio transport never imports the HTTP paths.
 - Known remaining: two high advisories in `image-size` via `pptxgenjs@4.0.1` (DoS in the ICNS/JXL/HEIF parsers). The only npm-offered fix is a breaking downgrade to `pptxgenjs@1.1.5`, which would drop PPTX export; the render engine only ever feeds it its own resvg PNGs, so it stays until pptxgenjs updates the dependency.

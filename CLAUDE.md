@@ -31,6 +31,7 @@ index.ts            — entrypoint: McpServer, instructions, rejestracja tooli (
 config.ts           — ReportConfig { outputDir }, configFromEnv(), getConfigDir() → .report-baby, getOutputDir() → <data>/out
 constants.ts        — (brak; report-baby nie ma OAuth/kluczy)
 errors.ts           — formatError()
+version.ts          — SERVER_VERSION wkompilowany w bundle. update_plugin porównuje go z package.json na dysku, żeby odróżnić wersję POBRANĄ od AKTYWNEJ — proces nie umie podmienić swojego bundla w locie.
 assets.d.ts         — declare module '*.wasm' / '*.ttf' → Uint8Array (dla tsc; esbuild ładuje binarnie)
 svg.ts              — silnik wykresów: barChart/lineChart/pieChart/metricCards/renderChart → SVG string. Paleta, typografia, FONT_FAMILY.
 render.ts           — silnik niskopoziomowy: ensureWasm()+renderSvgToPng() (resvg), newPdf()+pdfFont() (jsPDF z osadzonym fontem, `compress: true` — BEZ tego rastry wykresów lądują w PDF nieskompresowane i raport puchnie do dziesiątek MB). applyPlugin(jsPDF) dla autotable.
