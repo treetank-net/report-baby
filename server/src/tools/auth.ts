@@ -98,10 +98,12 @@ export function registerAuthTools(server: McpServer, _cfg: ReportConfig) {
         const remote = await res.json() as { version?: string };
         const remoteVer = remote.version || '0.0.0';
 
-        if (remoteVer === installedVer) {
-          const text = SERVER_VERSION === installedVer
-            ? `Already up to date and active: ${SERVER_VERSION}.`
-            : `Already downloaded, not yet active. ${restartPendingNote(installedVer)}`;
+        if (!semverGt(remoteVer, installedVer)) {
+          const text = remoteVer === installedVer
+            ? (SERVER_VERSION === installedVer
+                ? `Already up to date and active: ${SERVER_VERSION}.`
+                : `Already downloaded, not yet active. ${restartPendingNote(installedVer)}`)
+            : `Nothing to install: this copy is ${installedVer}, newer than ${remoteVer} on the update server. Local files left untouched.`;
           return { content: [{ type: 'text', text }] };
         }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
@@ -10,17 +10,12 @@ const pkgPath = join(root, 'package.json');
 
 const REPO_RAW = 'https://raw.githubusercontent.com/treetank-net/report-baby/main';
 
-function localVersion() {
-  try {
-    return JSON.parse(readFileSync(pkgPath, 'utf-8')).version || '0.0.0';
-  } catch { return '0.0.0'; }
-}
-
 async function download(remotePath, localPath) {
   const res = await fetch(`${REPO_RAW}/${remotePath}`);
   if (!res.ok) return false;
   const staging = `${localPath}.download`;
   try {
+    mkdirSync(dirname(localPath), { recursive: true });
     writeFileSync(staging, Buffer.from(await res.arrayBuffer()));
     renameSync(staging, localPath);
     return true;
@@ -30,27 +25,19 @@ async function download(remotePath, localPath) {
   }
 }
 
-async function autoUpdate() {
+async function fetchBundleOnce() {
+  process.stderr.write('report-baby: no server bundle on disk, fetching it once...\n');
   try {
-    const res = await fetch(`${REPO_RAW}/package.json`);
-    if (!res.ok) return;
-    const remote = await res.json();
-    if ((remote.version || '0.0.0') === localVersion()) return;
-
-    process.stderr.write(`Updating report-baby ${localVersion()} -> ${remote.version}...\n`);
-
-    await download('server/bundle.cjs', bundle);
-    await download('package.json', pkgPath);
-    await download('scripts/start-mcp.js', join(root, 'scripts', 'start-mcp.js'));
-
-    process.stderr.write(`Updated to ${remote.version}.\n`);
-  } catch { /* offline — start with what we have */ }
+    if (!(await download('server/bundle.cjs', bundle))) return;
+    if (!existsSync(pkgPath)) await download('package.json', pkgPath);
+    process.stderr.write('report-baby: bundle fetched.\n');
+  } catch { /* offline — handled by the existence check below */ }
 }
 
-await autoUpdate();
+if (!existsSync(bundle)) await fetchBundleOnce();
 
 if (!existsSync(bundle)) {
-  process.stderr.write(`Missing MCP server bundle at ${bundle}.\n`);
+  process.stderr.write(`Missing MCP server bundle at ${bundle} and it could not be fetched. Reinstall the plugin.\n`);
   process.exit(1);
 }
 

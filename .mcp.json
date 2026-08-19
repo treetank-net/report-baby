@@ -5,7 +5,8 @@
       "args": ["scripts/start-mcp.js"],
       "cwd": ".",
       "env": {
-        "REPORT_BABY_DATA": "${REPORT_BABY_DATA:-}"
+        "REPORT_BABY_DATA": "${REPORT_BABY_DATA:-}",
+        "CLAUDE_PLUGIN_ROOT": "${HOME}/.report-baby/dev-plugin-root"
       }
     }
   }

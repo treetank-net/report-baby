@@ -55,7 +55,7 @@ tools/
 - `render_slides_png` { data, slide_index?, output_dir?, filename_prefix? } — wszystkie slajdy albo jeden wybrany slajd → PNG 1600×900.
 - `render_slides_pptx` { data, output_path? } — ten sam model → PPTX; tekst/KPI/tabele/kształty są edytowalne, wykresy są obrazami.
 - `list_templates` {} — lista szablonów (`default-report`, `campaign-summary`).
-- `update_plugin` {} — sprawdź/zainstaluj aktualizacje pluginu.
+- `update_plugin` {} — sprawdź/zainstaluj aktualizacje pluginu. JEDYNA ścieżka aktualizacji: `start-mcp.js` NIE aktualizuje na starcie (pobiera bundle tylko gdy go nie ma), bo stale cache CDN nadpisywał świeższą instalację starszymi plikami. Bramka używa porównania semver, nie `!==` — kopia nowsza od serwera aktualizacji zostaje nietknięta.
 
 ### Kształt danych `render_report`
 `{ brand?, title?, subtitle?, period?, intro?, kpis?: [{label,value,delta?,trend?,note?}], charts?: [{type,title?,subtitle?,prefix?,suffix?,data}], sections?: [{heading,body}], table?: {head,body,caption?}, highlights?: string[], footer? }`.
@@ -111,6 +111,7 @@ i jsPDF bundlują się w całości esbuildem, font wchodzi binarnie do bundla. E
 - GitLab: `treetank/report-baby` (origin, primary).
 - GitHub: `treetank-net/report-baby` (mirror, remote `gh`, branch `main`).
 - REPO_RAW (`start-mcp.js`, `update_plugin`): `https://raw.githubusercontent.com/treetank-net/report-baby/main`.
+- `.mcp.json` w repo ustawia `CLAUDE_PLUGIN_ROOT` na `~/.report-baby/dev-plugin-root` — zaślepka, żeby serwer odpalony z checkoutu nie mógł zapisać pobranych plików do working tree (`getPluginRoot()` bez tej zmiennej to `process.cwd()`).
 
 ## Commands
 - `cd server && npm install && npm run build` — zależności (dev) + typecheck + bundle.

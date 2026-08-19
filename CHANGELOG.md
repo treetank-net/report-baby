@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.4
+- `scripts/start-mcp.js` no longer updates the plugin on every start. Updates happen only through `update_plugin`; the wrapper downloads the bundle exactly once, when there is none on disk. A stale CDN cache used to let a start-up fetch overwrite a freshly installed newer copy — twice in practice, once degrading a 0.4.3 install to 0.4.2 files.
+- `update_plugin` compares versions with semver ordering instead of string inequality, so a copy newer than the update server is left untouched with an explicit message instead of being silently downgraded.
+- `.mcp.json` in this repo pins `CLAUDE_PLUGIN_ROOT` to `~/.report-baby/dev-plugin-root`, so a development server started from the checkout can never write update artifacts into the working tree.
+
 ## v0.4.3
 - `update_plugin` now reports the version installed on disk separately from the version the process is actually running. A running MCP server cannot swap its own bundle — Node keeps the loaded module in memory — so a download that has not been activated yet says so instead of reading as done. The server version is compiled into the bundle (`version.ts`), which is what makes the two comparable.
 - Downloads are now atomic: each file lands in `<name>.download` and is renamed into place, so an interrupted update leaves the previous working file instead of a truncated one. Applies to both `update_plugin` and the auto-update in `scripts/start-mcp.js`.
