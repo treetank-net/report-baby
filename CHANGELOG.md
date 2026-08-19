@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.1
+- Fixed PDF size: `render_report` and `render_slides_pdf` now deflate their content streams, so embedded chart rasters are no longer stored uncompressed. A 14-chart report drops from 46.3 MB to 0.51 MB and an 11-slide deck from 45.6 MB to 0.37 MB, with pixel-identical output.
+- Synced the plugin manifest versions with the server version; they had lagged behind since v0.4.0.
+
 ## v0.4.0
 - Added one bounded slide model covering title, KPI, chart, table, narrative, and conclusion slides while preserving the existing A4 `render_report` contract.
 - Added local 16:9 `render_slides_pdf` and deterministic 1600×900 `render_slides_png`, including selected-slide rendering.

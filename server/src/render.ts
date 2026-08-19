@@ -34,7 +34,7 @@ export async function renderSvgToPng(svg: string, width?: number): Promise<Buffe
 }
 
 export function newPdf(orientation: 'portrait' | 'landscape' = 'portrait', format: string | [number, number] = 'a4'): jsPDF {
-  const doc = new jsPDF({ orientation, unit: 'mm', format });
+  const doc = new jsPDF({ orientation, unit: 'mm', format, compress: true });
   doc.addFileToVFS('DejaVuSans.ttf', fontRegularBase64);
   doc.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
   doc.addFileToVFS('DejaVuSans-Bold.ttf', fontBoldBase64);

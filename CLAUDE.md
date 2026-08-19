@@ -33,7 +33,7 @@ constants.ts        — (brak; report-baby nie ma OAuth/kluczy)
 errors.ts           — formatError()
 assets.d.ts         — declare module '*.wasm' / '*.ttf' → Uint8Array (dla tsc; esbuild ładuje binarnie)
 svg.ts              — silnik wykresów: barChart/lineChart/pieChart/metricCards/renderChart → SVG string. Paleta, typografia, FONT_FAMILY.
-render.ts           — silnik niskopoziomowy: ensureWasm()+renderSvgToPng() (resvg), newPdf()+pdfFont() (jsPDF z osadzonym fontem). applyPlugin(jsPDF) dla autotable.
+render.ts           — silnik niskopoziomowy: ensureWasm()+renderSvgToPng() (resvg), newPdf()+pdfFont() (jsPDF z osadzonym fontem, `compress: true` — BEZ tego rastry wykresów lądują w PDF nieskompresowane i raport puchnie do dziesiątek MB). applyPlugin(jsPDF) dla autotable.
 templates.ts        — listTemplates(), renderReportPdf(name, data) → Buffer (multi-page PDF z sekcji: header/KPI/charts/sections/table/highlights/footer)
 slides.ts           — ograniczony wspólny model slajdów oraz renderery PDF 16:9, PNG 1600×900 i edytowalnego PPTX
 assets/
@@ -41,7 +41,7 @@ assets/
   font-bold.ttf     — DejaVu Sans bold
 
 tools/
-  render.ts         — registerRenderTools(): render_chart, render_metric_cards, render_svg, render_report, list_templates
+  render.ts         — registerRenderTools(): render_chart, render_metric_cards, render_svg, render_report, render_slides_pdf, render_slides_png, render_slides_pptx, list_templates
   auth.ts           — registerAuthTools(): update_plugin (self-update + changelog). BRAK setup_auth — nie ma OAuth.
 ```
 

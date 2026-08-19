@@ -7,7 +7,7 @@ import { registerAuthTools } from './tools/auth.js';
 async function main() {
   const server = new McpServer({
     name: 'report-baby',
-    version: '0.4.0',
+    version: '0.4.1',
   }, {
     instructions: [
       'This server is a self-contained render engine: it turns structured data into polished PNG charts and PDF reports locally. No accounts, no auth, no network, no headless browser — pure compute, fully bundled.',
