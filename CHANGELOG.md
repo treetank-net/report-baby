@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.2
+- Dependency audit: patched the five fixable advisories in the dependency tree — `dompurify` 3.4.12 → 3.4.13 (the only one that actually reaches the shipped bundle, via `jspdf`), plus `hono`, `@hono/node-server`, `fast-uri`, and `ip-address` under `@modelcontextprotocol/sdk`, none of which are bundled because the stdio transport never imports the HTTP paths.
+- Known remaining: two high advisories in `image-size` via `pptxgenjs@4.0.1` (DoS in the ICNS/JXL/HEIF parsers). The only npm-offered fix is a breaking downgrade to `pptxgenjs@1.1.5`, which would drop PPTX export; the render engine only ever feeds it its own resvg PNGs, so it stays until pptxgenjs updates the dependency.
+
 ## v0.4.1
 - Fixed PDF size: `render_report` and `render_slides_pdf` now deflate their content streams, so embedded chart rasters are no longer stored uncompressed. A 14-chart report drops from 46.3 MB to 0.51 MB and an 11-slide deck from 45.6 MB to 0.37 MB, with pixel-identical output.
 - Synced the plugin manifest versions with the server version; they had lagged behind since v0.4.0.
