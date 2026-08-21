@@ -16,6 +16,10 @@ data and receive a path to a finished PDF or PNG.
   multi-page client-facing PDF report.
 - One bounded slide model → 16:9 PDF, a PNG of the whole deck or one slide,
   and an editable PPTX.
+- Optional per-slide `notes`: speaker narration that never appears in the
+  layout. The PPTX carries it in the PowerPoint notes slide shown in presenter
+  view; PDF and PNG have no notes channel, so they drop it and report a counted
+  warning instead of silently losing it.
 - Returns a **file path**, not an image in context (a human deliverable).
   Optional `return_image` on PNG tools is available when an LLM must judge the
   layout.
@@ -34,7 +38,7 @@ data and receive a path to a finished PDF or PNG.
 | `render_report` | template + data → multi-page PDF report |
 | `render_slides_pdf` | shared slide model → 16:9 PDF |
 | `render_slides_png` | whole deck or selected slide → 1600×900 PNG |
-| `render_slides_pptx` | shared slide model → editable PPTX |
+| `render_slides_pptx` | shared slide model → editable PPTX, with per-slide speaker notes |
 | `list_templates` | list built-in templates |
 | `list_brand_templates` | read-only list of templates owned by a selected brand |
 | `inspect_brand_template` | read-only validation and inspection of a brand template |

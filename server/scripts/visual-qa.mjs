@@ -389,6 +389,20 @@ function deck(slides, extra = {}) {
   return { brand: 'QA Fixture', footer: 'Synthetic visual QA fixture', ...extra, slides };
 }
 
+function multipageReport() {
+  const report = standardReport();
+  return {
+    ...report,
+    data: {
+      ...report.data,
+      title: 'Long-form editorial review',
+      subtitle: 'Sections that cross page breaks on purpose',
+      intro: `${longWords(160, 'Lead')}.`,
+      sections: Array.from({ length: 5 }, (_, index) => ({ heading: `Article ${index + 1} spanning a page break`, body: `${longWords(320, 'Body')}.` })),
+    },
+  };
+}
+
 function buildCases() {
   const cases = [];
   for (const [index, brand] of settings.brands.entries()) {
@@ -418,6 +432,16 @@ function buildCases() {
     });
   }
   if (settings.brands.includes('pyrus')) {
+    cases.push({
+      id: 'formats-pyrus-editorial-report',
+      group: 'formats',
+      brand: 'pyrus',
+      profile: 'editorial',
+      kind: 'report',
+      formats: ['pdf'],
+      expect: 'render',
+      input: multipageReport(),
+    });
     cases.push({
       id: 'formats-pyrus-editorial-deck',
       group: 'formats',
@@ -659,7 +683,20 @@ function pdfTextOnFill(stream) {
   let fontSize = 12;
   let position = null;
   let pendingRect = null;
+  let clip = null;
+  let matrix = [];
+  let leading = 0;
+  const clipStack = [];
   const numbers = [];
+  const intersect = (a, b) => {
+    if (!a) return b;
+    if (!b) return a;
+    const x = Math.max(a.x, b.x);
+    const y = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const top = Math.min(a.y + a.height, b.y + b.height);
+    return right <= x || top <= y ? null : { x, y, width: right - x, height: top - y };
+  };
   const asColor = (channels) => `#${channels.map((channel) => Math.round(Math.max(0, Math.min(1, channel)) * 255).toString(16).padStart(2, '0')).join('')}`;
   for (const token of tokens) {
     const value = Number.parseFloat(token);
@@ -682,9 +719,20 @@ function pdfTextOnFill(stream) {
     } else if (token === 'Tf') fontSize = tail(2)[0];
     else if (token === 'Td' || token === 'TD') position = { x: tail(2)[0], y: tail(2)[1] };
     else if (token === 'Tm') position = { x: tail(6)[4], y: tail(6)[5] };
+    else if (token === 'TL') leading = tail(1)[0];
+    else if (token === 'T*' && position) position = { x: position.x, y: position.y - leading };
+    else if (token === 'q') clipStack.push(clip);
+    else if (token === 'Q') clip = clipStack.length > 0 ? clipStack.pop() : null;
+    else if (token === 'W' || token === 'W*') {
+      if (pendingRect) clip = intersect(clip, pendingRect);
+    }
+    else if (token === 'cm') matrix = tail(6);
     else if (token === 'Do') {
-      const [a, , , d, e, f] = tail(6);
-      if (Number.isFinite(a) && Number.isFinite(d)) images.push({ x: Math.min(e, e + a), y: Math.min(f, f + d), width: Math.abs(a), height: Math.abs(d) });
+      const [a, , , d, e, f] = matrix;
+      if (Number.isFinite(a) && Number.isFinite(d)) {
+        const painted = intersect({ x: Math.min(e, e + a), y: Math.min(f, f + d), width: Math.abs(a), height: Math.abs(d) }, clip);
+        if (painted) images.push(painted);
+      }
     } else if ((token === 'Tj' || token === 'TJ') && position && fill) {
       drawn.push({ ...position, color: fill, fontSize, rectangles: rectangles.length, images: images.length });
     }

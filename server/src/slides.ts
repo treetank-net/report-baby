@@ -20,6 +20,7 @@ export type Slide =
 interface SlideBase {
   title: string;
   subtitle?: string;
+  notes?: string;
   brand_ref?: string;
   template_ref?: string;
   surface?: string;
@@ -41,6 +42,8 @@ export interface SlideDeck {
   slidePlans?: Array<ResolvedSlidePlan | undefined>;
   slideTemplateSources?: Array<CompiledTemplate | undefined>;
 }
+
+export const SLIDE_NOTES_MAX_CHARS = 4000;
 
 const RENDER_CONFIG: RenderConfig = readRenderConfig();
 const WIDTH = RENDER_CONFIG.canvas.width;
@@ -192,6 +195,9 @@ function wrappedText(x: number, y: number, value: string, size: number, maxChars
 }
 
 function validateSlideContent(slide: Slide): void {
+  if (slide.notes !== undefined && slide.notes.length > SLIDE_NOTES_MAX_CHARS) {
+    throw new Error(`Slide '${slide.title}' has ${slide.notes.length} characters of notes; at most ${SLIDE_NOTES_MAX_CHARS} are supported.`);
+  }
   if (slide.type === 'table') {
     if (slide.body.length > 10) throw new Error(`Table slide '${slide.title}' has ${slide.body.length} rows; the renderer supports at most 10 without pagination.`);
     if ([...slide.head, ...slide.body.flat()].some((cell) => String(cell).length > RENDER_CONFIG.legacy.table_cell_max_chars)) throw new Error(`Table slide '${slide.title}' contains a cell longer than the supported ${RENDER_CONFIG.legacy.table_cell_max_chars}-character width.`);
@@ -647,6 +653,7 @@ export async function renderSlidesPptx(deck: SlideDeck, theme = defaultRenderThe
     const content = deck.slides[index];
     validateSlideContent(content);
     const slide = pptx.addSlide();
+    if (content.notes) slide.addNotes(content.notes);
     const slideTheme = deck.slideThemes?.[index] ?? theme;
     const plan = deck.slidePlans?.[index];
     const titleAlign = plan?.titleAlign ?? slideTheme.titleAlign;

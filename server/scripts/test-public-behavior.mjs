@@ -352,6 +352,68 @@ try {
   const archive = unzipSync(pptx);
   assert.equal(Object.keys(archive).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name)).length, deck.slides.length);
   assert.ok(Buffer.from(archive['ppt/slides/slide1.xml']).toString().includes('Wyniki kwartalne'));
+
+  const firstNote = 'Zacznij od kontekstu: wzrost & jakość ruchu <bez> przesady.';
+  const secondNote = 'Przejdź do wniosków i zaproponuj budżet na kolejny kwartał.';
+  const notesDeck = {
+    title: 'Notatki prelegenta',
+    brand: 'TreeTank',
+    footer: 'Poufne',
+    slides: [
+      { type: 'title', title: 'Notatki prelegenta', subtitle: 'Wersja zarządcza', notes: firstNote },
+      { type: 'conclusions', title: 'Wnioski', items: ['Skalować SEO'], notes: secondNote },
+      { type: 'narrative', title: 'Bez notatki', body: 'Ten slajd nie ma narracji.' },
+    ],
+  };
+
+  const notesPptxPath = join(outputDir, 'notes.pptx');
+  const notesPptxResult = await client.callTool({ name: 'render_slides_pptx', arguments: { brand_ref: 'brand://acme/primary', data: notesDeck, output_path: notesPptxPath } });
+  assert.notEqual(notesPptxResult.isError, true, JSON.stringify(notesPptxResult.content));
+  const notesArchive = unzipSync(await readFile(notesPptxPath));
+  assert.ok(notesArchive['ppt/notesSlides/notesSlide1.xml'], 'the PPTX has no notes slide part for the first slide');
+  const firstNotesXml = Buffer.from(notesArchive['ppt/notesSlides/notesSlide1.xml']).toString();
+  assert.match(firstNotesXml, /<p:notes[\s>]/, 'the notes slide part is not a p:notes document');
+  assert.ok(firstNotesXml.includes('Zacznij od kontekstu: wzrost &amp; jakość ruchu &lt;bez&gt; przesady.'), `the speaker notes text is missing from notesSlide1.xml: ${firstNotesXml.slice(0, 400)}`);
+  assert.ok(Buffer.from(notesArchive['ppt/notesSlides/notesSlide2.xml']).toString().includes(secondNote), 'the second slide lost its speaker notes');
+  const thirdNotesXml = Buffer.from(notesArchive['ppt/notesSlides/notesSlide3.xml']).toString();
+  assert.ok(!thirdNotesXml.includes('narracji'), 'a slide without notes received notes text');
+  const firstSlideRels = Buffer.from(notesArchive['ppt/slides/_rels/slide1.xml.rels']).toString();
+  assert.match(firstSlideRels, /Target="\.\.\/notesSlides\/notesSlide1\.xml"/, 'slide1 does not reference its notes slide');
+  assert.match(firstSlideRels, /relationships\/notesSlide"/, 'the slide → notes relationship type is missing');
+  assert.match(Buffer.from(notesArchive['ppt/notesSlides/_rels/notesSlide1.xml.rels']).toString(), /notesMaster1\.xml/, 'the notes slide does not reference the notes master');
+  assert.match(Buffer.from(notesArchive['[Content_Types].xml']).toString(), /notesSlides\/notesSlide1\.xml/, 'the notes slide part has no content-type override');
+  assert.ok(!Buffer.from(notesArchive['ppt/slides/slide1.xml']).toString().includes('Zacznij od kontekstu'), 'speaker notes leaked into the visible slide');
+  assert.equal(notesPptxResult.structuredContent?.notesSlides, 2, 'the PPTX response does not report how many slides carry notes');
+  assert.ok(!(notesPptxResult.structuredContent?.warnings ?? []).some((warning) => /notes/i.test(warning.message)), 'the PPTX response warns about notes it actually carried');
+
+  const notesPdfPath = join(outputDir, 'notes.pdf');
+  const notesPdfResult = await client.callTool({ name: 'render_slides_pdf', arguments: { brand_ref: 'brand://acme/primary', data: notesDeck, output_path: notesPdfPath } });
+  assert.notEqual(notesPdfResult.isError, true, JSON.stringify(notesPdfResult.content));
+  const notesPdf = await readFile(notesPdfPath);
+  assert.equal(notesPdf.subarray(0, 5).toString(), '%PDF-');
+  assert.equal(notesPdfResult.structuredContent?.notesSlides, 2, 'the PDF response does not report the notes it received');
+  const droppedNotesWarning = (notesPdfResult.structuredContent?.warnings ?? []).find((warning) => /notes/i.test(warning.message));
+  assert.ok(droppedNotesWarning, 'the PDF response silently dropped the speaker notes');
+  assert.equal(droppedNotesWarning.slides, 2, 'the dropped-notes warning does not count the affected slides');
+  assert.match(droppedNotesWarning.message, /render_slides_pptx/, 'the dropped-notes warning does not name the format that keeps notes');
+  const extractedNotesText = spawnSync('pdftotext', [notesPdfPath, '-'], { encoding: 'utf8', timeout: 10_000 });
+  if (extractedNotesText.status === 0) {
+    assert.ok(!extractedNotesText.stdout.includes('Zacznij od kontekstu'), 'speaker notes were printed onto the slide PDF');
+  }
+
+  const notesPngResult = await client.callTool({ name: 'render_slides_png', arguments: { brand_ref: 'brand://acme/primary', data: notesDeck, output_dir: outputDir, filename_prefix: 'notes' } });
+  assert.notEqual(notesPngResult.isError, true, JSON.stringify(notesPngResult.content));
+  assert.ok((notesPngResult.structuredContent?.warnings ?? []).some((warning) => /notes/i.test(warning.message)), 'the PNG response silently dropped the speaker notes');
+
+  const overlongNotes = await client.callTool({
+    name: 'render_slides_pptx',
+    arguments: {
+      brand_ref: 'brand://acme/primary',
+      output_path: join(outputDir, 'overlong-notes.pptx'),
+      data: { title: 'Za długie notatki', slides: [{ type: 'narrative', title: 'Slajd', body: 'Treść.', notes: 'x'.repeat(4001) }] },
+    },
+  });
+  assert.equal(overlongNotes.isError, true, 'the slide model accepted notes beyond its documented bound');
 } finally {
   await client.close();
   await rm(outputDir, { recursive: true, force: true });

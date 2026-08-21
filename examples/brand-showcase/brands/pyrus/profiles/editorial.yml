@@ -1,8 +1,13 @@
 layout:
   header_style: plain
+  report_header_style: image-band
+  show_report_brand_name: false
   title_align: center
   title_case: normal
   heading_weight: 600
   radius: 28
+  image_text_color: ivory
+  logo_variant: white
 assets:
   background_image: null
+  report_header_image: backgrounds/band-dark.png

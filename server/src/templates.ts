@@ -91,7 +91,11 @@ class Cursor {
     }
   }
   keepTogether(blockHeight: number, minLeadHeight: number): void {
-    this.ensure(blockHeight <= USABLE_H ? blockHeight : minLeadHeight);
+    const remaining = PAGE_H - MARGIN - this.y;
+    if (blockHeight <= remaining) return;
+    const cannotFitOnAnyPage = blockHeight > USABLE_H;
+    const leavesUsableSpaceBehind = remaining >= minLeadHeight && remaining / USABLE_H >= PDF_CONFIG.keepTogetherWasteRatio;
+    this.ensure(cannotFitOnAnyPage || leavesUsableSpaceBehind ? minLeadHeight : blockHeight);
   }
   breakPage(): void {
       this.doc.addPage();
@@ -160,6 +164,16 @@ function addPreparedBrandAssetCover(doc: jsPDF, asset: PdfAsset | undefined, x: 
   doc.restoreGraphicsState();
 }
 
+function withPreservedTextStyle(doc: jsPDF, draw: () => void): void {
+  const font = doc.getFont();
+  const size = doc.getFontSize();
+  const color = doc.getTextColor();
+  draw();
+  doc.setFont(font.fontName, font.fontStyle);
+  doc.setFontSize(size);
+  doc.setTextColor(color);
+}
+
 interface ReportHeaderRenderer {
   drawFirstPage(doc: jsPDF, cur: Cursor): void;
   followingPageHeight(): number;
@@ -201,7 +215,7 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
 
   const followingPageHeight = backgroundAsset || band ? PDF_CONFIG.headerRepeatBandHeight : PDF_CONFIG.headerRepeatHeight;
 
-  const drawFollowingPageChrome = (doc: jsPDF): void => {
+  const drawFollowingPageChrome = (doc: jsPDF): void => withPreservedTextStyle(doc, () => {
     if (backgroundAsset) addPreparedBrandAssetCover(doc, backgroundAsset, 0, 0, PAGE_W, followingPageHeight);
     if (band) {
       doc.setFillColor(...rgb(band));
@@ -219,7 +233,7 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
       doc.setLineWidth(PDF_CONFIG.headerRepeatRuleWidth);
       doc.line(MARGIN, followingPageHeight, PAGE_W - MARGIN, followingPageHeight);
     }
-  };
+  });
 
   return {
     drawFirstPage(doc, cur) {
@@ -258,6 +272,9 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
         doc.line(MARGIN, cur.y, PAGE_W - MARGIN, cur.y);
       }
       cur.y += PDF_CONFIG.headerBottomGap;
+      if (backgroundAsset || band) {
+        cur.y = Math.max(cur.y, PDF_CONFIG.headerBandHeight + PDF_CONFIG.headerBottomGap);
+      }
     },
     followingPageHeight() {
       return followingPageHeight;

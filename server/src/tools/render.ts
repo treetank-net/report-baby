@@ -8,10 +8,10 @@ import type { ReportConfig } from '../config.js';
 import { listTemplates, renderReportPdf, type ReportData } from '../templates.js';
 import { renderChart, metricCards, type ChartType } from '../svg.js';
 import { loadRenderFontSet, renderSvgToPng } from '../render.js';
-import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, type SlideDeck } from '../slides.js';
+import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, SLIDE_NOTES_MAX_CHARS, type SlideDeck } from '../slides.js';
 import { resolveSlideDeck } from '../slide-context.js';
 import { listBuiltinSlideTemplates, readBuiltinTemplateSource } from '../builtin-template-loader.js';
-import { brandRenderSummary, slideRenderDiagnostics } from '../tool-response.js';
+import { brandRenderSummary, slideNotesCarriage, slideRenderDiagnostics } from '../tool-response.js';
 
 const datumSchema = z.object({
   label: z.string(),
@@ -68,6 +68,11 @@ const reportDataSchema = z.object({
 const slideCommonSchema = {
   title: z.string(),
   subtitle: z.string().optional(),
+  notes: z
+    .string()
+    .max(SLIDE_NOTES_MAX_CHARS)
+    .optional()
+    .describe('Speaker notes / narration for this slide: never drawn on the slide. render_slides_pptx writes them to the PowerPoint notes slide shown in presenter view; render_slides_pdf and render_slides_png drop them and report it as a warning.'),
   brand_ref: z.string().optional(),
   template_ref: z.string().optional(),
   surface: z.string().optional(),
@@ -232,7 +237,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       const resolved = await resolveSlideDeck({ ...data, direction: direction ?? data.direction } as SlideDeck, { brandRoot: cfg.brandDir, brandRef: brand_ref, templateRef: template_ref, surface: surface ?? 'pptx-16x9', overrides: overrides as BrandOverrides | undefined });
       const out = outputPath(cfg, output_path, 'pdf');
       await writeArtifact(out, await renderSlidesPdf(resolved.deck, resolved.context.theme));
-      return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...slideRenderDiagnostics({ diagnostics: resolved.context.diagnostics, slideDiagnostics: resolved.slideDiagnostics, slidePlans: resolved.deck.slidePlans ?? [] }, diagnostics) } };
+      return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...slideRenderDiagnostics({ diagnostics: resolved.context.diagnostics, slideDiagnostics: resolved.slideDiagnostics, slidePlans: resolved.deck.slidePlans ?? [], notes: slideNotesCarriage(resolved.deck, false) }, diagnostics) } };
     },
   );
 
@@ -252,7 +257,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
         await writeFile(path, buffers[index]);
         paths.push(path);
       }
-      return { content: [{ type: 'text' as const, text: paths.join('\n') }], structuredContent: { paths, ...slideRenderDiagnostics({ diagnostics: resolved.context.diagnostics, slideDiagnostics: resolved.slideDiagnostics, slidePlans: resolved.deck.slidePlans ?? [] }, diagnostics) } };
+      return { content: [{ type: 'text' as const, text: paths.join('\n') }], structuredContent: { paths, ...slideRenderDiagnostics({ diagnostics: resolved.context.diagnostics, slideDiagnostics: resolved.slideDiagnostics, slidePlans: resolved.deck.slidePlans ?? [], notes: slideNotesCarriage(resolved.deck, false) }, diagnostics) } };
     },
   );
 
@@ -264,7 +269,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       const resolved = await resolveSlideDeck({ ...data, direction: direction ?? data.direction } as SlideDeck, { brandRoot: cfg.brandDir, brandRef: brand_ref, templateRef: template_ref, surface: surface ?? 'pptx-16x9', overrides: overrides as BrandOverrides | undefined });
       const out = outputPath(cfg, output_path, 'pptx');
       await writeArtifact(out, await renderSlidesPptx(resolved.deck, resolved.context.theme));
-      return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...slideRenderDiagnostics({ diagnostics: resolved.context.diagnostics, slideDiagnostics: resolved.slideDiagnostics, slidePlans: resolved.deck.slidePlans ?? [] }, diagnostics) } };
+      return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...slideRenderDiagnostics({ diagnostics: resolved.context.diagnostics, slideDiagnostics: resolved.slideDiagnostics, slidePlans: resolved.deck.slidePlans ?? [], notes: slideNotesCarriage(resolved.deck, true) }, diagnostics) } };
     },
   );
 

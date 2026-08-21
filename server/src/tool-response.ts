@@ -1,5 +1,6 @@
 import type { BrandDiagnostics } from './brand.js';
 import type { ResolvedSlidePlan } from './slide-plan.js';
+import type { SlideDeck } from './slides.js';
 
 export type DiagnosticsDetail = 'summary' | 'full';
 
@@ -33,10 +34,22 @@ export function brandRenderSummary(diagnostics: BrandDiagnostics | undefined): R
   });
 }
 
+export const DROPPED_SLIDE_NOTES_WARNING = 'Speaker notes were dropped: this output format carries no notes. Render the same deck with render_slides_pptx to keep them in the presenter notes.';
+
+export interface SlideNotesCarriage {
+  slides: number;
+  carried: boolean;
+}
+
+export function slideNotesCarriage(deck: SlideDeck, carried: boolean): SlideNotesCarriage {
+  return { slides: deck.slides.filter((slide) => Boolean(slide.notes)).length, carried };
+}
+
 export interface SlideRenderDiagnosticsInput {
   diagnostics: BrandDiagnostics;
   slideDiagnostics: BrandDiagnostics[];
   slidePlans: Array<ResolvedSlidePlan | undefined>;
+  notes: SlideNotesCarriage;
 }
 
 export function slideRenderDiagnostics(input: SlideRenderDiagnosticsInput, detail: DiagnosticsDetail): Record<string, unknown> {
@@ -49,7 +62,11 @@ export function slideRenderDiagnostics(input: SlideRenderDiagnosticsInput, detai
     templateRefs: planTemplateRefs.length > 1 ? planTemplateRefs : undefined,
     surface: input.diagnostics.surface,
     appliedOverrides: input.diagnostics.appliedOverrides,
-    warnings: countWarnings(input.diagnostics, input.slideDiagnostics),
+    notesSlides: input.notes.slides > 0 ? input.notes.slides : undefined,
+    warnings: [
+      ...countWarnings(input.diagnostics, input.slideDiagnostics),
+      ...(input.notes.slides > 0 && !input.notes.carried ? [{ message: DROPPED_SLIDE_NOTES_WARNING, slides: input.notes.slides }] : []),
+    ],
   });
   if (detail !== 'full') return summary;
   return { ...summary, slideDiagnostics: input.slideDiagnostics, slidePlans: input.slidePlans };

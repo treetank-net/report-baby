@@ -95,6 +95,7 @@ for development.
 - `render_slides_pdf` `{ data, output_path?, diagnostics?='summary' }` — shared slide model → local 16:9 PDF.
 - `render_slides_png` `{ data, slide_index?, output_dir?, filename_prefix?, diagnostics?='summary' }` — all slides or one selected slide → 1600×900 PNG.
 - `render_slides_pptx` `{ data, output_path?, diagnostics?='summary' }` — same model → PPTX; text/KPIs/tables/shapes are editable and charts are images.
+- Every slide of the shared model accepts `notes` (at most 4000 characters, `SLIDE_NOTES_MAX_CHARS` in `slides.ts`): speaker narration that is never drawn on the slide. `render_slides_pptx` writes it to the PowerPoint notes slide (`ppt/notesSlides/notesSlideN.xml` via `pptxgenjs` `slide.addNotes()`), which PowerPoint, Google Slides, Keynote, and LibreOffice show in presenter view. PDF and PNG have no notes channel: they drop it and say so — `notesSlides` counts the slides that carried notes and the warnings list gains one counted entry naming `render_slides_pptx`.
 - `diagnostics: 'full'` on the three slide tools adds `slideDiagnostics` and the full `slidePlans`; the default `'summary'` omits them. `inspect_brand_template` is not a substitute — it only compiles brand-owned template sources (normalized 0..1 frames) and throws for built-in templates.
 - `list_templates` `{}` — list templates (`default-report`, `campaign-summary`).
 - `list_brandbooks` `{}` — locally configured brandbooks and their named profiles.
@@ -163,6 +164,15 @@ first-start download — the same model as `google-ads-baby`.
   ourselves: self-contained, deterministic, offline.
 - **Artifact on claude.ai** — attractive HTML, but confined to Claude. We need
   cross-client rendering to a file on disk.
+- **Narration on `render_report` A4 pages** — no A4 surface has a presenter
+  view, so page narration would either print (defeating its purpose) or vanish
+  into a field nobody can read back. PDF text annotations are not a substitute:
+  viewers either draw a visible sticky-note icon on the page or hide the text
+  entirely. Report commentary belongs in `intro`, `sections`, and `highlights`,
+  which are meant to be read. `notes` therefore exists only on the slide model.
+- **PDF text annotations for slide notes** (`jsPDF createAnnotation`) — the same
+  problem one surface down: an icon on the slide breaks "invisible in the
+  layout", and viewers that hide annotations make the notes unreachable.
 
 ## Skills
 

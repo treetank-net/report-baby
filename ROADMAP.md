@@ -59,6 +59,14 @@
   external and generated slides, and never overwrite input. Generated slides
   use their own layout and do not inherit the client master; fonts and colors
   must be mapped deliberately.
+- [x] Per-slide `notes` (speaker notes) in the shared slide model, written to
+  the PPTX notes slide (`ppt/notesSlides/notesSlideN.xml`) and reported as a
+  counted warning by the PDF and PNG renderers, which have nowhere to keep it.
+- [ ] Optional notes companion for the non-PPTX surfaces: either a sibling
+  Markdown/text file listing the narration per slide, or jsPDF notes pages
+  appended after the deck. Not sticky-note PDF annotations — viewers either
+  draw a visible icon on the slide or hide the text entirely, so the notes
+  would leak into the deliverable or be unreachable.
 - [ ] Edit an existing file with `pptx-automizer` (npm, MIT, 0.9.0), NOT by
   hand-editing XML. Before adoption, check its Node >=20 requirement, its
   dependency on `pptxgenjs@^3.12.0` while this project uses 4.0.1, its temporary
@@ -197,3 +205,22 @@ Driven by `docs/brand-rendering-review.md`, which holds the full findings.
 - [ ] `layout.show_report_brand_name` governs the A4 header only; the slide
   lockup has no equivalent switch, so a logo that carries its own wordmark still
   gets the text brand name repeated on slides.
+- [ ] The `contrast-pdf-text` gate has a dead zone that hides exactly the class
+  of bug it was built for. In the `pyrus/editorial` case all 17 ivory-on-ivory
+  text runs are discarded as "over an image" even though the header band is
+  clipped to 34 mm and the text sits below it. The stream parser now tracks the
+  clip path (`W`/`W*` with the `q`/`Q` stack), the `cm` matrix an image is drawn
+  under, and `TL`/`T*` line advances, but text positions still drift enough to
+  land inside an image box. Either finish the parser (reset the text matrix on
+  `BT`, and read the leading per text object rather than per stream) or replace
+  it with a rasterised measurement the way the slide gates work — `pdftoppm` is
+  not a dependency the harness can assume, so that means an in-process
+  rasteriser.
+- [ ] `render_report` renders one column, so a long-form section fills the page
+  edge to edge at 10.5 pt — readable, but not what a newsletter looks like.
+  `docs/multi-column-pdf.md` has the research; nothing consumes it yet.
+- [ ] No inline formatting in `intro` or `sections[].body`: a draft written with
+  `**bold**` or `*italic*` renders the asterisks literally. A bounded inline
+  parser would need to split a paragraph into styled runs and measure each run,
+  because the current path measures whole lines with `splitTextToSize` and would
+  break wrapping, section-height accounting and page breaks.

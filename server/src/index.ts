@@ -14,6 +14,7 @@ async function main() {
     instructions: [
       'This server is a self-contained render engine: it turns structured data into polished PNG charts and PDF reports locally. No accounts, no auth, no network, no headless browser — pure compute, fully bundled.',
       'Charts and metric cards produce standalone PNGs. render_report produces a multi-page A4 PDF. Presentation tools share one bounded slide model and produce 16:9 PDF, selected or complete PNG slides, and editable PPTX.',
+      'A slide can carry notes: speaker narration that is never drawn on the slide. Only render_slides_pptx keeps it (in the PowerPoint notes slide shown in presenter view); render_slides_pdf and render_slides_png drop it and report a counted warning.',
       'For a chart, pass the raw data values (label/value pairs) — do NOT hand-build SVG unless you need something the chart types do not cover (then use render_svg; text needs font-family="DejaVu Sans").',
       'Render tools return the PATH to the written file plus a compact summary: resolved brand profile, template_ref, slide count and deduplicated warnings. Do NOT pull rendered images into context to read numbers — you already have the source data. Only pass return_image: true when you must visually judge layout or aesthetics.',
       'The render_slides_* tools accept diagnostics: "full" to add the per-slide pixel layout plans; that payload costs thousands of tokens per deck, so request it only when a layout is actually broken.',

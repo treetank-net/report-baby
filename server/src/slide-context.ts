@@ -1,6 +1,6 @@
 import { readBrandTemplateSource, resolveBrandContext, type BrandDiagnostics, type BrandOverrides, type RenderBrandContext } from './brand.js';
 import { readBuiltinTemplateSource } from './builtin-template-loader.js';
-import type { SlideDeck } from './slides.js';
+import { SLIDE_NOTES_MAX_CHARS, type SlideDeck } from './slides.js';
 import { resolveSlidePlan } from './slide-plan.js';
 import { logicalDirection } from './slide-templates.js';
 import { compileTemplateSource, type CompiledTemplate } from './template-source.js';
@@ -74,7 +74,8 @@ function validateOverrides(value: unknown, label: string): void {
 function validateSlide(slide: unknown, index: number): void {
   const label = `Slide ${index + 1}`;
   if (!isRecord(slide) || typeof slide.title !== 'string' || typeof slide.type !== 'string') throw new Error(`${label} must contain a title and type.`);
-  for (const key of ['subtitle', 'brand_ref', 'template_ref', 'surface', 'direction']) optionalString(slide[key], `${label}.${key}`);
+  for (const key of ['subtitle', 'notes', 'brand_ref', 'template_ref', 'surface', 'direction']) optionalString(slide[key], `${label}.${key}`);
+  if (typeof slide.notes === 'string' && slide.notes.length > SLIDE_NOTES_MAX_CHARS) throw new Error(`${label}.notes must be at most ${SLIDE_NOTES_MAX_CHARS} characters.`);
   if (slide.direction !== undefined) logicalDirection(slide.direction);
   validateOverrides(slide.overrides, `${label}.overrides`);
   if (slide.type === 'title') optionalString(slide.eyebrow, `${label}.eyebrow`);

@@ -13,7 +13,7 @@ description: How to compose polished A4 reports, 16:9 presentations, editable PP
 - **`render_svg`** — escape hatch for fully custom graphics; every text node needs `font-family="DejaVu Sans"`.
 - **`render_slides_pdf`** — complete local 16:9 presentation from the shared slide model.
 - **`render_slides_png`** — all slides or one `slide_index` as deterministic 1600×900 PNG files.
-- **`render_slides_pptx`** — editable PPTX from the same model; charts are images, while text, KPI cards, tables, and shapes remain editable.
+- **`render_slides_pptx`** — editable PPTX from the same model; charts are images, while text, KPI cards, tables, and shapes remain editable. The only format that keeps per-slide speaker `notes`.
 
 All tools return the PATH to the written file. Never pull the rendered file back into context to read numbers — you already have the source data. Visually inspect (Read on PDF pages, `return_image: true` on PNGs) only when you must judge layout or aesthetics.
 
@@ -94,9 +94,22 @@ Use one `data` object for all three presentation formats. Keep the model bounded
     { "type": "chart", "title": "Revenue trend", "chart": { "type": "bar", "data": [{ "label": "May", "value": 30 }, { "label": "June", "value": 42 }] } },
     { "type": "table", "title": "Channel detail", "head": ["Channel", "Result"], "body": [["SEO", 42], ["Ads", 37]] },
     { "type": "narrative", "title": "Interpretation", "body": "Plain prose.", "highlights": ["One short emphasis"] },
-    { "type": "conclusions", "title": "Next actions", "items": ["Scale the winning channel"] }
+    { "type": "conclusions", "title": "Next actions", "items": ["Scale the winning channel"], "notes": "Ask for a decision on the media budget before moving on." }
   ]
 }
+```
+
+### Speaker notes
+
+Every slide takes an optional `notes` string (max 4000 chars): the sentence you would say out loud about the numbers on that slide. It is never drawn on the slide.
+
+- Put the narration in `notes`, not in `subtitle` or `body` — those print.
+- `render_slides_pptx` writes it to the PowerPoint notes slide, which PowerPoint, Google Slides, Keynote, and LibreOffice show in presenter view and in the notes pane.
+- `render_slides_pdf` and `render_slides_png` have no notes channel. They drop the notes and say so: the response reports `notesSlides` (how many slides carried notes) plus one warning naming `render_slides_pptx`. If the narration must survive, render the PPTX.
+- Plain prose, one short paragraph per slide; markdown is not interpreted anywhere in this model.
+
+```json
+{ "type": "metrics", "title": "Key KPIs", "metrics": [{ "label": "ROAS", "value": "4,2", "delta": "−0,3", "trend": "down" }], "notes": "ROAS dipped because we deliberately opened prospecting; CPA held, so the trade is intentional." }
 ```
 
 Keep metric slides to 6 cards, narrative highlights to 4, conclusions to 7, and visible table rows to 10. Use `slide_index` (zero-based) to regenerate one PNG without touching unrelated slides. Preserve the same source object when producing PDF, PNG, and PPTX so content and ordering stay aligned.

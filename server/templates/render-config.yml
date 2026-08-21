@@ -78,6 +78,7 @@ pdf:
   section_heading_line_height: 6
   section_heading_gap: 2
   section_min_lead_lines: 3
+  keep_together_waste_ratio: 0.25
   section_bottom_gap: 6
   table_caption_gap: 10
   table_caption_bottom_gap: 4
