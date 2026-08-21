@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.0
+- Slide tool responses are compact by default. `render_slides_pdf`, `render_slides_png` and `render_slides_pptx` return the path, slide count, resolved brand/profile/template/surface, non-empty applied overrides and warnings deduplicated across slides; a warning that repeated once per slide is now one entry with a slide count. A ten-slide PPTX response fell from 32,726 to 230 characters, and the payload is O(1) in slide count instead of O(n). The full per-slide layout plans are still available through `diagnostics: "full"`, which is what a caller reading `slidePlans` must now pass. `list_templates` no longer duplicates its listing in `structuredContent`.
+- A4 header images are clipped to their band. jsPDF does not clip, so a header image whose aspect ratio was taller than the band was cover-fitted and then drawn in full: a 3.9:1 image in the 210x34 mm repeated band rendered 54 mm tall and spilled over the page body, drawing dark photography across the first line of running text. Every page after the first was affected wherever `report_header_style: image-band` was set.
+- `image-band` report headers pick readable ink. The brand name took `color.primary`, which on dark photography meant navy on navy; it now uses the image text colour, and the accent rule that was being drawn inside the band is omitted.
+- New brandbook key `layout.show_report_brand_name`. Setting it to `false` keeps the logo asset and drops the repeated text brand name next to it, for lockups where the logo already carries the wordmark.
+- Narrative and conclusion text on slides that carry a cover or an image band now uses the image text colour instead of `color.foreground`, matching the title, and the narrative bullet follows it. A light brand drew dark body text over dark photography.
+- Line charts flip a value label below its point when the label would cross the top of the plot. A first data point equal to the rounded axis maximum used to print its value over the top axis tick.
+
 ## v0.5.0
 - Brandbooks: external brand directories with named profiles, profile inheritance (`extends`), published release snapshots and asset resolution behind a path boundary. Four read-only tools expose them: `list_brandbooks`, `inspect_brand`, `list_brand_templates`, `inspect_brand_template`. MCP never writes to a brandbook.
 - Brand-owned template language: normalised frames, named regions and slots, and `reject` / `shrink-to-fit` overflow per slot. The built-in slide templates (`standard`, `compact`, `centered-title`, `two-column`) and every visual constant now live in `server/templates/` and are embedded in the bundle at build time, so a copied `bundle.cjs` boots with no source tree next to it. `REPORT_BABY_TEMPLATE_DIR` overrides the embedded copy.

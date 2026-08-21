@@ -226,6 +226,7 @@ try {
     assert.ok(entry.use_with.includes('render_slides_pptx'), 'slide templates must say which tools accept them');
   }
   assert.equal(listedRefs.get('slides/primary')?.owner, 'brand', 'brand-owned templates are not tagged as brand-owned');
+  assert.equal(templateListing.structuredContent, undefined, 'list_templates duplicates its whole listing in structuredContent');
 
   const columnsDeck = {
     title: 'Dwie kolumny',
@@ -258,10 +259,22 @@ try {
   const columnsPdf = await readFile(columnsPdfPath);
   assert.equal(columnsPdf.subarray(0, 5).toString(), '%PDF-');
   assert.equal((columnsPdf.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length, columnsDeck.slides.length);
-  const columnsPlans = columnsPdfResult.structuredContent?.slidePlans ?? [];
+  const columnsSummary = columnsPdfResult.structuredContent ?? {};
+  assert.equal(columnsSummary.slidePlans, undefined, 'the default response still carries per-slide layout plans');
+  assert.equal(columnsSummary.slideDiagnostics, undefined, 'the default response still carries per-slide diagnostics');
+  assert.equal(columnsSummary.appliedOverrides, undefined, 'the default response still carries an empty appliedOverrides collection');
+  assert.equal(columnsSummary.slideCount, columnsDeck.slides.length, 'the summary response lost the slide count');
+  assert.equal(columnsSummary.brandRef, 'brand://acme/primary', 'the summary response lost the resolved brand reference');
+  assert.deepEqual(new Set(columnsSummary.templateRefs ?? [columnsSummary.templateRef]), new Set(['slides/two-column', 'slides/standard']), 'the summary response lost the resolved template references');
+  assert.ok(JSON.stringify(columnsSummary).length < 400, `the summary response is too large: ${JSON.stringify(columnsSummary).length} chars`);
+
+  const columnsFullResult = await client.callTool({ name: 'render_slides_pdf', arguments: { brand_ref: 'brand://acme/primary', data: columnsDeck, output_path: columnsPdfPath, diagnostics: 'full' } });
+  assert.notEqual(columnsFullResult.isError, true, JSON.stringify(columnsFullResult.content));
+  const columnsPlans = columnsFullResult.structuredContent?.slidePlans ?? [];
   assert.equal(columnsPlans[0]?.slideType, 'columns', 'the columns slide type did not survive the tool schema');
   assert.equal(columnsPlans[0]?.templateRef, 'slides/two-column', 'the two-column template was not applied to the columns slide');
   assert.ok(columnsPlans[1]?.slotRules, 'a columns slide without template_ref did not get a slide plan');
+  assert.ok(Array.isArray(columnsFullResult.structuredContent?.slideDiagnostics), 'diagnostics: full did not return per-slide diagnostics');
 
   const columnsPngResult = await client.callTool({ name: 'render_slides_png', arguments: { brand_ref: 'brand://acme/primary', data: columnsDeck, output_dir: outputDir, filename_prefix: 'columns' } });
   assert.notEqual(columnsPngResult.isError, true, JSON.stringify(columnsPngResult.content));

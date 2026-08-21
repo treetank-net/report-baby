@@ -19,6 +19,10 @@ data and receive a path to a finished PDF or PNG.
 - Returns a **file path**, not an image in context (a human deliverable).
   Optional `return_image` on PNG tools is available when an LLM must judge the
   layout.
+- The response stays small on purpose: the written path plus the resolved brand
+  profile, `template_ref`, slide count, and deduplicated warnings. The
+  `render_slides_*` tools accept `diagnostics: "full"` to add the per-slide
+  pixel layout plans for debugging; that payload is large, so it is opt-in.
 
 ## Tools
 

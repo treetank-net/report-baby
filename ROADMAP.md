@@ -189,3 +189,11 @@ Driven by `docs/brand-rendering-review.md`, which holds the full findings.
 - [ ] A declared bold font face is trusted without checking it. The `orbit`
   fixture ships `UbuntuSans-Bold.ttf` whose `usWeightClass` is 400, so bold text
   silently renders regular in PNG and PDF while PPTX substitutes a real bold.
+- [ ] No synthetic fixture sets `report_header_style: image-band`, so the A4
+  header band has no automated coverage. Both bugs fixed in v0.6.0 — the
+  unclipped cover image and the unreadable brand name — were found by hand on a
+  customer brandbook. A neutral `examples/brand-showcase` profile with an image
+  band would let `contrast-pdf-text` catch that whole class of overlap.
+- [ ] `layout.show_report_brand_name` governs the A4 header only; the slide
+  lockup has no equivalent switch, so a logo that carries its own wordmark still
+  gets the text brand name repeated on slides.

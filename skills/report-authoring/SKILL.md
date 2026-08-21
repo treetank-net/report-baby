@@ -17,6 +17,8 @@ description: How to compose polished A4 reports, 16:9 presentations, editable PP
 
 All tools return the PATH to the written file. Never pull the rendered file back into context to read numbers — you already have the source data. Visually inspect (Read on PDF pages, `return_image: true` on PNGs) only when you must judge layout or aesthetics.
 
+The response is deliberately compact: the path, the resolved brand profile, `template_ref`, the slide count, and warnings deduplicated across slides (one entry with the number of slides it affected). Only when a slide layout is visibly wrong, re-run the same call with `diagnostics: "full"` to get the per-slide pixel plans (`slidePlans`, `slotRules`, slot boxes) — that payload costs thousands of tokens per deck.
+
 ## Workflow
 
 1. Collect and verify all numbers FIRST. The report is a formatting step, not an analysis step.

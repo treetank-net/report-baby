@@ -48,6 +48,7 @@ export interface RenderTheme {
   density: 'comfortable' | 'compact';
   headerStyle: 'plain' | 'accent-band' | 'dark-band' | 'image-band';
   reportHeaderStyle: 'plain' | 'accent-band' | 'dark-band' | 'image-band';
+  showReportBrandName: boolean;
   titleAlign: 'left' | 'center';
   titleCase: 'normal' | 'upper';
   titleColor: string;
@@ -125,6 +126,7 @@ const DEFAULT_THEME: RenderTheme = {
   density: 'comfortable',
   headerStyle: 'plain',
   reportHeaderStyle: 'plain',
+  showReportBrandName: true,
   titleAlign: 'left',
   titleCase: 'normal',
   titleColor: '#ffffff',
@@ -340,6 +342,7 @@ function extractTheme(brandDir: string, document: RecordValue, surface?: string)
   };
   const headerStyle = asString(layout.header_style);
   const reportHeaderStyle = asString(layout.report_header_style) ?? headerStyle;
+  const showReportBrandName = layout.show_report_brand_name !== false;
   const titleAlign = asString(layout.title_align);
   const titleCase = asString(layout.title_case);
   const titleColor = resolveColor(layout.title_color, palette, surface) ?? DEFAULT_THEME.titleColor;
@@ -396,6 +399,7 @@ function extractTheme(brandDir: string, document: RecordValue, surface?: string)
       pptxHeadingScale,
       headerStyle: headerStyle === 'accent-band' || headerStyle === 'dark-band' || headerStyle === 'image-band' ? headerStyle : DEFAULT_THEME.headerStyle,
       reportHeaderStyle: reportHeaderStyle === 'accent-band' || reportHeaderStyle === 'dark-band' || reportHeaderStyle === 'image-band' ? reportHeaderStyle : DEFAULT_THEME.reportHeaderStyle,
+      showReportBrandName,
       titleAlign: titleAlign === 'center' ? 'center' : DEFAULT_THEME.titleAlign,
       titleCase: titleCase === 'upper' ? 'upper' : DEFAULT_THEME.titleCase,
       titleColor,

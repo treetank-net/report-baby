@@ -152,7 +152,12 @@ function addPreparedBrandAssetCover(doc: jsPDF, asset: PdfAsset | undefined, x: 
   const renderedHeight = properties.height * scale;
   const renderedX = x + (width - renderedWidth) / 2;
   const renderedY = y + (height - renderedHeight) / 2;
+  doc.saveGraphicsState();
+  doc.rect(x, y, width, height, null);
+  doc.clip();
+  doc.discardPath();
   doc.addImage(asset.data, asset.format, renderedX, renderedY, renderedWidth, renderedHeight);
+  doc.restoreGraphicsState();
 }
 
 interface ReportHeaderRenderer {
@@ -180,10 +185,10 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
 
   const drawTopLine = (doc: jsPDF, baseline: number, compact = false): void => {
     const size = compact ? PDF_CONFIG.headerBrandCompactSize : PDF_CONFIG.headerBrandSize;
-    if (data.brand) {
+    if (data.brand && theme.showReportBrandName) {
       doc.setFont(font, 'bold');
       doc.setFontSize(size);
-      doc.setTextColor(...rgb(band ? readableTextColor(band, theme, size * PT_TO_PX, true) : theme.primary));
+      doc.setTextColor(...rgb(band ? readableTextColor(band, theme, size * PT_TO_PX, true) : reportHeaderStyle === 'image-band' ? theme.imageTextColor : theme.primary));
       doc.text(String(data.brand).toUpperCase(), MARGIN + logoWidth + PDF_CONFIG.headerBrandGap, baseline);
     }
     if (data.period) {
@@ -209,7 +214,7 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
     doc.setTextColor(...rgb(headerText));
     const repeatedTitle = doc.splitTextToSize(theme.titleCase === 'upper' ? title.toUpperCase() : title, CONTENT_W).slice(0, 1);
     doc.text(repeatedTitle, MARGIN, PDF_CONFIG.headerRepeatTitleY);
-    if (!band) {
+    if (!band && reportHeaderStyle !== 'image-band') {
       doc.setDrawColor(...rgb(theme.primary));
       doc.setLineWidth(PDF_CONFIG.headerRepeatRuleWidth);
       doc.line(MARGIN, followingPageHeight, PAGE_W - MARGIN, followingPageHeight);
@@ -226,7 +231,7 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
       addPreparedBrandAssetContain(doc, logoAsset, MARGIN, logoY, logoWidth, logoHeight);
       const lockupBaseline = logoY + logoHeight * PDF_CONFIG.headerLockupBaselineRatio;
       cur.y = band || reportHeaderStyle === 'image-band' ? PDF_CONFIG.headerBandTitleTop : PDF_CONFIG.headerTitleTop;
-      const hasTopLine = Boolean(data.brand || data.period);
+      const hasTopLine = Boolean((data.brand && theme.showReportBrandName) || data.period);
       drawTopLine(doc, lockupBaseline);
       if (hasTopLine) cur.y += PDF_CONFIG.headerTopLineGap;
 
@@ -247,7 +252,7 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
         cur.y += subLines.length * PDF_CONFIG.headerSubtitleLineHeight;
       }
       cur.y += PDF_CONFIG.headerRuleGap;
-      if (!band) {
+      if (!band && reportHeaderStyle !== 'image-band') {
         doc.setDrawColor(...rgb(theme.primary));
         doc.setLineWidth(PDF_CONFIG.headerRuleWidth);
         doc.line(MARGIN, cur.y, PAGE_W - MARGIN, cur.y);

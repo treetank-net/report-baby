@@ -36,6 +36,15 @@ file.
   expensive context.
 - PNG tools have `return_image: boolean` (default `false`) and can also return
   MCP image content. Use it only when the LLM must judge layout or aesthetics.
+- `structuredContent` stays a compact summary: the path(s), the resolved
+  `brandRef`/`profile`/`templateRef`/`surface`, `slideCount`, non-empty
+  `appliedOverrides`, and warnings deduplicated across slides
+  (`[{ message, slides }]`). Empty collections are omitted entirely.
+- The full per-slide layout plans are opt-in through `diagnostics: 'full'` on the
+  `render_slides_*` tools; they cost thousands of tokens per deck and only exist
+  for debugging a layout. `server/src/example.ts` keeps writing the full
+  `manifest.json` — `server/scripts/visual-qa.mjs` reads `slidePlans`,
+  `slotBoxes` and `slideThemes` from it, so that file must stay verbose.
 
 ### Source layout (`server/src/`)
 
@@ -55,6 +64,7 @@ template-source.ts  — brand-owned template language: compileTemplateSource() �
 slide-plan.ts       — resolveSlidePlan(): CompiledTemplate + theme + slide → ResolvedSlidePlan in 1600×900 px; slidePlanSummary() for diagnostics
 slide-templates.ts  — built-in slide template refs, logical→physical direction/alignment/lockup helpers
 slide-context.ts    — resolveSlideDeck(): validates the deck, resolves brand + template + plan per slide
+tool-response.ts    — MCP response contract: brandRenderSummary(), slideRenderDiagnostics(summary|full), countWarnings() deduplicating one warning per slide into a single counted entry
 builtin-template-loader.ts — reads server/templates/: readRenderConfig() (all visual constants) and the built-in slide templates, from the files embedded in the bundle or from an on-disk override
 generated/          — build output of scripts/generate-builtin-templates.mjs; regenerated, never hand-edited
 example.ts          — standalone CLI used by scripts/render-example.js (prototyping from an external brandbook, no npm)
@@ -64,7 +74,7 @@ assets/
   font-bold.ttf     — DejaVu Sans bold
 
 tools/
-  render.ts         — registerRenderTools(): render_chart, render_metric_cards, render_svg, render_report, render_slides_pdf, render_slides_png, render_slides_pptx, list_templates
+  render.ts         — registerRenderTools(): render_chart, render_metric_cards, render_svg, render_report, render_slides_pdf, render_slides_png, render_slides_pptx, list_templates. Responses go through tool-response.ts; list_templates returns its JSON once, in text content only.
   brand.ts          — registerBrandTools(): list_brandbooks, inspect_brand, list_brand_templates, inspect_brand_template. Read-only; MCP never writes to a brandbook.
   auth.ts           — registerAuthTools(): update_plugin (self-update + changelog). No setup_auth; there is no OAuth.
 ```
@@ -82,9 +92,10 @@ for development.
 - `render_metric_cards` `{ cards: [{label,value,delta?,trend?,note?}], title?, subtitle?, columns?, width?, output_path?, return_image? }` — KPI card grid → PNG.
 - `render_svg` `{ svg, width?, output_path?, return_image? }` — arbitrary SVG → PNG (escape hatch; text requires `font-family="DejaVu Sans"`).
 - `render_report` `{ template?='default-report', data, output_path? }` — opinionated template + data → multi-page PDF.
-- `render_slides_pdf` `{ data, output_path? }` — shared slide model → local 16:9 PDF.
-- `render_slides_png` `{ data, slide_index?, output_dir?, filename_prefix? }` — all slides or one selected slide → 1600×900 PNG.
-- `render_slides_pptx` `{ data, output_path? }` — same model → PPTX; text/KPIs/tables/shapes are editable and charts are images.
+- `render_slides_pdf` `{ data, output_path?, diagnostics?='summary' }` — shared slide model → local 16:9 PDF.
+- `render_slides_png` `{ data, slide_index?, output_dir?, filename_prefix?, diagnostics?='summary' }` — all slides or one selected slide → 1600×900 PNG.
+- `render_slides_pptx` `{ data, output_path?, diagnostics?='summary' }` — same model → PPTX; text/KPIs/tables/shapes are editable and charts are images.
+- `diagnostics: 'full'` on the three slide tools adds `slideDiagnostics` and the full `slidePlans`; the default `'summary'` omits them. `inspect_brand_template` is not a substitute — it only compiles brand-owned template sources (normalized 0..1 frames) and throws for built-in templates.
 - `list_templates` `{}` — list templates (`default-report`, `campaign-summary`).
 - `list_brandbooks` `{}` — locally configured brandbooks and their named profiles.
 - `inspect_brand` `{ brand_ref, surface? }` — resolve one profile without rendering; returns the theme and diagnostics.

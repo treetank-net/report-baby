@@ -207,7 +207,11 @@ export function lineChart(opts: ChartOptions): string {
   opts.data.forEach((d, i) => {
     parts.push(`<circle cx="${px(i).toFixed(1)}" cy="${py(d.value).toFixed(1)}" r="${CHART_CONFIG.pointRadius}" fill="#ffffff" stroke="${accent}" stroke-width="${CHART_CONFIG.linePointStrokeWidth}"/>`);
     parts.push(text(px(i), plotBottom + CHART_CONFIG.lineLabelGap, truncate(d.label, plotW / n - CHART_CONFIG.lineLabelReserve, CHART_CONFIG.lineLabelSize), { size: CHART_CONFIG.lineLabelSize, color: muted, anchor: 'middle' }));
-    if (n <= CHART_CONFIG.lineValueMaxPoints) parts.push(text(px(i), py(d.value) - CHART_CONFIG.lineValueOffset, fmt(d.value, opts.prefix, opts.suffix), { size: CHART_CONFIG.lineValueSize, color: ink, weight: 600, anchor: 'middle' }));
+    if (n <= CHART_CONFIG.lineValueMaxPoints) {
+      const above = py(d.value) - CHART_CONFIG.lineValueOffset;
+      const valueY = above - CHART_CONFIG.lineValueSize < plotTop ? py(d.value) + CHART_CONFIG.lineValueOffset + CHART_CONFIG.lineValueSize : above;
+      parts.push(text(px(i), valueY, fmt(d.value, opts.prefix, opts.suffix), { size: CHART_CONFIG.lineValueSize, color: ink, weight: 600, anchor: 'middle' }));
+    }
   });
 
   parts.push('</svg>');
