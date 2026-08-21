@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.7.1
+- `pdf.keep_together_waste_ratio` drops from 0.25 to 0.15. At 0.25 a section that missed the bottom of a page by a little still jumped to the next one, leaving up to a quarter of the sheet blank — 49 mm of empty cream in a replay of a real editorial draft. At 0.15 the block starts on the page it reaches and flows over; `pdf.section_min_lead_lines` still keeps a heading from stranding alone at the foot of a page.
+
 ## v0.7.0
 - Slides take `notes`: per-slide narration that never appears in the layout. `render_slides_pptx` writes it to the PPTX notes slide, where PowerPoint, Google Slides, Keynote and LibreOffice all show it in presenter view, so a deck of numbers can carry the sentence that explains them. PDF and PNG have no notes channel and say so — they report the count and return one counted warning naming `render_slides_pptx`, rather than dropping the text silently.
 - Page chrome no longer leaks its text style into the body. The repeated A4 header set a bold font and the header ink and never restored them, so any paragraph that continued past a page break kept drawing in the header colour: on an `image-band` profile with a light page, entire pages of body text rendered white-on-cream and bold. Confirmed across three real documents before the fix.
