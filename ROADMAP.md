@@ -219,18 +219,16 @@ Driven by `docs/brand-rendering-review.md`, which holds the full findings.
 - [ ] `render_report` renders one column, so a long-form section fills the page
   edge to edge at 10.5 pt — readable, but not what a newsletter looks like.
   `docs/multi-column-pdf.md` has the research; nothing consumes it yet.
-- [ ] No inline formatting in `intro` or `sections[].body`: a draft written with
-  `**bold**` or `*italic*` renders the asterisks literally. A bounded inline
-  parser would need to split a paragraph into styled runs and measure each run,
-  because the current path measures whole lines with `splitTextToSize` and would
-  break wrapping, section-height accounting and page breaks.
-- [ ] Nothing warns when text uses a glyph the brand font does not carry. In a
-  replay of a real editorial draft `Germany → Poland` rendered as
-  `Germany  Poland`: Source Serif 4 has no U+2192, and jsPDF silently drops the
-  glyph instead of falling back to the embedded DejaVu Sans. A `cmap` read of
-  each brand font at load time would let the renderer report the missing code
-  points as a warning; a real glyph fallback is a larger change, because a
-  paragraph would have to be split into runs per font.
-- [ ] `render_report` has no second heading level, so a source draft whose `##`
-  chapters each hold several `###` sections renders as one flat list of
-  headings. A replay of a two-article draft loses the article boundary.
+- [ ] No italic face anywhere: `*italic*` in report copy renders upright and
+  only reports a warning. A brandbook cannot declare `font_italic_path`, and the
+  bundled DejaVu set carries regular and bold only. Adding one means a third and
+  fourth embedded face plus an italic slot in the brand font schema.
+- [ ] Table cells cannot mix weights or fonts inside one cell: `jspdf-autotable`
+  draws a cell with a single font, so inline markup is stripped and a cell that
+  needs a glyph the brand font lacks is drawn entirely in DejaVu Sans. Drawing
+  cells by hand from `willDrawCell` would fix both, but the row heights are
+  measured by autotable before that hook runs.
+- [ ] Styled runs are wrapped by measuring each token with its own font, while
+  chart labels, KPI values and the PPTX renderer still measure whole strings in
+  one font. A line that mixes fonts can therefore be a fraction of a millimetre
+  wider than the wrapper assumed.

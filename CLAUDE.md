@@ -61,6 +61,7 @@ templates.ts        — listTemplates(), renderReportPdf(name, data) → Buffer 
 slides.ts           — bounded shared slide model and PDF 16:9, PNG 1600×900, and editable PPTX renderers
 brand.ts            — brandbook reader: resolveBrandContext() → RenderTheme + RenderComposition + diagnostics, profile inheritance (extends), release snapshots (active.json → releases/<v>/), asset resolution behind safeRelativePath(), listBrandbooks()/inspectBrand()/listBrandTemplates()/inspectBrandTemplate()
 template-source.ts  — brand-owned template language: compileTemplateSource() → CompiledTemplate (normalized 0..1 frames, named regions/slots, reject|shrink-to-fit), resolvePlan() → ResolvedTemplatePlan
+text-runs.ts        — styled-run text engine: parseInlineRuns() (**bold**), fontCoverage() (TTF cmap format 4/12 → covered code points), splitUncovered() routing missing glyphs to the bundled DejaVu Sans, wrapStyledRuns()/drawStyledLine() measuring and drawing each run with its own font
 slide-plan.ts       — resolveSlidePlan(): CompiledTemplate + theme + slide → ResolvedSlidePlan in 1600×900 px; slidePlanSummary() for diagnostics
 slide-templates.ts  — built-in slide template refs, logical→physical direction/alignment/lockup helpers
 slide-context.ts    — resolveSlideDeck(): validates the deck, resolves brand + template + plan per slide
@@ -106,11 +107,19 @@ for development.
 
 ### `render_report` data shape
 
-`{ brand?, title?, subtitle?, period?, intro?, kpis?: [{label,value,delta?,trend?,note?}], charts?: [{type,title?,subtitle?,prefix?,suffix?,data}], sections?: [{heading,body}], table?: {head,body,caption?}, highlights?: string[], highlights_title?, footer? }`.
+`{ brand?, title?, subtitle?, period?, intro?, kpis?: [{label,value,delta?,trend?,note?}], charts?: [{type,title?,subtitle?,prefix?,suffix?,data}], sections?: [{heading,body,level?}], table?: {head,body,caption?}, highlights?: string[], highlights_title?, footer? }`.
 
 All fields are optional. Only present blocks render, in this order: header →
 intro → KPI → charts → sections → table → highlights → footer (the numbered
 footer appears on every page).
+
+`intro`, `sections[].body`, section headings, highlights and the table caption
+accept `**bold**` inline markup and fall back to the bundled DejaVu Sans for
+characters the brand font does not carry; `sections[].level: 2` renders a
+subheading under the preceding chapter. Table cells cannot do either — markup is
+stripped and a cell needing a missing glyph is drawn wholly in DejaVu Sans, both
+reported as warnings in `structuredContent.warnings`. There is no italic face,
+so `*italic*` renders upright and reports a warning.
 
 ## Distribution — zero-dependency bundle
 

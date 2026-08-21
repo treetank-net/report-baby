@@ -53,7 +53,8 @@ Only present blocks render, in this fixed order: header → intro → kpis → c
     { "type": "pie", "title": "Conversions by source", "data": [ { "label": "Google", "value": 512 }, { "label": "Meta", "value": 300 } ] }
   ],
   "sections": [
-    { "heading": "What worked", "body": "Plain-prose narrative. No markdown — the renderer prints text verbatim." }
+    { "heading": "What worked", "body": "Prose narrative. **Bold** works inline; nothing else does.", "level": 1 },
+    { "heading": "Paid search", "body": "level 2 renders a subheading under the chapter above it.", "level": 2 }
   ],
   "table": {
     "caption": "Campaign detail",
@@ -77,7 +78,9 @@ alignment.
 - `charts[].title` — max ~55 chars. `pie` renders as a donut with the item count in the middle; use `suffix`/`prefix` on `bar`/`line` for units.
 - `footer` — max ~120 chars, single line shared with the page number.
 - `period` and `brand` share one line — keep both short.
-- `sections[].body` and `intro` — plain prose only; markdown syntax (`**`, `##`, `-`) prints literally. Length is fine: text flows across pages, and headings always stay with their body (never orphaned at a page bottom).
+- `sections[].body` and `intro` — prose with one exception: `**bold**` (and `__bold__`) renders bold inline. Everything else (`##`, `-`, `[links]`) prints literally, and `*italic*` renders upright because no font here has an italic face. Length is fine: text flows across pages, and headings always stay with their body (never orphaned at a page bottom).
+- `sections[].level` — `1` (default) is a chapter, `2` a subheading beneath it. A `level: 1` section may have an empty `body` and act purely as a chapter opener. Use levels when the source has two heading tiers; otherwise leave it out.
+- Table cells are the one place inline markup is dropped rather than rendered, and a cell needing a character the brand font lacks is drawn in the bundled fallback font. Both show up in the response warnings — read them, they mean the output is not what you asked for.
 - `table` — any column count, but past ~6 columns cells get cramped; prefer splitting into two tables.
 
 ## Shared slide model

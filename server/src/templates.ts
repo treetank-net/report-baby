@@ -3,6 +3,20 @@ import type { UserOptions } from 'jspdf-autotable';
 import { assetDataUri, defaultRenderTheme, type RenderTheme } from './brand.js';
 import { readRenderConfig } from './builtin-template-loader.js';
 import { loadRenderFontSet, newPdf, pdfFont, readableTextColor, renderSvgToPng } from './render.js';
+import {
+  drawStyledLine,
+  fontCoverage,
+  layoutStyledText,
+  FALLBACK_FAMILY,
+  LITERAL_MARKUP_WARNING,
+  missingCodePoints,
+  stripInlineMarkup,
+  tableFallbackWarning,
+  splitUncovered,
+  styledRuns,
+  type StyledRun,
+  type StyledTextContext,
+} from './text-runs.js';
 import { renderChart, type ChartDatum, type ChartType } from './svg.js';
 
 export interface TemplateInfo {
@@ -49,7 +63,7 @@ export interface ReportData {
   intro?: string;
   kpis?: Array<{ label: string; value: string | number; delta?: string; trend?: 'up' | 'down' | 'flat'; note?: string }>;
   charts?: ReportChart[];
-  sections?: Array<{ heading: string; body: string }>;
+  sections?: Array<{ heading: string; body: string; level?: 1 | 2 }>;
   table?: { head: string[]; body: Array<Array<string | number>>; caption?: string };
   highlights?: string[];
   highlights_title?: string;
@@ -106,12 +120,20 @@ class Cursor {
   }
 }
 
-function drawParagraph(doc: jsPDF, cur: Cursor, lines: string[], lineHeight: number, x = MARGIN): void {
+function boldRuns(runs: StyledRun[]): StyledRun[] {
+  return runs.map((run) => ({ ...run, bold: true }));
+}
+
+function drawStyledLines(doc: jsPDF, lines: StyledRun[][], x: number, y: number, lineHeight: number, text: StyledTextContext): void {
+  lines.forEach((line, index) => drawStyledLine(doc, line, x, y + index * lineHeight, text));
+}
+
+function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight: number, text: StyledTextContext, x = MARGIN): void {
   let remaining = lines;
   while (remaining.length > 0) {
     const fit = Math.max(1, Math.floor((PAGE_H - MARGIN - cur.y) / lineHeight));
     const chunk = remaining.slice(0, fit);
-    doc.text(chunk, x, cur.y);
+    drawStyledLines(doc, chunk, x, cur.y, lineHeight, text);
     cur.y += chunk.length * lineHeight;
     remaining = remaining.slice(chunk.length);
     if (remaining.length > 0) cur.breakPage();
@@ -288,14 +310,14 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
   };
 }
 
-function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
+function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext): void {
   if (!data.intro) return;
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
   doc.setTextColor(...rgb(theme.foreground));
-  const lines = doc.splitTextToSize(data.intro, CONTENT_W);
+  const lines = layoutStyledText(doc, data.intro, CONTENT_W, text);
   cur.keepTogether(lines.length * PDF_CONFIG.introLineHeight + PDF_CONFIG.introKeepPadding, PDF_CONFIG.introLineHeight * PDF_CONFIG.introMinLeadLines);
-  drawParagraph(doc, cur, lines, PDF_CONFIG.introLineHeight);
+  drawParagraph(doc, cur, lines, PDF_CONFIG.introLineHeight, text);
   cur.y += PDF_CONFIG.introBottomGap;
 }
 
@@ -313,7 +335,7 @@ function fitOneLine(doc: jsPDF, text: string, width: number): string {
   return `${head.replace(/[\s,;:.\u2013\u2014-]+$/, '')}…`;
 }
 
-function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
+function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext): void {
   const kpis = data.kpis ?? [];
   if (kpis.length === 0) return;
   const font = pdfFont(theme);
@@ -337,11 +359,11 @@ function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThem
     doc.setFont(font, 'bold');
     doc.setFontSize(PDF_CONFIG.kpiLabelSize);
     doc.setTextColor(...rgb(theme.muted));
-    doc.text(String(k.label).toUpperCase(), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiLabelY);
+    drawStyledLine(doc, boldRuns(splitUncovered([{ text: String(k.label).toUpperCase(), bold: true, fallback: false }], text)), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiLabelY, text);
     doc.setFont(font, 'bold');
     doc.setFontSize(PDF_CONFIG.kpiValueSize);
     doc.setTextColor(...rgb(theme.foreground));
-    doc.text(String(k.value), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiValueY);
+    drawStyledLine(doc, boldRuns(splitUncovered([{ text: String(k.value), bold: true, fallback: false }], text)), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiValueY, text);
     if (k.delta) {
       const color = k.trend === 'down' ? rgb(theme.danger) : k.trend === 'up' ? rgb(theme.success) : rgb(theme.muted);
       const arrow = k.trend === 'down' ? '▼ ' : k.trend === 'up' ? '▲ ' : '';
@@ -353,7 +375,7 @@ function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThem
       doc.setFont(font, 'normal');
       doc.setFontSize(PDF_CONFIG.kpiNoteSize);
       doc.setTextColor(...rgb(theme.muted));
-      doc.text(fitOneLine(doc, k.note, cardW - PDF_CONFIG.kpiPadding * 2), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiDeltaY);
+      drawStyledLine(doc, splitUncovered([{ text: fitOneLine(doc, k.note, cardW - PDF_CONFIG.kpiPadding * 2), bold: false, fallback: false }], text), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiDeltaY, text);
     }
   });
   cur.y += cardH + PDF_CONFIG.kpiBottomGap;
@@ -381,31 +403,49 @@ async function renderCharts(doc: jsPDF, cur: Cursor, data: ReportData, theme: Re
   }
 }
 
-function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
+function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext): void {
   const font = pdfFont(theme);
-  for (const s of data.sections ?? []) {
+  const sections = data.sections ?? [];
+  sections.forEach((s, index) => {
+    const sub = s.level === 2;
+    const headingSize = sub ? PDF_CONFIG.sectionSubheadingSize : PDF_CONFIG.sectionHeadingSize;
+    const headingLineHeight = sub ? PDF_CONFIG.sectionSubheadingLineHeight : PDF_CONFIG.sectionHeadingLineHeight;
+    const headingGap = sub ? PDF_CONFIG.sectionSubheadingGap : PDF_CONFIG.sectionHeadingGap;
+    if (!sub && index > 0) cur.y += PDF_CONFIG.sectionChapterTopGap;
     doc.setFont(font, 'bold');
-    doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
-    const headingLines = doc.splitTextToSize(s.heading, CONTENT_W);
-    const headingH = headingLines.length * PDF_CONFIG.sectionHeadingLineHeight;
+    doc.setFontSize(headingSize);
+    const headingLines = layoutStyledText(doc, s.heading, CONTENT_W, text).map(boldRuns);
+    const headingH = headingLines.length * headingLineHeight;
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.bodySize);
-    const bodyLines = doc.splitTextToSize(s.body, CONTENT_W);
-    cur.keepTogether(headingH + PDF_CONFIG.sectionHeadingGap + bodyLines.length * PDF_CONFIG.bodyLineHeight, headingH + PDF_CONFIG.sectionHeadingGap + PDF_CONFIG.sectionMinLeadLines * PDF_CONFIG.bodyLineHeight);
+    const bodyLines = s.body.trim().length > 0 ? layoutStyledText(doc, s.body, CONTENT_W, text) : [];
+    const leadLines = Math.min(bodyLines.length, PDF_CONFIG.sectionMinLeadLines);
+    cur.keepTogether(headingH + headingGap + bodyLines.length * PDF_CONFIG.bodyLineHeight, headingH + headingGap + leadLines * PDF_CONFIG.bodyLineHeight);
     doc.setFont(font, 'bold');
-    doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
+    doc.setFontSize(headingSize);
     doc.setTextColor(...rgb(theme.foreground));
-    doc.text(headingLines, MARGIN, cur.y);
+    drawStyledLines(doc, headingLines, MARGIN, cur.y, headingLineHeight, text);
     cur.y += headingH;
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.bodySize);
     doc.setTextColor(...rgb(theme.foreground));
-    drawParagraph(doc, cur, bodyLines, PDF_CONFIG.bodyLineHeight);
-    cur.y += PDF_CONFIG.sectionBottomGap;
-  }
+    if (bodyLines.length > 0) drawParagraph(doc, cur, bodyLines, PDF_CONFIG.bodyLineHeight, text);
+    cur.y += bodyLines.length > 0 ? PDF_CONFIG.sectionBottomGap : PDF_CONFIG.sectionSubheadingGap;
+  });
 }
 
-function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, header: ReportHeaderRenderer): void {
+function warnAboutTableText(table: NonNullable<ReportData['table']>, text: StyledTextContext): void {
+  if (!text.warnings) return;
+  const cells = [...table.head, ...table.body.flat()].map(String).join(' ');
+  const missing = missingCodePoints(cells, text.coverage);
+  if (missing.length > 0) {
+    const warning = tableFallbackWarning(text.family, missing);
+    if (!text.warnings.includes(warning)) text.warnings.push(warning);
+  }
+  if (/\*\*|__|(?<![*\w])\*[^*\n]+\*(?![*\w])/.test(cells) && !text.warnings.includes(LITERAL_MARKUP_WARNING)) text.warnings.push(LITERAL_MARKUP_WARNING);
+}
+
+function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, header: ReportHeaderRenderer, text: StyledTextContext): void {
   if (!data.table) return;
   const font = pdfFont(theme);
   const firstRowsH = PDF_CONFIG.tableCaptionHeight;
@@ -414,20 +454,24 @@ function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
     doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
     doc.setTextColor(...rgb(theme.foreground));
     cur.ensure(PDF_CONFIG.tableCaptionGap + firstRowsH);
-    doc.text(data.table.caption, MARGIN, cur.y);
+    drawStyledLine(doc, boldRuns(styledRuns(data.table.caption, text)), MARGIN, cur.y, text);
     cur.y += PDF_CONFIG.tableCaptionBottomGap;
   } else {
     cur.ensure(firstRowsH);
   }
+  warnAboutTableText(data.table, text);
   const tableInitialPage = doc.getNumberOfPages();
   const tableOptions: UserOptions = {
-    head: [data.table.head],
-    body: data.table.body.map((r) => r.map((c) => String(c))),
+    head: [data.table.head.map((c) => stripInlineMarkup(String(c)))],
+    body: data.table.body.map((r) => r.map((c) => stripInlineMarkup(String(c)))),
     startY: cur.y + PDF_CONFIG.tableStartOffset,
     margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: MARGIN, right: MARGIN },
     styles: { font, fontSize: PDF_CONFIG.tableFontSize, cellPadding: PDF_CONFIG.tableCellPadding, textColor: rgb(theme.foreground), fillColor: rgb(theme.background), lineColor: rgb(theme.line), lineWidth: PDF_CONFIG.tableLineWidth },
     headStyles: { font, fontStyle: 'bold', fillColor: rgb(theme.primary), textColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)) },
     alternateRowStyles: { fillColor: rgb(theme.soft) },
+    didParseCell: ({ cell }) => {
+      if (missingCodePoints(cell.text.join(' '), text.coverage).length > 0) cell.styles.font = FALLBACK_FAMILY;
+    },
     willDrawPage: ({ doc: pageDoc, pageNumber }) => {
       const documentPage = pageDoc.getNumberOfPages();
       if (documentPage > tableInitialPage) {
@@ -441,28 +485,31 @@ function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
   cur.y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + PDF_CONFIG.tableBottomGap;
 }
 
-function renderHighlights(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
+function renderHighlights(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext): void {
   const highlights = data.highlights ?? [];
   if (highlights.length === 0) return;
   const font = pdfFont(theme);
+  const bulletWidth = CONTENT_W - PDF_CONFIG.highlightIndent;
   doc.setFont(font, 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
-  const firstLines = doc.splitTextToSize(highlights[0], CONTENT_W - PDF_CONFIG.highlightIndent);
+  const firstLines = layoutStyledText(doc, highlights[0], bulletWidth, text);
   doc.setFont(font, 'bold');
   doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
   doc.setTextColor(...rgb(theme.foreground));
   cur.ensure(PDF_CONFIG.highlightsHeadingGap + firstLines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap);
-  doc.text(data.highlights_title ?? 'Highlights', MARGIN, cur.y);
+  drawStyledLine(doc, boldRuns(styledRuns(data.highlights_title ?? 'Highlights', text)), MARGIN, cur.y, text);
   cur.y += PDF_CONFIG.highlightsHeadingHeight;
   doc.setFont(font, 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
   doc.setTextColor(...rgb(theme.foreground));
   for (const h of highlights) {
-    const lines = doc.splitTextToSize(h, CONTENT_W - PDF_CONFIG.highlightIndent);
+    const lines = layoutStyledText(doc, h, bulletWidth, text);
     cur.ensure(lines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap);
     doc.setFillColor(...rgb(theme.primary));
     doc.circle(MARGIN + PDF_CONFIG.highlightBulletX, cur.y - PDF_CONFIG.highlightBulletY, PDF_CONFIG.highlightBulletRadius, 'F');
-    doc.text(lines, MARGIN + PDF_CONFIG.highlightIndent, cur.y);
+    doc.setFont(font, 'normal');
+    doc.setFontSize(PDF_CONFIG.bodySize);
+    drawStyledLines(doc, lines, MARGIN + PDF_CONFIG.highlightIndent, cur.y, PDF_CONFIG.bodyLineHeight, text);
     cur.y += lines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap;
   }
   cur.y += PDF_CONFIG.highlightsBottomGap;
@@ -540,10 +587,16 @@ async function renderTitlePage(doc: jsPDF, data: ReportData, theme: RenderTheme)
   }
 }
 
-export async function renderReportPdf(name: string, data: ReportData, theme = defaultRenderTheme()): Promise<Buffer> {
+export async function renderReportPdf(name: string, data: ReportData, theme = defaultRenderTheme(), warnings: string[] = []): Promise<Buffer> {
   const resolved = resolveTemplate(name, data);
   const fontSet = await loadRenderFontSet(theme);
   const doc = newPdf('portrait', 'a4', fontSet);
+  const family = pdfFont(theme);
+  const text: StyledTextContext = {
+    family,
+    coverage: family === 'DejaVu' ? undefined : fontCoverage(fontSet.regular),
+    warnings,
+  };
   const header = await createReportHeader(resolved, theme);
   const cur = new Cursor(doc, theme.background, (cursor) => header.drawFollowingPage(doc, cursor));
   if (resolved.title_page) {
@@ -552,12 +605,12 @@ export async function renderReportPdf(name: string, data: ReportData, theme = de
   } else {
     header.drawFirstPage(doc, cur);
   }
-  renderIntro(doc, cur, resolved, theme);
-  renderKpis(doc, cur, resolved, theme);
+  renderIntro(doc, cur, resolved, theme, text);
+  renderKpis(doc, cur, resolved, theme, text);
   await renderCharts(doc, cur, resolved, theme);
-  renderSections(doc, cur, resolved, theme);
-  renderTable(doc, cur, resolved, theme, header);
-  renderHighlights(doc, cur, resolved, theme);
+  renderSections(doc, cur, resolved, theme, text);
+  renderTable(doc, cur, resolved, theme, header, text);
+  renderHighlights(doc, cur, resolved, theme, text);
   renderFooter(doc, resolved, theme);
   return Buffer.from(doc.output('arraybuffer'));
 }

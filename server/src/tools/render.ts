@@ -44,7 +44,10 @@ const reportDataSchema = z.object({
   intro: z.string().optional().describe('Lead paragraph under the title'),
   kpis: z.array(cardSchema).optional().describe('KPI cards; keep labels under ~28 chars to avoid clipping'),
   charts: z.array(reportChartSchema).optional(),
-  sections: z.array(z.object({ heading: z.string(), body: z.string() })).optional().describe('Narrative sections; heading stays on the same page as the body'),
+  sections: z
+    .array(z.object({ heading: z.string(), body: z.string(), level: z.union([z.literal(1), z.literal(2)]).optional() }))
+    .optional()
+    .describe('Narrative sections; heading stays on the same page as the body. level 2 renders a subheading under the preceding level 1 chapter. Body text accepts **bold** inline markup'),
   table: z
     .object({
       head: z.array(z.string()).min(1),
@@ -326,9 +329,10 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, templateRef: template_ref ?? template, surface: surface ?? 'pdf-a4', overrides: overrides as BrandOverrides | undefined });
       await mkdir(cfg.outputDir, { recursive: true });
       const out = outputPath(cfg, output_path, 'pdf');
-      const pdf = await renderReportPdf(requestedTemplate, { ...data, brand: data.brand ?? context.brandName } as ReportData, context.theme);
+      const renderWarnings: string[] = [];
+      const pdf = await renderReportPdf(requestedTemplate, { ...data, brand: data.brand ?? context.brandName } as ReportData, context.theme, renderWarnings);
       await writeFile(out, pdf);
-      return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...brandRenderSummary(context.diagnostics) } };
+      return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...brandRenderSummary(context.diagnostics, renderWarnings) } };
     },
   );
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.8.1
+
+- A4 body text is drawn from styled runs instead of whole lines, which fixes
+  three things at once:
+  - `**bold**` (and `__bold__`) inside `intro`, `sections[].body`, section
+    headings, highlights and the table caption now renders bold instead of
+    printing the asterisks. `*italic*` renders upright and reports a warning:
+    no bundled or brand font ships an italic face.
+  - characters the brand font does not carry are drawn with the bundled DejaVu
+    Sans rather than silently dropped. A real draft lost every `→` because
+    Source Serif 4 has no U+2192 and jsPDF emits the notdef glyph without a
+    word of complaint. `render_report` now reports which code points fell back.
+  - table cells keep the same guarantee one step down: inline markup is
+    stripped to plain text and a cell that needs a missing glyph is drawn
+    entirely in DejaVu Sans. Both are reported as warnings, because neither is
+    what the author asked for.
+- New optional `sections[].level`: `2` renders a subheading under the preceding
+  `level: 1` chapter, so a source draft with `##` chapters holding `###`
+  sections no longer flattens into one list of identical headings. A level 1
+  section may now carry an empty `body` and act as a chapter opener.
+- `render_report` returns render warnings in `structuredContent.warnings`
+  alongside the brand diagnostics.
+- New QA case `inline-markup-report` with two gates that fail when either fix
+  regresses: `render-warnings` matches the expected warning set, and
+  `font-fallback` counts the baselines drawn with more than one font.
+
 ## v0.8.0
 
 - A4 KPI grid no longer leaves a single orphan card in the last row: the column

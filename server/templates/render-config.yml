@@ -80,6 +80,10 @@ pdf:
   section_min_lead_lines: 3
   keep_together_waste_ratio: 0.15
   section_bottom_gap: 6
+  section_subheading_size: 11
+  section_subheading_line_height: 5.4
+  section_subheading_gap: 1.6
+  section_chapter_top_gap: 5
   table_caption_gap: 10
   table_caption_bottom_gap: 4
   table_start_offset: 2

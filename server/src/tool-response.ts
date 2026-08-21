@@ -22,15 +22,17 @@ export function countWarnings(deck: BrandDiagnostics | undefined, perSlide: Bran
   return [...slidesPerMessage].map(([message, slides]) => (slides > 0 ? { message, slides } : { message }));
 }
 
-export function brandRenderSummary(diagnostics: BrandDiagnostics | undefined): Record<string, unknown> {
-  if (!diagnostics) return {};
+export function brandRenderSummary(diagnostics: BrandDiagnostics | undefined, renderWarnings: string[] = []): Record<string, unknown> {
+  if (!diagnostics && renderWarnings.length === 0) return {};
+  const counted = countWarnings(diagnostics, []);
+  for (const message of renderWarnings) if (!counted.some((entry) => entry.message === message)) counted.push({ message });
   return withoutEmptyValues({
-    brandRef: diagnostics.brandRef,
-    profile: diagnostics.profile,
-    templateRef: diagnostics.templateRef,
-    surface: diagnostics.surface,
-    appliedOverrides: diagnostics.appliedOverrides,
-    warnings: countWarnings(diagnostics, []),
+    brandRef: diagnostics?.brandRef,
+    profile: diagnostics?.profile,
+    templateRef: diagnostics?.templateRef,
+    surface: diagnostics?.surface,
+    appliedOverrides: diagnostics?.appliedOverrides,
+    warnings: counted,
   });
 }
 

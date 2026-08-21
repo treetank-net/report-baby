@@ -140,12 +140,17 @@ async function renderReportData(args: CliArgs, input: any): Promise<Record<strin
   });
   const data = { ...inputData, brand: inputData.brand ?? context.brandName };
   const outputs: Record<string, string> = {};
+  const renderWarnings: string[] = [];
   if (args.formats.includes('pdf')) {
     const path = join(args.out, 'report.pdf');
-    await writeFile(path, await renderReportPdf(template, data, context.theme));
+    await writeFile(path, await renderReportPdf(template, data, context.theme, renderWarnings));
     outputs.pdf = manifestPath(args.out, path);
   }
-  return { outputs, diagnostics: context.diagnostics, theme: themeSummary(context.theme) };
+  return {
+    outputs,
+    diagnostics: { ...context.diagnostics, warnings: [...context.diagnostics.warnings, ...renderWarnings] },
+    theme: themeSummary(context.theme),
+  };
 }
 
 async function renderReportExample(args: CliArgs, input: any): Promise<Record<string, unknown>> {

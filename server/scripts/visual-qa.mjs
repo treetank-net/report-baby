@@ -403,6 +403,32 @@ function multipageReport() {
   };
 }
 
+function inlineMarkupReport() {
+  const report = standardReport();
+  return {
+    ...report,
+    data: {
+      ...report.data,
+      title: 'Inline markup and glyph fallback',
+      subtitle: 'Bold runs, a glyph the brand font lacks, and two heading levels',
+      intro: 'This lead carries **bold emphasis mid-sentence** and a checkmark \u2713 that the brand serif does not ship, so it has to fall back to the bundled font.',
+      kpis: [
+        { label: 'Bold label', value: '90%', note: 'Note with a \u2713 inside' },
+        { label: 'Plain label', value: '12', note: 'Plain note' },
+      ],
+      sections: [
+        { heading: 'Article 1', body: 'Chapter lead-in with **bold** and a \u2713.', level: 1 },
+        { heading: 'First subsection', body: 'Body under a level 2 heading, with **bold** in the middle of a sentence and enough words to wrap onto a second line so the wrapper has to carry styled runs across a line break.', level: 2 },
+        { heading: 'Article 2', body: 'A second chapter at level 1.', level: 1 },
+        { heading: 'Second subsection', body: 'Closing subsection with *italic markup* that has no italic face.', level: 2 },
+      ],
+      table: { caption: 'Cells with markup', head: ['Corridor', 'Change'], body: [['North \u2713 South', '+18%'], ['East to West', '**+17%**']] },
+      highlights: ['A bullet with **bold** inside', 'A bullet with a \u2713 inside'],
+      highlights_title: 'What to check',
+    },
+  };
+}
+
 function buildCases() {
   const cases = [];
   for (const [index, brand] of settings.brands.entries()) {
@@ -441,6 +467,24 @@ function buildCases() {
       formats: ['pdf'],
       expect: 'render',
       input: multipageReport(),
+    });
+    cases.push({
+      id: 'inline-markup-report',
+      group: 'formats',
+      brand: 'pyrus',
+      profile: 'editorial',
+      kind: 'report',
+      formats: ['pdf'],
+      expect: 'render',
+      input: inlineMarkupReport(),
+      expectFontsUsed: 3,
+      expectMixedFontLines: 7,
+      expectWarnings: [
+        /is missing 1 glyph\(s\) \(U\+2713\)/,
+        /Table cells use 1 glyph\(s\) missing/,
+        /Inline markup inside table cells was stripped/,
+        /Italic markup was rendered upright/,
+      ],
     });
     cases.push({
       id: 'formats-pyrus-editorial-deck',
@@ -739,6 +783,74 @@ function pdfTextOnFill(stream) {
     if (token !== 're' && !/^-?[\d.]+$/.test(token)) numbers.length = 0;
   }
   return { rectangles, images, drawn };
+}
+
+function gateRenderWarnings(item, rendered, checks) {
+  if (!item.expectWarnings) return;
+  const warnings = rendered.manifest?.diagnostics?.warnings ?? [];
+  for (const pattern of item.expectWarnings) {
+    const hit = warnings.some((warning) => pattern.test(warning));
+    checks.push({
+      gate: 'render-warnings',
+      name: String(pattern),
+      status: hit ? 'pass' : 'fail',
+      message: hit ? 'reported' : `no warning matched; got ${warnings.length === 0 ? 'none' : warnings.join(' | ')}`,
+    });
+  }
+}
+
+function pdfFontsUsed(streams) {
+  const used = new Set();
+  for (const stream of streams) {
+    const tokens = stream.split(/\s+/);
+    for (let index = 1; index < tokens.length; index += 1) {
+      if (tokens[index] === 'Tf' && index >= 2 && tokens[index - 2].startsWith('/')) used.add(tokens[index - 2]);
+    }
+  }
+  return used;
+}
+
+function pdfMixedFontBaselines(streams) {
+  const perBaseline = new Map();
+  for (const stream of streams) {
+    const tokens = stream.split(/\s+/);
+    let font = null;
+    let baseline = null;
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index];
+      if (token === 'Tf' && index >= 2 && tokens[index - 2].startsWith('/')) font = tokens[index - 2];
+      else if ((token === 'Td' || token === 'TD') && index >= 2) baseline = Number.parseFloat(tokens[index - 1]);
+      else if (token === 'Tm' && index >= 6) baseline = Number.parseFloat(tokens[index - 1]);
+      else if ((token === 'Tj' || token === 'TJ') && font && baseline !== null && Number.isFinite(baseline)) {
+        const key = baseline.toFixed(1);
+        if (!perBaseline.has(key)) perBaseline.set(key, new Set());
+        perBaseline.get(key).add(font);
+      }
+    }
+  }
+  return [...perBaseline.values()].filter((fonts) => fonts.size > 1).length;
+}
+
+function gatePdfFontSwitches(item, rendered, checks) {
+  if (!item.expectFontsUsed) return;
+  const path = join(rendered.outputDir, 'report.pdf');
+  if (!existsSync(path)) return;
+  const streams = pdfContentStreams(readFileSync(path));
+  const used = pdfFontsUsed(streams);
+  checks.push({
+    gate: 'font-fallback',
+    name: 'distinct fonts drawn in the report body',
+    status: used.size >= item.expectFontsUsed ? 'pass' : 'fail',
+    message: `${used.size} font resource(s) used (${[...used].sort().join(' ')}) against at least ${item.expectFontsUsed}`,
+  });
+  const mixed = pdfMixedFontBaselines(streams);
+  const required = item.expectMixedFontLines ?? 1;
+  checks.push({
+    gate: 'font-fallback',
+    name: 'baselines that switch font mid-line',
+    status: mixed >= required ? 'pass' : 'fail',
+    message: `${mixed} baseline(s) drawn with more than one font against at least ${required}`,
+  });
 }
 
 function gatePdfTextContrast(item, rendered, checks) {
@@ -1197,7 +1309,11 @@ function main() {
       checks.push({ gate: 'render', name: 'render', status: 'pass', message: `rendered ${item.formats.join(', ')}` });
       gateArtifacts(item, rendered, checks, images);
       gateThemeContrast(item, rendered, checks);
-      if (item.kind === 'report') gatePdfTextContrast(item, rendered, checks);
+      gateRenderWarnings(item, rendered, checks);
+      if (item.kind === 'report') {
+        gatePdfTextContrast(item, rendered, checks);
+        gatePdfFontSwitches(item, rendered, checks);
+      }
       if (item.kind === 'deck') {
         gateGeometry(item, rendered, checks);
         gateSlideTextLines(item, rendered, checks);
