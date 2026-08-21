@@ -12,6 +12,26 @@ equality. "99.999% the same" would be a weaker guarantee than the one available.
 Any hash change is a finding: either a bug, or an intended change that needs an
 enumerated list, a re-recorded baseline and a CHANGELOG entry. Never a shrug.
 
+## P0.0 — present state before the harness
+
+Measured on 2026-08-22 in Europe/Warsaw at commit `eb373d5`, with a clean
+working tree. This is the floor for the first implementation work; it is not a
+claim that the existing suite is green.
+
+| Command | Result | Evidence |
+| --- | --- | --- |
+| `cd server && npm run build` | **PASS** | templates generated; TypeScript and all three bundles built |
+| `cd server && npx tsc --noEmit` | **PASS** | no diagnostics |
+| `cd server && npm test` | **FAIL** | MCP client request timed out after 60 s (`-32001`) |
+| `cd server && npm run test:brand` | **FAIL** | `scripts/test-brand-contract.js:296`; absolute `brand_ref` produced no explanatory rejection |
+| `node server/scripts/visual-qa.mjs` | **PASS** | 37 cases; 2102 passed, 0 failed, 29 warnings, 23 skips; 147 s |
+
+Visual QA used the repository-required fallback `flatpak:org.libreoffice.LibreOffice`
+version `26.2.5.2`; `--no-office` was not used. The 23 skips and 29 warnings are
+reported baseline conditions, not failures. The two red test commands are
+recorded as current baseline failures and must not be silently hidden by the
+parity harness.
+
 ## Normalisation, per format
 
 | Format | Hash over | Why |

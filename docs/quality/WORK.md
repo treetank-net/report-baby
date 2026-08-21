@@ -61,7 +61,12 @@ Timeboxed to one working day. If it runs long, cut scope: Tier A only, hashes
 only, one command. A harness that becomes a project has replaced the work it was
 meant to protect.
 
-- [ ] **P0.1 Create the shared script module, starting with the hash primitives.**
+- [x] **P0.0 Record the present state — `eb373d5`.** Build, standalone TypeScript,
+  public MCP behavior, brand contract and full visual QA were run before the
+  harness was extended. Results and the two existing red commands are recorded
+  in [BASELINE.md](BASELINE.md#p00-present-state-before-the-harness).
+
+- [x] **P0.1 Create the shared script module, starting with the hash primitives — `eb373d5`.**
   `pdfContentHash`, `pptxContentHash`, `zipEntries`, `stripTimestamps` out of
   `visual-qa.mjs`, and point `visual-qa.mjs` at them. **This item owns the
   directory** — G4 moves the remaining mechanisms into it and does not create it
