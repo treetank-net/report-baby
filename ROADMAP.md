@@ -238,3 +238,46 @@ Driven by `docs/brand-rendering-review.md`, which holds the full findings.
   split a six-bullet list to fill the previous page, and nothing should: the
   remaining lever is a shorter last page, which means multi-column layout or a
   narrative that ends earlier.
+
+## Phase 8 — refactoring goals
+
+Structural work on the repository itself, planned in
+[`docs/quality/`](docs/quality/README.md) as six measurable goals rather than a
+phase sequence. Each goal names the effect it produces, carries a number measured
+at `a987030`, and is verified by a command with an exit code — no metric is
+judged by reading code.
+
+The goals, and the gate that decides each:
+
+- [ ] **Page layout is configuration, not code.** A two-column A4 family with
+  chosen column widths, driven by a template file. Today `kind: page` compiles but
+  nothing renders it, `templates.ts` never reads a template at all, and
+  `const CONTENT_W = PAGE_W - MARGIN * 2` is the whole layout model. The research
+  in `docs/multi-column-pdf.md` and the 783-line algorithm in
+  `server/scripts/prototype-multicolumn.mjs` are complete and unwired. Gate:
+  mutating a declared geometry field must move the rendered output.
+- [ ] **Bad input says what to fix.** The same JSON mistake gives MCP users a
+  field path and CLI users `j.forEach is not a function`. Gate: every rejection,
+  on every path, names the field and the expected type; zero crash-shaped
+  messages.
+- [ ] **Adding a thing costs fewer files.** One report field is mentioned in nine
+  files. Reported, deliberately not gated — grep can be satisfied without
+  reducing coupling.
+- [ ] **Standalone scripts share code.** 14 scripts, 3 729 lines, zero shared
+  modules, `findOfficeConverter` in two copies that already disagree. Gate: at
+  least one shared module and no identical function bodies across files.
+- [ ] **The result is reproducible.** Hash parity per format, plus a declared
+  shape for `manifest.json`, which has six consumers and no schema — two of them
+  run no renderer, so a byte-perfect change can still break them. Gate: zero
+  differences.
+- [ ] **A module can be lifted out.** Explicitly a means to the first and third
+  goals, not an end. The six-module import cycle is type-only: five `import type`
+  edges carrying `RenderTheme`, `Slide` and `ResolvedSlidePlan`. Gate: zero
+  runtime cycles, zero layer violations.
+
+Cut, because nothing in the goals needed it: merging the three bundles into one
+entrypoint, a repository-wide formatter, a test-architecture programme, and about
+twenty structural metrics kept as proxies. Deferred with named triggers:
+untracking the dev bundles, a CI verify stage, structural PDF diffing, corpus
+extension, launcher install checks. The reasoning for each is in
+[`docs/quality/README.md`](docs/quality/README.md).
