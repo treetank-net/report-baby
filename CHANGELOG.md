@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.2
+
+- Widow and orphan control for A4 body copy, the Word rule the renderer was
+  missing: a paragraph no longer breaks so that a single line is left at the
+  bottom of a page or carried alone onto the next one. Blank lines between
+  paragraphs do not count towards the minimum, and a page never opens on one.
+  Thresholds: `pdf.widow_min_lines`, `pdf.orphan_min_lines`.
+- The highlights list is paginated as a block rather than bullet by bullet: a
+  single trailing bullet is no longer stranded on a page of its own
+  (`pdf.widow_min_bullets`).
+
 ## v0.8.1
 
 - A4 body text is drawn from styled runs instead of whole lines, which fixes

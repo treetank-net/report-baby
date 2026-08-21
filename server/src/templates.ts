@@ -128,11 +128,37 @@ function drawStyledLines(doc: jsPDF, lines: StyledRun[][], x: number, y: number,
   lines.forEach((line, index) => drawStyledLine(doc, line, x, y + index * lineHeight, text));
 }
 
+function lineHasInk(line: StyledRun[]): boolean {
+  return line.some((run) => run.text.trim().length > 0);
+}
+
+function splitWithoutWidows(lines: StyledRun[][], available: number): number {
+  if (available >= lines.length) return lines.length;
+  const ink = lines.map(lineHasInk);
+  const inkAfter = (from: number): number => ink.slice(from).filter(Boolean).length;
+  const inkBefore = (to: number): number => ink.slice(0, to).filter(Boolean).length;
+  for (let take = available; take > 0; take -= 1) {
+    if (!ink[take]) continue;
+    if (inkAfter(take) < PDF_CONFIG.widowMinLines) continue;
+    if (inkBefore(take) < PDF_CONFIG.orphanMinLines) continue;
+    return take;
+  }
+  return 0;
+}
+
 function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight: number, text: StyledTextContext, x = MARGIN): void {
   let remaining = lines;
+  let brokeWithoutProgress = false;
   while (remaining.length > 0) {
-    const fit = Math.max(1, Math.floor((PAGE_H - MARGIN - cur.y) / lineHeight));
-    const chunk = remaining.slice(0, fit);
+    const available = Math.floor((PAGE_H - MARGIN - cur.y) / lineHeight);
+    const take = brokeWithoutProgress ? Math.max(1, Math.min(available, remaining.length)) : splitWithoutWidows(remaining, available);
+    if (take <= 0) {
+      cur.breakPage();
+      brokeWithoutProgress = true;
+      continue;
+    }
+    brokeWithoutProgress = false;
+    const chunk = remaining.slice(0, take);
     drawStyledLines(doc, chunk, x, cur.y, lineHeight, text);
     cur.y += chunk.length * lineHeight;
     remaining = remaining.slice(chunk.length);
@@ -502,9 +528,27 @@ function renderHighlights(doc: jsPDF, cur: Cursor, data: ReportData, theme: Rend
   doc.setFont(font, 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
   doc.setTextColor(...rgb(theme.foreground));
-  for (const h of highlights) {
-    const lines = layoutStyledText(doc, h, bulletWidth, text);
-    cur.ensure(lines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap);
+  const bulletLines = highlights.map((h) => layoutStyledText(doc, h, bulletWidth, text));
+  const bulletHeight = (lines: StyledRun[][]): number => lines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap;
+  const pageBottom = PAGE_H - MARGIN;
+  const bulletsLeftBehind = (from: number, at: number): number => {
+    let y = at;
+    let left = 0;
+    for (const lines of bulletLines.slice(from)) {
+      const height = bulletHeight(lines);
+      if (y + height <= pageBottom) y += height;
+      else left += 1;
+    }
+    return left;
+  };
+  for (const [index, lines] of bulletLines.entries()) {
+    const height = bulletHeight(lines);
+    const fitsHere = cur.y + height <= pageBottom;
+    const stranded = bulletsLeftBehind(index + 1, cur.y + height);
+    const wouldStrandTooFew = fitsHere && stranded > 0 && stranded < PDF_CONFIG.widowMinBullets;
+    const pageIsFresh = bulletsLeftBehind(index, cur.y) === bulletsLeftBehind(index, 0);
+    if (!fitsHere || (wouldStrandTooFew && !pageIsFresh)) cur.breakPage();
+    else cur.ensure(height);
     doc.setFillColor(...rgb(theme.primary));
     doc.circle(MARGIN + PDF_CONFIG.highlightBulletX, cur.y - PDF_CONFIG.highlightBulletY, PDF_CONFIG.highlightBulletRadius, 'F');
     doc.setFont(font, 'normal');
