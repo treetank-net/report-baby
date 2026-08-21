@@ -232,10 +232,9 @@ Driven by `docs/brand-rendering-review.md`, which holds the full findings.
   chart labels, KPI values and the PPTX renderer still measure whole strings in
   one font. A line that mixes fonts can therefore be a fraction of a millimetre
   wider than the wrapper assumed.
-- [ ] A report can still end on a page carrying two lines, two bullets or two
-  table rows. Widow and orphan control (0.8.2) stops the single-line case, but
-  `jspdf-autotable` splits rows with no equivalent rule, and no pass reconsiders
-  the layout once the page count is known. `docs/handoff-page-fitting.md` has the
-  plan: row measurement before the table is drawn, a second render pass that
-  scales inter-block gaps when the last page is nearly empty, and a `page-fill`
-  gate with cases for all three variants.
+- [ ] A report can still end on a page holding one indivisible block — a list
+  with its heading, or a table that only fits whole. Gap tightening (0.8.3) buys
+  a few millimetres and widow control keeps the block together, but nothing will
+  split a six-bullet list to fill the previous page, and nothing should: the
+  remaining lever is a shorter last page, which means multi-column layout or a
+  narrative that ends earlier.

@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.8.3
+
+- Table rows get widow control. `renderTable` measures the table on a throwaway
+  document before drawing it; when the tail page would carry fewer than
+  `pdf.table_widow_min_rows` body rows and the table fits on one page, the whole
+  table moves to a fresh page instead of leaving two rows behind a repeated
+  header.
+- A report that would end on a near-empty page is re-rendered with the gaps
+  between blocks scaled by `pdf.last_page_gap_factor_1`, then `_2`, and the
+  shorter result wins. Type sizes and leading are never touched — they are brand
+  decisions. The applied factor is reported as a warning; if no factor saves a
+  page, the original layout is kept.
+- Three blocks now keep their heading: a table caption moves with the table, and
+  the highlights list is paginated as a plan computed before its heading is
+  drawn, so the heading can no longer stay behind on the previous page while the
+  bullets move on.
+- New `page-fill` QA gate with four synthetic cases (paragraph, bullet list,
+  table tail, gap tightening) that fail when a report page carries less than
+  `pdf.page_fill_min` of its content area.
+
 ## v0.8.2
 
 - Widow and orphan control for A4 body copy, the Word rule the renderer was

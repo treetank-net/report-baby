@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inflateRawSync, inflateSync } from 'node:zlib';
+import { parse as parseYaml } from 'yaml';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -37,6 +38,9 @@ const settings = {
   json: option('json', undefined),
 };
 const reportPath = settings.json ? resolve(REPO_ROOT, settings.json) : join(settings.out, 'qa-report.json');
+const templateRoot = settings.templateDir ? resolve(REPO_ROOT, settings.templateDir) : resolve(REPO_ROOT, 'server/templates');
+const renderConfig = parseYaml(readFileSync(join(templateRoot, 'render-config.yml'), 'utf8'));
+const pdfConfig = renderConfig.pdf;
 
 function run(command, commandArgs, options = {}) {
   const result = spawnSync(command, commandArgs, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...options });
@@ -429,6 +433,46 @@ function inlineMarkupReport() {
   };
 }
 
+function pageFillReport(variant) {
+  const base = {
+    template: 'default-report',
+    data: {
+      title: `Page-fill fixture: ${variant}`,
+      subtitle: 'Synthetic content used only by the page-fitting gate',
+      intro: 'This report is synthetic and contains no customer data.',
+      footer: 'Synthetic page-fill fixture',
+    },
+  };
+  if (variant === 'section') {
+    base.data.sections = [{ heading: 'A paragraph crossing a page boundary', body: `${longWords(195, 'SectionWord')}.` }];
+  } else if (variant === 'highlights') {
+    base.data.sections = [{ heading: 'Lead content before the list', body: `${longWords(200, 'LeadWord')}.` }];
+    base.data.highlights = ['The first synthetic conclusion.', 'The second synthetic conclusion.', 'The final synthetic conclusion.'];
+  } else {
+    base.data.sections = [{ heading: 'Lead content before the table', body: `${longWords(120, 'TableLead')}.` }];
+    base.data.table = {
+      caption: 'Synthetic table with enough rows to exercise a page tail',
+      head: ['Route', 'Volume', 'Change'],
+      body: Array.from({ length: 11 }, (_, index) => [`Route ${index + 1}`, `${1000 + index}`, `+${index}%`]),
+    };
+  }
+  return base;
+}
+
+function gapTighteningReport() {
+  return {
+    template: 'default-report',
+    data: {
+      title: 'Page-fill fixture: gap tightening',
+      subtitle: 'Synthetic content used to exercise the second render pass',
+      intro: `${longWords(28, 'IntroWord')}.`,
+      sections: Array.from({ length: 4 }, (_, index) => ({ heading: `Gap section ${index + 1}`, body: `${longWords(36, 'GapWord')}.` })),
+      highlights: ['A compact synthetic conclusion.', 'A second compact synthetic conclusion.'],
+      footer: 'Synthetic page-fill fixture',
+    },
+  };
+}
+
 function buildCases() {
   const cases = [];
   for (const [index, brand] of settings.brands.entries()) {
@@ -485,6 +529,31 @@ function buildCases() {
         /Inline markup inside table cells was stripped/,
         /Italic markup was rendered upright/,
       ],
+    });
+    for (const variant of ['section', 'highlights', 'table']) {
+      cases.push({
+        id: `page-fill-${variant}`,
+        group: 'page-fill',
+        brand: 'pyrus',
+        profile: 'editorial',
+        kind: 'report',
+        formats: ['pdf'],
+        expect: 'render',
+        input: pageFillReport(variant),
+        expectPages: variant === 'table' ? 2 : 1,
+      });
+    }
+    cases.push({
+      id: 'page-fill-gap-tightening',
+      group: 'page-fill',
+      brand: 'pyrus',
+      profile: 'editorial',
+      kind: 'report',
+      formats: ['pdf'],
+      expect: 'render',
+      input: gapTighteningReport(),
+      expectPages: 1,
+      expectWarnings: [/A4 report gaps tightened by factor/],
     });
     cases.push({
       id: 'formats-pyrus-editorial-deck',
@@ -694,28 +763,36 @@ function usedContentSlots(slide) {
 }
 
 function pdfContentStreams(buffer) {
-  const streams = [];
-  const source = buffer.toString('latin1');
-  const opening = /(?<!end)stream\r?\n/g;
-  let match = opening.exec(source);
-  while (match) {
-    const from = match.index + match[0].length;
-    const to = source.indexOf('endstream', from);
-    if (to === -1) break;
-    let text = null;
-    for (const decode of [inflateSync, inflateRawSync]) {
-      try {
-        text = decode(buffer.subarray(from, to)).toString('latin1');
-        break;
-      } catch {
-        text = null;
-      }
+  return pdfPageContentStreams(buffer).filter((stream) => stream.includes(' Tj') || stream.includes(' TJ'));
+}
+
+function decodePdfObjectStream(objectBody) {
+  const match = /stream\r?\n([\s\S]*?)endstream/.exec(objectBody);
+  if (!match) return null;
+  const compressed = Buffer.from(match[1], 'latin1');
+  for (const decode of [inflateSync, inflateRawSync]) {
+    try {
+      return decode(compressed).toString('latin1');
+    } catch {
+      // Try the other common PDF stream encoding.
     }
-    if (text !== null && (text.includes(' Tj') || text.includes(' TJ'))) streams.push(text);
-    opening.lastIndex = to;
-    match = opening.exec(source);
   }
-  return streams;
+  return null;
+}
+
+function pdfPageContentStreams(buffer) {
+  const source = buffer.toString('latin1');
+  const objects = new Map();
+  for (const match of source.matchAll(/(\d+)\s+0\s+obj([\s\S]*?)endobj/g)) objects.set(Number(match[1]), match[2]);
+  const pages = [];
+  for (const body of objects.values()) {
+    if (!/\/Type\s*\/Page\b/.test(body)) continue;
+    const contents = /\/Contents\s*(\[[\s\S]*?\]|\d+\s+0\s+R)/.exec(body)?.[1] ?? '';
+    const ids = [...contents.matchAll(/(\d+)\s+0\s+R/g)].map((match) => Number(match[1]));
+    const streams = ids.map((id) => decodePdfObjectStream(objects.get(id) ?? '')).filter((stream) => stream !== null);
+    pages.push(streams.join('\n'));
+  }
+  return pages;
 }
 
 function pdfTextOnFill(stream) {
@@ -887,6 +964,57 @@ function gatePdfTextContrast(item, rendered, checks) {
       ? `${measured} text runs measured against the rectangle drawn behind them, all above the WCAG AA minimum (theme background ${theme.background})`
       : `${failures.length} of ${measured} text runs are unreadable over their own background: ${failures.slice(0, 4).join('; ')}`,
   });
+}
+
+function gatePageFill(item, rendered, checks) {
+  const path = join(rendered.outputDir, 'report.pdf');
+  const buffer = readIfExists(path);
+  if (!buffer) return;
+  const pages = pdfPageCount(buffer);
+  const expectedPages = item.expectPages;
+  if (expectedPages !== undefined) {
+    checks.push({
+      gate: 'page-fill',
+      name: 'expected page count',
+      status: pages === expectedPages ? 'pass' : 'fail',
+      message: `${pages} page(s) against the fixture expectation of ${expectedPages}`,
+    });
+  }
+  const streams = pdfPageContentStreams(buffer);
+  const minPageFill = item.minPageFill ?? pdfConfig.page_fill_min;
+  // jsPDF writes these streams in PDF points with the origin at the bottom;
+  // the visual report uses an A4 content rectangle of roughly 18mm margins.
+  const content = {
+    x: pdfConfig.page_fill_x,
+    y: pdfConfig.page_fill_y,
+    width: pdfConfig.page_fill_width,
+    height: pdfConfig.page_fill_height,
+  };
+  const skippedCover = Boolean(item.input.data?.title_page);
+  for (let pageIndex = 0; pageIndex < pages; pageIndex += 1) {
+    if (skippedCover && pageIndex === 0) {
+      checks.push({ gate: 'page-fill', name: `page ${pageIndex + 1}`, status: 'skip', message: 'title page is intentionally sparse' });
+      continue;
+    }
+    const stream = streams[pageIndex] ?? '';
+    const { images, drawn } = pdfTextOnFill(stream);
+    const textBaselines = drawn
+      .map((text) => text.y)
+      .filter((y) => y >= content.y && y <= content.y + content.height);
+    const textBottom = textBaselines.length > 0 ? Math.min(...textBaselines) : content.y + content.height;
+    const imageArea = images.reduce((area, image) => area + (intersection(image, content)?.area ?? 0), 0);
+    const textFill = textBaselines.length > 0 ? Math.max(0, Math.min(1, (content.y + content.height - textBottom) / content.height)) : 0;
+    const imageFill = Math.max(0, Math.min(1, imageArea / (content.width * content.height)));
+    const fill = Math.max(textFill, imageFill);
+    checks.push({
+      gate: 'page-fill',
+      name: `page ${pageIndex + 1}`,
+      status: fill >= minPageFill ? 'pass' : 'fail',
+      message: `${(fill * 100).toFixed(1)}% content fill against a minimum of ${(minPageFill * 100).toFixed(1)}% (${drawn.length} text runs, ${(imageFill * 100).toFixed(1)}% image area)`,
+      fill: Number(fill.toFixed(3)),
+      minimum: minPageFill,
+    });
+  }
 }
 
 function gateGeometry(item, rendered, checks) {
@@ -1313,6 +1441,7 @@ function main() {
       if (item.kind === 'report') {
         gatePdfTextContrast(item, rendered, checks);
         gatePdfFontSwitches(item, rendered, checks);
+        if (item.group === 'page-fill') gatePageFill(item, rendered, checks);
       }
       if (item.kind === 'deck') {
         gateGeometry(item, rendered, checks);
@@ -1362,6 +1491,7 @@ function main() {
       'contrast-theme': 'WCAG AA contrast between resolved theme text colours and their band or surface colours.',
       'contrast-measured': 'WCAG AA contrast between the text colour and the pixels actually rendered behind it.',
       'contrast-pdf-text': 'WCAG AA contrast between every A4 text run and the filled rectangle drawn behind it in the PDF content stream.',
+      'page-fill': 'Every non-cover A4 page carries enough text baseline span or image surface to avoid a near-empty trailing page.',
       geometry: 'Every slot box stays inside the canvas, inside its region, and clear of the other slots in use.',
       determinism: 'Two identical renders produce identical content (PNG bytes, PDF and PPTX with timestamps stripped).',
       'pptx-round-trip': 'PPTX converted by LibreOffice to PDF, rasterised, and compared pixel by pixel with the direct render.',

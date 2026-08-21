@@ -87,6 +87,15 @@ pdf:
   widow_min_lines: 2
   orphan_min_lines: 2
   widow_min_bullets: 2
+  table_widow_min_rows: 3
+  min_last_page_fill: 0.2
+  last_page_gap_factor_1: 0.85
+  last_page_gap_factor_2: 0.7
+  page_fill_min: 0.15
+  page_fill_x: 51
+  page_fill_y: 51
+  page_fill_width: 493
+  page_fill_height: 740
   table_caption_gap: 10
   table_caption_bottom_gap: 4
   table_start_offset: 2
