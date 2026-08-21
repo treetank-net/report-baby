@@ -28,3 +28,4 @@ token.json
 
 # Editorial replay fixtures hold customer draft copy; both remotes are public.
 fixtures/
+docs/handoff-editorial-profile.md

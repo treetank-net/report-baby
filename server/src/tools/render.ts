@@ -53,6 +53,7 @@ const reportDataSchema = z.object({
     })
     .optional(),
   highlights: z.array(z.string()).optional().describe('Bullet list rendered under a "Highlights" heading'),
+  highlights_title: z.string().optional().describe('Heading above the bullet list; defaults to "Highlights"'),
   footer: z.string().optional().describe('Shown on every page; keep under ~120 chars'),
   title_page: z
     .object({

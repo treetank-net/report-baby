@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.0
+
+- A4 KPI grid no longer leaves a single orphan card in the last row: the column
+  count is chosen so the remainder is never one.
+- KPI notes that do not fit on one line are truncated with an ellipsis instead
+  of being cut mid-phrase.
+- New optional `highlights_title` in the `render_report` data shape; the bullet
+  list heading is no longer hard-coded to "Highlights".
+
 ## v0.7.1
 - `pdf.keep_together_waste_ratio` drops from 0.25 to 0.15. At 0.25 a section that missed the bottom of a page by a little still jumped to the next one, leaving up to a quarter of the sheet blank — 49 mm of empty cream in a replay of a real editorial draft. At 0.15 the block starts on the page it reaches and flows over; `pdf.section_min_lead_lines` still keeps a heading from stranding alone at the foot of a page.
 

@@ -224,3 +224,13 @@ Driven by `docs/brand-rendering-review.md`, which holds the full findings.
   parser would need to split a paragraph into styled runs and measure each run,
   because the current path measures whole lines with `splitTextToSize` and would
   break wrapping, section-height accounting and page breaks.
+- [ ] Nothing warns when text uses a glyph the brand font does not carry. In a
+  replay of a real editorial draft `Germany → Poland` rendered as
+  `Germany  Poland`: Source Serif 4 has no U+2192, and jsPDF silently drops the
+  glyph instead of falling back to the embedded DejaVu Sans. A `cmap` read of
+  each brand font at load time would let the renderer report the missing code
+  points as a warning; a real glyph fallback is a larger change, because a
+  paragraph would have to be split into runs per font.
+- [ ] `render_report` has no second heading level, so a source draft whose `##`
+  chapters each hold several `###` sections renders as one flat list of
+  headings. A replay of a two-article draft loses the article boundary.

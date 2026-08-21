@@ -61,6 +61,7 @@ Only present blocks render, in this fixed order: header → intro → kpis → c
     "body": [ ["Brand PL", "4 100 zł", 210, "19,50 zł"], ["Generic PL", "9 800 zł", 240, "40,80 zł"] ]
   },
   "highlights": ["One-line takeaway per bullet."],
+  "highlights_title": "What to compare",
   "footer": "Source: Google Ads API, 6.07.2026."
 }
 ```

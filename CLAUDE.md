@@ -106,7 +106,7 @@ for development.
 
 ### `render_report` data shape
 
-`{ brand?, title?, subtitle?, period?, intro?, kpis?: [{label,value,delta?,trend?,note?}], charts?: [{type,title?,subtitle?,prefix?,suffix?,data}], sections?: [{heading,body}], table?: {head,body,caption?}, highlights?: string[], footer? }`.
+`{ brand?, title?, subtitle?, period?, intro?, kpis?: [{label,value,delta?,trend?,note?}], charts?: [{type,title?,subtitle?,prefix?,suffix?,data}], sections?: [{heading,body}], table?: {head,body,caption?}, highlights?: string[], highlights_title?, footer? }`.
 
 All fields are optional. Only present blocks render, in this order: header →
 intro → KPI → charts → sections → table → highlights → footer (the numbered

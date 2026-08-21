@@ -11,7 +11,7 @@
       "description": "Render structured data into polished PNG charts and PDF reports locally — self-contained SVG+PDF engine, no browser, no accounts, no auth. Returns file paths.",
       "name": "report-baby",
       "source": "./",
-      "version": "0.7.1"
+      "version": "0.8.0"
     }
   ]
 }

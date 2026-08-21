@@ -52,6 +52,7 @@ export interface ReportData {
   sections?: Array<{ heading: string; body: string }>;
   table?: { head: string[]; body: Array<Array<string | number>>; caption?: string };
   highlights?: string[];
+  highlights_title?: string;
   footer?: string;
   title_page?: ReportTitlePage;
 }
@@ -298,11 +299,25 @@ function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
   cur.y += PDF_CONFIG.introBottomGap;
 }
 
+function kpiColumnCount(count: number): number {
+  const max = Math.min(count, PDF_CONFIG.kpiColumns);
+  for (let cols = max; cols >= 2; cols -= 1) if (count % cols !== 1) return cols;
+  return max;
+}
+
+function fitOneLine(doc: jsPDF, text: string, width: number): string {
+  const lines = doc.splitTextToSize(text, width) as string[];
+  if (lines.length <= 1) return lines[0] ?? '';
+  let head = lines[0];
+  while (head.length > 1 && doc.getTextWidth(`${head}…`) > width) head = head.slice(0, -1);
+  return `${head.replace(/[\s,;:.\u2013\u2014-]+$/, '')}…`;
+}
+
 function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
   const kpis = data.kpis ?? [];
   if (kpis.length === 0) return;
   const font = pdfFont(theme);
-  const cols = Math.min(kpis.length, PDF_CONFIG.kpiColumns);
+  const cols = kpiColumnCount(kpis.length);
   const gap = PDF_CONFIG.kpiGap;
   const cardW = (CONTENT_W - gap * (cols - 1)) / cols;
   const cardH = PDF_CONFIG.kpiHeight;
@@ -338,7 +353,7 @@ function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThem
       doc.setFont(font, 'normal');
       doc.setFontSize(PDF_CONFIG.kpiNoteSize);
       doc.setTextColor(...rgb(theme.muted));
-      doc.text(doc.splitTextToSize(k.note, cardW - PDF_CONFIG.kpiPadding * 2)[0], x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiDeltaY);
+      doc.text(fitOneLine(doc, k.note, cardW - PDF_CONFIG.kpiPadding * 2), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiDeltaY);
     }
   });
   cur.y += cardH + PDF_CONFIG.kpiBottomGap;
@@ -437,7 +452,7 @@ function renderHighlights(doc: jsPDF, cur: Cursor, data: ReportData, theme: Rend
   doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
   doc.setTextColor(...rgb(theme.foreground));
   cur.ensure(PDF_CONFIG.highlightsHeadingGap + firstLines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap);
-  doc.text('Highlights', MARGIN, cur.y);
+  doc.text(data.highlights_title ?? 'Highlights', MARGIN, cur.y);
   cur.y += PDF_CONFIG.highlightsHeadingHeight;
   doc.setFont(font, 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
