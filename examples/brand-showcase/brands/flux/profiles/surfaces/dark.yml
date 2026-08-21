@@ -1,0 +1,11 @@
+extends: primary
+color:
+  success: "#46e6f3"
+  danger: "#ff76b6"
+  warning: "#f4b65f"
+layout:
+  header_style: dark-band
+  title_align: left
+  logo_variant: white
+assets:
+  background_image: null

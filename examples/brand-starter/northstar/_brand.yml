@@ -1,0 +1,48 @@
+schema_version: 1
+x-provenance:
+  kind: generated-starter
+  source: report-baby brand-tool init
+meta:
+  name: "Northstar"
+  short: "Northstar"
+  description: A neutral starter brand generated for report-baby prototyping.
+color:
+  palette:
+    navy: "#0b2f4a"
+    blue: "#2bb2ef"
+    cyan: "#7ed7f2"
+    orange: "#f28c28"
+    fog: "#123d5d"
+    line: "#285575"
+    ink: "#f8fbff"
+  background: "#0b2f4a"
+  foreground: ink
+  primary: blue
+  secondary: orange
+  muted: "#b8c7d5"
+  surface: fog
+  line: line
+  success: "#73d39b"
+  danger: "#ff9f9f"
+  warning: "#ffd27a"
+  series: [blue, cyan, orange, navy]
+typography:
+  base: { family: "DejaVu Sans" }
+  headings: { family: "DejaVu Sans" }
+  roles:
+    display: { family: "DejaVu Sans" }
+assets:
+  source_root: assets
+  logo: logos/logo.svg
+  logo_white: logos/logo-white.svg
+  logo_mark: logos/logo-mark.svg
+  logo_white_mark: logos/logo-white-mark.svg
+layout:
+  header_style: dark-band
+  title_align: left
+  title_case: normal
+  heading_weight: 700
+  body_weight: 400
+  radius: 10
+  logo_variant: white
+  image_text_color: "#ffffff"

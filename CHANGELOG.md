@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.0
+- Brandbooks: external brand directories with named profiles, profile inheritance (`extends`), published release snapshots and asset resolution behind a path boundary. Four read-only tools expose them: `list_brandbooks`, `inspect_brand`, `list_brand_templates`, `inspect_brand_template`. MCP never writes to a brandbook.
+- Brand-owned template language: normalised frames, named regions and slots, and `reject` / `shrink-to-fit` overflow per slot. The built-in slide templates (`standard`, `compact`, `centered-title`, `two-column`) and every visual constant now live in `server/templates/` and are embedded in the bundle at build time, so a copied `bundle.cjs` boots with no source tree next to it. `REPORT_BABY_TEMPLATE_DIR` overrides the embedded copy.
+- Charts take their text, grid, axis and font from the brand theme instead of a fixed palette, and axis ticks land on round numbers.
+- Text ink is measured rather than assumed. Table headers, table bodies and band text pick the candidate that clears the WCAG minimum for their size; a dark brand used to draw white body text onto the white row fill that `jspdf-autotable` supplies by default, leaving report tables unreadable.
+- Chart category labels sit below the plot again. A constant migration had swapped the label gap with the truncation reserve, so labels overlapped the bars.
+- PPTX: SVG assets are rasterised (`pptxgenjs` stored an SVG logo as `.png` with a PNG content type, which PowerPoint would not draw), media are deduplicated by digest, the slide background is written once per slide, and the logo lockup uses the same geometry as the SVG renderer. A deck with photography went from 28.2 MB to 3.3 MB.
+- New brand directory settings: `REPORT_BABY_BRAND_DIR`, `REPORT_BABY_BRAND_STORE` and `REPORT_BABY_BRAND_SOURCE_ROOTS`, the allow-list that governs absolute `assets.source_root` values.
+- Development harnesses: `scripts/render-example.js` for prototyping from an external brandbook without npm, `brand-tool` for authoring and publishing, and a visual QA suite whose gates cover three-format rendering, text overflow, slot geometry, determinism, WCAG contrast measured from rendered pixels and from the A4 PDF content stream, and a LibreOffice PPTX round-trip.
+
 ## v0.4.4
 - `scripts/start-mcp.js` no longer updates the plugin on every start. Updates happen only through `update_plugin`; the wrapper downloads the bundle exactly once, when there is none on disk. A stale CDN cache used to let a start-up fetch overwrite a freshly installed newer copy — twice in practice, once degrading a 0.4.3 install to 0.4.2 files.
 - `update_plugin` compares versions with semver ordering instead of string inequality, so a copy newer than the update server is left untouched with an explicit message instead of being silently downgraded.

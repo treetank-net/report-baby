@@ -34,6 +34,12 @@ Only present blocks render, in this fixed order: header → intro → kpis → c
   "period": "1–31.05.2026",
   "title": "Monthly performance report",
   "subtitle": "Google Ads + Meta, all accounts",
+  "title_page": {
+    "eyebrow": "CLIENT · REPORT",
+    "title": "Monthly performance report",
+    "subtitle": "One short sentence explaining the report",
+    "period": "Q2 2026"
+  },
   "intro": "Lead paragraph: what happened this period and why it matters.",
   "kpis": [
     { "label": "Revenue", "value": "124 300 zł", "delta": "+18% MoM", "trend": "up" },
@@ -56,6 +62,11 @@ Only present blocks render, in this fixed order: header → intro → kpis → c
   "footer": "Source: Google Ads API, 6.07.2026."
 }
 ```
+
+`title_page` is optional. When present, it creates a separate branded cover;
+the regular report content starts on page two. Keep the cover text short and
+let the selected brand profile provide the logo, background, contrast, and
+alignment.
 
 ## Layout guardrails (avoid clipped text)
 
@@ -94,4 +105,4 @@ Keep metric slides to 6 cards, narrative highlights to 4, conclusions to 7, and 
 - Chart data is `data: [{label, value}]` per chart, NOT `labels`/`values` arrays.
 - Chart types are exactly `bar`, `line`, `pie` (`pie` = donut). There is no `donut`/`stacked`/`area` type.
 - KPI delta color comes from `trend` (`up` = green, `down` = red) — a "down" that is good news (e.g. lower CPA) still renders red; phrase the delta accordingly or use `note` instead.
-- Polish/diacritics are fully supported (DejaVu Sans embedded) — never transliterate.
+- Polish and other diacritics are fully supported (DejaVu Sans is embedded) — never transliterate.

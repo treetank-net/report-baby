@@ -1,0 +1,27 @@
+schema_version: 1
+id: slides/two-column
+kind: slide
+archetype: columns
+surface: slide-16x9
+header_title_y: 132
+header_subtitle_y: 174
+header_line_y: 202
+content_top: 232
+content_bottom: 810
+title_align: start
+canvas:
+  direction: ltr
+regions:
+  header: { frame: { x: 0.05, y: 0, width: 0.90, height: 0.2244444444 } }
+  content: { frame: { x: 0.05, y: 0.2577777778, width: 0.90, height: 0.6422222222 } }
+  footer: { frame: { x: 0.05, y: 0.9355555556, width: 0.90, height: 0.0466666667 } }
+slots:
+  title: { type: text, frame: { x: 0.05, y: 0.1000000000, width: 0.90, height: 0.0600000000 }, role: heading, max_lines: 1, overflow: shrink-to-fit }
+  subtitle: { type: text, frame: { x: 0.05, y: 0.1700000000, width: 0.90, height: 0.0455555556 }, role: subtitle, max_lines: 1, overflow: shrink-to-fit }
+  lockup: { type: lockup, frame: { x: 0.05, y: 0.0377777778, width: 0.0300000000, height: 0.0533333333 } }
+  lockup-name: { type: text, frame: { x: 0.085, y: 0.0422222222, width: 0.20, height: 0.0444444444 }, role: lockup-name, max_lines: 1, overflow: shrink-to-fit }
+  left: { type: text, frame: { x: 0.05, y: 0.2955555556, width: 0.405, height: 0.5555555556 }, role: column, max_lines: 12, overflow: shrink-to-fit }
+  right: { type: text, frame: { x: 0.545, y: 0.2955555556, width: 0.405, height: 0.5555555556 }, role: column, max_lines: 12, overflow: shrink-to-fit }
+constraints:
+  inside_canvas: true
+  no_overlap: true

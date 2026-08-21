@@ -1,0 +1,43 @@
+schema_version: 1
+x-provenance:
+  kind: synthetic-example
+  source: report-baby brand showcase
+  license: MIT
+meta:
+  name: Pyrus
+  short: Pyrus
+  description: Fictional premium creative hardware brand for the report-baby showcase.
+color:
+  palette:
+    graphite: "#20251f"
+    forest: "#355840"
+    leaf: "#89a93d"
+    ivory: "#f4efe5"
+    clay: "#bd7455"
+    line: "#d7d0c4"
+    surface: "#ebe5da"
+  background: ivory
+  foreground: graphite
+  primary: forest
+  secondary: leaf
+  muted: "#514d47"
+  surface: surface
+  line: line
+  success: forest
+  danger: "#9d4f36"
+  warning: "#52731f"
+  series: [forest, leaf, clay, graphite]
+typography:
+  base: { family: "DejaVu Serif" }
+  headings: { family: "DejaVu Serif" }
+  roles:
+    innovation: { family: "DejaVu Serif" }
+assets:
+  source_root: assets
+  logo: logos/logo.svg
+  logo_white: logos/logo-white.svg
+  logo_mark: logos/logo-mark.svg
+  logo_white_mark: logos/logo-white-mark.svg
+  background_image: backgrounds/hero.png
+  font_regular: fonts/DejaVuSerif.ttf
+  font_bold: fonts/DejaVuSerif-Bold.ttf

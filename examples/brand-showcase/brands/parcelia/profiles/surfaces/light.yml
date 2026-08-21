@@ -1,0 +1,18 @@
+extends: primary
+color:
+  background: "#fffaf2"
+  foreground: "#071a33"
+  surface: "#f3eadc"
+  muted: "#667991"
+  line: "#d8c8b4"
+  primary: "#f57a20"
+  secondary: "#2b72d6"
+  success: "#147a50"
+  danger: "#a83322"
+  warning: "#9a4f00"
+layout:
+  header_style: plain
+  title_align: left
+  logo_variant: default
+assets:
+  background_image: null

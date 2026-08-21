@@ -1,6 +1,6 @@
 {
   "name": "report-baby",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Render structured data into polished PNG charts and PDF reports locally — self-contained SVG+PDF engine, no browser.",
   "author": {
     "name": "treetank",

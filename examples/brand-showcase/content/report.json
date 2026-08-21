@@ -1,0 +1,34 @@
+{
+  "template_ref": "default-report",
+  "data": {
+    "title": "From signal to momentum",
+    "subtitle": "A cross-channel product performance review",
+    "period": "Q2 2026",
+    "intro": "This deliberately ordinary business story is rendered four different ways. The content stays fixed; the brandbook controls the visual system, cover treatment, hierarchy, colour, logo, chart palette, spacing and density.",
+    "kpis": [
+      { "label": "Active teams", "value": "18.4k", "delta": "+12.8%", "trend": "up", "note": "vs. previous quarter" },
+      { "label": "Activation", "value": "64.2%", "delta": "+6.4 pp", "trend": "up", "note": "first-week cohort" },
+      { "label": "Time saved", "value": "31 min", "delta": "−8.2%", "trend": "up", "note": "per weekly workflow" },
+      { "label": "Expansion", "value": "€2.8m", "delta": "+18.1%", "trend": "up", "note": "qualified pipeline" }
+    ],
+    "charts": [
+      { "type": "line", "title": "Weekly active teams", "subtitle": "A steady climb after the spring release", "data": [ { "label": "W1", "value": 11200 }, { "label": "W2", "value": 11800 }, { "label": "W3", "value": 12100 }, { "label": "W4", "value": 12900 }, { "label": "W5", "value": 13700 }, { "label": "W6", "value": 14400 }, { "label": "W7", "value": 15600 }, { "label": "W8", "value": 16800 }, { "label": "W9", "value": 18400 } ] },
+      { "type": "bar", "title": "Where momentum comes from", "subtitle": "Share of qualified expansion pipeline", "data": [ { "label": "Core", "value": 42 }, { "label": "Automation", "value": 28 }, { "label": "Collaboration", "value": 19 }, { "label": "New regions", "value": 11 } ] }
+    ],
+    "sections": [
+      { "heading": "The product is becoming a habit", "body": "The strongest signal is not a single campaign spike. Teams that complete the first workflow return more often, invite colleagues sooner and create a larger share of qualified expansion opportunities." },
+      { "heading": "The next unlock is clarity", "body": "The opportunity for the next cycle is to make the value of automation visible earlier. A shorter path from first result to shared team ritual should improve both activation and retention." }
+    ],
+    "table": {
+      "caption": "Priority bets for the next cycle",
+      "head": [ "Bet", "Signal", "Owner", "Next checkpoint" ],
+      "body": [
+        [ "First-result guidance", "Activation +6.4 pp", "Product", "Week 2" ],
+        [ "Team ritual prompts", "Invites +14%", "Lifecycle", "Week 4" ],
+        [ "Regional proof points", "Pipeline €2.8m", "Growth", "Week 6" ]
+      ]
+    },
+    "highlights": [ "Keep the first result visible within one session.", "Turn successful workflows into team-level habits.", "Use regional proof points to make expansion feel concrete." ],
+    "footer": "Example content · report-baby brand showcase"
+  }
+}

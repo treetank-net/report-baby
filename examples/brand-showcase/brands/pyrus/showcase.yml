@@ -1,0 +1,49 @@
+schema_version: 1
+showcase:
+  meta:
+    complexity: segmented
+    description: Five surfaces show how a restrained editorial brand can still have light, dark, gray, accent and graphic modes.
+  reports:
+    - id: light-report
+      profile: surfaces/light
+      data:
+        title: From signal to momentum
+        subtitle: A quiet editorial report surface
+        period: Q2 2026
+        intro: The premium system uses white space and a restrained serif voice when the content should feel considered.
+        kpis:
+          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
+          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
+          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
+        charts:
+          - { type: line, title: Weekly active teams, subtitle: A steady climb, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] }
+        sections:
+          - { heading: The product is becoming a habit, body: A quiet surface gives the narrative room to breathe and lets the pear mark do the identity work. }
+        highlights: [Keep the first result visible., Turn successful workflows into team habits.]
+        footer: Pyrus showcase · light report
+    - id: dark-report
+      profile: surfaces/dark
+      data:
+        title: From signal to momentum
+        subtitle: A dark studio report surface
+        period: Q2 2026
+        intro: The same premium identity can move to a dark studio mode for launches, reviews and focused moments.
+        kpis:
+          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
+          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
+          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
+        charts:
+          - { type: bar, title: Where momentum comes from, subtitle: Share of qualified pipeline, data: [{ label: Core, value: 42 }, { label: Automation, value: 28 }, { label: Collaboration, value: 19 }, { label: Regions, value: 11 }] }
+        sections:
+          - { heading: Contrast can create focus, body: A dark mode is one of the brand’s instruments, not a replacement for its quieter editorial surface. }
+        highlights: [Use dark mode for focus., Keep the typography calm.]
+        footer: Pyrus showcase · dark report
+  decks:
+    - id: mixed-surfaces
+      slides:
+        - { type: title, profile: surfaces/graphic, data: { eyebrow: Q2 2026 / PRODUCT SIGNALS, title: From signal to momentum, subtitle: Sculptural cover with a quiet premium silhouette } }
+        - { type: metrics, profile: surfaces/light, data: { title: The light signal board, subtitle: Serif headings and generous ivory space, body: The editorial surface deliberately spends space on calm hierarchy instead of visual noise., callout: "Segmented brand contract · restraint is a composition choice, not missing data", metrics: [{ label: Active teams, value: 18.4k, delta: +12.8%, trend: up }, { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up }, { label: Expansion, value: €2.8m, delta: +18.1%, trend: up }] } }
+        - { type: chart, profile: surfaces/dark, data: { title: The dark signal board, subtitle: A focused studio mode, chart: { type: line, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] } } }
+        - { type: narrative, profile: surfaces/gray, data: { title: A gray editorial surface, body: Gray creates a soft transition between the ivory system and the dark studio mode., highlights: [Use quiet contrast for explanation., Keep the signal hierarchy explicit.] } }
+        - { type: table, profile: surfaces/accent, data: { title: An accent surface for decisions, subtitle: Green carries the considered action, head: [Bet, Signal, Owner], body: [[First-result guidance, +6.4 pp, Product], [Team ritual prompts, +14%, Lifecycle], [Regional proof points, €2.8m, Growth], [Focused craft, +9.2 pp, Design], [Fewer handoffs, -18%, Operations], [Shared standards, +11%, Leadership]] } }
+        - { type: conclusions, profile: surfaces/light, data: { title: Make momentum repeatable, subtitle: Return to the quiet light surface for the close, items: [Shorten the path to first value., Make collaboration natural., Let evidence lead the expansion story.] } }

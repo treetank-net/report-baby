@@ -1,0 +1,48 @@
+schema_version: 1
+id: slides/title
+kind: slide
+surface: slide-16x9
+
+canvas:
+  direction: ltr
+
+regions:
+  hero:
+    frame: { x: 0.06, y: 0.06, width: 0.88, height: 0.70 }
+
+slots:
+  lockup:
+    type: lockup
+    frame: { x: 0.06, y: 0.06, width: 0.03625, height: 0.0533333333 }
+  lockup-name:
+    type: text
+    frame: { x: 0.115, y: 0.06, width: 0.18, height: 0.0533333333 }
+    role: lockup-name
+  image:
+    type: image
+    region: hero
+    frame: { x: 0.64, y: 0.06, width: 0.30, height: 0.70 }
+  eyebrow:
+    type: text
+    region: hero
+    frame: { x: 0.06, y: 0.23, width: 0.50, height: 0.06 }
+    max_lines: 1
+    overflow: reject
+  title:
+    type: text
+    region: hero
+    frame: { x: 0.06, y: 0.33, width: 0.50, height: 0.23 }
+    role: heading-display
+    max_lines: 2
+    overflow: shrink-to-fit
+  subtitle:
+    type: text
+    region: hero
+    frame: { x: 0.06, y: 0.59, width: 0.50, height: 0.12 }
+    role: body
+    max_lines: 2
+    overflow: shrink-to-fit
+
+constraints:
+  inside_canvas: true
+  no_overlap: true

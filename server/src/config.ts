@@ -1,7 +1,9 @@
-import { join } from 'path';
+import { isAbsolute, join, resolve } from 'path';
 
 export interface ReportConfig {
   outputDir: string;
+  brandDir: string;
+  brandSourceRoots: string[];
 }
 
 function isValidEnv(val: string | undefined): val is string {
@@ -25,8 +27,26 @@ export function getOutputDir(): string {
   return join(getConfigDir(), 'out');
 }
 
+export function getBrandDir(): string {
+  const store = env('REPORT_BABY_BRAND_STORE');
+  if (store) return store;
+  const explicit = env('REPORT_BABY_BRAND_DIR');
+  if (explicit) return explicit;
+  return join(getConfigDir(), 'brands');
+}
+
+export function getBrandSourceRoots(): string[] {
+  return env('REPORT_BABY_BRAND_SOURCE_ROOTS')
+    .split(':')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0 && isAbsolute(entry))
+    .map((entry) => resolve(entry));
+}
+
 export function configFromEnv(): ReportConfig {
   return {
     outputDir: getOutputDir(),
+    brandDir: getBrandDir(),
+    brandSourceRoots: getBrandSourceRoots(),
   };
 }

@@ -1,37 +1,45 @@
 # report-baby
 
-MCP server do renderowania ładnych raportów: **dane → PNG wykresy/karty metryk oraz PDF raporty**.
-Członek rodziny pluginów `*-baby` (obok `google-ads-baby`, `meta-ads-baby`).
+An MCP server for rendering polished reports: **data → PNG charts/metric cards
+and PDF reports**. It is part of the `*-baby` plugin family, alongside
+`google-ads-baby` and `meta-ads-baby`.
 
-Najprostszy, najczystszy członek rodziny — czysty render lokalny: **zero OAuth, zero safety/hooków,
-zero API kont reklamowych, zero przeglądarki w runtime.** Podajesz dane, dostajesz ścieżkę do gotowego pliku PDF/PNG.
+The simplest member of the family: local rendering only — **no OAuth, no
+safety/hooks, no advertising-account APIs, and no browser at runtime**. Supply
+data and receive a path to a finished PDF or PNG.
 
-## Czym jest
+## What it is
 
-- Render wykresów i kart metryk do PNG bez zewnętrznych usług.
-- Rasteryzacja własnego SVG do PNG.
-- Opinionated `render_report` — wbudowany ostylowany szablon + Twoje dane → wielostronicowy raport PDF dla klienta.
-- Jeden ograniczony model slajdów → PDF 16:9, PNG całej prezentacji lub jednego slajdu oraz edytowalny PPTX.
-- Zwraca **ścieżkę do pliku**, nie obraz do kontekstu (deliverable dla człowieka). Opcjonalny
-  `return_image` w toolach PNG tylko gdy LLM ma ocenić layout.
+- Render charts and metric cards to PNG without external services.
+- Rasterize custom SVG to PNG.
+- Opinionated `render_report`: built-in styled template + your data → a
+  multi-page client-facing PDF report.
+- One bounded slide model → 16:9 PDF, a PNG of the whole deck or one slide,
+  and an editable PPTX.
+- Returns a **file path**, not an image in context (a human deliverable).
+  Optional `return_image` on PNG tools is available when an LLM must judge the
+  layout.
 
-## Toole
+## Tools
 
-| Tool | Opis |
+| Tool | Description |
 | --- | --- |
-| `render_chart` | dane → wykres bar/line/pie PNG |
-| `render_metric_cards` | KPI → siatka kart PNG |
-| `render_svg` | dowolny SVG → PNG (`return_image` opcjonalnie) |
-| `render_report` | szablon + dane → wielostronicowy raport PDF |
-| `render_slides_pdf` | wspólny model slajdów → PDF 16:9 |
-| `render_slides_png` | cała prezentacja lub wybrany slajd → PNG 1600×900 |
-| `render_slides_pptx` | wspólny model slajdów → edytowalny PPTX |
-| `list_templates` | lista wbudowanych szablonów |
-| `update_plugin` | aktualizacja pluginu |
+| `render_chart` | data → bar/line/pie chart PNG |
+| `render_metric_cards` | KPI → PNG card grid |
+| `render_svg` | arbitrary SVG → PNG (`return_image` optional) |
+| `render_report` | template + data → multi-page PDF report |
+| `render_slides_pdf` | shared slide model → 16:9 PDF |
+| `render_slides_png` | whole deck or selected slide → 1600×900 PNG |
+| `render_slides_pptx` | shared slide model → editable PPTX |
+| `list_templates` | list built-in templates |
+| `list_brand_templates` | read-only list of templates owned by a selected brand |
+| `inspect_brand_template` | read-only validation and inspection of a brand template |
+| `update_plugin` | update the plugin |
 
-## Wykresy
+## Charts
 
-report-baby ma wbudowany silnik SVG dla wykresów bar/line/pie i kart KPI. Dla niestandardowej grafiki użyj `render_svg`.
+report-baby includes an SVG engine for bar, line, and pie charts and KPI cards.
+Use `render_svg` for custom graphics.
 
 ## Build
 
@@ -41,27 +49,82 @@ npm install
 npm run build
 ```
 
-## Install In Claude Code
+`npm` is needed only when developing or rebuilding report-baby. A bundled
+installation needs Node.js 18+ and runs with `node`; it does not need `npm` at
+runtime.
 
-This repository can be installed as a Claude Code plugin through its marketplace manifest:
+Set `REPORT_BABY_BRAND_STORE` to a published brand store when MCP must ignore
+working-tree brand changes. `REPORT_BABY_BRAND_DIR` remains the working-tree
+directory used for prototyping.
+
+## Brandbooks
+
+Brandbooks are external inputs, not plugin content. Keep each customer brand in
+its own repository or configured data directory, with `_brand.yml`, profiles,
+and assets next to the source brand. Select a profile explicitly with
+`brand://...` and configure its parent directory with `REPORT_BABY_BRAND_DIR`.
+
+For a Node-only local prototype, use the same renderer path as MCP:
+
+```sh
+node scripts/render-example.js \
+  --kind deck \
+  --brand-root /path/to/brands \
+  --brand brand://acme/primary \
+  --input ./deck.json \
+  --out ./prototype/acme-primary \
+  --formats pdf,png,pptx
+```
+
+The script runs a separately built standalone bundle that imports the same
+resolver and renderer modules as the MCP bundle, renders the chosen input, and
+writes a `manifest.json` with the resolved paths. It does not require `npm`.
+
+Read [`docs/brand-authoring.md`](docs/brand-authoring.md) for the authoring
+workflow and [`skills/brand-authoring/SKILL.md`](skills/brand-authoring/SKILL.md)
+for the agent workflow. The contract for brand-owned slide/page templates is
+documented in [`BRANDBOOK-TEMPLATE-CONTRACT.md`](BRANDBOOK-TEMPLATE-CONTRACT.md);
+the external Node-only `brand-tool` can create a starter with `init`, make small
+named YAML changes with `set`, validate, preview and publish. Template and
+asset mutations belong to that external tool or the repository that owns the
+brand, not to the report-baby MCP.
+
+The renderer's shared visual defaults are also external data in
+`server/templates/render-config.yml`; the built-in slide fallbacks live below
+`server/templates/slides/`. Editing those files does not require changing a
+TypeScript constant or rebuilding the design logic. A built-in fallback can be
+copied into a brand and then edited there:
+
+```bash
+node scripts/brand-tool.js template copy \
+  --brand-root /path/to/brands \
+  --brand brand://acme/primary \
+  --from slides/two-column \
+  --to slides/decision-two-column
+```
+
+## Install in Claude Code
+
+This repository can be installed as a Claude Code plugin through its marketplace
+manifest:
 
 ```text
 .claude-plugin/plugin.json
 .claude-plugin/marketplace.json
 ```
 
-Add the GitLab repository as a Claude Code plugin marketplace, then install the plugin:
+Add the GitLab repository as a Claude Code plugin marketplace, then install the
+plugin:
 
 ```bash
 /plugin marketplace add https://gitlab.com/treetank/report-baby.git
 /plugin install report-baby@report-baby-marketplace
 ```
 
-After installation, reload or restart Claude Code. The plugin registers:
+After installation, reload or restart Claude Code. The plugin registers the
+`report` MCP server.
 
-- MCP server: `report`
-
-## Install In Codex
+## Install in Codex
 
 This repository contains Codex plugin metadata:
 
@@ -71,16 +134,33 @@ This repository contains Codex plugin metadata:
 .agents/plugins/marketplace.json
 ```
 
-The marketplace entry points to `./plugins/report-baby`. That directory is a small Codex wrapper; it downloads the latest built bundle from the GitHub mirror and starts the MCP server.
+The marketplace entry points to `./plugins/report-baby`, a small Codex wrapper
+that downloads the latest built bundle from the GitHub mirror and starts the
+MCP server.
 
-Add this repository as a local Codex plugin/marketplace source, then enable `report-baby`. No OAuth or mutation-safety hooks are required.
+Add this repository as a local Codex plugin/marketplace source, then enable
+`report-baby`. No OAuth or mutation-safety hooks are required.
 
-Szczegóły architektury i trade-offów: `CLAUDE.md`. Plany: `ROADMAP.md`.
+Architecture and trade-offs: `CLAUDE.md`. Plans: `ROADMAP.md`.
 
-## Config
+## Configuration
 
-- `REPORT_BABY_DATA` — katalog danych (domyślnie `~/.report-baby`); output w `<data>/out`.
+- `REPORT_BABY_DATA` — data directory (default `~/.report-baby`); output is in
+  `<data>/out`.
+- `REPORT_BABY_BRAND_DIR` — brandbook directory (default
+  `<REPORT_BABY_DATA>/brands`). Renderers accept `brand_ref`, for example
+  `brand://acme/primary`; `list_brandbooks` and `inspect_brand` help discover
+  and validate profiles.
+- `REPORT_BABY_BRAND_STORE` — optional published-release directory; it takes
+  precedence over `REPORT_BABY_BRAND_DIR`.
+- `REPORT_BABY_BRAND_SOURCE_ROOTS` — `:`-separated allow-list of directories a
+  brandbook may reach with an absolute `assets.source_root`. Without it, only
+  paths relative to the brand directory are accepted. Use it when brand assets
+  live in another repository, for example a website theme checked out beside the
+  brandbook.
+- `REPORT_BABY_TEMPLATE_DIR` — optional override for the built-in render
+  configuration and slide recipes embedded in the bundle.
 
-## Licencja
+## License
 
 MIT — Jacek Mariański / Treetank.

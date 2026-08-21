@@ -1,0 +1,9 @@
+layout:
+  header_style: dark-band
+  title_align: left
+  title_case: upper
+  heading_weight: 800
+  radius: 4
+  logo_variant: white
+assets:
+  background_image: null

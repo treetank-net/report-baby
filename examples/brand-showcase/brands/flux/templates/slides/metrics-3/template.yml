@@ -1,0 +1,58 @@
+schema_version: 1
+id: slides/metrics-3
+kind: slide
+archetype: metrics
+surface: slide-16x9
+
+canvas:
+  direction: ltr
+
+regions:
+  header:
+    frame: { x: 0.05, y: 0.04, width: 0.90, height: 0.20 }
+  footer:
+    frame: { x: 0.05, y: 0.93, width: 0.90, height: 0.04 }
+
+slots:
+  lockup:
+    type: lockup
+    frame: { x: 0.06, y: 0.05, width: 0.03625, height: 0.0533333333 }
+  lockup-name:
+    type: text
+    frame: { x: 0.115, y: 0.05, width: 0.18, height: 0.0533333333 }
+    role: lockup-name
+  title:
+    type: text
+    region: header
+    frame: { x: 0.05, y: 0.12, width: 0.90, height: 0.06 }
+    max_lines: 1
+    overflow: shrink-to-fit
+  subtitle:
+    type: text
+    region: header
+    frame: { x: 0.05, y: 0.18, width: 0.90, height: 0.03 }
+    max_lines: 1
+    overflow: shrink-to-fit
+  metric-1:
+    type: metric-card
+    frame: { x: 0.05, y: 0.30, width: 0.27, height: 0.24 }
+  metric-2:
+    type: metric-card
+    frame: { x: 0.365, y: 0.30, width: 0.27, height: 0.24 }
+  metric-3:
+    type: metric-card
+    frame: { x: 0.68, y: 0.30, width: 0.27, height: 0.24 }
+  body:
+    type: text
+    frame: { x: 0.05, y: 0.60, width: 0.90, height: 0.10 }
+    max_lines: 3
+    overflow: shrink-to-fit
+  callout:
+    type: text
+    frame: { x: 0.05, y: 0.76, width: 0.90, height: 0.10 }
+    max_lines: 2
+    overflow: shrink-to-fit
+
+constraints:
+  inside_canvas: true
+  no_overlap: true

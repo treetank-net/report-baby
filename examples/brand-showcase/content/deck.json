@@ -1,0 +1,12 @@
+{
+  "brand": "A product performance review",
+  "footer": "Example content · report-baby brand showcase",
+  "slides": [
+    { "type": "title", "eyebrow": "Q2 2026 / PRODUCT SIGNALS", "title": "From signal to momentum", "subtitle": "How a useful workflow becomes a durable habit" },
+    { "type": "metrics", "title": "The quarter in four signals", "subtitle": "The same metrics, interpreted through the selected brand system", "metrics": [ { "label": "Active teams", "value": "18.4k", "delta": "+12.8%", "trend": "up", "note": "vs. previous quarter" }, { "label": "Activation", "value": "64.2%", "delta": "+6.4 pp", "trend": "up", "note": "first-week cohort" }, { "label": "Expansion", "value": "€2.8m", "delta": "+18.1%", "trend": "up", "note": "qualified pipeline" } ] },
+    { "type": "chart", "title": "A steady climb after the spring release", "subtitle": "Weekly active teams", "chart": { "type": "line", "data": [ { "label": "W1", "value": 11200 }, { "label": "W2", "value": 11800 }, { "label": "W3", "value": 12100 }, { "label": "W4", "value": 12900 }, { "label": "W5", "value": 13700 }, { "label": "W6", "value": 14400 }, { "label": "W7", "value": 15600 }, { "label": "W8", "value": 16800 }, { "label": "W9", "value": 18400 } ] } },
+    { "type": "narrative", "title": "The product is becoming a habit", "body": "Teams that complete the first workflow return more often, invite colleagues sooner and create a larger share of qualified expansion opportunities. The next unlock is to make that value visible earlier.", "highlights": [ "Keep the first result visible within one session.", "Turn successful workflows into team-level habits.", "Use regional proof points to make expansion feel concrete." ] },
+    { "type": "table", "title": "Three bets for the next cycle", "subtitle": "A compact plan with explicit checkpoints", "head": [ "Bet", "Signal", "Owner", "Checkpoint" ], "body": [ [ "First-result guidance", "Activation +6.4 pp", "Product", "Week 2" ], [ "Team ritual prompts", "Invites +14%", "Lifecycle", "Week 4" ], [ "Regional proof points", "Pipeline €2.8m", "Growth", "Week 6" ] ] },
+    { "type": "conclusions", "title": "Make momentum repeatable", "subtitle": "The next release should reduce the distance between first value and shared habit.", "items": [ "Shorten the path to the first useful result.", "Make collaboration a natural next step.", "Let evidence lead the expansion story." ], "overrides": { "fit": { "strategy": "shrink-to-fit", "min_body_pt": 11 }, "typography": { "heading": { "scale": 0.92 } } } }
+  ]
+}

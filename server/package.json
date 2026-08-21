@@ -1,11 +1,16 @@
 {
   "name": "report-baby-server",
-  "version": "0.4.4",
-  "description": "Self-contained SVG/data → PNG/PDF render MCP server (resvg-wasm + jsPDF, zero runtime deps)",
+  "version": "0.5.0",
+  "description": "Self-contained SVG/data \u2192 PNG/PDF render MCP server (resvg-wasm + jsPDF, zero runtime deps)",
   "type": "module",
   "main": "bundle.cjs",
   "scripts": {
-    "build": "tsc --noEmit && npx esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=bundle.cjs",
+    "build": "npm run build:templates && tsc --noEmit && npm run build:mcp && npm run build:example && npm run build:brand-tool",
+    "build:templates": "node scripts/generate-builtin-templates.mjs",
+    "build:mcp": "npx esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=bundle.cjs",
+    "build:example": "npx esbuild src/example.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=example-bundle.cjs",
+    "build:brand-tool": "npx esbuild src/brand-tool.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=brand-tool-bundle.cjs",
+    "test:brand": "node ../scripts/test-brand-contract.js",
     "test": "node scripts/test-public-behavior.mjs",
     "dev": "tsc --watch --noEmit",
     "start": "node bundle.cjs"
@@ -13,15 +18,16 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
     "@resvg/resvg-wasm": "^2.6.2",
+    "fflate": "^0.8.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "pptxgenjs": "^4.0.1",
+    "yaml": "^2.9.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
     "esbuild": "^0.28.1",
-    "fflate": "^0.8.3",
     "typescript": "^5.9.3"
   },
   "engines": {

@@ -1,0 +1,41 @@
+schema_version: 1
+x-provenance:
+  kind: synthetic-example
+  source: report-baby brand showcase
+  license: MIT
+meta:
+  name: Parcelia
+  short: Parcelia
+  description: Fictional commerce and logistics brand for the report-baby showcase.
+color:
+  palette:
+    navy: "#071a33"
+    orange: "#f57a20"
+    blue: "#2b72d6"
+    cream: "#fff1dc"
+    red: "#e85d43"
+    line: "#233b5d"
+    soft: "#102947"
+  background: navy
+  foreground: cream
+  primary: orange
+  secondary: blue
+  muted: "#a9bad0"
+  surface: soft
+  line: line
+  success: "#8fdda0"
+  danger: "#ff9b75"
+  warning: "#ffc15c"
+  series: [orange, blue, cream, red]
+typography:
+  base: { family: "Liberation Sans" }
+  headings: { family: "Liberation Sans" }
+assets:
+  source_root: assets
+  logo: logos/logo.svg
+  logo_white: logos/logo-white.svg
+  logo_mark: logos/logo-mark.svg
+  logo_white_mark: logos/logo-white-mark.svg
+  background_image: backgrounds/hero.png
+  font_regular: fonts/LiberationSans.ttf
+  font_bold: fonts/LiberationSans-Bold.ttf

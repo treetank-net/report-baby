@@ -1,0 +1,40 @@
+id: slides/standard
+schema_version: 1
+kind: slide
+surface: slide-16x9
+header_title_y: 132
+header_subtitle_y: 174
+header_line_y: 202
+content_top: 232
+content_bottom: 810
+title_align: start
+canvas:
+  direction: ltr
+regions:
+  header: { frame: { x: 0.05, y: 0, width: 0.90, height: 0.2244444444 } }
+  content: { frame: { x: 0.05, y: 0.2577777778, width: 0.90, height: 0.6422222222 } }
+  footer: { frame: { x: 0.05, y: 0.9355555556, width: 0.90, height: 0.0466666667 } }
+slots:
+  title: { type: text, frame: { x: 0.05, y: 0.0800000000, width: 0.90, height: 0.1155555556 }, role: heading, max_lines: 1, overflow: shrink-to-fit }
+  subtitle: { type: text, frame: { x: 0.05, y: 0.1600000000, width: 0.90, height: 0.0455555556 }, role: subtitle, max_lines: 1, overflow: shrink-to-fit }
+  lockup: { type: lockup, frame: { x: 0.05, y: 0.0377777778, width: 0.0300000000, height: 0.0533333333 } }
+  lockup-name: { type: text, frame: { x: 0.085, y: 0.0422222222, width: 0.20, height: 0.0444444444 }, role: lockup-name, max_lines: 1, overflow: shrink-to-fit }
+  metric-1: { type: metric-card, frame: { x: 0.0500000000, y: 0.2577777778, width: 0.2883333333, height: 0.2666666667 } }
+  metric-2: { type: metric-card, frame: { x: 0.3558333333, y: 0.2577777778, width: 0.2883333333, height: 0.2666666667 } }
+  metric-3: { type: metric-card, frame: { x: 0.6616666667, y: 0.2577777778, width: 0.2883333333, height: 0.2666666667 } }
+  metric-4: { type: metric-card, frame: { x: 0.0500000000, y: 0.5555555556, width: 0.2883333333, height: 0.2666666667 } }
+  metric-5: { type: metric-card, frame: { x: 0.3558333333, y: 0.5555555556, width: 0.2883333333, height: 0.2666666667 } }
+  metric-6: { type: metric-card, frame: { x: 0.6616666667, y: 0.5555555556, width: 0.2883333333, height: 0.2666666667 } }
+  body: { type: text, frame: { x: 0.0500000000, y: 0.6433333333, width: 0.90, height: 0.1111111111 }, max_lines: 3, overflow: shrink-to-fit }
+  callout: { type: text, frame: { x: 0.0500000000, y: 0.7600000000, width: 0.90, height: 0.0900000000 }, max_lines: 2, overflow: shrink-to-fit }
+  chart: { type: image, frame: { x: 0.0875000000, y: 0.2577777778, width: 0.825, height: 0.6000000000 }, role: chart }
+  table: { type: text, frame: { x: 0.0500000000, y: 0.2622222222, width: 0.90, height: 0.6377777778 }, role: table }
+  narrative: { type: text, frame: { x: 0.0500000000, y: 0.2888888889, width: 0.90, height: 0.30 }, max_lines: 5, overflow: shrink-to-fit }
+  narrative-highlight-1: { type: text, frame: { x: 0.0750000000, y: 0.6111111111, width: 0.84, height: 0.0555555556 }, max_lines: 1, overflow: shrink-to-fit }
+  narrative-highlight-2: { type: text, frame: { x: 0.0750000000, y: 0.6755555556, width: 0.84, height: 0.0555555556 }, max_lines: 1, overflow: shrink-to-fit }
+  narrative-highlight-3: { type: text, frame: { x: 0.0750000000, y: 0.7400000000, width: 0.84, height: 0.0555555556 }, max_lines: 1, overflow: shrink-to-fit }
+  narrative-highlight-4: { type: text, frame: { x: 0.0750000000, y: 0.8044444444, width: 0.84, height: 0.0555555556 }, max_lines: 1, overflow: shrink-to-fit }
+  conclusions: { type: text, frame: { x: 0.0975000000, y: 0.3022222222, width: 0.805, height: 0.55 }, max_lines: 7, overflow: shrink-to-fit }
+constraints:
+  inside_canvas: true
+  no_overlap: false

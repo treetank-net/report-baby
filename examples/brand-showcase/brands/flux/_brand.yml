@@ -1,0 +1,44 @@
+schema_version: 1
+x-provenance:
+  kind: synthetic-example
+  source: report-baby brand showcase
+  license: MIT
+meta:
+  name: Flux
+  short: Flux
+  description: Fictional data intelligence and financial operations brand for the report-baby showcase.
+color:
+  palette:
+    night: "#090713"
+    violet: "#7657ff"
+    cyan: "#19c9f5"
+    amber: "#f4b65f"
+    pink: "#d846c6"
+    mist: "#b9b3d0"
+    line: "#2a2448"
+    surface: "#17112b"
+  background: night
+  foreground: "#f7f5ff"
+  primary: cyan
+  secondary: violet
+  muted: mist
+  surface: surface
+  line: line
+  success: "#46e6f3"
+  danger: "#ff76b6"
+  warning: "#f4b65f"
+  series: [cyan, violet, amber, pink]
+typography:
+  base: { family: "DejaVu Sans Mono" }
+  headings: { family: "DejaVu Sans Mono" }
+  roles:
+    signal: { family: "DejaVu Sans Mono" }
+assets:
+  source_root: assets
+  logo: logos/logo.svg
+  logo_white: logos/logo-white.svg
+  logo_mark: logos/logo-mark.svg
+  logo_white_mark: logos/logo-white-mark.svg
+  background_image: backgrounds/hero.png
+  font_regular: fonts/DejaVuSansMono.ttf
+  font_bold: fonts/DejaVuSansMono-Bold.ttf

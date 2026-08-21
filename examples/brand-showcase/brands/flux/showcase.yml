@@ -1,0 +1,99 @@
+schema_version: 1
+showcase:
+  meta:
+    complexity: rich
+    description: A high-contrast data brand with multiple surfaces, graphic cover art, mono typography and deliberate mode changes.
+  reports:
+    - id: light-report
+      profile: surfaces/light
+      data:
+        title: From signal to momentum
+        subtitle: A light intelligence report surface
+        period: Q2 2026
+        intro: A data brand does not have to be dark; light mode can make dense analysis feel more open and operational.
+        kpis:
+          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
+          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
+          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
+        charts:
+          - { type: line, title: Weekly active teams, subtitle: A steady climb, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] }
+        sections:
+          - { heading: The product is becoming a habit, body: A light surface can make complex evidence easier to scan while preserving the signal colour system. }
+        highlights: [Keep the first result visible., Turn successful workflows into team habits.]
+        footer: Flux showcase · light report
+    - id: dark-report
+      profile: surfaces/dark
+      data:
+        title: From signal to momentum
+        subtitle: A dark intelligence report surface
+        period: Q2 2026
+        intro: Dark mode concentrates attention on the network, the signal and the next decision.
+        kpis:
+          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
+          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
+          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
+        charts:
+          - { type: bar, title: Where momentum comes from, subtitle: Share of qualified pipeline, data: [{ label: Core, value: 42 }, { label: Automation, value: 28 }, { label: Collaboration, value: 19 }, { label: Regions, value: 11 }] }
+        sections:
+          - { heading: Make the signal actionable, body: A dark field lets cyan, violet and amber carry the visual hierarchy when the review is about attention. }
+        highlights: [Use bright accents sparingly., Keep body copy readable.]
+        footer: Flux showcase · dark report
+    - id: pagination-report
+      profile: surfaces/light
+      data:
+        title: The signal, page by page
+        subtitle: A deliberately long report showing continuation pages
+        period: Q2 2026
+        intro: This example is intentionally longer than one A4 page. It demonstrates how the same brand surface carries a narrative, a table and supporting decisions across pages without losing its header, footer or reading order.
+        kpis:
+          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
+          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
+          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
+        charts:
+          - { type: line, title: Weekly active teams, subtitle: The long-form report keeps its analytical anchor, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] }
+        sections:
+          - { heading: What changed, body: The first release reduced the distance between a team noticing a problem and acting on it. More teams now return to the same workspace during the week, which makes the signal easier to interpret and the next decision easier to share. This paragraph is long enough to exercise ordinary line wrapping without turning the page into a wall of text. }
+          - { heading: Where the signal is strongest, body: Adoption is strongest in teams that pair a clear first result with a repeatable weekly ritual. They do not need more controls; they need the important result to remain visible while the surrounding context becomes progressively richer. The report keeps that hierarchy stable as the story continues onto another page. }
+          - { heading: What needs attention, body: Expansion is moving in the right direction, but the regional picture is uneven. The next review should separate a genuinely repeatable workflow from a one-off success, then give each owner a small number of actions that can be checked in the following cycle. }
+          - { heading: How to read the table, body: The table below is deliberately long enough to cross a page boundary. Its headings should return on the continuation page, while the report chrome should make it clear that the reader is still inside the same branded document. }
+        table:
+          title: Signals to carry into the next review
+          subtitle: A paginated table with repeated headings
+          head: [Signal, Movement, Owner]
+          body:
+            - [First-result guidance, +6.4 pp, Product]
+            - [Team ritual prompts, +14%, Lifecycle]
+            - [Regional proof points, €2.8m, Growth]
+            - [Shared workspace adoption, +11%, Product]
+            - [First-week completion, +8.2 pp, Activation]
+            - [Expansion readiness, +18.1%, Growth]
+            - [Customer evidence loops, +9.2 pp, Research]
+            - [Workflow handoffs, -12 min, Operations]
+            - [Decision review cadence, +2 cycles, Leadership]
+            - [Signal-to-action time, -18%, Product]
+            - [Repeat usage quality, +7.4 pp, Lifecycle]
+            - [Regional enablement, +16%, Growth]
+            - [Onboarding completion, +10.1 pp, Activation]
+            - [Qualified workspace depth, +13%, Product]
+            - [Evidence reuse, +21%, Research]
+            - [Review preparation time, -24 min, Operations]
+            - [Cross-team handoffs, +6.8 pp, Lifecycle]
+            - [Decision confidence, +9.7 pp, Leadership]
+            - [Local proof points, +12%, Growth]
+            - [Workflow consistency, +15%, Product]
+            - [Support deflection, -8.4%, Operations]
+            - [Activation after week four, +5.9 pp, Activation]
+            - [Expansion conversation rate, +14%, Growth]
+            - [Reusable insight blocks, +18%, Research]
+        highlights: [Keep the first result visible., Turn successful workflows into team habits., Let every continuation page preserve the context needed to act.]
+        footer: Flux showcase · pagination report
+  decks:
+    - id: mixed-surfaces
+      footer: Flux showcase · Q2 2026
+      slides:
+        - { type: title, template_ref: slides/title, profile: surfaces/graphic, data: { eyebrow: Q2 2026 / PRODUCT SIGNALS, title: From signal to momentum, subtitle: Network graphic cover with a high-energy data field } }
+        - { type: metrics, template_ref: slides/metrics-3, profile: surfaces/light, data: { title: The light signal board, subtitle: Open analysis surface with mono typography, body: The light mode keeps the data readable while the monospace voice makes the system feel instrumented., callout: "Rich brand contract · the same signal can move between analytical modes", metrics: [{ label: Active teams, value: 18.4k, delta: +12.8%, trend: up }, { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up }, { label: Expansion, value: €2.8m, delta: +18.1%, trend: up }] } }
+        - { type: chart, profile: surfaces/dark, data: { title: The dark signal board, subtitle: Neon accents on a deep field, chart: { type: line, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] } } }
+        - { type: narrative, profile: surfaces/gray, data: { title: A gray editorial surface, body: Gray can turn down the intensity when the story needs interpretation rather than a dashboard moment., highlights: [Use quiet contrast for explanation., Keep the signal hierarchy explicit.] } }
+        - { type: table, profile: surfaces/accent, data: { title: An accent surface for decisions, subtitle: Violet carries the decision moment, head: [Bet, Signal, Owner], body: [[First-result guidance, +6.4 pp, Product], [Team ritual prompts, +14%, Lifecycle], [Regional proof points, €2.8m, Growth], [More signal, +9.2 pp, Product], [Less noise, -18%, Analytics], [Shared context, +11%, Teams]] } }
+        - { type: conclusions, profile: surfaces/light, data: { title: Make momentum repeatable, subtitle: Return to the open light surface for the close, items: [Shorten the path to first value., Make collaboration natural., Let evidence lead the expansion story.] } }

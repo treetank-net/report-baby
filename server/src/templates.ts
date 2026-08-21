@@ -1,6 +1,8 @@
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
-import { newPdf, pdfFont, renderSvgToPng } from './render.js';
+import { assetDataUri, defaultRenderTheme, type RenderTheme } from './brand.js';
+import { readRenderConfig } from './builtin-template-loader.js';
+import { loadRenderFontSet, newPdf, pdfFont, readableTextColor, renderSvgToPng } from './render.js';
 import { renderChart, type ChartDatum, type ChartType } from './svg.js';
 
 export interface TemplateInfo {
@@ -32,6 +34,13 @@ export interface ReportChart {
   data: ChartDatum[];
 }
 
+export interface ReportTitlePage {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  period?: string;
+}
+
 export interface ReportData {
   title?: string;
   subtitle?: string;
@@ -44,37 +53,51 @@ export interface ReportData {
   table?: { head: string[]; body: Array<Array<string | number>>; caption?: string };
   highlights?: string[];
   footer?: string;
+  title_page?: ReportTitlePage;
 }
 
-const ACCENT: [number, number, number] = [37, 99, 235];
-const INK: [number, number, number] = [15, 23, 42];
-const MUTED: [number, number, number] = [100, 116, 139];
-const LINE: [number, number, number] = [226, 232, 240];
-const SOFT: [number, number, number] = [248, 250, 252];
-const GOOD: [number, number, number] = [22, 163, 74];
-const BAD: [number, number, number] = [220, 38, 38];
-
-const PAGE_W = 210;
-const PAGE_H = 297;
-const MARGIN = 18;
+const RENDER_CONFIG = readRenderConfig();
+const PDF_CONFIG = RENDER_CONFIG.pdf;
+const PT_TO_PX = RENDER_CONFIG.canvas.width / RENDER_CONFIG.canvas.pptxWidth / RENDER_CONFIG.canvas.pointsPerInch;
+const CHART_CONFIG = RENDER_CONFIG.chart;
+const PAGE_W = PDF_CONFIG.pageWidth;
+const PAGE_H = PDF_CONFIG.pageHeight;
+const MARGIN = PDF_CONFIG.margin;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 const USABLE_H = PAGE_H - MARGIN * 2;
 
+function rgb(hex: string): [number, number, number] {
+  const value = hex.replace('#', '');
+  const normalized = value.length === 3 ? value.split('').map((part) => part + part).join('') : value;
+  const number = Number.parseInt(normalized, 16);
+  return [(number >> 16) & 255, (number >> 8) & 255, number & 255];
+}
+
 class Cursor {
   y = MARGIN;
-  constructor(private doc: jsPDF) {}
+  constructor(private doc: jsPDF, private pageBackground: string, private onNewPage?: (cursor: Cursor) => void) {
+    this.paintPage();
+  }
+  private paintPage(): void {
+    this.doc.setFillColor(...rgb(this.pageBackground));
+    this.doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
+  }
   ensure(height: number): void {
     if (this.y + height > PAGE_H - MARGIN) {
       this.doc.addPage();
+      this.paintPage();
       this.y = MARGIN;
+      this.onNewPage?.(this);
     }
   }
   keepTogether(blockHeight: number, minLeadHeight: number): void {
     this.ensure(blockHeight <= USABLE_H ? blockHeight : minLeadHeight);
   }
   breakPage(): void {
-    this.doc.addPage();
-    this.y = MARGIN;
+      this.doc.addPage();
+      this.paintPage();
+      this.y = MARGIN;
+      this.onNewPage?.(this);
   }
 }
 
@@ -90,67 +113,177 @@ function drawParagraph(doc: jsPDF, cur: Cursor, lines: string[], lineHeight: num
   }
 }
 
-function renderHeader(doc: jsPDF, cur: Cursor, data: ReportData): void {
-  const font = pdfFont();
-  let hasTopLine = false;
-  if (data.brand) {
-    doc.setFont(font, 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(...ACCENT);
-    doc.text(String(data.brand).toUpperCase(), MARGIN, cur.y);
-    hasTopLine = true;
-  }
-  if (data.period) {
-    doc.setFont(font, 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(...MUTED);
-    doc.text(String(data.period), PAGE_W - MARGIN, cur.y, { align: 'right' });
-    hasTopLine = true;
-  }
-  if (hasTopLine) cur.y += 9;
+interface PdfAsset {
+  data: string;
+  format: 'PNG' | 'JPEG';
+}
 
-  doc.setFont(font, 'bold');
-  doc.setFontSize(22);
-  doc.setTextColor(...INK);
+async function prepareBrandAsset(path: string | undefined, width: number): Promise<PdfAsset | undefined> {
+  const uri = await assetDataUri(path);
+  if (!uri) return undefined;
+  if (uri.startsWith('data:image/svg+xml')) {
+    const svg = Buffer.from(uri.slice(uri.indexOf(',') + 1), 'base64').toString('utf8');
+    const png = await renderSvgToPng(svg, Math.round(width * PDF_CONFIG.assetRasterDensity));
+    return { data: `data:image/png;base64,${png.toString('base64')}`, format: 'PNG' };
+  }
+  return { data: uri, format: uri.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG' };
+}
+
+function addPreparedBrandAsset(doc: jsPDF, asset: PdfAsset | undefined, x: number, y: number, width: number, height: number): void {
+  if (asset) doc.addImage(asset.data, asset.format, x, y, width, height);
+}
+
+function addPreparedBrandAssetContain(doc: jsPDF, asset: PdfAsset | undefined, x: number, y: number, width: number, height: number): void {
+  if (!asset) return;
+  const properties = doc.getImageProperties(asset.data);
+  const scale = Math.min(width / properties.width, height / properties.height);
+  const renderedWidth = properties.width * scale;
+  const renderedHeight = properties.height * scale;
+  const renderedX = x + (width - renderedWidth) / 2;
+  const renderedY = y + (height - renderedHeight) / 2;
+  doc.addImage(asset.data, asset.format, renderedX, renderedY, renderedWidth, renderedHeight);
+}
+
+function addPreparedBrandAssetCover(doc: jsPDF, asset: PdfAsset | undefined, x: number, y: number, width: number, height: number): void {
+  if (!asset) return;
+  const properties = doc.getImageProperties(asset.data);
+  const scale = Math.max(width / properties.width, height / properties.height);
+  const renderedWidth = properties.width * scale;
+  const renderedHeight = properties.height * scale;
+  const renderedX = x + (width - renderedWidth) / 2;
+  const renderedY = y + (height - renderedHeight) / 2;
+  doc.addImage(asset.data, asset.format, renderedX, renderedY, renderedWidth, renderedHeight);
+}
+
+interface ReportHeaderRenderer {
+  drawFirstPage(doc: jsPDF, cur: Cursor): void;
+  followingPageHeight(): number;
+  drawFollowingPageChrome(doc: jsPDF): void;
+  drawFollowingPage(doc: jsPDF, cur: Cursor): void;
+}
+
+async function createReportHeader(data: ReportData, theme: RenderTheme): Promise<ReportHeaderRenderer> {
+  const font = pdfFont(theme);
+  const reportHeaderStyle = theme.reportHeaderStyle;
+  const band = reportHeaderStyle === 'accent-band' ? theme.primary : reportHeaderStyle === 'dark-band' ? theme.background : undefined;
+  const headerText = band ? readableTextColor(band, theme, PDF_CONFIG.headerTitleSize * PT_TO_PX, true) : reportHeaderStyle === 'image-band' ? theme.imageTextColor : theme.foreground;
+  const logoPath = theme.logoVariant === 'white' ? theme.logoWhitePath ?? theme.logoPath : theme.logoPath;
+  const logoMarkPath = theme.logoVariant === 'white' ? theme.logoWhiteMarkPath ?? theme.logoMarkPath : theme.logoMarkPath;
+  const logoWidth = logoMarkPath ? PDF_CONFIG.headerLogoMarkWidth : PDF_CONFIG.headerLogoWidth;
+  const logoY = PDF_CONFIG.headerLogoY;
+  const logoHeight = PDF_CONFIG.headerLogoHeight;
   const title = data.title ?? 'Report';
-  const titleLines = doc.splitTextToSize(title, CONTENT_W);
-  doc.text(titleLines, MARGIN, cur.y + 2);
-  cur.y += titleLines.length * 9;
+  const backgroundAsset = reportHeaderStyle === 'image-band'
+    ? await prepareBrandAsset(theme.reportHeaderImagePath ?? theme.backgroundImagePath, PAGE_W)
+    : undefined;
+  const logoAsset = await prepareBrandAsset(logoMarkPath ?? logoPath, logoWidth);
 
-  if (data.subtitle) {
-    doc.setFont(font, 'normal');
-    doc.setFontSize(12);
-    doc.setTextColor(...MUTED);
-    const subLines = doc.splitTextToSize(data.subtitle, CONTENT_W);
-    doc.text(subLines, MARGIN, cur.y + 2);
-    cur.y += subLines.length * 5.5;
-  }
-  cur.y += 4;
-  doc.setDrawColor(...ACCENT);
-  doc.setLineWidth(0.8);
-  doc.line(MARGIN, cur.y, PAGE_W - MARGIN, cur.y);
-  cur.y += 10;
+  const drawTopLine = (doc: jsPDF, baseline: number, compact = false): void => {
+    const size = compact ? PDF_CONFIG.headerBrandCompactSize : PDF_CONFIG.headerBrandSize;
+    if (data.brand) {
+      doc.setFont(font, 'bold');
+      doc.setFontSize(size);
+      doc.setTextColor(...rgb(band ? readableTextColor(band, theme, size * PT_TO_PX, true) : theme.primary));
+      doc.text(String(data.brand).toUpperCase(), MARGIN + logoWidth + PDF_CONFIG.headerBrandGap, baseline);
+    }
+    if (data.period) {
+      doc.setFont(font, 'normal');
+      doc.setFontSize(compact ? PDF_CONFIG.headerPeriodCompactSize : PDF_CONFIG.headerPeriodSize);
+      doc.setTextColor(...rgb(band ? readableTextColor(band, theme, PDF_CONFIG.headerPeriodSize * PT_TO_PX, false) : reportHeaderStyle === 'image-band' ? theme.imageTextColor : theme.muted));
+      doc.text(String(data.period), PAGE_W - MARGIN, baseline, { align: 'right' });
+    }
+  };
+
+  const followingPageHeight = backgroundAsset || band ? PDF_CONFIG.headerRepeatBandHeight : PDF_CONFIG.headerRepeatHeight;
+
+  const drawFollowingPageChrome = (doc: jsPDF): void => {
+    if (backgroundAsset) addPreparedBrandAssetCover(doc, backgroundAsset, 0, 0, PAGE_W, followingPageHeight);
+    if (band) {
+      doc.setFillColor(...rgb(band));
+      doc.rect(0, 0, PAGE_W, followingPageHeight, 'F');
+    }
+    addPreparedBrandAssetContain(doc, logoAsset, MARGIN, PDF_CONFIG.headerRepeatLogoY, logoWidth, PDF_CONFIG.headerRepeatLogoHeight);
+    drawTopLine(doc, PDF_CONFIG.headerRepeatTopLineY, true);
+    doc.setFont(font, 'bold');
+    doc.setFontSize(PDF_CONFIG.bodySize);
+    doc.setTextColor(...rgb(headerText));
+    const repeatedTitle = doc.splitTextToSize(theme.titleCase === 'upper' ? title.toUpperCase() : title, CONTENT_W).slice(0, 1);
+    doc.text(repeatedTitle, MARGIN, PDF_CONFIG.headerRepeatTitleY);
+    if (!band) {
+      doc.setDrawColor(...rgb(theme.primary));
+      doc.setLineWidth(PDF_CONFIG.headerRepeatRuleWidth);
+      doc.line(MARGIN, followingPageHeight, PAGE_W - MARGIN, followingPageHeight);
+    }
+  };
+
+  return {
+    drawFirstPage(doc, cur) {
+      if (backgroundAsset) addPreparedBrandAssetCover(doc, backgroundAsset, 0, 0, PAGE_W, PDF_CONFIG.headerBandHeight);
+      if (band) {
+        doc.setFillColor(...rgb(band));
+        doc.rect(0, 0, PAGE_W, PDF_CONFIG.headerBandHeight, 'F');
+      }
+      addPreparedBrandAssetContain(doc, logoAsset, MARGIN, logoY, logoWidth, logoHeight);
+      const lockupBaseline = logoY + logoHeight * PDF_CONFIG.headerLockupBaselineRatio;
+      cur.y = band || reportHeaderStyle === 'image-band' ? PDF_CONFIG.headerBandTitleTop : PDF_CONFIG.headerTitleTop;
+      const hasTopLine = Boolean(data.brand || data.period);
+      drawTopLine(doc, lockupBaseline);
+      if (hasTopLine) cur.y += PDF_CONFIG.headerTopLineGap;
+
+      doc.setFont(font, 'bold');
+      doc.setFontSize(PDF_CONFIG.headerTitleSize);
+      doc.setTextColor(...rgb(headerText));
+      const titleLines = doc.splitTextToSize(title, CONTENT_W);
+      const titleX = theme.titleAlign === 'center' ? PAGE_W / 2 : MARGIN;
+      doc.text(theme.titleCase === 'upper' ? titleLines.map((line: string) => String(line).toUpperCase()) : titleLines, titleX, cur.y + PDF_CONFIG.headerTextBaselineOffset, { align: theme.titleAlign === 'center' ? 'center' : 'left' });
+      cur.y += titleLines.length * PDF_CONFIG.headerTitleLineHeight;
+
+      if (data.subtitle) {
+        doc.setFont(font, 'normal');
+        doc.setFontSize(PDF_CONFIG.headerSubtitleSize);
+        doc.setTextColor(...rgb(band ? readableTextColor(band, theme, PDF_CONFIG.headerPeriodSize * PT_TO_PX, false) : reportHeaderStyle === 'image-band' ? theme.imageTextColor : theme.muted));
+        const subLines = doc.splitTextToSize(data.subtitle, CONTENT_W);
+        doc.text(subLines, MARGIN, cur.y + PDF_CONFIG.headerTextBaselineOffset);
+        cur.y += subLines.length * PDF_CONFIG.headerSubtitleLineHeight;
+      }
+      cur.y += PDF_CONFIG.headerRuleGap;
+      if (!band) {
+        doc.setDrawColor(...rgb(theme.primary));
+        doc.setLineWidth(PDF_CONFIG.headerRuleWidth);
+        doc.line(MARGIN, cur.y, PAGE_W - MARGIN, cur.y);
+      }
+      cur.y += PDF_CONFIG.headerBottomGap;
+    },
+    followingPageHeight() {
+      return followingPageHeight;
+    },
+    drawFollowingPageChrome,
+    drawFollowingPage(doc, cur) {
+      drawFollowingPageChrome(doc);
+      cur.y = followingPageHeight + PDF_CONFIG.headerRepeatBottomGap;
+    },
+  };
 }
 
-function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData): void {
+function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
   if (!data.intro) return;
-  doc.setFont(pdfFont(), 'normal');
-  doc.setFontSize(11);
-  doc.setTextColor(51, 65, 85);
+  doc.setFont(pdfFont(theme), 'normal');
+  doc.setFontSize(PDF_CONFIG.bodySize);
+  doc.setTextColor(...rgb(theme.foreground));
   const lines = doc.splitTextToSize(data.intro, CONTENT_W);
-  cur.keepTogether(lines.length * 5.2 + 6, 5.2 * 3);
-  drawParagraph(doc, cur, lines, 5.2);
-  cur.y += 8;
+  cur.keepTogether(lines.length * PDF_CONFIG.introLineHeight + PDF_CONFIG.introKeepPadding, PDF_CONFIG.introLineHeight * PDF_CONFIG.introMinLeadLines);
+  drawParagraph(doc, cur, lines, PDF_CONFIG.introLineHeight);
+  cur.y += PDF_CONFIG.introBottomGap;
 }
 
-function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData): void {
+function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
   const kpis = data.kpis ?? [];
   if (kpis.length === 0) return;
-  const font = pdfFont();
-  const cols = Math.min(kpis.length, 3);
-  const gap = 5;
+  const font = pdfFont(theme);
+  const cols = Math.min(kpis.length, PDF_CONFIG.kpiColumns);
+  const gap = PDF_CONFIG.kpiGap;
   const cardW = (CONTENT_W - gap * (cols - 1)) / cols;
-  const cardH = 26;
+  const cardH = PDF_CONFIG.kpiHeight;
   const rows = Math.ceil(kpis.length / cols);
   cur.ensure(rows * (cardH + gap));
 
@@ -160,167 +293,242 @@ function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData): void {
     if (col === 0 && row > 0) cur.y += cardH + gap;
     const x = MARGIN + col * (cardW + gap);
     const y = cur.y;
-    doc.setFillColor(...SOFT);
-    doc.setDrawColor(...LINE);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(x, y, cardW, cardH, 2, 2, 'FD');
+    doc.setFillColor(...rgb(theme.soft));
+    doc.setDrawColor(...rgb(theme.line));
+    doc.setLineWidth(PDF_CONFIG.kpiLineWidth);
+    doc.roundedRect(x, y, cardW, cardH, PDF_CONFIG.kpiRadius, PDF_CONFIG.kpiRadius, 'FD');
     doc.setFont(font, 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(...MUTED);
-    doc.text(String(k.label).toUpperCase(), x + 5, y + 7);
+    doc.setFontSize(PDF_CONFIG.kpiLabelSize);
+    doc.setTextColor(...rgb(theme.muted));
+    doc.text(String(k.label).toUpperCase(), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiLabelY);
     doc.setFont(font, 'bold');
-    doc.setFontSize(16);
-    doc.setTextColor(...INK);
-    doc.text(String(k.value), x + 5, y + 16);
+    doc.setFontSize(PDF_CONFIG.kpiValueSize);
+    doc.setTextColor(...rgb(theme.foreground));
+    doc.text(String(k.value), x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiValueY);
     if (k.delta) {
-      const color = k.trend === 'down' ? BAD : k.trend === 'up' ? GOOD : MUTED;
+      const color = k.trend === 'down' ? rgb(theme.danger) : k.trend === 'up' ? rgb(theme.success) : rgb(theme.muted);
       const arrow = k.trend === 'down' ? '▼ ' : k.trend === 'up' ? '▲ ' : '';
       doc.setFont(font, 'bold');
-      doc.setFontSize(9);
+      doc.setFontSize(PDF_CONFIG.kpiDeltaSize);
       doc.setTextColor(...color);
-      doc.text(`${arrow}${k.delta}`, x + 5, y + 22);
+      doc.text(`${arrow}${k.delta}`, x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiDeltaY);
     } else if (k.note) {
       doc.setFont(font, 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(...MUTED);
-      doc.text(doc.splitTextToSize(k.note, cardW - 9)[0], x + 5, y + 22);
+      doc.setFontSize(PDF_CONFIG.kpiNoteSize);
+      doc.setTextColor(...rgb(theme.muted));
+      doc.text(doc.splitTextToSize(k.note, cardW - PDF_CONFIG.kpiPadding * 2)[0], x + PDF_CONFIG.kpiPadding, y + PDF_CONFIG.kpiDeltaY);
     }
   });
-  cur.y += cardH + 12;
+  cur.y += cardH + PDF_CONFIG.kpiBottomGap;
 }
 
-async function renderCharts(doc: jsPDF, cur: Cursor, data: ReportData): Promise<void> {
+async function renderCharts(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): Promise<void> {
+  const fontSet = await loadRenderFontSet(theme);
   for (const chart of data.charts ?? []) {
     const svg = renderChart(chart.type, {
       title: chart.title,
       subtitle: chart.subtitle,
       prefix: chart.prefix,
       suffix: chart.suffix,
-      data: chart.data,
+      data: chart.data.map((datum, index) => ({ ...datum, color: datum.color ?? theme.palette[index % theme.palette.length] })),
+      theme,
     });
-    const png = await renderSvgToPng(svg, 1400);
+    const png = await renderSvgToPng(svg, CHART_CONFIG.renderWidth, fontSet);
     const pxW = png.readUInt32BE(16);
     const pxH = png.readUInt32BE(20);
     const h = (pxH / pxW) * CONTENT_W;
-    cur.ensure(h + 8);
+    cur.ensure(h + PDF_CONFIG.chartKeepPadding);
     const dataUrl = `data:image/png;base64,${png.toString('base64')}`;
     doc.addImage(dataUrl, 'PNG', MARGIN, cur.y, CONTENT_W, h);
-    cur.y += h + 10;
+    cur.y += h + PDF_CONFIG.chartBottomGap;
   }
 }
 
-function renderSections(doc: jsPDF, cur: Cursor, data: ReportData): void {
-  const font = pdfFont();
+function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
+  const font = pdfFont(theme);
   for (const s of data.sections ?? []) {
     doc.setFont(font, 'bold');
-    doc.setFontSize(13);
+    doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
     const headingLines = doc.splitTextToSize(s.heading, CONTENT_W);
-    const headingH = headingLines.length * 6;
+    const headingH = headingLines.length * PDF_CONFIG.sectionHeadingLineHeight;
     doc.setFont(font, 'normal');
-    doc.setFontSize(10.5);
+    doc.setFontSize(PDF_CONFIG.bodySize);
     const bodyLines = doc.splitTextToSize(s.body, CONTENT_W);
-    cur.keepTogether(headingH + 2 + bodyLines.length * 5, headingH + 2 + 3 * 5);
+    cur.keepTogether(headingH + PDF_CONFIG.sectionHeadingGap + bodyLines.length * PDF_CONFIG.bodyLineHeight, headingH + PDF_CONFIG.sectionHeadingGap + PDF_CONFIG.sectionMinLeadLines * PDF_CONFIG.bodyLineHeight);
     doc.setFont(font, 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(...INK);
+    doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
+    doc.setTextColor(...rgb(theme.foreground));
     doc.text(headingLines, MARGIN, cur.y);
     cur.y += headingH;
     doc.setFont(font, 'normal');
-    doc.setFontSize(10.5);
-    doc.setTextColor(51, 65, 85);
-    drawParagraph(doc, cur, bodyLines, 5);
-    cur.y += 6;
+    doc.setFontSize(PDF_CONFIG.bodySize);
+    doc.setTextColor(...rgb(theme.foreground));
+    drawParagraph(doc, cur, bodyLines, PDF_CONFIG.bodyLineHeight);
+    cur.y += PDF_CONFIG.sectionBottomGap;
   }
 }
 
-function renderTable(doc: jsPDF, cur: Cursor, data: ReportData): void {
+function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, header: ReportHeaderRenderer): void {
   if (!data.table) return;
-  const font = pdfFont();
-  const firstRowsH = 20;
+  const font = pdfFont(theme);
+  const firstRowsH = PDF_CONFIG.tableCaptionHeight;
   if (data.table.caption) {
     doc.setFont(font, 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(...INK);
-    cur.ensure(10 + firstRowsH);
+    doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
+    doc.setTextColor(...rgb(theme.foreground));
+    cur.ensure(PDF_CONFIG.tableCaptionGap + firstRowsH);
     doc.text(data.table.caption, MARGIN, cur.y);
-    cur.y += 4;
+    cur.y += PDF_CONFIG.tableCaptionBottomGap;
   } else {
     cur.ensure(firstRowsH);
   }
+  const tableInitialPage = doc.getNumberOfPages();
   const tableOptions: UserOptions = {
     head: [data.table.head],
     body: data.table.body.map((r) => r.map((c) => String(c))),
-    startY: cur.y + 2,
-    margin: { left: MARGIN, right: MARGIN },
-    styles: { font, fontSize: 9, cellPadding: 2.5, textColor: INK, lineColor: LINE, lineWidth: 0.2 },
-    headStyles: { font, fontStyle: 'bold', fillColor: ACCENT, textColor: [255, 255, 255] },
-    alternateRowStyles: { fillColor: SOFT },
+    startY: cur.y + PDF_CONFIG.tableStartOffset,
+    margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: MARGIN, right: MARGIN },
+    styles: { font, fontSize: PDF_CONFIG.tableFontSize, cellPadding: PDF_CONFIG.tableCellPadding, textColor: rgb(theme.foreground), fillColor: rgb(theme.background), lineColor: rgb(theme.line), lineWidth: PDF_CONFIG.tableLineWidth },
+    headStyles: { font, fontStyle: 'bold', fillColor: rgb(theme.primary), textColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)) },
+    alternateRowStyles: { fillColor: rgb(theme.soft) },
+    willDrawPage: ({ doc: pageDoc, pageNumber }) => {
+      const documentPage = pageDoc.getNumberOfPages();
+      if (documentPage > tableInitialPage) {
+        pageDoc.setFillColor(...rgb(theme.background));
+        pageDoc.rect(0, 0, PAGE_W, PAGE_H, 'F');
+        if (documentPage > 1 || pageNumber > 1) header.drawFollowingPageChrome(pageDoc);
+      }
+    },
   };
   (doc as jsPDF & { autoTable: (options: UserOptions) => void }).autoTable(tableOptions);
-  cur.y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  cur.y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + PDF_CONFIG.tableBottomGap;
 }
 
-function renderHighlights(doc: jsPDF, cur: Cursor, data: ReportData): void {
+function renderHighlights(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme): void {
   const highlights = data.highlights ?? [];
   if (highlights.length === 0) return;
-  const font = pdfFont();
+  const font = pdfFont(theme);
   doc.setFont(font, 'normal');
-  doc.setFontSize(10.5);
-  const firstLines = doc.splitTextToSize(highlights[0], CONTENT_W - 6);
+  doc.setFontSize(PDF_CONFIG.bodySize);
+  const firstLines = doc.splitTextToSize(highlights[0], CONTENT_W - PDF_CONFIG.highlightIndent);
   doc.setFont(font, 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(...INK);
-  cur.ensure(10 + firstLines.length * 5 + 2);
+  doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
+  doc.setTextColor(...rgb(theme.foreground));
+  cur.ensure(PDF_CONFIG.highlightsHeadingGap + firstLines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap);
   doc.text('Highlights', MARGIN, cur.y);
-  cur.y += 6;
+  cur.y += PDF_CONFIG.highlightsHeadingHeight;
   doc.setFont(font, 'normal');
-  doc.setFontSize(10.5);
-  doc.setTextColor(51, 65, 85);
+  doc.setFontSize(PDF_CONFIG.bodySize);
+  doc.setTextColor(...rgb(theme.foreground));
   for (const h of highlights) {
-    const lines = doc.splitTextToSize(h, CONTENT_W - 6);
-    cur.ensure(lines.length * 5 + 2);
-    doc.setFillColor(...ACCENT);
-    doc.circle(MARGIN + 1.2, cur.y - 1.4, 0.9, 'F');
-    doc.text(lines, MARGIN + 6, cur.y);
-    cur.y += lines.length * 5 + 2;
+    const lines = doc.splitTextToSize(h, CONTENT_W - PDF_CONFIG.highlightIndent);
+    cur.ensure(lines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap);
+    doc.setFillColor(...rgb(theme.primary));
+    doc.circle(MARGIN + PDF_CONFIG.highlightBulletX, cur.y - PDF_CONFIG.highlightBulletY, PDF_CONFIG.highlightBulletRadius, 'F');
+    doc.text(lines, MARGIN + PDF_CONFIG.highlightIndent, cur.y);
+    cur.y += lines.length * PDF_CONFIG.bodyLineHeight + PDF_CONFIG.highlightLineGap;
   }
-  cur.y += 6;
+  cur.y += PDF_CONFIG.highlightsBottomGap;
 }
 
-function renderFooter(doc: jsPDF, data: ReportData): void {
-  const font = pdfFont();
+function renderFooter(doc: jsPDF, data: ReportData, theme: RenderTheme): void {
+  const font = pdfFont(theme);
   const pages = doc.getNumberOfPages();
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p);
-    doc.setDrawColor(...LINE);
-    doc.setLineWidth(0.3);
-    doc.line(MARGIN, PAGE_H - 12, PAGE_W - MARGIN, PAGE_H - 12);
+    const coverPage = Boolean(data.title_page && p === 1);
+    const footerLine = coverPage ? theme.titleSubtitleColor : theme.line;
+    const footerText = coverPage ? theme.titleSubtitleColor : theme.muted;
+    doc.setDrawColor(...rgb(footerLine));
+    doc.setLineWidth(PDF_CONFIG.footerLineWidth);
+    doc.line(MARGIN, PDF_CONFIG.footerY, PAGE_W - MARGIN, PDF_CONFIG.footerY);
     doc.setFont(font, 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    if (data.footer) doc.text(String(data.footer), MARGIN, PAGE_H - 7);
-    doc.text(`${p} / ${pages}`, PAGE_W - MARGIN, PAGE_H - 7, { align: 'right' });
+    doc.setFontSize(PDF_CONFIG.footerFontSize);
+    doc.setTextColor(...rgb(footerText));
+    if (data.footer) doc.text(String(data.footer), MARGIN, PDF_CONFIG.footerTextY);
+    doc.text(`${p} / ${pages}`, PAGE_W - MARGIN, PDF_CONFIG.footerTextY, { align: 'right' });
   }
 }
 
-export async function renderReportPdf(name: string, data: ReportData): Promise<Buffer> {
+async function renderTitlePage(doc: jsPDF, data: ReportData, theme: RenderTheme): Promise<void> {
+  const page = data.title_page;
+  if (!page) return;
+  const font = pdfFont(theme);
+  const backgroundAsset = await prepareBrandAsset(theme.coverImagePath, PAGE_W);
+  const coverBand = theme.headerStyle === 'accent-band' ? theme.primary : theme.headerStyle === 'dark-band' ? theme.background : undefined;
+  const hasGraphic = Boolean(backgroundAsset) || Boolean(coverBand) || Boolean(theme.coverBackground);
+  doc.setFillColor(...rgb(theme.coverBackground ?? coverBand ?? theme.background));
+  doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
+  if (backgroundAsset) addPreparedBrandAssetCover(doc, backgroundAsset, 0, 0, PAGE_W, PAGE_H);
+  if (theme.imageScrim) {
+    doc.setFillColor(...rgb(theme.imageScrim.color));
+    doc.setGState?.(new (doc as unknown as { GState: new (options: { opacity: number }) => unknown }).GState({ opacity: theme.imageScrim.opacity }));
+    doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
+    doc.setGState?.(new (doc as unknown as { GState: new (options: { opacity: number }) => unknown }).GState({ opacity: 1 }));
+  }
+
+  const logoPath = theme.logoVariant === 'white' ? theme.logoWhitePath ?? theme.logoPath : theme.logoPath;
+  const logoAsset = await prepareBrandAsset(logoPath, PDF_CONFIG.titleLogoWidth);
+  if (logoAsset) addPreparedBrandAssetContain(doc, logoAsset, PAGE_W - MARGIN - PDF_CONFIG.titleLogoWidth, PDF_CONFIG.titleLogoY, PDF_CONFIG.titleLogoWidth, PDF_CONFIG.titleLogoHeight);
+  if (page.period) {
+    doc.setFont(font, 'normal');
+    doc.setFontSize(PDF_CONFIG.titlePeriodSize);
+    doc.setTextColor(...rgb(hasGraphic ? theme.titleSubtitleColor : theme.muted));
+    doc.text(page.period, PAGE_W - MARGIN, PDF_CONFIG.titlePeriodY, { align: 'right' });
+  }
+
+  const x = theme.titleAlign === 'center' ? PAGE_W / 2 : MARGIN;
+  let y = PDF_CONFIG.titleY;
+  if (page.eyebrow) {
+    doc.setFont(font, 'bold');
+    doc.setFontSize(PDF_CONFIG.titleEyebrowSize);
+    doc.setTextColor(...rgb(hasGraphic ? theme.titleAccentColor : theme.primary));
+    doc.text(page.eyebrow.toUpperCase(), x, y, { align: theme.titleAlign === 'center' ? 'center' : 'left' });
+    y += PDF_CONFIG.titleEyebrowLineHeight;
+  }
+  if (page.title) {
+    doc.setFont(font, 'bold');
+    doc.setFontSize(PDF_CONFIG.titleSize);
+    doc.setTextColor(...rgb(hasGraphic ? theme.titleColor : theme.foreground));
+    const titleLines = doc.splitTextToSize(page.title, CONTENT_W);
+    doc.text(titleLines, x, y, { align: theme.titleAlign === 'center' ? 'center' : 'left' });
+    y += titleLines.length * PDF_CONFIG.titleLineHeight + PDF_CONFIG.titleBottomGap;
+  }
+  if (page.subtitle) {
+    doc.setFont(font, 'normal');
+    doc.setFontSize(PDF_CONFIG.titleSubtitleSize);
+    doc.setTextColor(...rgb(hasGraphic ? theme.titleSubtitleColor : theme.muted));
+    const subtitleLines = doc.splitTextToSize(page.subtitle, CONTENT_W);
+    doc.text(subtitleLines, x, y, { align: theme.titleAlign === 'center' ? 'center' : 'left' });
+  }
+}
+
+export async function renderReportPdf(name: string, data: ReportData, theme = defaultRenderTheme()): Promise<Buffer> {
   const resolved = resolveTemplate(name, data);
-  const doc = newPdf('portrait');
-  const cur = new Cursor(doc);
-  renderHeader(doc, cur, resolved);
-  renderIntro(doc, cur, resolved);
-  renderKpis(doc, cur, resolved);
-  await renderCharts(doc, cur, resolved);
-  renderSections(doc, cur, resolved);
-  renderTable(doc, cur, resolved);
-  renderHighlights(doc, cur, resolved);
-  renderFooter(doc, resolved);
+  const fontSet = await loadRenderFontSet(theme);
+  const doc = newPdf('portrait', 'a4', fontSet);
+  const header = await createReportHeader(resolved, theme);
+  const cur = new Cursor(doc, theme.background, (cursor) => header.drawFollowingPage(doc, cursor));
+  if (resolved.title_page) {
+    await renderTitlePage(doc, resolved, theme);
+    cur.breakPage();
+  } else {
+    header.drawFirstPage(doc, cur);
+  }
+  renderIntro(doc, cur, resolved, theme);
+  renderKpis(doc, cur, resolved, theme);
+  await renderCharts(doc, cur, resolved, theme);
+  renderSections(doc, cur, resolved, theme);
+  renderTable(doc, cur, resolved, theme, header);
+  renderHighlights(doc, cur, resolved, theme);
+  renderFooter(doc, resolved, theme);
   return Buffer.from(doc.output('arraybuffer'));
 }
 
 function resolveTemplate(name: string, data: ReportData): ReportData {
-  if (name === 'default-report') return data;
-  if (name === 'campaign-summary') {
+  const templateName = name.split('/').filter(Boolean).at(-1) ?? name;
+  if (templateName === 'default-report') return data;
+  if (templateName === 'campaign-summary') {
     return {
       ...data,
       title: data.title ?? 'Campaign summary',

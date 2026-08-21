@@ -1,0 +1,10 @@
+layout:
+  header_style: plain
+  title_align: left
+  heading_weight: 700
+  pptx_heading_scale: 0.97
+  body_weight: 400
+  radius: 12
+  logo_variant: default
+assets:
+  background_image: null

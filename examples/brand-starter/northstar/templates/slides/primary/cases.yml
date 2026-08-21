@@ -1,0 +1,9 @@
+schema_version: 1
+template_ref: slides/primary
+cases:
+  - id: baseline
+    description: Short title and subtitle on the default surface.
+  - id: long-copy
+    description: Long title and subtitle must shrink or wrap inside their slots.
+  - id: rtl
+    description: Change canvas.direction to rtl when the brand supports Arabic or Hebrew.

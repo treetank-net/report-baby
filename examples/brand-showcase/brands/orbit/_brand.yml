@@ -1,0 +1,44 @@
+schema_version: 1
+x-provenance:
+  kind: synthetic-example
+  source: report-baby brand showcase
+  license: MIT
+meta:
+  name: Orbit
+  short: Orbit
+  description: Fictional search and productivity brand for the report-baby showcase.
+color:
+  palette:
+    blue: "#2457d6"
+    green: "#16a57a"
+    yellow: "#f2b72b"
+    coral: "#ef665b"
+    violet: "#8466e8"
+    ink: "#14213d"
+    fog: "#f5f7fb"
+    line: "#dbe3f0"
+  background: "#ffffff"
+  foreground: ink
+  primary: blue
+  secondary: green
+  muted: "#4b5563"
+  surface: fog
+  line: line
+  success: "#0b7657"
+  danger: "#b42318"
+  warning: "#8a5a00"
+  series: [blue, green, yellow, coral, violet]
+typography:
+  base: { family: "Ubuntu Sans" }
+  headings: { family: "Ubuntu Sans" }
+  roles:
+    display: { family: "Ubuntu Sans" }
+assets:
+  source_root: assets
+  logo: logos/logo.svg
+  logo_white: logos/logo-white.svg
+  logo_mark: logos/logo-mark.svg
+  logo_white_mark: logos/logo-white-mark.svg
+  background_image: backgrounds/hero.png
+  font_regular: fonts/UbuntuSans.ttf
+  font_bold: fonts/UbuntuSans-Bold.ttf

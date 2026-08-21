@@ -1,0 +1,30 @@
+schema_version: 1
+showcase:
+  meta:
+    complexity: basic
+    description: One dependable editorial surface; the brand is intentionally useful rather than decorative.
+  reports:
+    - id: primary-report
+      profile: primary
+      data:
+        title: From signal to momentum
+        subtitle: A straightforward product report
+        period: Q2 2026
+        intro: "Orbit is the deliberately basic fixture: one surface, one logo lockup, one readable palette and no generated variants that the brand did not define."
+        kpis:
+          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
+          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
+          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
+        charts:
+          - { type: line, title: Weekly active teams, subtitle: A steady climb, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] }
+        sections:
+          - { heading: The product is becoming a habit, body: Teams that complete the first workflow return more often and invite colleagues sooner. }
+        highlights: [Keep the first result visible., Turn successful workflows into team habits.]
+        footer: Orbit showcase · basic report
+  decks:
+    - id: primary-surface
+      profile: primary
+      slides:
+        - { type: title, profile: primary, data: { eyebrow: Q2 2026 / PRODUCT SIGNALS, title: From signal to momentum, subtitle: One clear surface is enough when the brand has a disciplined hierarchy. } }
+        - { type: metrics, profile: primary, data: { title: The primary signal board, subtitle: No artificial theme variants, body: "This deck is intentionally small: it demonstrates that a simple brand stays simple in the example output.", callout: "Basic brand contract · one surface · one dependable hierarchy", metrics: [{ label: Active teams, value: 18.4k, delta: +12.8%, trend: up }, { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up }, { label: Expansion, value: €2.8m, delta: +18.1%, trend: up }] } }
+        - { type: narrative, profile: primary, data: { title: A useful default, body: A basic brand should not be inflated with dark modes, graphics and accent surfaces merely to make a showcase look impressive., highlights: [The renderer follows the brand., Missing definitions stay missing., Complexity comes from the brandbook.] } }

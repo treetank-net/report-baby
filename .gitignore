@@ -4,6 +4,16 @@ dist/
 
 # Render output
 server/out/
+# Rendered fixtures are reproducible from examples/ and stay out of the tree.
+examples/*/generated/
+
+# Visual QA is disposable and must never enter the product tree.
+**/qa/
+**/qa-report.json
+**/.staging-*/
+
+# Local client reference material; never include it in the repository.
+.tmp-reference/
 
 # Secrets & credentials
 .env

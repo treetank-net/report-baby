@@ -1,0 +1,9 @@
+layout:
+  header_style: image-band
+  title_align: left
+  title_case: upper
+  heading_weight: 800
+  body_weight: 400
+  radius: 14
+  logo_variant: white
+  background_image_opacity: 0.92

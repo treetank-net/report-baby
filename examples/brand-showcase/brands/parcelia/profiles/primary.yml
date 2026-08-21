@@ -1,0 +1,11 @@
+layout:
+  header_style: image-band
+  image_text_color: "#ffffff"
+  image_text_safe_area: { x: 0.03, y: 0.00, width: 0.94, height: 1.00 }
+  image_scrim: { color: "#071a33", opacity: 0.58 }
+  title_align: left
+  heading_weight: 800
+  body_weight: 400
+  radius: 10
+  logo_variant: white
+  background_image_opacity: 0.88

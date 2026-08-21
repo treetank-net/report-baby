@@ -1,0 +1,30 @@
+schema_version: 1
+showcase:
+  meta:
+    complexity: basic
+    description: A generated starter with one profile, one owned title template and one dependable surface.
+  reports:
+    - id: primary-report
+      profile: primary
+      data:
+        title: "Northstar signal review"
+        subtitle: A starter report generated from the brandbook
+        period: Q2 2026
+        intro: This report is intentionally ordinary. Change the profile, assets and template, then render it again to see which decisions belong to the brand.
+        kpis:
+          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
+          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
+          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
+        charts:
+          - { type: line, title: Weekly active teams, subtitle: A steady climb, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] }
+        sections:
+          - { heading: The first useful signal, body: Keep the content simple while the visual system is being authored. The point of this fixture is to make the effect of each brand decision easy to see. }
+        highlights: [Replace the sample logo., Add a real profile only for a real use case., Inspect PDF, PNG and PPTX before publishing.]
+        footer: Northstar starter · report-baby
+  decks:
+    - id: primary-deck
+      footer: Northstar starter · Q2 2026
+      slides:
+        - { type: title, template_ref: slides/primary, profile: primary, data: { eyebrow: Q2 2026 / STARTER BRAND, title: "Northstar signal review", subtitle: Edit this title template in your brandbook } }
+        - { type: metrics, profile: primary, data: { title: The primary signal board, subtitle: Start here, then add only the surfaces the brand really needs, body: The renderer consumes the brandbook; it does not decide the identity for you., callout: Change one value, render again and compare the result., metrics: [{ label: Active teams, value: 18.4k, delta: +12.8%, trend: up }, { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up }, { label: Expansion, value: €2.8m, delta: +18.1%, trend: up }] } }
+        - { type: narrative, profile: primary, data: { title: A useful first iteration, body: Once this output looks intentional, add a second profile or a brand-owned template for a real communication mode., highlights: [Keep tokens semantic., Keep geometry in templates., Use showcase data to prove the brand.] } }

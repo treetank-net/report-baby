@@ -1,0 +1,12 @@
+schema_version: 1
+layout:
+  header_style: dark-band
+  title_align: left
+  title_case: normal
+  heading_weight: 700
+  body_weight: 400
+  radius: 10
+  logo_variant: white
+  pptx_heading_scale: 1
+assets:
+  background_image: null

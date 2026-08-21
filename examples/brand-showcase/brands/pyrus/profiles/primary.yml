@@ -1,0 +1,11 @@
+layout:
+  header_style: image-band
+  title_align: left
+  heading_weight: 600
+  body_weight: 400
+  radius: 28
+  logo_variant: default
+  background_image_opacity: 0.94
+  image_text_color: graphite
+  image_text_safe_area: { x: 0.04, y: 0.18, width: 0.58, height: 0.50 }
+  heading_scale: 0.86

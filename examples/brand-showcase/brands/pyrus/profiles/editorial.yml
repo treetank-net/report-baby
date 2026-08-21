@@ -1,0 +1,8 @@
+layout:
+  header_style: plain
+  title_align: center
+  title_case: normal
+  heading_weight: 600
+  radius: 28
+assets:
+  background_image: null
