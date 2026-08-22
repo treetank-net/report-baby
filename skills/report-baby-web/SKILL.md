@@ -73,6 +73,14 @@ apostrophes, Polish characters, and multiline text:
 node /tmp/rb/server/cli-bundle.cjs render_report < report.json
 ```
 
+When a render writes an artifact, stdout contains only its path so shell
+composition stays simple. Any `structuredContent.warnings` are printed to
+stderr; use `--json` when the complete structured result is needed on stdout:
+
+```bash
+node /tmp/rb/server/cli-bundle.cjs --json render_report < report.json
+```
+
 The report input has this shape:
 
 ```json

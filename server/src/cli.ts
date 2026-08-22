@@ -40,6 +40,7 @@ interface CliOptions {
   brandUrl?: string;
   brandPath?: string;
   gitRef?: string;
+  json: boolean;
 }
 
 function parseCliOptions(argv: string[]): CliOptions {
@@ -47,8 +48,13 @@ function parseCliOptions(argv: string[]): CliOptions {
   let brandUrl: string | undefined;
   let brandPath: string | undefined;
   let gitRef: string | undefined;
+  let json = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === '--json') {
+      json = true;
+      continue;
+    }
     if (arg === '--brand-url' || arg === '--brand-path' || arg === '--git-ref') {
       const value = argv[index + 1];
       if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value.`);
@@ -61,7 +67,7 @@ function parseCliOptions(argv: string[]): CliOptions {
     toolArgs.push(arg);
   }
   if (brandPath && !brandUrl) throw new Error('--brand-path requires --brand-url.');
-  return { toolArgs, brandUrl, brandPath, gitRef };
+  return { toolArgs, brandUrl, brandPath, gitRef, json };
 }
 
 async function prepareBrandDirectory(options: CliOptions): Promise<void> {
@@ -118,8 +124,18 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const path = result?.structuredContent?.path;
-  process.stdout.write(path ? `${path}\n` : `${JSON.stringify(result?.structuredContent ?? result, null, 2)}\n`);
+  const structuredContent = result?.structuredContent ?? result;
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(structuredContent, null, 2)}\n`);
+    return;
+  }
+  const path = structuredContent?.path;
+  process.stdout.write(path ? `${path}\n` : `${JSON.stringify(structuredContent, null, 2)}\n`);
+  if (path && Array.isArray(structuredContent?.warnings)) {
+    for (const warning of structuredContent.warnings) {
+      process.stderr.write(`report-baby warning: ${typeof warning === 'string' ? warning : JSON.stringify(warning)}\n`);
+    }
+  }
 }
 
 main().catch((error: any) => {

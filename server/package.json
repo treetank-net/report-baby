@@ -22,6 +22,7 @@
     "goals:script-dup": "node scripts/script-dup.mjs",
     "test:brand": "node ../scripts/test-brand-contract.js",
     "test:cli": "node scripts/test-cli.mjs",
+    "test:editorial-flow": "node scripts/test-editorial-flow.mjs",
     "test": "node scripts/test-public-behavior.mjs",
     "dev": "tsc --watch --noEmit",
     "start": "node bundle.cjs"

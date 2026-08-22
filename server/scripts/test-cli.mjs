@@ -53,6 +53,31 @@ try {
   assert.equal(branded.code, 0, branded.stderr);
   assert.equal(branded.stdout.trim(), brandedPath);
   assert.equal((await readFile(brandedPath)).subarray(0, 5).toString(), '%PDF-');
+
+  const warningPath = join(outputDir, 'warning-report.pdf');
+  const warned = await run(['render_report'], JSON.stringify({
+    template: 'pages/editorial-two-column',
+    output_path: warningPath,
+    data: {
+      title: 'CLI warnings',
+      kpis: [{ label: 'Ignored KPI', value: 1 }],
+      charts: [{ type: 'bar', data: [{ label: 'Ignored chart', value: 1 }] }],
+      sections: [{ heading: 'Works', body: 'The report still renders.' }],
+    },
+  }));
+  assert.equal(warned.code, 0, warned.stderr);
+  assert.equal(warned.stdout.trim(), warningPath);
+  assert.match(warned.stderr, /does not render KPI blocks/);
+  assert.match(warned.stderr, /does not render chart blocks/);
+
+  const jsonWarned = await run(['--json', 'render_report'], JSON.stringify({
+    template: 'pages/editorial-two-column',
+    output_path: join(outputDir, 'warning-report-json.pdf'),
+    data: { title: 'CLI warnings JSON', kpis: [{ label: 'Ignored KPI', value: 1 }] },
+  }));
+  assert.equal(jsonWarned.code, 0, jsonWarned.stderr);
+  assert.equal(jsonWarned.stderr, '');
+  assert.match(jsonWarned.stdout, /does not render KPI blocks/);
 } finally {
   await rm(outputDir, { recursive: true, force: true });
 }

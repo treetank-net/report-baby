@@ -363,9 +363,9 @@ interface FlowCandidate {
   gaps: number;
 }
 
-const FLOW_HYPHEN_PENALTY = { justify: 120, left: 900 };
+const FLOW_HYPHEN_PENALTY = { justify: 3000, left: 900 };
 const FLOW_CONSECUTIVE_HYPHEN_PENALTY = 900;
-const FLOW_MAX_STRETCH = 1.7;
+const FLOW_MAX_STRETCH = 2.2;
 const FLOW_MAX_SHRINK = 0.78;
 const FLOW_LAST_LINE_MIN_FILL = 0.12;
 const FLOW_RAGGED_BADNESS = 9000;
@@ -501,7 +501,7 @@ export function breakStyledParagraph(
       let cost = state.cost;
       if (!isLast) {
         if (align === 'justify') {
-          if (line.gaps === 0) cost += 4000;
+          if (line.gaps === 0) cost += 12000;
           else {
             const ratio = (doc.getTextWidth(' ') + slack / line.gaps) / doc.getTextWidth(' ');
             if (ratio > FLOW_MAX_STRETCH) continue;

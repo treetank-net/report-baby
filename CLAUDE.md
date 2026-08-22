@@ -122,6 +122,9 @@ tools and shares their handlers. Its bundle is downloaded from
 `raw.githubusercontent.com`, which is the supported web distribution channel.
 Do not change this path to `api.github.com` or `codeload.github.com`; those hosts
 are blocked in target web/sandbox environments.
+For a successful artifact render, stdout contains only the output path and
+structured warnings are written to stderr. Pass `--json` when the full
+structured result is required on stdout.
 
 ### `render_report` data shape
 

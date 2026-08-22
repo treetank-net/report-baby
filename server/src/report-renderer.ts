@@ -131,6 +131,7 @@ function rgb(hex: string): [number, number, number] {
 class Cursor {
   private segment: PageSegment;
   private segmentIndex = 0;
+  private activeBlockName: string | undefined;
   private readonly baseSegments: PageSegment[];
   constructor(private doc: jsPDF, private pageBackground: string, private onNewPage?: (cursor: Cursor) => void, private geometry = DEFAULT_PAGE_GEOMETRY) {
     this.baseSegments = geometry.segments.map((segment) => ({ ...segment }));
@@ -146,19 +147,21 @@ class Cursor {
   get dynamicFlow(): boolean { return this.geometry.dynamicFlow; }
   block(name: string): PageSegment | undefined { return this.geometry.blockFrames[name]; }
   moveTo(segment: PageSegment): void { this.segment = { ...segment }; }
-  activateBlock(name: string): void {
+  activateBlock(name: string, minimumTop?: number): void {
     const frame = this.geometry.blockFrames[name];
     if (!frame) return;
+    const top = minimumTop === undefined ? frame.top : Math.max(frame.top, minimumTop);
     const segments = this.baseSegments
       .filter((segment) => segment.x < frame.x + frame.width && segment.x + segment.width > frame.x)
       .map((segment) => ({
         x: Math.max(segment.x, frame.x),
-        top: Math.max(segment.top, frame.top),
+        top: Math.max(segment.top, top),
         width: Math.min(segment.x + segment.width, frame.x + frame.width) - Math.max(segment.x, frame.x),
         bottom: Math.min(segment.bottom, frame.bottom),
       }))
       .filter((segment) => segment.width > 0 && segment.bottom > segment.top);
     if (segments.length === 0) return;
+    this.activeBlockName = name;
     this.geometry.segments = segments;
     this.segmentIndex = 0;
     this.segment = { ...segments[0] };
@@ -170,6 +173,7 @@ class Cursor {
     this.segment = { ...this.geometry.segments[this.segmentIndex] };
   }
   flowFrom(top: number): void {
+    this.activeBlockName = undefined;
     this.geometry.segments = this.baseSegments.map((segment) => ({ ...segment }));
     this.segmentIndex = 0;
     this.setFlowTop(top);
@@ -205,10 +209,13 @@ class Cursor {
     this.ensure(cannotFitOnAnyPage || leavesUsableSpaceBehind ? minLeadHeight : blockHeight);
   }
   breakPage(): void {
+    const activeBlockName = this.activeBlockName;
     this.doc.addPage();
     this.paintPage();
     this.resetSegments();
     this.onNewPage?.(this);
+    if (activeBlockName) this.activateBlock(activeBlockName, this.y);
+    else this.setFlowTop(this.y);
   }
 }
 
@@ -295,7 +302,7 @@ function drawDynamicParagraph(doc: jsPDF, cur: Cursor, content: string, lineHeig
     if (result.lines.length === 0) return;
     const qualityWarnings = [
       result.forcedLines > 0 ? `Page flow produced ${result.forcedLines} forced overfull line(s).` : undefined,
-      result.maxStretch > 1.7 ? `Page flow stretched a space to ${result.maxStretch.toFixed(2)}x its natural width.` : undefined,
+      result.maxStretch > 2.2 ? `Page flow stretched a space to ${result.maxStretch.toFixed(2)}x its natural width.` : undefined,
       result.maxConsecutiveHyphenated > 4 ? `Page flow used hyphenation on ${result.maxConsecutiveHyphenated} consecutive lines.` : undefined,
     ].filter((warning): warning is string => Boolean(warning));
     for (const warning of qualityWarnings) if (text.warnings && !text.warnings.includes(warning)) text.warnings.push(warning);

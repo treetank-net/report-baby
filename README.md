@@ -99,6 +99,10 @@ The web distribution path is deliberately `raw.githubusercontent.com`.
 Do not introduce a dependency on `api.github.com` or `codeload.github.com`:
 those hosts are blocked in some target environments.
 
+The CLI keeps stdout composable: a successful render prints only the artifact
+path. Render warnings go to stderr; pass `--json` to receive the complete
+structured result on stdout.
+
 Set `REPORT_BABY_BRAND_STORE` to a published brand store when MCP must ignore
 working-tree brand changes. `REPORT_BABY_BRAND_DIR` remains the working-tree
 directory used for prototyping.
