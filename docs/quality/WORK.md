@@ -135,7 +135,7 @@ Independent of everything. Cheapest visible win in the set.
   Flatpak and Docker fallbacks `AGENTS.md` requires.
 - [ ] **G4.3 One spawn wrapper, one showcase iteration.** Nine scripts have their
   own `spawn`; seven iterate the showcase their own way.
-- [ ] **G4.4 One fixture builder.** Three exist: `visual-qa.mjs`,
+- [x] **G4.4 One fixture builder — `3d8d874`.** Three exist: `visual-qa.mjs`,
   `test-public-behavior.mjs`, `test-brand-contract.js`.
 - [ ] **G4.5 Wire the gate, per mechanism.** `goals:script-dup` asserts each count
   from G4.1 individually: `findOfficeConverter` 1, fixture builders 1, showcase
