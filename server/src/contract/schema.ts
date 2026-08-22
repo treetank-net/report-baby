@@ -143,5 +143,6 @@ export const slideDiagnosticsField = {
 };
 
 export type ReportInput = z.infer<typeof reportDataSchema>;
+export type Slide = z.infer<typeof slideSchema>;
 export type SlideInput = z.infer<typeof slideSchema>;
 export type SlideDeckInput = z.infer<typeof slideDeckSchema>;

@@ -153,7 +153,7 @@ Independent of everything. Cheapest visible win in the set.
 Do only what Goals 1 and 3 need. If an item here stops serving them, drop it and
 say so.
 
-- [ ] **G6.1 Move the three cycle-carrying declarations — to two different
+- [x] **G6.1 Move the three cycle-carrying declarations — to two different
   owners.** Breaking the cycle needs all three out of their implementation
   modules, but they are not the same kind of thing, and putting all three in
   `contract/` would turn it into a bag for every shared type. Measured ownership:
@@ -176,7 +176,7 @@ say so.
   the item Goal 1 depends on. **Not** one module per section — the split that
   matters is geometry (where boxes are) from flow (how text fills them). The 10
   cursor-carrying functions need to accept a segment instead of a `y`.
-- [ ] **G6.4 The architecture check — only rules this plan can support.**
+- [x] **G6.4 The architecture check — only rules this plan can support.**
   `arch:check` fails the build on:
 
   | Rule | From when |
@@ -197,7 +197,7 @@ say so.
   for their own reasons, the rule comes back with them.
 
   Shares graph construction with `goals` — two checkers disagreeing about what an
-  edge is would be worse than having neither.
+  edge is would be worse than having neither. Executable gate: `npm run arch:check`.
 - [ ] **G6.5 Opportunistic renames.** `brand.ts` and `render.ts` exist twice;
   five modules have "template" in the name without distinguishing which owns the
   brand template language, which owns built-in A4 reports, and which is generated.

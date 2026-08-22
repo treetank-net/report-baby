@@ -1,33 +1,17 @@
 import { createHash } from 'node:crypto';
 import { unzipSync, zipSync } from 'fflate';
 import PptxGenJS from 'pptxgenjs';
-import { assetDataUri, defaultRenderTheme, type RenderTheme } from './brand.js';
+import { assetDataUri, defaultRenderTheme } from './brand.js';
 import { readRenderConfig, type RenderConfig } from './builtin-template-loader.js';
+import type { Slide } from './contract/schema.js';
+import type { RenderTheme } from './core/model/render-theme.js';
+import type { ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
 import { loadRenderFontSet, newPdf, readableTextColor, renderSvgToPng } from './render.js';
-import { FONT_FAMILY, PALETTE, renderChart, type ChartDatum, type ChartType, type MetricCard } from './svg.js';
-import type { ResolvedSlidePlan } from './slide-plan.js';
+import { FONT_FAMILY, PALETTE, renderChart, type MetricCard } from './svg.js';
 import type { CompiledTemplate } from './template-source.js';
 import { SLIDE_NOTES_MAX_CHARS } from './contract/schema.js';
 
-export type Slide =
-  | SlideBase & { type: 'title'; eyebrow?: string }
-  | SlideBase & { type: 'metrics'; metrics: MetricCard[]; body?: string; callout?: string }
-  | SlideBase & { type: 'chart'; chart: { type: ChartType; data: ChartDatum[]; prefix?: string; suffix?: string } }
-  | SlideBase & { type: 'table'; head: string[]; body: Array<Array<string | number>> }
-  | SlideBase & { type: 'narrative'; body: string; highlights?: string[] }
-  | SlideBase & { type: 'conclusions'; items: string[] }
-  | SlideBase & { type: 'columns'; columns: Array<{ heading?: string; body: string; highlights?: string[] }> };
-
-interface SlideBase {
-  title: string;
-  subtitle?: string;
-  notes?: string;
-  brand_ref?: string;
-  template_ref?: string;
-  surface?: string;
-  direction?: import('./slide-templates.js').TextDirection;
-  overrides?: import('./brand.js').BrandOverrides;
-}
+export type { Slide } from './contract/schema.js';
 
 export interface SlideDeck {
   title?: string;

@@ -3,8 +3,11 @@ import { existsSync } from 'node:fs';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { getBrandSourceRoots } from './config.js';
+import type { RenderTheme } from './core/model/render-theme.js';
 import { logicalDirection, logicalPlacement, logicalSpacing, type LockupPlacement, type LockupSpacing, type SlideTemplateRef, type TextDirection } from './slide-templates.js';
 import { readTemplateSource } from './template-source.js';
+
+export type { RenderTheme } from './core/model/render-theme.js';
 
 export interface BrandOverrides {
   fit?: {
@@ -23,57 +26,6 @@ export interface BrandOverrides {
     heading_role?: string;
   };
   emphasis?: { role?: string };
-}
-
-export interface RenderTheme {
-  background: string;
-  foreground: string;
-  primary: string;
-  secondary: string;
-  muted: string;
-  line: string;
-  soft: string;
-  success: string;
-  danger: string;
-  warning: string;
-  palette: string[];
-  fontFamily: string;
-  headingFontFamily: string;
-  bodyScale: number;
-  headingScale: number;
-  pptxHeadingScale: number;
-  fitStrategy: 'none' | 'shrink-to-fit';
-  minBodyPt: number;
-  minHeadingPt: number;
-  density: 'comfortable' | 'compact';
-  headerStyle: 'plain' | 'accent-band' | 'dark-band' | 'image-band';
-  reportHeaderStyle: 'plain' | 'accent-band' | 'dark-band' | 'image-band';
-  showReportBrandName: boolean;
-  titleAlign: 'left' | 'center';
-  titleCase: 'normal' | 'upper';
-  titleColor: string;
-  titleAccentColor: string;
-  titleSubtitleColor: string;
-  titleLogoWidthPx: number;
-  titleLogoHeightPx: number;
-  coverBackground?: string;
-  headingWeight: number;
-  bodyWeight: number;
-  radius: number;
-  logoVariant: 'default' | 'white';
-  logoPath?: string;
-  logoWhitePath?: string;
-  logoMarkPath?: string;
-  logoWhiteMarkPath?: string;
-  backgroundImagePath?: string;
-  coverImagePath?: string;
-  reportHeaderImagePath?: string;
-  backgroundImageOpacity: number;
-  imageTextColor: string;
-  imageTextSafeArea: { x: number; y: number; width: number; height: number };
-  imageScrim?: { color: string; opacity: number };
-  fontRegularPath?: string;
-  fontBoldPath?: string;
 }
 
 export interface BrandDiagnostics {

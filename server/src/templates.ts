@@ -1,7 +1,8 @@
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
-import { assetDataUri, defaultRenderTheme, type RenderTheme } from './brand.js';
+import { assetDataUri, defaultRenderTheme } from './brand.js';
 import { readRenderConfig } from './builtin-template-loader.js';
+import type { RenderTheme } from './core/model/render-theme.js';
 import { loadRenderFontSet, newPdf, pdfFont, readableTextColor, renderSvgToPng, type RenderFontSet } from './render.js';
 import {
   drawStyledLine,
