@@ -15,6 +15,7 @@ import {
   stripInlineMarkup,
   tableFallbackWarning,
   splitUncovered,
+  styledLineWidth,
   styledRuns,
   type StyledRun,
   type StyledTextContext,
@@ -100,6 +101,7 @@ interface PageGeometry {
   margins: { top: number; right: number; bottom: number; left: number };
   content: PageSegment;
   segments: PageSegment[];
+  flow: { align: 'justify' | 'left'; hyphenate: boolean };
 }
 
 const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
@@ -109,6 +111,7 @@ const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
   margins: { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN },
   content: { x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN },
   segments: [{ x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN }],
+  flow: { align: 'left', hyphenate: false },
 };
 
 interface PdfGaps {
@@ -150,6 +153,7 @@ class Cursor {
   set y(value: number) { this.segment.top = value; }
   get width(): number { return this.segment.width; }
   get bottom(): number { return this.segment.bottom; }
+  get flow(): PageGeometry['flow'] { return this.geometry.flow; }
   moveTo(segment: PageSegment): void { this.segment = { ...segment }; }
   setFlowTop(top: number): void {
     if (this.geometry.segments.length <= 1) return;
@@ -220,6 +224,30 @@ function splitWithoutWidows(lines: StyledRun[][], available: number): number {
   return 0;
 }
 
+function drawJustifiedLine(doc: jsPDF, line: StyledRun[], x: number, y: number, width: number, text: StyledTextContext): void {
+  const gaps = line.reduce((count, run) => count + (run.text.match(/\s/g)?.length ?? 0), 0);
+  const naturalWidth = styledLineWidth(doc, line, text);
+  if (gaps === 0 || naturalWidth >= width) {
+    drawStyledLine(doc, line, x, y, text);
+    return;
+  }
+  const extra = (width - naturalWidth) / gaps;
+  let cursor = x;
+  for (const run of line) {
+    const pieces = run.text.split(/(\s+)/).filter(Boolean);
+    for (const piece of pieces) {
+      applyFontForRun(doc, run, text);
+      doc.text(piece, cursor, y);
+      cursor += doc.getTextWidth(piece) + (/^\s+$/.test(piece) ? extra : 0);
+    }
+  }
+}
+
+function applyFontForRun(doc: jsPDF, run: StyledRun, text: StyledTextContext): void {
+  const family = run.fallback ? FALLBACK_FAMILY : text.family;
+  doc.setFont(family, run.bold ? 'bold' : 'normal');
+}
+
 function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight: number, text: StyledTextContext, x?: number): void {
   let remaining = lines;
   let brokeWithoutProgress = false;
@@ -233,7 +261,11 @@ function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight
     }
     brokeWithoutProgress = false;
     const chunk = remaining.slice(0, take);
-    drawStyledLines(doc, chunk, x ?? cur.x, cur.y, lineHeight, text);
+    chunk.forEach((line, index) => {
+      const isFinalLine = remaining.length === chunk.length && index === chunk.length - 1;
+      if (cur.flow.align === 'justify' && !isFinalLine) drawJustifiedLine(doc, line, x ?? cur.x, cur.y + index * lineHeight, cur.width, text);
+      else drawStyledLine(doc, line, x ?? cur.x, cur.y + index * lineHeight, text);
+    });
     cur.y += chunk.length * lineHeight;
     remaining = remaining.slice(chunk.length);
     if (remaining.length > 0) cur.flowBreak();
@@ -799,6 +831,7 @@ function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeometry {
     margins: page.margins,
     content: { ...segments[0] },
     segments,
+    flow: page.flow,
   };
 }
 
