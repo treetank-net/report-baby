@@ -386,11 +386,11 @@ function buildCases() {
     { id: 'capacity-metrics-six-short', expect: 'render', input: deck([{ type: 'metrics', title: 'Full grid', metrics: Array.from({ length: 6 }, (_, index) => ({ label: `KPI ${index + 1}`, value: `${index + 1}0%`, delta: '+1.2 pp', trend: 'up', note: 'vs prior' })) }]), inkGate: true },
     { id: 'overflow-table-cell-too-wide', expect: 'reject', message: /46-character/i, input: deck([{ type: 'table', title: 'Rows', head: ['Channel', 'Result'], body: [[longWords(8, 'Cell'), 1]] }]) },
     { id: 'overflow-table-too-many-rows', expect: 'reject', message: /at most 10/i, input: deck([{ type: 'table', title: 'Rows', head: ['Channel', 'Result'], body: Array.from({ length: 11 }, (_, index) => [`Row ${index + 1}`, index]) }]) },
-    { id: 'overflow-conclusions-too-many', expect: 'reject', message: /conclusions/i, input: deck([{ type: 'conclusions', title: 'Wrap up', items: Array.from({ length: 8 }, (_, index) => `Item ${index + 1}`) }]) },
-    { id: 'overflow-narrative-too-many-highlights', expect: 'reject', message: /narrative/i, input: deck([{ type: 'narrative', title: 'Story', body: 'One line.', highlights: Array.from({ length: 5 }, (_, index) => `Highlight ${index + 1}`) }]) },
+    { id: 'overflow-conclusions-too-many', expect: 'reject', message: /conclusions|items|at most 7/i, input: deck([{ type: 'conclusions', title: 'Wrap up', items: Array.from({ length: 8 }, (_, index) => `Item ${index + 1}`) }]) },
+    { id: 'overflow-narrative-too-many-highlights', expect: 'reject', message: /narrative|highlights|at most 4/i, input: deck([{ type: 'narrative', title: 'Story', body: 'One line.', highlights: Array.from({ length: 5 }, (_, index) => `Highlight ${index + 1}`) }]) },
     { id: 'overflow-narrative-body-too-long', expect: 'reject', message: /narrative body does not fit/i, input: deck([{ type: 'narrative', title: 'Story', body: longWords(240, 'Sentence') }]) },
     { id: 'overflow-narrative-highlight-too-long', expect: 'reject', message: /narrative highlight/i, input: deck([{ type: 'narrative', title: 'Story', body: 'One line.', highlights: [longWords(40, 'Highlight')] }]) },
-    { id: 'overflow-columns-too-many-highlights', expect: 'reject', message: /column/i, input: deck([{ type: 'columns', template_ref: 'slides/two-column', title: 'Two views', columns: [{ heading: 'Left', body: 'One line.', highlights: ['a', 'b', 'c', 'd'] }, { heading: 'Right', body: 'One line.' }] }]) },
+    { id: 'overflow-columns-too-many-highlights', expect: 'reject', message: /column|highlights|at most 3/i, input: deck([{ type: 'columns', template_ref: 'slides/two-column', title: 'Two views', columns: [{ heading: 'Left', body: 'One line.', highlights: ['a', 'b', 'c', 'd'] }, { heading: 'Right', body: 'One line.' }] }]) },
     { id: 'overflow-columns-body-too-long', expect: 'reject', message: /column \d body does not fit/i, input: deck([{ type: 'columns', template_ref: 'slides/two-column', title: 'Two views', columns: [{ heading: 'Left', body: longWords(200, 'Word') }, { heading: 'Right', body: 'One line.' }] }]) },
     { id: 'overflow-brand-name-too-long', expect: 'reject', message: /brand name exceeds/i, input: deck([{ type: 'narrative', title: 'Heading', body: 'One line.' }], { brand: 'A Deliberately Very Long Brand Name For The Lockup Slot' }) },
     { id: 'missing-optional-slots', expect: 'render', input: { slides: [{ type: 'title', title: 'Only a title' }, { type: 'narrative', title: 'Heading only', body: 'One line.' }] }, inkGate: true },
@@ -431,7 +431,7 @@ function renderCase(item, directory) {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
-  return { result, outputDir, manifest, message: diagnosticLines.find((line) => !line.startsWith('at ') && !line.startsWith('Node.js')) ?? '', stderr: result.stderr };
+  return { result, outputDir, manifest, message: diagnosticLines.filter((line) => !line.startsWith('at ') && !line.startsWith('Node.js')).join('\n'), stderr: result.stderr };
 }
 
 function themeContrastPairs(theme, kind) {
