@@ -101,6 +101,7 @@ interface PageGeometry {
   margins: { top: number; right: number; bottom: number; left: number };
   content: PageSegment;
   segments: PageSegment[];
+  blockFrames: Record<string, PageSegment>;
   flow: { align: 'justify' | 'left'; hyphenate: boolean };
 }
 
@@ -111,6 +112,7 @@ const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
   margins: { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN },
   content: { x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN },
   segments: [{ x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN }],
+  blockFrames: {},
   flow: { align: 'left', hyphenate: false },
 };
 
@@ -154,12 +156,17 @@ class Cursor {
   get width(): number { return this.segment.width; }
   get bottom(): number { return this.segment.bottom; }
   get flow(): PageGeometry['flow'] { return this.geometry.flow; }
+  block(name: string): PageSegment | undefined { return this.geometry.blockFrames[name]; }
   moveTo(segment: PageSegment): void { this.segment = { ...segment }; }
   setFlowTop(top: number): void {
     if (this.geometry.segments.length <= 1) return;
     const nextTop = Math.max(top, this.geometry.segments[0]?.top ?? top);
     this.geometry.segments = this.geometry.segments.map((segment) => ({ ...segment, top: nextTop }));
     this.segment = { ...this.geometry.segments[this.segmentIndex] };
+  }
+  flowFrom(top: number): void {
+    this.segmentIndex = 0;
+    this.setFlowTop(top);
   }
   private resetSegments(): void {
     this.segmentIndex = 0;
@@ -447,10 +454,13 @@ function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
   doc.setTextColor(...rgb(theme.foreground));
+  const block = cur.block('intro');
+  if (block) cur.moveTo({ ...block, top: Math.max(block.top, cur.y) });
   const lines = layoutStyledText(doc, data.intro, cur.width, text);
   cur.keepTogether(lines.length * PDF_CONFIG.introLineHeight + PDF_CONFIG.introKeepPadding, PDF_CONFIG.introLineHeight * PDF_CONFIG.introMinLeadLines);
   drawParagraph(doc, cur, lines, PDF_CONFIG.introLineHeight, text);
-  cur.y += gaps.introBottomGap;
+  if (block) cur.flowFrom(Math.max(cur.y + gaps.introBottomGap, block.bottom));
+  else cur.y += gaps.introBottomGap;
 }
 
 function kpiColumnCount(count: number): number {
@@ -831,6 +841,12 @@ function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeometry {
     margins: page.margins,
     content: { ...segments[0] },
     segments,
+    blockFrames: Object.fromEntries(Object.entries(page.blockFrames).map(([name, frame]) => [name, {
+      x: frame.x * page.width,
+      top: frame.y * page.height,
+      width: frame.width * page.width,
+      bottom: (frame.y + frame.height) * page.height,
+    }])),
     flow: page.flow,
   };
 }

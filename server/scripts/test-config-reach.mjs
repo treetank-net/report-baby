@@ -30,6 +30,7 @@ const variants = {
   columns: (source) => source.replace('count: 2', 'count: 1').replace('gutter: 6', 'gutter: 0').replace('widths: [85, 85]', 'widths: [176]'),
   gutter: (source) => source.replace('gutter: 6', 'gutter: 12').replace('widths: [85, 85]', 'widths: [82, 82]'),
   reservedHeader: (source) => source.replace('height: 0.18', 'height: 0.30'),
+  introFrame: (source) => source.replace('height: 0.10', 'height: 0.14'),
 };
 
 function fail(message) {
