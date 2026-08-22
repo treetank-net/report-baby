@@ -4,22 +4,14 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { brandContractDeck } from '../server/scripts/lib/fixtures.mjs';
 import { runProcess } from '../server/scripts/lib/process.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const temp = await mkdtemp('/tmp/report-baby-brand-contract-');
 const input = join(temp, 'deck.json');
 const output = join(temp, 'rendered');
-const longTitle = 'A deliberately long title that must be fitted into the selected brand safe area';
-const deck = {
-  title: 'Contract test',
-  footer: 'Brand contract test',
-  overrides: { fit: { strategy: 'shrink-to-fit', min_heading_pt: 24, min_body_pt: 10 } },
-  slides: [
-    { type: 'title', title: longTitle, subtitle: 'The title uses the same resolved profile in PNG and PPTX.', brand_ref: 'brand://orbit/primary' },
-    { type: 'metrics', title: 'A second brand on the same deck', subtitle: 'Per-slide profile selection is part of the public contract.', brand_ref: 'brand://pyrus/surfaces/light', metrics: [{ label: 'Signal', value: '64.2%', delta: '+6.4 pp', trend: 'up' }] },
-  ],
-};
+const deck = brandContractDeck();
 
 await writeFile(input, `${JSON.stringify(deck, null, 2)}\n`);
 const exampleBundle = process.env.REPORT_BABY_EXAMPLE_BUNDLE || 'server/example-bundle.cjs';

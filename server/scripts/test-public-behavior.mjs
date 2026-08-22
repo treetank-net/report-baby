@@ -1,67 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { unzipSync } from 'fflate';
+import { writePublicBrandFixture } from './lib/fixtures.mjs';
 import { runProcess } from './lib/process.mjs';
 
 const outputDir = await mkdtemp(join(tmpdir(), 'report-baby-test-'));
 const brandDir = join(outputDir, 'brands');
-await mkdir(join(brandDir, 'acme', 'profiles'), { recursive: true });
-await writeFile(join(brandDir, 'acme', '_brand.yml'), `
-schema_version: 1
-meta:
-  name: Acme
-color:
-  palette:
-    navy: "#112233"
-    orange: "#ff6600"
-    teal: "#00aa99"
-    green: "#16a34a"
-    red: "#dc2626"
-    purple: "#7c3aed"
-  background: "#ffffff"
-  foreground: navy
-  primary: navy
-  secondary: orange
-  success: green
-  danger: red
-typography:
-  fonts:
-    - family: Inter
-      source: file
-  base:
-    family: Inter
-  headings:
-    family: Inter
-  roles:
-    innovation-display:
-      family: "Aptos Display"
-`, 'utf8');
-await writeFile(join(brandDir, 'acme', 'profiles', 'primary.yml'), `
-color:
-  primary: orange
-`, 'utf8');
-await mkdir(join(brandDir, 'acme', 'templates', 'slides', 'primary'), { recursive: true });
-await writeFile(join(brandDir, 'acme', 'templates', 'slides', 'primary', 'template.yml'), `
-schema_version: 1
-id: slides/primary
-kind: slide
-archetype: narrative
-surface: slide-16x9
-header_title_y: 132
-header_subtitle_y: 174
-header_line_y: 202
-content_top: 232
-content_bottom: 810
-title_align: start
-regions:
-  content: { frame: { x: 0.05, y: 0.2577777778, width: 0.90, height: 0.6422222222 } }
-slots:
-  title: { type: text, frame: { x: 0.05, y: 0.10, width: 0.90, height: 0.06 }, role: heading, max_lines: 1, overflow: shrink-to-fit }
-`, 'utf8');
+await writePublicBrandFixture(brandDir);
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [process.env.REPORT_BABY_TEST_BUNDLE ?? 'bundle.cjs'],
