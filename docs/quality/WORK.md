@@ -224,19 +224,19 @@ what P0 is for.
   Progress: the engine now advances paragraphs across template-owned segments,
   supports explicit justification and opt-in Polish hyphenation. The prototype's
   full dynamic-programming line breaker and its diagnostics are still pending.
-- [ ] **G1.3 Let the A4 renderer read templates.** `templates.ts` does not import
+- [x] **G1.3 Let the A4 renderer read templates.** `templates.ts` does not import
   `template-source.ts` at all. This is the wiring that makes geometry
   configuration rather than code, and it depends on G6.3.
   Progress: complete for the built-in `pages/editorial-two-column` family;
   `render_report` resolves and renders it while `default-report` stays on its
   legacy path.
-- [ ] **G1.4 Keep the typographic decisions explicit.** `justify` versus
+- [x] **G1.4 Keep the typographic decisions explicit.** `justify` versus
   `ragged-right` named, Polish hyphenation opt-in per template or block. The
   research measured a 1.617× space-stretch p95 and a four-line hyphenation run:
   design decisions, not hidden defaults.
   Progress: complete for page flow; `flow.align` and `flow.hyphenate` are
   explicit template fields, with `default-report` unchanged.
-- [ ] **G1.5 Do not touch `default-report`.** A new family, per the recommendation
+- [x] **G1.5 Do not touch `default-report`.** A new family, per the recommendation
   in `docs/multi-column-pdf.md`: *"do not add editorial columns to
   `default-report` implicitly."* Parity proves this.
   Progress: the public contract and brand contract pass; the baseline remains
