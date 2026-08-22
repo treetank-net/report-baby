@@ -130,7 +130,7 @@ Independent of everything. Cheapest visible win in the set.
   already created. Five of them, each with a count that has to reach 1:
   `findOfficeConverter` (2, diverged), fixture builders (3), showcase iterations
   (7), process runners (9), and identical normalised function bodies (>0 → 0).
-- [ ] **G4.2 Collapse the diverged copies.** `findOfficeConverter` exists in two
+- [x] **G4.2 Collapse the diverged copies — `2d63edf`.** `findOfficeConverter` exists in two
   versions (16 and 21 lines) that no longer agree. One implementation, with the
   Flatpak and Docker fallbacks `AGENTS.md` requires.
 - [ ] **G4.3 One spawn wrapper, one showcase iteration.** Nine scripts have their
