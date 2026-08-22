@@ -173,10 +173,12 @@ say so.
   reading it globally is why testing it needs a subprocess with a modified
   environment. `ReportConfig.brandSourceRoots` is now passed through MCP, CLI
   and brand-tool into brand resolution; `brand.ts` owns no environment read.
-- [ ] **G6.3 Separate page geometry from text flow in `templates.ts`.** This is
+- [x] **G6.3 Separate page geometry from text flow in `templates.ts`.** This is
   the item Goal 1 depends on. **Not** one module per section — the split that
   matters is geometry (where boxes are) from flow (how text fills them). The 10
-  cursor-carrying functions need to accept a segment instead of a `y`.
+  cursor-carrying functions need to accept a segment instead of a `y`. — cd9fead
+  Progress: page geometry and reserved-band segmentation live in
+  `page-geometry.ts`; dynamic text flow is kept separate from report painting.
 - [x] **G6.4 The architecture check — only rules this plan can support.**
   `arch:check` fails the build on:
 
@@ -199,10 +201,13 @@ say so.
 
   Shares graph construction with `goals` — two checkers disagreeing about what an
   edge is would be worse than having neither. Executable gate: `npm run arch:check`.
-- [ ] **G6.5 Opportunistic renames.** `brand.ts` and `render.ts` exist twice;
+- [x] **G6.5 Opportunistic renames.** `brand.ts` and `render.ts` exist twice;
   five modules have "template" in the name without distinguishing which owns the
   brand template language, which owns built-in A4 reports, and which is generated.
-  Free while files are moving, expensive later. Not a gate.
+  Free while files are moving, expensive later. Not a gate. — cd9fead
+  Progress: report rendering, render primitives, template contracts, built-in
+  template sources, slide template engine and MCP adapters now have distinct
+  names; the duplicate `brand.ts`/`render.ts` names are gone.
 
 ## G1 — page layout is configuration (Goal 1)
 
@@ -210,20 +215,21 @@ The reason the rest of this document exists. Changes output on purpose: a new
 template family. `default-report` must stay byte-identical throughout — that is
 what P0 is for.
 
-- [ ] **G1.1 Extend the template schema with page geometry.** Margins, column
+- [x] **G1.1 Extend the template schema with page geometry.** Margins, column
   count, gutter, reserved bands, block frames. `kind: 'page'` already compiles
   (`template-source.ts:114`); it needs fields and a renderer. Reject frames
   outside the page, as `docs/multi-column-pdf.md` recommends.
-  Progress: page margins, columns, gutter, reserved bands and validated block
-  frames now compile; the `intro` frame is wired into the editorial flow. The
-  remaining block-specific frames still need renderer semantics.
-- [ ] **G1.2 Move the prototype algorithm into the engine.**
+  Progress: page margins, columns, gutter, arbitrary reserved bands and validated
+  block frames compile; `intro` and `narrative` frames are consumed by the page
+  renderer. — cd9fead
+- [x] **G1.2 Move the prototype algorithm into the engine.**
   `prototype-multicolumn.mjs` has `breakParagraph(tokens, start, measure)` and
   `columnBoxes(spec)` in 783 working lines. `wrapStyledRuns` already takes a width,
   so the wrap engine needs no change.
-  Progress: the engine now advances paragraphs across template-owned segments,
-  supports explicit justification and opt-in Polish hyphenation. The prototype's
-  full dynamic-programming line breaker and its diagnostics are still pending.
+  Progress: the engine advances paragraphs across template-owned segments using
+  the prototype's dynamic-programming line breaker, explicit justification and
+  opt-in Polish hyphenation. Forced lines, extreme stretch and long hyphenation
+  runs are reported as diagnostics. — cd9fead
 - [x] **G1.3 Let the A4 renderer read templates.** `templates.ts` does not import
   `template-source.ts` at all. This is the wiring that makes geometry
   configuration rather than code, and it depends on G6.3.
@@ -241,13 +247,13 @@ what P0 is for.
   `default-report` implicitly."* Parity proves this.
   Progress: the public contract and brand contract pass; the baseline remains
   the final byte-parity gate for this slice.
-- [ ] **G1.6 Wire the gate.** `goals:config-reach` — every declared geometry field
+- [x] **G1.6 Wire the gate.** `goals:config-reach` — every declared geometry field
   mutates the output when mutated; zero dead fields. Column containment, gutter
   clearance, line overflow and extreme stretch belong in `visual-qa.mjs` as
   property checks, not in the parity hash.
-  Progress: `goals:config-reach` covers five live geometry mutations, including
-  the intro frame. Property checks for containment, gutter clearance and line
-  quality remain to be added.
+  Progress: `goals:config-reach` covers eight live geometry mutations, including
+  both block frames and both reserved bands. The page-layout visual QA gate checks
+  column containment, use of both columns and line-quality diagnostics. — cd9fead
 
 ## G5 — declare the manifest contract (Goal 5)
 

@@ -136,11 +136,11 @@ first-start download — the same model as `google-ads-baby`.
 
 1. Add a builder function in `svg.ts` returning an SVG string (use `open`,
    `text`, `header`, palette, `niceCeil`, and `truncate` helpers).
-2. Connect it in `renderChart()` and in the `type` schema in `tools/render.ts`.
+2. Connect it in `renderChart()` and in the `type` schema in `tools/render-tools.ts`.
 
 **New rendering tool:**
 
-1. Add `server.tool('render_...')` handler in `tools/render.ts`.
+1. Add `server.tool('render_...')` handler in `tools/render-tools.ts`.
 2. Build SVG (from `svg.ts`) or PDF (from `templates.ts`), write with
    `writePng()` / `writeFile`, and return the path.
 

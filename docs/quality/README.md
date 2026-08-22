@@ -63,13 +63,13 @@ not a change inside the render engine.
 | --- | --- | --- |
 | TypeScript files to touch to change page geometry — slide | 0 | 0 |
 | TypeScript files to touch to change page geometry — A4 report | 1–3 | **0** |
-| `kind: page` templates that render | 0 (compiles, nothing renders it) | all declared |
-| Column count / gutter / measure reachable from a template file | no | yes |
+| `kind: page` templates that render | 1 built-in family | all declared |
+| Column count / gutter / measure reachable from a template file | yes | yes |
 
 Measured by `goals:config-reach`, which mutates a value in a copy of
-`templates/`, renders the corpus and compares hashes. Proven to work: mutating
-`margin` changed the PDF hash; mutating `columns_fallback_x_gap` — a slide value —
-left the report hash identical. See [METRICS.md](METRICS.md#goal-1).
+`templates/`, renders the corpus and compares hashes. The gate currently checks
+eight page-geometry mutations, while the page-layout visual QA gate checks column
+containment and line quality. See [METRICS.md](METRICS.md#goal-1).
 
 ### Goal 2 — bad input says what to fix
 
