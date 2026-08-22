@@ -148,6 +148,14 @@ export function readBuiltinTemplateSource(templateRef: string | undefined): { so
   return { source, path: file.path };
 }
 
+export function readBuiltinPageTemplateSource(templateRef: string | undefined): { source: unknown; path: string } | undefined {
+  if (!templateRef) return undefined;
+  const file = readTemplateFile(templateRelativePath(templateRef));
+  const source = readYaml(file);
+  if (!file || !source || source.kind !== 'page') return undefined;
+  return { source, path: file.path };
+}
+
 function slideTemplateRefs(): string[] {
   const suffix = '/template.yml';
   const refs = new Set(Object.keys(BUILTIN_TEMPLATE_FILES)
@@ -165,6 +173,25 @@ function slideTemplateRefs(): string[] {
 
 export function listBuiltinSlideTemplates(): Array<{ templateRef: string; path: string }> {
   return slideTemplateRefs().map((templateRef) => ({ templateRef, path: templatePath(templateRef) }));
+}
+
+function pageTemplateRefs(): string[] {
+  const suffix = '/template.yml';
+  const refs = new Set(Object.keys(BUILTIN_TEMPLATE_FILES)
+    .filter((key) => key.startsWith('pages/') && key.endsWith(suffix))
+    .map((key) => key.slice(0, -suffix.length)));
+  const overrideRoot = overrideTemplateRoot();
+  const overridePages = overrideRoot ? join(overrideRoot, 'pages') : undefined;
+  if (overridePages && existsSync(overridePages)) {
+    for (const entry of readdirSync(overridePages, { withFileTypes: true })) {
+      if (entry.isDirectory() && existsSync(join(overridePages, entry.name, 'template.yml'))) refs.add(`pages/${entry.name}`);
+    }
+  }
+  return [...refs].sort();
+}
+
+export function listBuiltinPageTemplates(): Array<{ templateRef: string; path: string }> {
+  return pageTemplateRefs().map((templateRef) => ({ templateRef, path: templatePath(templateRef) }));
 }
 
 export function readBuiltinTemplateText(templateRef: string): { text: string; path: string } {

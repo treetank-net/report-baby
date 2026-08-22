@@ -24,6 +24,32 @@ export interface CompiledTemplateSlot {
   overflow?: TemplateOverflow;
 }
 
+export interface PageMargins {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface PageFlow {
+  align: 'justify' | 'left';
+  hyphenate: boolean;
+}
+
+export interface PageGeometry {
+  width: number;
+  height: number;
+  margins: PageMargins;
+  columns: {
+    count: number;
+    gutter: number;
+    widths: number[];
+  };
+  reservedBands: Record<string, NormalizedFrame>;
+  blockFrames: Record<string, NormalizedFrame>;
+  flow: PageFlow;
+}
+
 export type TemplateArchetype = 'title' | 'metrics' | 'chart' | 'table' | 'narrative' | 'conclusions' | 'columns';
 
 export interface CompiledTemplate {
@@ -39,6 +65,7 @@ export interface CompiledTemplate {
     insideCanvas: boolean;
     noOverlap: boolean;
   };
+  page?: PageGeometry;
 }
 
 export interface ResolvedTemplatePlan {
@@ -103,6 +130,70 @@ function optionalPositiveInteger(value: unknown, path: string): number | undefin
   return value;
 }
 
+function positiveNumberAt(value: unknown, path: string): number {
+  const result = numberAt(value, path);
+  if (result <= 0) fail(path, 'must be greater than zero.');
+  return result;
+}
+
+function nonNegativeNumberAt(value: unknown, path: string): number {
+  const result = numberAt(value, path);
+  if (result < 0) fail(path, 'must not be negative.');
+  return result;
+}
+
+function pageMarginsAt(value: unknown, path: string): PageMargins {
+  if (!isRecord(value)) fail(path, 'must contain top, right, bottom and left margins.');
+  return {
+    top: nonNegativeNumberAt(value.top, `${path}.top`),
+    right: nonNegativeNumberAt(value.right, `${path}.right`),
+    bottom: nonNegativeNumberAt(value.bottom, `${path}.bottom`),
+    left: nonNegativeNumberAt(value.left, `${path}.left`),
+  };
+}
+
+function pageGeometryAt(value: unknown, path: string): PageGeometry {
+  if (!isRecord(value)) fail(path, 'must contain page geometry.');
+  const width = positiveNumberAt(value.width, `${path}.width`);
+  const height = positiveNumberAt(value.height, `${path}.height`);
+  const margins = pageMarginsAt(value.margins, `${path}.margins`);
+  const columns = isRecord(value.columns) ? value.columns : {};
+  const count = optionalPositiveInteger(columns.count, `${path}.columns.count`) ?? 1;
+  const gutter = nonNegativeNumberAt(columns.gutter ?? 0, `${path}.columns.gutter`);
+  const availableWidth = width - margins.left - margins.right;
+  const availableHeight = height - margins.top - margins.bottom;
+  if (availableWidth <= 0 || availableHeight <= 0) fail(path, 'margins must leave a positive content area.');
+  if (count > 1 && gutter * (count - 1) >= availableWidth) fail(`${path}.columns.gutter`, 'leaves no positive width for the columns.');
+  const rawWidths = columns.widths;
+  let widths: number[];
+  if (rawWidths === undefined) {
+    const equalWidth = (availableWidth - gutter * (count - 1)) / count;
+    widths = Array.from({ length: count }, () => equalWidth);
+  } else {
+    if (!Array.isArray(rawWidths) || rawWidths.length !== count) fail(`${path}.columns.widths`, `must contain exactly ${count} widths.`);
+    widths = rawWidths.map((item, index) => positiveNumberAt(item, `${path}.columns.widths.${index}`));
+    const total = widths.reduce((sum, item) => sum + item, 0) + gutter * (count - 1);
+    if (Math.abs(total - availableWidth) > 0.001) fail(`${path}.columns.widths`, `must add up to the ${availableWidth} unit content width including gutters.`);
+  }
+  const frameDictionary = (raw: unknown, field: string): Record<string, NormalizedFrame> => {
+    const result: Record<string, NormalizedFrame> = {};
+    for (const [id, item] of entriesAt(raw, `${path}.${field}`)) result[id] = frameAt(item, `${path}.${field}.${id}`);
+    return result;
+  };
+  const flow = isRecord(value.flow) ? value.flow : {};
+  const align = flow.align === undefined || flow.align === 'left' ? 'left' : flow.align === 'justify' ? 'justify' : fail(`${path}.flow.align`, "must be 'justify' or 'left'.");
+  if (flow.hyphenate !== undefined && typeof flow.hyphenate !== 'boolean') fail(`${path}.flow.hyphenate`, 'must be boolean.');
+  return {
+    width,
+    height,
+    margins,
+    columns: { count, gutter, widths },
+    reservedBands: frameDictionary(value.reserved_bands, 'reserved_bands'),
+    blockFrames: frameDictionary(value.blocks, 'blocks'),
+    flow: { align, hyphenate: flow.hyphenate === true },
+  };
+}
+
 function overlaps(a: NormalizedFrame, b: NormalizedFrame): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
@@ -150,6 +241,9 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
       if (slots[slotId]?.kind !== 'metric-card') fail(`slots.${slotId}`, "metrics templates need three metric-card slots named metric-1, metric-2 and metric-3.");
     }
   }
+  const page = source.page === undefined ? undefined : pageGeometryAt(source.page, 'page');
+  if (kind === 'page' && !page) fail('page', 'is required for kind page templates.');
+  if (kind === 'slide' && page) fail('page', 'is only allowed for kind page templates.');
 
   const constraints = isRecord(source.constraints) ? source.constraints : {};
   if (constraints.inside_canvas !== undefined && typeof constraints.inside_canvas !== 'boolean') fail('constraints.inside_canvas', 'must be boolean.');
@@ -178,6 +272,7 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
       insideCanvas: true,
       noOverlap: constraints.no_overlap === true,
     },
+    page,
   };
 }
 
