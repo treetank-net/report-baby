@@ -1,9 +1,10 @@
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
 import { assetDataUri, defaultRenderTheme } from './brand.js';
-import { readRenderConfig } from './builtin-template-loader.js';
+import { readBuiltinPageTemplateSource, readRenderConfig } from './builtin-template-loader.js';
 import type { RenderTheme } from './core/model/render-theme.js';
 import { loadRenderFontSet, newPdf, pdfFont, readableTextColor, renderSvgToPng, type RenderFontSet } from './render.js';
+import { compileTemplateSource, type CompiledTemplate } from './template-source.js';
 import {
   drawStyledLine,
   fontCoverage,
@@ -33,6 +34,10 @@ const TEMPLATES: TemplateInfo[] = [
   {
     name: 'campaign-summary',
     description: 'Compact paid-media / analytics snapshot: title defaults to "Campaign summary", same building blocks as default-report.',
+  },
+  {
+    name: 'pages/editorial-two-column',
+    description: 'Configurable editorial A4 page: two explicit columns, template-owned gutter and reserved header/footer bands.',
   },
 ];
 
@@ -92,14 +97,18 @@ interface PageGeometry {
   width: number;
   height: number;
   margin: number;
+  margins: { top: number; right: number; bottom: number; left: number };
   content: PageSegment;
+  segments: PageSegment[];
 }
 
 const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
   width: PAGE_W,
   height: PAGE_H,
   margin: MARGIN,
+  margins: { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN },
   content: { x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN },
+  segments: [{ x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN }],
 };
 
 interface PdfGaps {
@@ -131,6 +140,7 @@ function rgb(hex: string): [number, number, number] {
 
 class Cursor {
   private segment: PageSegment;
+  private segmentIndex = 0;
   constructor(private doc: jsPDF, private pageBackground: string, private onNewPage?: (cursor: Cursor) => void, private geometry = DEFAULT_PAGE_GEOMETRY) {
     this.segment = { ...geometry.content };
     this.paintPage();
@@ -141,22 +151,37 @@ class Cursor {
   get width(): number { return this.segment.width; }
   get bottom(): number { return this.segment.bottom; }
   moveTo(segment: PageSegment): void { this.segment = { ...segment }; }
+  setFlowTop(top: number): void {
+    if (this.geometry.segments.length <= 1) return;
+    const nextTop = Math.max(top, this.geometry.segments[0]?.top ?? top);
+    this.geometry.segments = this.geometry.segments.map((segment) => ({ ...segment, top: nextTop }));
+    this.segment = { ...this.geometry.segments[this.segmentIndex] };
+  }
+  private resetSegments(): void {
+    this.segmentIndex = 0;
+    this.segment = { ...(this.geometry.segments[0] ?? this.geometry.content) };
+  }
+  flowBreak(): void {
+    if (this.segmentIndex + 1 < this.geometry.segments.length) {
+      this.segmentIndex += 1;
+      this.segment = { ...this.geometry.segments[this.segmentIndex] };
+      return;
+    }
+    this.breakPage();
+  }
   private paintPage(): void {
     this.doc.setFillColor(...rgb(this.pageBackground));
     this.doc.rect(0, 0, this.geometry.width, this.geometry.height, 'F');
   }
   ensure(height: number): void {
     if (this.y + height > this.bottom) {
-      this.doc.addPage();
-      this.paintPage();
-      this.segment = { ...this.geometry.content };
-      this.onNewPage?.(this);
+      this.flowBreak();
     }
   }
   keepTogether(blockHeight: number, minLeadHeight: number): void {
     const remaining = this.bottom - this.y;
     if (blockHeight <= remaining) return;
-    const usableHeight = this.geometry.content.bottom - this.geometry.content.top;
+    const usableHeight = Math.max(...this.geometry.segments.map((segment) => segment.bottom - segment.top));
     const cannotFitOnAnyPage = blockHeight > usableHeight;
     const leavesUsableSpaceBehind = remaining >= minLeadHeight && remaining / usableHeight >= PDF_CONFIG.keepTogetherWasteRatio;
     this.ensure(cannotFitOnAnyPage || leavesUsableSpaceBehind ? minLeadHeight : blockHeight);
@@ -164,7 +189,7 @@ class Cursor {
   breakPage(): void {
     this.doc.addPage();
     this.paintPage();
-    this.segment = { ...this.geometry.content };
+    this.resetSegments();
     this.onNewPage?.(this);
   }
 }
@@ -195,23 +220,23 @@ function splitWithoutWidows(lines: StyledRun[][], available: number): number {
   return 0;
 }
 
-function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight: number, text: StyledTextContext, x = cur.x): void {
+function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight: number, text: StyledTextContext, x?: number): void {
   let remaining = lines;
   let brokeWithoutProgress = false;
   while (remaining.length > 0) {
     const available = Math.floor((cur.bottom - cur.y) / lineHeight);
     const take = brokeWithoutProgress ? Math.max(1, Math.min(available, remaining.length)) : splitWithoutWidows(remaining, available);
     if (take <= 0) {
-      cur.breakPage();
+      cur.flowBreak();
       brokeWithoutProgress = true;
       continue;
     }
     brokeWithoutProgress = false;
     const chunk = remaining.slice(0, take);
-    drawStyledLines(doc, chunk, x, cur.y, lineHeight, text);
+    drawStyledLines(doc, chunk, x ?? cur.x, cur.y, lineHeight, text);
     cur.y += chunk.length * lineHeight;
     remaining = remaining.slice(chunk.length);
-    if (remaining.length > 0) cur.breakPage();
+    if (remaining.length > 0) cur.flowBreak();
   }
 }
 
@@ -669,7 +694,7 @@ function renderHighlights(
   cur.y += gaps.highlightsBottomGap;
 }
 
-function renderFooter(doc: jsPDF, data: ReportData, theme: RenderTheme): void {
+function renderFooter(doc: jsPDF, data: ReportData, theme: RenderTheme, geometry = DEFAULT_PAGE_GEOMETRY): void {
   const font = pdfFont(theme);
   const pages = doc.getNumberOfPages();
   for (let p = 1; p <= pages; p++) {
@@ -679,12 +704,14 @@ function renderFooter(doc: jsPDF, data: ReportData, theme: RenderTheme): void {
     const footerText = coverPage ? theme.titleSubtitleColor : theme.muted;
     doc.setDrawColor(...rgb(footerLine));
     doc.setLineWidth(PDF_CONFIG.footerLineWidth);
-    doc.line(MARGIN, PDF_CONFIG.footerY, PAGE_W - MARGIN, PDF_CONFIG.footerY);
+    const footerY = geometry.height - (PAGE_H - PDF_CONFIG.footerY);
+    doc.line(geometry.margins.left, footerY, geometry.width - geometry.margins.right, footerY);
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.footerFontSize);
     doc.setTextColor(...rgb(footerText));
-    if (data.footer) doc.text(String(data.footer), MARGIN, PDF_CONFIG.footerTextY);
-    doc.text(`${p} / ${pages}`, PAGE_W - MARGIN, PDF_CONFIG.footerTextY, { align: 'right' });
+    const footerTextY = geometry.height - (PAGE_H - PDF_CONFIG.footerTextY);
+    if (data.footer) doc.text(String(data.footer), geometry.margins.left, footerTextY);
+    doc.text(`${p} / ${pages}`, geometry.width - geometry.margins.right, footerTextY, { align: 'right' });
   }
 }
 
@@ -747,10 +774,40 @@ interface RenderReportAttempt {
   lastPageFill: number;
 }
 
+function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeometry {
+  const page = compiled.page;
+  if (!page) throw new Error(`Page template '${compiled.id}' is missing compiled geometry.`);
+  const topBand = Math.max(0, ...Object.values(page.reservedBands)
+    .filter((frame) => frame.y <= 0.000001)
+    .map((frame) => (frame.y + frame.height) * page.height));
+  const bottomBand = Math.min(page.height, ...Object.values(page.reservedBands)
+    .filter((frame) => frame.y + frame.height >= 0.999999)
+    .map((frame) => frame.y * page.height));
+  const top = Math.max(page.margins.top, topBand);
+  const bottom = Math.min(page.height - page.margins.bottom, bottomBand);
+  if (bottom <= top) throw new Error(`Page template '${compiled.id}' leaves no usable flow area between margins and reserved bands.`);
+  const segments: PageSegment[] = [];
+  let x = page.margins.left;
+  for (const width of page.columns.widths) {
+    segments.push({ x, top, width, bottom });
+    x += width + page.columns.gutter;
+  }
+  return {
+    width: page.width,
+    height: page.height,
+    margin: page.margins.left,
+    margins: page.margins,
+    content: { ...segments[0] },
+    segments,
+  };
+}
+
 async function renderReportAttempt(name: string, data: ReportData, theme: RenderTheme, gaps: PdfGaps, warnings: string[]): Promise<RenderReportAttempt> {
-  const resolved = resolveTemplate(name, data);
+  const template = resolveTemplate(name, data);
+  const resolved = template.data;
+  const geometry = template.page ? pageGeometryFromTemplate(template.compiled!) : DEFAULT_PAGE_GEOMETRY;
   const fontSet = await loadRenderFontSet(theme);
-  const doc = newPdf('portrait', 'a4', fontSet);
+  const doc = newPdf('portrait', template.page ? [geometry.width, geometry.height] : 'a4', fontSet);
   const family = pdfFont(theme);
   const text: StyledTextContext = {
     family,
@@ -758,12 +815,17 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     warnings,
   };
   const header = await createReportHeader(resolved, theme);
-  const cur = new Cursor(doc, theme.background, (cursor) => header.drawFollowingPage(doc, cursor));
+  const cur = new Cursor(doc, theme.background, (cursor) => {
+    header.drawFollowingPage(doc, cursor);
+    cursor.setFlowTop(cursor.y);
+  }, geometry);
   if (resolved.title_page) {
     await renderTitlePage(doc, resolved, theme);
     cur.breakPage();
+    cur.setFlowTop(cur.y);
   } else {
     header.drawFirstPage(doc, cur);
+    cur.setFlowTop(cur.y);
   }
   renderIntro(doc, cur, resolved, theme, text, gaps);
   renderKpis(doc, cur, resolved, theme, text, gaps);
@@ -771,10 +833,10 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
   renderSections(doc, cur, resolved, theme, text, gaps);
   renderTable(doc, cur, resolved, theme, header, text, fontSet);
   renderHighlights(doc, cur, resolved, theme, text, gaps, header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap);
-  renderFooter(doc, resolved, theme);
+  renderFooter(doc, resolved, theme, geometry);
   const pages = doc.getNumberOfPages();
   const contentStart = header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap;
-  const contentHeight = PAGE_H - MARGIN - contentStart;
+  const contentHeight = geometry.height - geometry.margins.bottom - contentStart;
   const lastPageFill = pages > 1 && contentHeight > 0
     ? Math.max(0, Math.min(1, (cur.y - contentStart) / contentHeight))
     : 1;
@@ -794,14 +856,27 @@ export async function renderReportPdf(name: string, data: ReportData, theme = de
   return original.buffer;
 }
 
-function resolveTemplate(name: string, data: ReportData): ReportData {
+interface ResolvedReportTemplate {
+  data: ReportData;
+  page?: CompiledTemplate['page'];
+  compiled?: CompiledTemplate;
+}
+
+function resolveTemplate(name: string, data: ReportData): ResolvedReportTemplate {
+  const pageSource = readBuiltinPageTemplateSource(name);
+  if (pageSource) {
+    const compiled = compileTemplateSource(pageSource.source);
+    return { data, page: compiled.page, compiled };
+  }
   const templateName = name.split('/').filter(Boolean).at(-1) ?? name;
-  if (templateName === 'default-report') return data;
+  if (templateName === 'default-report') return { data };
   if (templateName === 'campaign-summary') {
     return {
-      ...data,
-      title: data.title ?? 'Campaign summary',
-      subtitle: data.subtitle ?? 'Performance snapshot and next actions',
+      data: {
+        ...data,
+        title: data.title ?? 'Campaign summary',
+        subtitle: data.subtitle ?? 'Performance snapshot and next actions',
+      },
     };
   }
   throw new Error(`Unknown template: ${name}. Available: ${TEMPLATES.map((t) => t.name).join(', ')}`);

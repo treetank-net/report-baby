@@ -183,9 +183,9 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
 
   server.tool(
     'render_report',
-    'Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished multi-page A4 PDF (branded header, KPI grid, embedded charts, narrative sections, data table, highlights, footer). All data fields are optional — only present blocks render, in the order: header, intro, kpis, charts, sections, table, highlights. Returns the path to the written PDF. Use this for the final client-facing report.',
+    'Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished A4 PDF (default-report/campaign-summary or a configurable page template such as pages/editorial-two-column). All data fields are optional — only present blocks render, in the order: header, intro, kpis, charts, sections, table, highlights. Returns the path to the written PDF. Use this for the final client-facing report.',
     {
-      template: z.string().optional().default('default-report').describe('Built-in A4 report template name, from list_templates: default-report or campaign-summary'),
+      template: z.string().optional().default('default-report').describe('Built-in A4 report template name, from list_templates: default-report, campaign-summary or a pages/* template'),
       data: reportDataSchema,
       output_path: z.string().optional(),
       ...brandRenderFields,

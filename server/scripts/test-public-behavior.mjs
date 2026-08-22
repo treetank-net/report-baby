@@ -73,6 +73,27 @@ try {
   assert.ok(pdf.length > 20_000);
   assert.ok((pdf.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length >= 2);
 
+  const editorialPdfPath = join(outputDir, 'editorial-report.pdf');
+  const editorialReport = await client.callTool({
+    name: 'render_report',
+    arguments: {
+      template: 'pages/editorial-two-column',
+      output_path: editorialPdfPath,
+      brand_ref: 'brand://acme/primary',
+      data: {
+        title: 'Editorial page template',
+        intro: 'The page geometry comes from a built-in page template rather than from the default report constants.',
+        sections: [{ heading: 'Configured flow', body: 'This paragraph crosses the configured measure when the renderer advances from the first column to the second. '.repeat(30) }],
+        highlights: ['Two explicit columns', 'A template-owned gutter'],
+        footer: 'Editorial page test',
+      },
+    },
+  });
+  assert.notEqual(editorialReport.isError, true, JSON.stringify(editorialReport.content));
+  const editorialPdf = await readFile(editorialPdfPath);
+  assert.equal(editorialPdf.subarray(0, 5).toString(), '%PDF-');
+  assert.ok(editorialPdf.length > 10_000);
+
   const splitPdfPath = join(outputDir, 'section-split.pdf');
   const splitMarker = 'SECTION_SPLIT_MARKER';
   const splitReport = await client.callTool({
