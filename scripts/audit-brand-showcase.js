@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { findManifestPaths, forEachManifest, manifestOutputPath, recordFailure as fail } from '../server/scripts/lib/showcase.mjs';
+import { findManifestPaths, forEachManifest, manifestOutputPath, recordFailure } from '../server/scripts/lib/showcase.mjs';
 
 const root = resolve(process.argv[2] ?? 'examples/brand-showcase/generated/showcase');
 const failures = [];
+const fail = (path, message) => recordFailure(failures, path, message);
 let manifests;
 
 function hex(value) {

@@ -232,18 +232,33 @@ what P0 is for.
 
 ## G5 — declare the manifest contract (Goal 5)
 
-- [ ] **G5.1 Give `manifest.json` an executable schema.** A zod schema plus a test
+- [x] **G5.1 Give `manifest.json` an executable schema.** A zod schema plus a test
   that validates a rendered manifest against it and fails on drift — not a prose
   description of the fields. Six consumers today, no schema, no version field, no
   test; two of them run no renderer at all. **A documentation-only version of this
-  item does not close it**, because it would protect nothing.
-- [ ] **G5.2 Record which fields `visual-qa.mjs` depends on.** Today
+  item does not close it**, because it would protect nothing. Implemented in
+  `server/src/manifest.ts` and `server/scripts/test-manifest-contract.mjs`.
+- [x] **G5.2 Record which fields `visual-qa.mjs` depends on.** Today
   `slidePlans`, `slotBoxes`, `slideThemes`. `CLAUDE.md` says the manifest "must
   stay verbose" without saying which parts, which makes it impossible to change
-  safely.
-- [ ] **G5.3 Put the two manifest-only consumers in the test matrix.**
+  safely. The dependency inventory is recorded below.
+- [x] **G5.3 Put the two manifest-only consumers in the test matrix.**
   `audit-brand-showcase.js` and `inspect-brand-showcase.js` run against a recorded
-  manifest tree.
+  manifest tree. `npm run test:manifest-consumers` records a showcase tree, then
+  runs both consumers as separate gates against it.
+
+### G5 manifest fields used by visual QA
+
+`server/scripts/visual-qa.mjs` treats these manifest fields as its public input:
+
+| Field | Use in the QA gates |
+| --- | --- |
+| `theme` | Fallback theme and report-level typography, color, image and header decisions |
+| `slideThemes[]` | Per-slide color, typography and full-bleed image decisions |
+| `slidePlans[].slotBoxes` | Canvas containment, region overlap, slot clearance and lockup geometry |
+| `slidePlans[].titleConstraints` / `subtitleConstraints` | Declared line limits for title overflow checks |
+| `slideLayout[]` | Number of rendered title and subtitle lines |
+| `diagnostics.warnings` | Resolver warnings reported by the artifact gate |
 
 ## Decision log
 

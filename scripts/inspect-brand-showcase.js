@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
 import { runProcess as run } from '../server/scripts/lib/process.mjs';
 import { findOfficeConverter } from '../server/scripts/lib/office.mjs';
-import { findManifestPaths, manifestOutputPath, mapManifests, recordFailure as fail } from '../server/scripts/lib/showcase.mjs';
+import { findManifestPaths, manifestOutputPath, mapManifests, recordFailure } from '../server/scripts/lib/showcase.mjs';
 
 const args = process.argv.slice(2);
 const valueFor = (flag, fallback) => {
@@ -19,6 +19,7 @@ const qaStage = `${qaRoot}.staging-${process.pid}`;
 const requirePptxRender = args.includes('--require-pptx-render');
 const failures = [];
 const findings = [];
+const fail = (path, message) => recordFailure(failures, path, message);
 
 function parsePdfInfo(path) {
   const result = run('pdfinfo', [path]);

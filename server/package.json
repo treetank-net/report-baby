@@ -12,6 +12,8 @@
     "build:brand-tool": "npx esbuild src/brand-tool.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=brand-tool-bundle.cjs",
     "baseline:record": "node scripts/baseline.mjs record",
     "baseline:verify": "node scripts/baseline.mjs verify",
+    "test:manifest": "npm run build:example && node scripts/test-manifest-contract.mjs",
+    "test:manifest-consumers": "node scripts/test-showcase-manifest-consumers.mjs",
     "goals:script-dup": "node scripts/script-dup.mjs",
     "test:brand": "node ../scripts/test-brand-contract.js",
     "test": "node scripts/test-public-behavior.mjs",

@@ -5,6 +5,9 @@ import { renderReportPdf } from './templates.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnostics, type SlideDeck } from './slides.js';
 import { resolveSlideDeck } from './slide-context.js';
 import { slidePlanSummary } from './slide-plan.js';
+import { validateRenderManifest } from './manifest.js';
+
+export { validateRenderManifest };
 
 interface CliArgs {
   kind: 'report' | 'deck' | 'showcase';
@@ -258,7 +261,7 @@ export async function runExampleCli(argv: string[]): Promise<void> {
     : args.kind === 'report'
       ? await renderReportExample(args, await readJson(args.input as string))
       : await renderDeckExample(args, await readJson(args.input as string));
-  const manifest = {
+  const manifest = validateRenderManifest({
     schema_version: 1,
     kind: args.kind,
     brand: args.brand,
@@ -266,7 +269,7 @@ export async function runExampleCli(argv: string[]): Promise<void> {
     input: args.input && args.input.startsWith(process.cwd()) ? relative(process.cwd(), args.input).replaceAll('\\', '/') : undefined,
     formats: args.formats,
     ...rendered,
-  };
+  });
   await writeFile(join(args.out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(JSON.stringify(manifest, null, 2));
 }
