@@ -214,24 +214,40 @@ what P0 is for.
   count, gutter, reserved bands, block frames. `kind: 'page'` already compiles
   (`template-source.ts:114`); it needs fields and a renderer. Reject frames
   outside the page, as `docs/multi-column-pdf.md` recommends.
+  Progress: page margins, columns, gutter, reserved bands and validated block
+  frames now compile; the `intro` frame is wired into the editorial flow. The
+  remaining block-specific frames still need renderer semantics.
 - [ ] **G1.2 Move the prototype algorithm into the engine.**
   `prototype-multicolumn.mjs` has `breakParagraph(tokens, start, measure)` and
   `columnBoxes(spec)` in 783 working lines. `wrapStyledRuns` already takes a width,
   so the wrap engine needs no change.
+  Progress: the engine now advances paragraphs across template-owned segments,
+  supports explicit justification and opt-in Polish hyphenation. The prototype's
+  full dynamic-programming line breaker and its diagnostics are still pending.
 - [ ] **G1.3 Let the A4 renderer read templates.** `templates.ts` does not import
   `template-source.ts` at all. This is the wiring that makes geometry
   configuration rather than code, and it depends on G6.3.
+  Progress: complete for the built-in `pages/editorial-two-column` family;
+  `render_report` resolves and renders it while `default-report` stays on its
+  legacy path.
 - [ ] **G1.4 Keep the typographic decisions explicit.** `justify` versus
   `ragged-right` named, Polish hyphenation opt-in per template or block. The
   research measured a 1.617× space-stretch p95 and a four-line hyphenation run:
   design decisions, not hidden defaults.
+  Progress: complete for page flow; `flow.align` and `flow.hyphenate` are
+  explicit template fields, with `default-report` unchanged.
 - [ ] **G1.5 Do not touch `default-report`.** A new family, per the recommendation
   in `docs/multi-column-pdf.md`: *"do not add editorial columns to
   `default-report` implicitly."* Parity proves this.
+  Progress: the public contract and brand contract pass; the baseline remains
+  the final byte-parity gate for this slice.
 - [ ] **G1.6 Wire the gate.** `goals:config-reach` — every declared geometry field
   mutates the output when mutated; zero dead fields. Column containment, gutter
   clearance, line overflow and extreme stretch belong in `visual-qa.mjs` as
   property checks, not in the parity hash.
+  Progress: `goals:config-reach` covers five live geometry mutations, including
+  the intro frame. Property checks for containment, gutter clearance and line
+  quality remain to be added.
 
 ## G5 — declare the manifest contract (Goal 5)
 
