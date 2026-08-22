@@ -1,15 +1,16 @@
 {
   "name": "report-baby-server",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "description": "Self-contained SVG/data \u2192 PNG/PDF render MCP server (resvg-wasm + jsPDF, zero runtime deps)",
   "type": "module",
   "main": "bundle.cjs",
   "scripts": {
-    "build": "npm run build:templates && tsc --noEmit && npm run build:mcp && npm run build:example && npm run build:brand-tool",
+    "build": "npm run build:templates && tsc --noEmit && npm run build:mcp && npm run build:example && npm run build:brand-tool && npm run build:cli",
     "build:templates": "node scripts/generate-builtin-templates.mjs",
     "build:mcp": "npx esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=bundle.cjs",
     "build:example": "npx esbuild src/example.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=example-bundle.cjs",
     "build:brand-tool": "npx esbuild src/brand-tool.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=brand-tool-bundle.cjs",
+    "build:cli": "npx esbuild src/cli.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=cli-bundle.cjs",
     "baseline:record": "node scripts/baseline.mjs record",
     "baseline:verify": "node scripts/baseline.mjs verify",
     "test:manifest": "npm run build:example && node scripts/test-manifest-contract.mjs",
@@ -20,6 +21,7 @@
     "arch:check": "node scripts/architecture-check.mjs",
     "goals:script-dup": "node scripts/script-dup.mjs",
     "test:brand": "node ../scripts/test-brand-contract.js",
+    "test:cli": "node scripts/test-cli.mjs",
     "test": "node scripts/test-public-behavior.mjs",
     "dev": "tsc --watch --noEmit",
     "start": "node bundle.cjs"

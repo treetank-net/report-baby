@@ -83,6 +83,8 @@ try {
       data: {
         title: 'Editorial page template',
         intro: 'The page geometry comes from a built-in page template rather than from the default report constants.',
+        kpis: [{ label: 'Ignored KPI', value: 42 }],
+        charts: [{ type: 'bar', title: 'Ignored chart', data: [{ label: 'July', value: 42 }] }],
         sections: [{ heading: 'Configured flow', body: 'This paragraph crosses the configured measure when the renderer advances from the first column to the second. '.repeat(30) }],
         highlights: ['Two explicit columns', 'A template-owned gutter'],
         footer: 'Editorial page test',
@@ -90,6 +92,9 @@ try {
     },
   });
   assert.notEqual(editorialReport.isError, true, JSON.stringify(editorialReport.content));
+  const editorialWarnings = new Set((editorialReport.structuredContent?.warnings ?? []).map((warning) => warning.message));
+  assert.ok(editorialWarnings.has("Report template 'pages/editorial-two-column' does not render KPI blocks; use default-report or move the content to sections/highlights."));
+  assert.ok(editorialWarnings.has("Report template 'pages/editorial-two-column' does not render chart blocks; use default-report or move the content to sections/highlights."));
   const editorialPdf = await readFile(editorialPdfPath);
   assert.equal(editorialPdf.subarray(0, 5).toString(), '%PDF-');
   assert.ok(editorialPdf.length > 10_000);

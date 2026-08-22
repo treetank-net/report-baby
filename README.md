@@ -61,6 +61,44 @@ npm run build
 installation needs Node.js 18+ and runs with `node`; it does not need `npm` at
 runtime.
 
+## Run once without MCP
+
+Some web, sandbox, and CI sessions cannot register a local stdio MCP server.
+For those sessions, download the committed `server/cli-bundle.cjs` and invoke
+one tool for one render. This is a short-lived command, unlike the long-lived
+MCP server:
+
+```sh
+BASE=https://raw.githubusercontent.com/treetank-net/report-baby/main
+mkdir -p /tmp/rb/server
+curl -sfL "$BASE/server/cli-bundle.cjs" -o /tmp/rb/server/cli-bundle.cjs
+node /tmp/rb/server/cli-bundle.cjs list_templates
+node /tmp/rb/server/cli-bundle.cjs render_report < report.json
+```
+
+The bundle needs Node.js 18+, not npm or a build tool. For a branded result,
+set `REPORT_BABY_BRAND_DIR` to a checked-out brandbook directory and pass an
+explicit `brand_ref`, such as `brand://acme/primary`. First call
+`list_brandbooks` and `list_templates`; do not guess names. The full workflow,
+including sparse brandbook checkout and common stdin/environment traps, is in
+[`skills/report-baby-web/SKILL.md`](skills/report-baby-web/SKILL.md).
+
+The CLI can also fetch a Git-hosted brandbook itself:
+
+```sh
+node /tmp/rb/server/cli-bundle.cjs \
+  --brand-url https://github.com/example/client-brand.git \
+  --brand-path brands \
+  render_report < report.json
+```
+
+It uses a shallow sparse checkout and caches it under `REPORT_BABY_DATA`; the
+JSON still supplies the explicit `brand_ref`.
+
+The web distribution path is deliberately `raw.githubusercontent.com`.
+Do not introduce a dependency on `api.github.com` or `codeload.github.com`:
+those hosts are blocked in some target environments.
+
 Set `REPORT_BABY_BRAND_STORE` to a published brand store when MCP must ignore
 working-tree brand changes. `REPORT_BABY_BRAND_DIR` remains the working-tree
 directory used for prototyping.

@@ -469,7 +469,7 @@
     "name": "render_metric_cards"
   },
   {
-    "description": "Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished multi-page A4 PDF (branded header, KPI grid, embedded charts, narrative sections, data table, highlights, footer). All data fields are optional — only present blocks render, in the order: header, intro, kpis, charts, sections, table, highlights. Returns the path to the written PDF. Use this for the final client-facing report.",
+    "description": "Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished A4 PDF (default-report/campaign-summary or a configurable page template such as pages/editorial-two-column). All data fields are optional — only present blocks render, in the order: header, intro, kpis, charts, sections, table, highlights. Returns the path to the written PDF. Use this for the final client-facing report.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "additionalProperties": false,
@@ -811,7 +811,7 @@
         },
         "template": {
           "default": "default-report",
-          "description": "Built-in A4 report template name, from list_templates: default-report or campaign-summary",
+          "description": "Built-in A4 report template name, from list_templates: default-report, campaign-summary or a pages/* template",
           "type": "string"
         },
         "template_ref": {

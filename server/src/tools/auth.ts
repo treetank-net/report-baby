@@ -113,6 +113,7 @@ export function registerAuthTools(server: McpServer, _cfg: ReportConfig) {
 
         const files = [
           ['server/bundle.cjs', join(root, 'server', 'bundle.cjs')],
+          ['server/cli-bundle.cjs', join(root, 'server', 'cli-bundle.cjs')],
           ['package.json', join(root, 'package.json')],
           ['scripts/start-mcp.js', join(root, 'scripts', 'start-mcp.js')],
           ['CHANGELOG.md', join(root, 'CHANGELOG.md')],

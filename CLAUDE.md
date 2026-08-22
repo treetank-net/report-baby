@@ -68,15 +68,16 @@ slide-context.ts    — resolveSlideDeck(): validates the deck, resolves brand +
 tool-response.ts    — MCP response contract: brandRenderSummary(), slideRenderDiagnostics(summary|full), countWarnings() deduplicating one warning per slide into a single counted entry
 builtin-template-loader.ts — reads server/templates/: readRenderConfig() (all visual constants) and the built-in slide templates, from the files embedded in the bundle or from an on-disk override
 generated/          — build output of scripts/generate-builtin-templates.mjs; regenerated, never hand-edited
-example.ts          — standalone CLI used by scripts/render-example.js (prototyping from an external brandbook, no npm)
-brand-tool.ts       — standalone CLI: init, set, validate, template inspect/copy, preview, publish
+example.ts          — standalone prototype CLI used by scripts/render-example.js (external brandbook, no npm)
+brand-tool.ts       — standalone authoring CLI: init, set, validate, template inspect/copy, preview, publish
+cli.ts              — one-shot all-tools CLI adapter for web, sandbox, and CI sessions without MCP registration
 assets/
   font.ttf          — DejaVu Sans regular (embedded in bundle)
   font-bold.ttf     — DejaVu Sans bold
 
 tools/
-  render.ts         — registerRenderTools(): render_chart, render_metric_cards, render_svg, render_report, render_slides_pdf, render_slides_png, render_slides_pptx, list_templates. Responses go through tool-response.ts; list_templates returns its JSON once, in text content only.
-  brand.ts          — registerBrandTools(): list_brandbooks, inspect_brand, list_brand_templates, inspect_brand_template. Read-only; MCP never writes to a brandbook.
+  render-tools.ts   — registerRenderTools(): render_chart, render_metric_cards, render_svg, render_report, render_slides_pdf, render_slides_png, render_slides_pptx, list_templates. Responses go through tool-response.ts; list_templates returns its JSON once, in text content only.
+  brand-tools.ts    — registerBrandTools(): list_brandbooks, inspect_brand, list_brand_templates, inspect_brand_template. Read-only; MCP never writes to a brandbook.
   auth.ts           — registerAuthTools(): update_plugin (self-update + changelog). No setup_auth; there is no OAuth.
 ```
 
@@ -104,6 +105,23 @@ for development.
 - `list_brand_templates` `{ brand_ref }` — brand-owned page/slide templates.
 - `inspect_brand_template` `{ brand_ref, template_ref }` — compile and validate one brand-owned template without changing the brandbook.
 - `update_plugin` `{}` — check/install plugin updates. The only update path is `start-mcp.js`; it does not update on startup, because a stale CDN cache used to overwrite a newer installation. The gate compares semver, so a copy newer than the update server remains untouched.
+
+### One-shot web/sandbox execution
+
+When a session cannot register the stdio MCP server, use the committed
+`server/cli-bundle.cjs` with Node.js 18+ and no npm install:
+
+```sh
+node server/cli-bundle.cjs list_templates
+node server/cli-bundle.cjs render_report < report.json
+```
+
+The MCP server is intentionally long-lived; use the CLI for one render so the
+process exits after writing the artifact. The CLI exposes all 13 registered
+tools and shares their handlers. Its bundle is downloaded from
+`raw.githubusercontent.com`, which is the supported web distribution channel.
+Do not change this path to `api.github.com` or `codeload.github.com`; those hosts
+are blocked in target web/sandbox environments.
 
 ### `render_report` data shape
 
@@ -223,6 +241,7 @@ first-start download — the same model as `google-ads-baby`.
   external brandbook; works without npm.
 - `cd server && npm run build:example` — build a separate CLI bundle from the
   same modules as MCP.
+- `cd server && npm run build:cli` — build the one-shot all-tools CLI bundle.
 
 ## Build
 

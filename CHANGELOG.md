@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.9.0
+
+- Added a committed one-shot `server/cli-bundle.cjs` exposing all 13 render,
+  brand, template, and update tools without MCP registration or npm at runtime.
+- Added the `report-baby-web` skill and documented raw GitHub bundle
+  distribution for web, sandbox, and CI sessions.
+- The one-shot CLI can shallow-clone a brand repository with `--brand-url` and
+  `--brand-path`, caching the checkout by repository, ref, and path.
+- `pages/editorial-two-column` now reports warnings instead of silently
+  overlapping unsupported KPI and chart blocks.
+
 ## v0.8.3
 
 - Table rows get widow control. `renderTable` measures the table on a throwaway

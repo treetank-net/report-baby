@@ -625,6 +625,11 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
   if (narrativeFrame) cur.flowFrom(Math.max(cur.y, narrativeFrame.bottom));
 }
 
+function addUnsupportedPageBlockWarning(templateName: string, block: string, warnings: string[]): void {
+  const warning = `Report template '${templateName}' does not render ${block} blocks; use default-report or move the content to sections/highlights.`;
+  if (!warnings.includes(warning)) warnings.push(warning);
+}
+
 function warnAboutTableText(table: NonNullable<ReportData['table']>, text: StyledTextContext): void {
   if (!text.warnings) return;
   const cells = [...table.head, ...table.body.flat()].map(String).join(' ');
@@ -892,8 +897,14 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     cur.setFlowTop(cur.y);
   }
   renderIntro(doc, cur, resolved, theme, text, gaps);
-  renderKpis(doc, cur, resolved, theme, text, gaps);
-  await renderCharts(doc, cur, resolved, theme);
+  const pageBlocksSupported = !geometry.dynamicFlow;
+  if (pageBlocksSupported) {
+    renderKpis(doc, cur, resolved, theme, text, gaps);
+    await renderCharts(doc, cur, resolved, theme);
+  } else {
+    if (resolved.kpis?.length) addUnsupportedPageBlockWarning(name, 'KPI', warnings);
+    if (resolved.charts?.length) addUnsupportedPageBlockWarning(name, 'chart', warnings);
+  }
   renderSections(doc, cur, resolved, theme, text, gaps);
   renderTable(doc, cur, resolved, theme, header, text, fontSet);
   renderHighlights(doc, cur, resolved, theme, text, gaps, header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap);
