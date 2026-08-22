@@ -1,0 +1,368 @@
+{
+  "schemaVersion": 1,
+  "tier": "A",
+  "cases": [
+    {
+      "id": "formats-flux-deck",
+      "kind": "deck",
+      "brand": "flux",
+      "profile": "primary",
+      "formats": [
+        "pdf",
+        "png",
+        "pptx"
+      ]
+    },
+    {
+      "id": "formats-flux-report",
+      "kind": "report",
+      "brand": "flux",
+      "profile": "primary",
+      "formats": [
+        "pdf"
+      ]
+    },
+    {
+      "id": "formats-orbit-deck",
+      "kind": "deck",
+      "brand": "orbit",
+      "profile": "primary",
+      "formats": [
+        "pdf",
+        "png",
+        "pptx"
+      ]
+    },
+    {
+      "id": "formats-orbit-report",
+      "kind": "report",
+      "brand": "orbit",
+      "profile": "primary",
+      "formats": [
+        "pdf"
+      ]
+    },
+    {
+      "id": "formats-parcelia-deck",
+      "kind": "deck",
+      "brand": "parcelia",
+      "profile": "primary",
+      "formats": [
+        "pdf",
+        "png",
+        "pptx"
+      ]
+    },
+    {
+      "id": "formats-parcelia-report",
+      "kind": "report",
+      "brand": "parcelia",
+      "profile": "primary",
+      "formats": [
+        "pdf"
+      ]
+    },
+    {
+      "id": "formats-pyrus-deck",
+      "kind": "deck",
+      "brand": "pyrus",
+      "profile": "primary",
+      "formats": [
+        "pdf",
+        "png",
+        "pptx"
+      ]
+    },
+    {
+      "id": "formats-pyrus-report",
+      "kind": "report",
+      "brand": "pyrus",
+      "profile": "primary",
+      "formats": [
+        "pdf"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "case": "formats-flux-deck",
+      "format": "png",
+      "path": "png/slide-01.png",
+      "normalization": "raw",
+      "hash": "b595ff0394c650fca9ca3fee2d8fea3a9e136c1c7a52ab34fed5f93c4fd1bc42"
+    },
+    {
+      "case": "formats-flux-deck",
+      "format": "png",
+      "path": "png/slide-02.png",
+      "normalization": "raw",
+      "hash": "29804b418c9b5d7388854293fe733a9a0da0ed40499529936c99e9b32dd2918f"
+    },
+    {
+      "case": "formats-flux-deck",
+      "format": "png",
+      "path": "png/slide-03.png",
+      "normalization": "raw",
+      "hash": "12f653ecf38ce5919c1a00d110a66cb08b1e168864820d465296c7912587d9a9"
+    },
+    {
+      "case": "formats-flux-deck",
+      "format": "png",
+      "path": "png/slide-04.png",
+      "normalization": "raw",
+      "hash": "a7b1252cd7207fdaa636059c40e2696283327b349a67ce03fade1e8533327580"
+    },
+    {
+      "case": "formats-flux-deck",
+      "format": "png",
+      "path": "png/slide-05.png",
+      "normalization": "raw",
+      "hash": "ef5954e92e074cc3fe2745c9b18792ea5113e3639e602c09e5c2bb9b53ee60ca"
+    },
+    {
+      "case": "formats-flux-deck",
+      "format": "png",
+      "path": "png/slide-06.png",
+      "normalization": "raw",
+      "hash": "7f284c9fc2354f85175000742db7f4762a799c6118fd17ea960ab6d18b9239cb"
+    },
+    {
+      "case": "formats-flux-deck",
+      "format": "png",
+      "path": "png/slide-07.png",
+      "normalization": "raw",
+      "hash": "e1f685734d6f90fb421afc96da4bd7fe17d1ae91b583ebee039f4b6ba21c76b3"
+    },
+    {
+      "case": "formats-flux-deck",
+      "format": "pdf",
+      "path": "slides.pdf",
+      "normalization": "pdf-content",
+      "hash": "d93bdbe620e6cba9e7ef6c718b0728e2e405c1f6712ca5005def12c4d84e7238"
+    },
+    {
+      "case": "formats-flux-deck",
+      "format": "pptx",
+      "path": "slides.pptx",
+      "normalization": "pptx-content",
+      "hash": "a911f46f22eafdeab5283ba1262dcfa0d4b535d165e95883fa67cd9078b593e8"
+    },
+    {
+      "case": "formats-flux-report",
+      "format": "pdf",
+      "path": "report.pdf",
+      "normalization": "pdf-content",
+      "hash": "1f5ae6ab9e4a9b0f7c3d99d227c1f055d2db51fb9ca6b775b563d09da0f7ffaa"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "png",
+      "path": "png/slide-01.png",
+      "normalization": "raw",
+      "hash": "e9d6077038c6fbd1059ca9b3f960d86f050fff08827edd91af4e85a6454570d7"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "png",
+      "path": "png/slide-02.png",
+      "normalization": "raw",
+      "hash": "09b3c0a9a8a52db949a99f7c0f45e43355346b6a56c82658e5c7dd3ba620045f"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "png",
+      "path": "png/slide-03.png",
+      "normalization": "raw",
+      "hash": "924559cf458453b0910df2949db8578efde4db8352c280151ec2465bc5ce3de2"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "png",
+      "path": "png/slide-04.png",
+      "normalization": "raw",
+      "hash": "40ed24f204cd426680b83d02a6191224fb66c06d42f3d94638fdefec90e191ed"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "png",
+      "path": "png/slide-05.png",
+      "normalization": "raw",
+      "hash": "0e7445aeef6afc7006564b2c09e55af9959d21d8878ba391f5df9966bfdbc3bc"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "png",
+      "path": "png/slide-06.png",
+      "normalization": "raw",
+      "hash": "c6d7f7e75ce8a86c00973a855f8637d22d8104e19d4e1d69961a5cccf467a902"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "png",
+      "path": "png/slide-07.png",
+      "normalization": "raw",
+      "hash": "d1eb51e7b491cfccca3e89520f7a0a6cfb6170610d81c2b70ca19a182d00fb3b"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "pdf",
+      "path": "slides.pdf",
+      "normalization": "pdf-content",
+      "hash": "772e06f7ae84dfdd062a3003e7beeee9869909938f8bdc77e046c0cdac63eadb"
+    },
+    {
+      "case": "formats-orbit-deck",
+      "format": "pptx",
+      "path": "slides.pptx",
+      "normalization": "pptx-content",
+      "hash": "c04351d6fd6ea4a3a93bd80a3e46cb8e87d58633cc2c44b495948fa692116bef"
+    },
+    {
+      "case": "formats-orbit-report",
+      "format": "pdf",
+      "path": "report.pdf",
+      "normalization": "pdf-content",
+      "hash": "f194edc1503268a7ef2661b2d7efd0851e16ba280e15887c64cdbdb950cb836d"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "png",
+      "path": "png/slide-01.png",
+      "normalization": "raw",
+      "hash": "ed9836a65044c851e71a113202a8b491a90e8f1f214f4c9d4be1cb1516a110aa"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "png",
+      "path": "png/slide-02.png",
+      "normalization": "raw",
+      "hash": "6a03fd46d6391ae6f669b2f68cb0a4cb4fa4f563b2dcda2b3f3fe2f80a912a83"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "png",
+      "path": "png/slide-03.png",
+      "normalization": "raw",
+      "hash": "5935cb9d69f8a07f5c248baa7cbe2f4d1c96fc908d43b91965c43103e1ef868d"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "png",
+      "path": "png/slide-04.png",
+      "normalization": "raw",
+      "hash": "fa622a980c0e40626693213669f9199cb74fee29253230540bbf072cbcb58ade"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "png",
+      "path": "png/slide-05.png",
+      "normalization": "raw",
+      "hash": "23975cda30f67cd10abf8d6a49754ad530074a2e6b7300e74a2d3bec5c8ae68f"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "png",
+      "path": "png/slide-06.png",
+      "normalization": "raw",
+      "hash": "e607c5e3d39174baed8b797c2eccd5cc1436ef917cb1dc79431eeb811fe5e976"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "png",
+      "path": "png/slide-07.png",
+      "normalization": "raw",
+      "hash": "e9b84e4fc7b4515771298c835217fff59d0991eb30da09f5d8789e8083b453ed"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "pdf",
+      "path": "slides.pdf",
+      "normalization": "pdf-content",
+      "hash": "44c99c8d137cf0acc13137baad7ce67496ffbb42d7571f1e06f950bbdd88a4f5"
+    },
+    {
+      "case": "formats-parcelia-deck",
+      "format": "pptx",
+      "path": "slides.pptx",
+      "normalization": "pptx-content",
+      "hash": "4bde3a7a4b8179bbbae22de79d56d6106aa47f82e7d729f84984561fdc3f582f"
+    },
+    {
+      "case": "formats-parcelia-report",
+      "format": "pdf",
+      "path": "report.pdf",
+      "normalization": "pdf-content",
+      "hash": "24eedeb5ea457c07c26bbf489544662d5cc9c6ca328dde4b5fe557875fd56993"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "png",
+      "path": "png/slide-01.png",
+      "normalization": "raw",
+      "hash": "cf7daa59f5ced371d5dc5312fb3a98c0cd866fe0e46de34e843adb916659f621"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "png",
+      "path": "png/slide-02.png",
+      "normalization": "raw",
+      "hash": "9baf9bcea09538e2202fec5b1788ed29932b673cff5afa0389e40e0904299932"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "png",
+      "path": "png/slide-03.png",
+      "normalization": "raw",
+      "hash": "7e4d4ec93276091919c4542c40081c17421ad65e3e54b476c3d98deeb5c3987e"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "png",
+      "path": "png/slide-04.png",
+      "normalization": "raw",
+      "hash": "9b709e992a49270ad457324b41a2ab9c7e21feae2d1fed1482605a6eac7519bd"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "png",
+      "path": "png/slide-05.png",
+      "normalization": "raw",
+      "hash": "21b8be5615408b0ef0d0235819a8c32ab39e6cc1b8b2125474ace19c435270ae"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "png",
+      "path": "png/slide-06.png",
+      "normalization": "raw",
+      "hash": "d871608e865423725b92fcd8123080db053b001ee923bf55c001c71a5525a38e"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "png",
+      "path": "png/slide-07.png",
+      "normalization": "raw",
+      "hash": "44bedb5ee340ef0cdb2c93b4d7956960332e5896b7ec54f941f7ac66cb0109fc"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "pdf",
+      "path": "slides.pdf",
+      "normalization": "pdf-content",
+      "hash": "018b5e4754014534415bf2bf9cb59d4fa9d64bb1f4f6a204d773282249451592"
+    },
+    {
+      "case": "formats-pyrus-deck",
+      "format": "pptx",
+      "path": "slides.pptx",
+      "normalization": "pptx-content",
+      "hash": "119492402b87852edc54bc04fa9de7ab914ce81aa951d117cc44e1275660afab"
+    },
+    {
+      "case": "formats-pyrus-report",
+      "format": "pdf",
+      "path": "report.pdf",
+      "normalization": "pdf-content",
+      "hash": "0ae0de9798b422ba18ca5e083786ede12639b049703226c594dfdc371f3ae22b"
+    }
+  ]
+}

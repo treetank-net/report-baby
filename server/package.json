@@ -10,6 +10,8 @@
     "build:mcp": "npx esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=bundle.cjs",
     "build:example": "npx esbuild src/example.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=example-bundle.cjs",
     "build:brand-tool": "npx esbuild src/brand-tool.ts --bundle --platform=node --target=node18 --format=cjs --minify --loader:.wasm=binary --loader:.ttf=binary --outfile=brand-tool-bundle.cjs",
+    "baseline:record": "node scripts/baseline.mjs record",
+    "baseline:verify": "node scripts/baseline.mjs verify",
     "test:brand": "node ../scripts/test-brand-contract.js",
     "test": "node scripts/test-public-behavior.mjs",
     "dev": "tsc --watch --noEmit",

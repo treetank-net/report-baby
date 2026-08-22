@@ -49,7 +49,7 @@ reports a bug that does not exist.
 
 | Tier | Scope | Where | Provenance |
 | --- | --- | --- | --- |
-| A | 4 showcase brands → 12 PDF, 4 PPTX, 21 PNG, ~25 s | committed, `examples/brand-showcase/` | reproducible by anyone |
+| A | 8 format cases → 8 PDF, 4 PPTX, 28 PNG, ~2 min without Office | `docs/quality/corpus-tier-a.json` and `docs/quality/baseline.json` | reproducible by anyone from `examples/brand-showcase/` |
 | B | 5 editorial reports | `$REPORT_BABY_DATA/regression/`, never in git | machine-local |
 
 **Tier B goldens must never be committed.** The fixture tree and the editorial
@@ -81,16 +81,18 @@ Stated so a green run is never mistaken for full coverage.
 
 ## Building the harness
 
-The primitives already exist in `server/scripts/visual-qa.mjs` (77 KB, 13 gates,
-no npm entry): `pdfContentHash`, `pptxContentHash`, `zipEntries`,
-`stripTimestamps`, `decodePng`, `pixelDiff`, `rasterisePdf`, `findOfficeConverter`.
-The work is extraction into a shared module, not authorship — which is also the
-first payment on Goal 4.
+The format primitives live in `server/scripts/lib/artifact-inspect.mjs` and
+`server/scripts/baseline.mjs` orchestrates the existing visual QA runner. The
+baseline runner deliberately uses `--no-office`: LibreOffice round-trips remain
+a visual property check, not a parity hash. The baseline itself is tracked in
+`docs/quality/baseline.json`; it contains no timestamps or machine-specific
+paths.
 
 Two commands, category **C**:
 
 ```bash
-npm run baseline:record   # writes per-artifact hashes for a tier
+cd server
+npm run baseline:record   # writes per-artifact hashes for Tier A
 npm run baseline:verify   # recomputes and diffs; exit 1 on any difference
 ```
 

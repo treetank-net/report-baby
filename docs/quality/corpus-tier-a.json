@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "tier": "A",
+  "cases": [
+    { "id": "formats-flux-deck", "kind": "deck", "brand": "flux", "profile": "primary", "formats": ["pdf", "png", "pptx"] },
+    { "id": "formats-flux-report", "kind": "report", "brand": "flux", "profile": "primary", "formats": ["pdf"] },
+    { "id": "formats-orbit-deck", "kind": "deck", "brand": "orbit", "profile": "primary", "formats": ["pdf", "png", "pptx"] },
+    { "id": "formats-orbit-report", "kind": "report", "brand": "orbit", "profile": "primary", "formats": ["pdf"] },
+    { "id": "formats-parcelia-deck", "kind": "deck", "brand": "parcelia", "profile": "primary", "formats": ["pdf", "png", "pptx"] },
+    { "id": "formats-parcelia-report", "kind": "report", "brand": "parcelia", "profile": "primary", "formats": ["pdf"] },
+    { "id": "formats-pyrus-deck", "kind": "deck", "brand": "pyrus", "profile": "primary", "formats": ["pdf", "png", "pptx"] },
+    { "id": "formats-pyrus-report", "kind": "report", "brand": "pyrus", "profile": "primary", "formats": ["pdf"] }
+  ]
+}
