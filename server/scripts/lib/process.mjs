@@ -7,6 +7,6 @@ export function runProcess(command, args = [], options = {}) {
     signal: result.signal,
     stdout: result.stdout ?? '',
     stderr: result.stderr ?? '',
-    error: result.error?.message,
+    error: result.error,
   };
 }
