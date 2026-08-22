@@ -88,6 +88,7 @@ pdf:
   orphan_min_lines: 2
   widow_min_bullets: 2
   table_widow_min_rows: 3
+  table_flow_max_rows: 6
   min_last_page_fill: 0.2
   last_page_gap_factor_1: 0.85
   last_page_gap_factor_2: 0.7

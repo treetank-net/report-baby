@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.1
+
+- Fixed `pages/editorial-two-column` flow for tables and highlights: both
+  blocks now participate in the same two-column/page flow as section text.
+- Added regression coverage for empty columns, internal layout gaps, table
+  widow control, and a 192-variant editorial-flow matrix.
+
 ## v0.9.0
 
 - Added a committed one-shot `server/cli-bundle.cjs` exposing all 13 render,

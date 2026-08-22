@@ -88,6 +88,7 @@ const PAGE_W = PDF_CONFIG.pageWidth;
 const PAGE_H = PDF_CONFIG.pageHeight;
 const MARGIN = PDF_CONFIG.margin;
 const CONTENT_W = PAGE_W - MARGIN * 2;
+const PT_TO_MM = 25.4 / 72;
 
 const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
   width: PAGE_W,
@@ -181,9 +182,28 @@ class Cursor {
     this.segmentIndex = 0;
     this.setFlowTop(top);
   }
+  releaseBlock(): void {
+    const currentTop = this.y;
+    const currentIndex = this.segmentIndex;
+    this.activeBlockName = undefined;
+    this.geometry.segments = this.baseSegments
+      .map((segment) => ({
+        ...segment,
+        bottom: this.dynamicFlow ? Math.min(PDF_CONFIG.footerTextY, this.geometry.height) : segment.bottom,
+      }))
+      .filter((segment) => segment.bottom > segment.top);
+    this.segmentIndex = Math.min(currentIndex, Math.max(0, this.geometry.segments.length - 1));
+    const segment = this.geometry.segments[this.segmentIndex] ?? this.geometry.content;
+    this.segment = { ...segment, top: Math.max(segment.top, currentTop) };
+  }
   private resetSegments(): void {
     this.segmentIndex = 0;
-    this.geometry.segments = this.baseSegments.map((segment) => ({ ...segment }));
+    this.geometry.segments = this.baseSegments
+      .map((segment) => ({
+        ...segment,
+        bottom: this.dynamicFlow ? Math.min(PDF_CONFIG.footerTextY, this.geometry.height) : segment.bottom,
+      }))
+      .filter((segment) => segment.bottom > segment.top);
     this.segment = { ...(this.geometry.segments[0] ?? this.geometry.content) };
   }
   flowBreak(): void {
@@ -645,7 +665,7 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
     const nextSectionNeedsSpace = index < sections.length - 1 && cur.dynamicFlow;
     if (!nextSectionNeedsSpace || cur.bottom - cur.y >= sectionGap + PDF_CONFIG.bodyLineHeight) cur.y += sectionGap;
   });
-  if (narrativeFrame) cur.flowFrom(Math.max(cur.y, narrativeFrame.bottom));
+  if (narrativeFrame) cur.releaseBlock();
 }
 
 function addUnsupportedPageBlockWarning(templateName: string, block: string, warnings: string[]): void {
@@ -686,8 +706,135 @@ function tablePageRowCounts(rowsByPage: Map<number, Set<number>>): number[] {
   return [...rowsByPage.entries()].sort(([left], [right]) => left - right).map(([, rows]) => rows.size);
 }
 
+interface TableRowMeasurements {
+  head: number;
+  body: number[];
+}
+
+function measureTableRows(tableOptions: UserOptions, fontSet: RenderFontSet): TableRowMeasurements {
+  const measureDoc = newPdf('portrait', 'a4', fontSet);
+  let head = 0;
+  const body: number[] = [];
+  const margin = tableOptions.margin && typeof tableOptions.margin === 'object' ? tableOptions.margin : {};
+  const measureOptions: UserOptions = {
+    ...tableOptions,
+    startY: 0,
+    margin: { ...margin, top: 0, bottom: 0 },
+    willDrawPage: undefined,
+    didDrawCell: (hook: any) => {
+      const height = Number(hook.cell?.height ?? 0);
+      if (hook.section === 'head') head = Math.max(head, height);
+      if (hook.section === 'body' && Number.isInteger(hook.row?.index)) body[hook.row.index] = Math.max(body[hook.row.index] ?? 0, height);
+    },
+  };
+  (measureDoc as jsPDF & { autoTable: (options: UserOptions) => void }).autoTable(measureOptions);
+  return { head, body };
+}
+
+function drawDynamicTableRow(
+  doc: jsPDF,
+  cur: Cursor,
+  cells: string[],
+  widths: number[],
+  y: number,
+  height: number,
+  font: string,
+  fill: [number, number, number],
+  line: [number, number, number],
+  foreground: [number, number, number],
+  bold: boolean,
+): void {
+  const lineHeight = PDF_CONFIG.tableFontSize * PT_TO_MM * 1.2;
+  let x = cur.x;
+  cells.forEach((cell, index) => {
+    const width = widths[index] ?? widths.at(-1) ?? cur.width;
+    doc.setFillColor(...fill);
+    doc.setDrawColor(...line);
+    doc.setLineWidth(PDF_CONFIG.tableLineWidth);
+    doc.rect(x, y, width, height, 'FD');
+    doc.setFont(font, bold ? 'bold' : 'normal');
+    doc.setFontSize(PDF_CONFIG.tableFontSize);
+    doc.setTextColor(...foreground);
+    const lines = doc.splitTextToSize(cell, Math.max(1, width - PDF_CONFIG.tableCellPadding * 2)).slice(0, Math.max(1, Math.floor(height / lineHeight))) as string[];
+    const textHeight = lines.length * lineHeight;
+    lines.forEach((line, lineIndex) => doc.text(line, x + PDF_CONFIG.tableCellPadding, y + (height - textHeight) / 2 + lineHeight * (lineIndex + 0.8)));
+    x += width;
+  });
+}
+
+function renderDynamicTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, header: ReportHeaderRenderer, text: StyledTextContext, fontSet: RenderFontSet): void {
+  if (!data.table) return;
+  const font = pdfFont(theme);
+  warnAboutTableText(data.table, text);
+  const tableHead = data.table.head.map((cell) => stripInlineMarkup(String(cell)));
+  const tableBody = data.table.body.map((row) => row.map((cell) => stripInlineMarkup(String(cell))));
+  const tableOptions: UserOptions = {
+    head: [tableHead],
+    body: tableBody,
+    margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: cur.x, right: PAGE_W - cur.x - cur.width, bottom: 0 },
+    styles: { font, fontSize: PDF_CONFIG.tableFontSize, cellPadding: PDF_CONFIG.tableCellPadding, textColor: rgb(theme.foreground), fillColor: rgb(theme.background), lineColor: rgb(theme.line), lineWidth: PDF_CONFIG.tableLineWidth },
+    headStyles: { font, fontStyle: 'bold', fillColor: rgb(theme.primary), textColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)) },
+    alternateRowStyles: { fillColor: rgb(theme.soft) },
+    didParseCell: ({ cell }) => {
+      if (missingCodePoints(cell.text.join(' '), text.coverage).length > 0) cell.styles.font = FALLBACK_FAMILY;
+    },
+  };
+  const measurements = measureTableRows(tableOptions, fontSet);
+  const captionHeight = data.table.caption ? PDF_CONFIG.tableCaptionGap + PDF_CONFIG.tableCaptionBottomGap : 0;
+  const minimumRows = Math.min(PDF_CONFIG.tableWidowMinRows - 1, tableBody.length);
+  const fallbackRowHeight = PDF_CONFIG.tableFontSize * PT_TO_MM + PDF_CONFIG.tableCellPadding * 2;
+  const minimumTableHeight = (measurements.head || fallbackRowHeight)
+    + measurements.body.slice(0, minimumRows).reduce((sum, height) => sum + (height || fallbackRowHeight), 0);
+  while (cur.y + captionHeight + PDF_CONFIG.tableStartOffset + minimumTableHeight > cur.bottom) cur.flowBreak();
+  if (data.table.caption) {
+    doc.setFont(font, 'bold');
+    doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
+    doc.setTextColor(...rgb(theme.foreground));
+    drawStyledLine(doc, boldRuns(styledRuns(data.table.caption, text)), cur.x, cur.y, text);
+    cur.y += PDF_CONFIG.tableCaptionBottomGap;
+  }
+
+  const columnCount = Math.max(tableHead.length, ...tableBody.map((row) => row.length), 1);
+  const widths = Array.from({ length: columnCount }, () => cur.width / columnCount);
+  const headHeight = measurements.head || PDF_CONFIG.tableFontSize * PT_TO_MM + PDF_CONFIG.tableCellPadding * 2;
+  let rowIndex = 0;
+  while (rowIndex < tableBody.length || rowIndex === 0 && tableBody.length === 0) {
+    const startRow = rowIndex;
+    let height = headHeight;
+    while (
+      rowIndex < tableBody.length
+      && rowIndex - startRow < PDF_CONFIG.tableFlowMaxRows
+      && cur.y + PDF_CONFIG.tableStartOffset + height + (measurements.body[rowIndex] ?? headHeight) <= cur.bottom
+    ) {
+      height += measurements.body[rowIndex] ?? headHeight;
+      rowIndex += 1;
+    }
+    const rowsInChunk = rowIndex - startRow;
+    const requiredRows = startRow === 0 ? Math.min(minimumRows, tableBody.length) : 0;
+    if (rowsInChunk < requiredRows || (rowsInChunk === 0 && tableBody.length > 0)) {
+      cur.flowBreak();
+      continue;
+    }
+    let rowY = cur.y + PDF_CONFIG.tableStartOffset;
+    drawDynamicTableRow(doc, cur, tableHead, widths, rowY, headHeight, font, rgb(theme.primary), rgb(theme.line), rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)), true);
+    rowY += headHeight;
+    for (let index = startRow; index < rowIndex; index += 1) {
+      const rowHeight = measurements.body[index] ?? headHeight;
+      drawDynamicTableRow(doc, cur, tableBody[index], widths, rowY, rowHeight, font, index % 2 === 0 ? rgb(theme.soft) : rgb(theme.background), rgb(theme.line), rgb(theme.foreground), false);
+      rowY += rowHeight;
+    }
+    cur.y = rowY + PDF_CONFIG.tableBottomGap;
+    if (rowIndex >= tableBody.length) break;
+    cur.flowBreak();
+  }
+}
+
 function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, header: ReportHeaderRenderer, text: StyledTextContext, fontSet: RenderFontSet): void {
   if (!data.table) return;
+  if (cur.dynamicFlow) {
+    renderDynamicTable(doc, cur, data, theme, header, text, fontSet);
+    return;
+  }
   const font = pdfFont(theme);
   const firstRowsH = PDF_CONFIG.tableCaptionHeight;
   const captionHeight = data.table.caption ? PDF_CONFIG.tableCaptionGap + PDF_CONFIG.tableCaptionBottomGap : 0;
@@ -780,6 +927,10 @@ function renderHighlights(
 ): void {
   const highlights = data.highlights ?? [];
   if (highlights.length === 0) return;
+  if (cur.dynamicFlow) {
+    renderDynamicHighlights(doc, cur, data, theme, text, gaps);
+    return;
+  }
   const font = pdfFont(theme);
   const bulletWidth = cur.width - PDF_CONFIG.highlightIndent;
   const pageBottom = cur.bottom;
@@ -811,6 +962,35 @@ function renderHighlights(
     }
   }
   cur.y += gaps.highlightsBottomGap;
+}
+
+function renderDynamicHighlights(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext, gaps: PdfGaps): void {
+  const highlights = data.highlights ?? [];
+  const font = pdfFont(theme);
+  doc.setFont(font, 'normal');
+  doc.setFontSize(PDF_CONFIG.bodySize);
+  const bulletLines = highlights.map((highlight) => layoutStyledText(doc, highlight, cur.width - PDF_CONFIG.highlightIndent, text));
+  const heights = bulletLines.map((lines) => lines.length * PDF_CONFIG.bodyLineHeight + gaps.highlightLineGap);
+  const headingHeight = PDF_CONFIG.highlightsHeadingHeight;
+  const firstRows = Math.min(PDF_CONFIG.widowMinBullets, highlights.length);
+  const firstHeight = headingHeight + heights.slice(0, firstRows).reduce((sum, height) => sum + height, 0);
+  while (cur.y + firstHeight > cur.bottom) cur.flowBreak();
+  doc.setFont(font, 'bold');
+  doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
+  doc.setTextColor(...rgb(theme.foreground));
+  drawStyledLine(doc, boldRuns(styledRuns(data.highlights_title ?? 'Highlights', text)), cur.x, cur.y, text);
+  cur.y += headingHeight;
+  for (const [index, lines] of bulletLines.entries()) {
+    if (cur.y + heights[index] > cur.bottom) cur.flowBreak();
+    doc.setFillColor(...rgb(theme.primary));
+    doc.circle(cur.x + PDF_CONFIG.highlightBulletX, cur.y - PDF_CONFIG.highlightBulletY, PDF_CONFIG.highlightBulletRadius, 'F');
+    doc.setFont(font, 'normal');
+    doc.setFontSize(PDF_CONFIG.bodySize);
+    doc.setTextColor(...rgb(theme.foreground));
+    drawStyledLines(doc, lines, cur.x + PDF_CONFIG.highlightIndent, cur.y, PDF_CONFIG.bodyLineHeight, text);
+    cur.y += heights[index];
+  }
+  if (cur.y + gaps.highlightsBottomGap <= cur.bottom) cur.y += gaps.highlightsBottomGap;
 }
 
 function renderFooter(doc: jsPDF, data: ReportData, theme: RenderTheme, geometry = DEFAULT_PAGE_GEOMETRY): void {
