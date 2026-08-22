@@ -1,15 +1,11 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { findManifestPaths, manifestOutputPath } from '../server/scripts/lib/showcase.mjs';
+import { findManifestPaths, forEachManifest, manifestOutputPath, recordFailure as fail } from '../server/scripts/lib/showcase.mjs';
 
 const root = resolve(process.argv[2] ?? 'examples/brand-showcase/generated/showcase');
 const failures = [];
 let manifests;
-
-function fail(path, message) {
-  failures.push(`${path}: ${message}`);
-}
 
 function hex(value) {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.slice(1) : null;
@@ -73,7 +69,7 @@ manifests = await findManifestPaths(root);
 if (manifests.length === 0) fail(root, 'no showcase manifests found; render with --kind showcase first');
 
 const fontFamilies = new Set();
-for (const path of manifests) {
+await forEachManifest(manifests, async (path) => {
   const manifest = JSON.parse(await readFile(path, 'utf8'));
   if (manifest.schema_version !== 1) fail(path, `unsupported manifest schema_version: ${manifest.schema_version}`);
   if (manifest.kind !== 'showcase') fail(path, `expected kind showcase, got ${manifest.kind}`);
@@ -102,7 +98,7 @@ for (const path of manifests) {
     if (pngs.length !== (deck.slideThemes ?? []).length) fail(path, `deck ${deck.id} has ${pngs.length} PNGs for ${(deck.slideThemes ?? []).length} slides`);
     for (const png of pngs) await assertFile(manifestOutputPath(path, png), 'png');
   }
-}
+});
 if (manifests.length >= 4 && fontFamilies.size < 4) fail(root, `expected at least 4 distinct showcase fonts, got ${[...fontFamilies].join(', ')}`);
 
 if (failures.length > 0) {

@@ -2,7 +2,7 @@
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { runProcess } from './server/scripts/lib/process.mjs';
+import { runProcess } from '../server/scripts/lib/process.mjs';
 
 const bundle = resolve(process.cwd(), 'server/example-bundle.cjs');
 if (!existsSync(bundle)) {

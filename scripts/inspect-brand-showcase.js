@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
 import { runProcess as run } from '../server/scripts/lib/process.mjs';
 import { findOfficeConverter } from '../server/scripts/lib/office.mjs';
-import { findManifestPaths, manifestOutputPath } from '../server/scripts/lib/showcase.mjs';
+import { findManifestPaths, manifestOutputPath, mapManifests, recordFailure as fail } from '../server/scripts/lib/showcase.mjs';
 
 const args = process.argv.slice(2);
 const valueFor = (flag, fallback) => {
@@ -19,10 +19,6 @@ const qaStage = `${qaRoot}.staging-${process.pid}`;
 const requirePptxRender = args.includes('--require-pptx-render');
 const failures = [];
 const findings = [];
-
-function fail(path, message) {
-  failures.push(`${path}: ${message}`);
-}
 
 function parsePdfInfo(path) {
   const result = run('pdfinfo', [path]);
@@ -270,8 +266,7 @@ const manifests = await findManifestPaths(root);
 await rm(qaStage, { recursive: true, force: true });
 await mkdir(qaStage, { recursive: true });
 const converter = findOfficeConverter(join(qaStage, 'libreoffice-profile'), { filesystemDirectory: qaStage });
-const records = [];
-for (const manifest of manifests) records.push(await inspectManifest(manifest, converter));
+const records = await mapManifests(manifests, (manifest) => inspectManifest(manifest, converter));
 if (manifests.length === 0) fail(root, 'no manifest.json files found');
 if (requirePptxRender && !converter) fail(root, 'PPTX→PDF converter is required but no LibreOffice CLI or Flatpak installation was found');
 
