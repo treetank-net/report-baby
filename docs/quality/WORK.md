@@ -71,15 +71,14 @@ meant to protect.
   `visual-qa.mjs`, and point `visual-qa.mjs` at them. **This item owns the
   directory** — G4 moves the remaining mechanisms into it and does not create it
   again.
-- [ ] **P0.2 Declare the corpus.** A tracked file listing Tier A cases. Tier B
+- [x] **P0.2 Declare the corpus — `c861003`.** A tracked file listing Tier A cases. Tier B
   lives in `$REPORT_BABY_DATA/regression/` and is named, never committed.
-- [ ] **P0.3 `baseline:record` and `baseline:verify`.** Per-artifact hashes, one
+- [x] **P0.3 `baseline:record` and `baseline:verify` — `c861003`.** Per-artifact hashes, one
   JSON, sorted, no timestamps. `verify` exits 1 on any difference and prints which
   artifact and which format.
-- [ ] **P0.4 Reproduce the recorded numbers through the harness.** The hashes in
-  [METRICS.md](METRICS.md) were measured ad hoc. Until the committed harness
-  reproduces them they are a claim about this repository, not a checked fact.
-- [ ] **P0.5 Prove the gate detects a real change.** Introduce a one-millimetre
+- [x] **P0.4 Reproduce the recorded numbers through the harness — `c861003`.** The
+  committed harness reproduces 40 Tier A hashes (8 PDF, 4 PPTX and 28 PNG).
+- [x] **P0.5 Prove the gate detects a real change — `c861003`.** Introduce a one-millimetre
   geometry change, confirm `verify` fails and names the artifact, revert. A gate
   never exercised against a real difference is decoration.
 

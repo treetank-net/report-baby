@@ -6,6 +6,9 @@ shown. Numbers only — the reasoning lives in [README.md](README.md).
 Provenance: **A** reproducible from a clean checkout; **B** machine-local, needs
 the gitignored fixture tree; **C** planned, does not exist yet.
 
+The structural and product measurements below retain their original provenance.
+The parity gate was implemented and refreshed separately at commit `c861003`.
+
 ## Gates
 
 The complete list. Each answers with an exit code; none requires a judgement.
@@ -20,7 +23,8 @@ The complete list. Each answers with an exit code; none requires a judgement.
 | No TypeScript import cycle | `npm run arch:check` | 2 | 0, from G6.1 |
 | No forbidden import, no `process.env` in core | `npm run arch:check` | 2 | 0, from G6.1 and G6.2 respectively |
 
-All of these are category **C**. The numbers below are what they must reproduce.
+The parity gate is implemented. The remaining gates are category **C**; the
+numbers below are what they must reproduce.
 
 ### Tool contract
 
@@ -165,7 +169,7 @@ copy does not satisfy it.
 
 | Corpus | Scope | Result | Provenance |
 | --- | --- | --- | --- |
-| In-repo brand showcase | 4 brands, 12 PDF, 4 PPTX, 21 PNG, ~25 s | PDF hashes identical, PNG byte-identical, PPTX content hashes identical across two runs | A |
+| In-repo brand showcase | 8 Tier A cases: 8 PDF, 4 PPTX, 28 PNG, ~2 min without Office | `baseline:verify` reports 40 identical normalised artifact hashes | A |
 | External editorial corpus | 5 reports | normalised PDF hashes identical to references rendered days earlier | B |
 
 Normalisation is per format and not optional — see [BASELINE.md](BASELINE.md).
