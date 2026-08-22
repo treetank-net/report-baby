@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { readBrandShowcase, resolveBrandContext, type BrandOverrides } from './brand.js';
+import { getBrandSourceRoots } from './config.js';
 import { renderReportPdf } from './templates.js';
 import type { RenderTheme } from './core/model/render-theme.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnostics, type SlideDeck } from './slides.js';
@@ -142,6 +143,7 @@ async function renderReportData(args: CliArgs, input: any): Promise<Record<strin
     templateRef: input.template_ref ?? template,
     surface: args.surface ?? 'pdf-a4',
     overrides: input.overrides as BrandOverrides | undefined,
+    brandSourceRoots: getBrandSourceRoots(),
   });
   const parsedData = reportDataSchema.parse(inputData);
   const data = { ...parsedData, brand: parsedData.brand ?? context.brandName };
@@ -167,6 +169,7 @@ async function renderDeckData(args: CliArgs, input: any): Promise<Record<string,
   const data = slideDeckSchema.parse(input.data ?? input) as SlideDeck;
   const resolved = await resolveSlideDeck(data, {
     brandRoot: args.brandRoot,
+    brandSourceRoots: getBrandSourceRoots(),
     brandRef: input.brand_ref ?? args.brand,
     templateRef: input.template_ref,
     surface: args.surface ?? input.surface ?? 'pptx-16x9',

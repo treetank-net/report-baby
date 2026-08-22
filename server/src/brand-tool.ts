@@ -4,6 +4,7 @@ import { join, relative, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 import { inspectBrand, inspectBrandTemplate, listBrandTemplates } from './brand.js';
 import { readBuiltinTemplateText } from './builtin-template-loader.js';
+import { getBrandSourceRoots } from './config.js';
 import { runExampleCli } from './example.js';
 
 function valueFor(args: string[], flag: string, fallback?: string): string | undefined {
@@ -289,7 +290,7 @@ async function validate(args: string[]): Promise<void> {
   const brandRoot = absolute(required(args, '--brand-root'));
   const brandRef = required(args, '--brand');
   const templates = await listBrandTemplates(brandRoot, brandRef);
-  const brand = await inspectBrand(brandRoot, brandRef);
+  const brand = await inspectBrand(brandRoot, brandRef, undefined, getBrandSourceRoots());
   const compiled = [];
   for (const template of templates) compiled.push(await inspectBrandTemplate(brandRoot, brandRef, template.templateRef));
   console.log(JSON.stringify({ valid: true, brand_ref: brandRef, template_count: compiled.length, templates: compiled.map((item) => ({ template_ref: item.templateRef, surface: item.compiled.surface, kind: item.compiled.kind })), diagnostics: brand.diagnostics }, null, 2));
@@ -321,7 +322,7 @@ async function publish(args: string[]): Promise<void> {
   const release = required(args, '--release');
   const brandId = brandRef.replace(/^brand:\/\//, '').replace(/^brand:/, '').split('/')[0];
   const templates = await listBrandTemplates(brandRoot, brandRef);
-  const brand = await inspectBrand(brandRoot, brandRef);
+  const brand = await inspectBrand(brandRoot, brandRef, undefined, getBrandSourceRoots());
   const releaseDir = join(store, brandId, 'releases', release);
   if (existsSync(releaseDir)) throw new Error(`Release already exists and is immutable: ${releaseDir}`);
   const compiledDir = join(releaseDir, 'templates');

@@ -97,7 +97,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       ...brandRenderFields,
     },
     async ({ type, data, title, subtitle, prefix, suffix, width, output_path, return_image, brand_ref, template_ref, surface, overrides }) => {
-      const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, templateRef: template_ref, surface, overrides: overrides as BrandOverrides | undefined });
+      const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, templateRef: template_ref, surface, overrides: overrides as BrandOverrides | undefined, brandSourceRoots: cfg.brandSourceRoots });
       const svg = renderChart(type as ChartType, { data: data.map((datum, index) => ({ ...datum, color: datum.color ?? context.theme.palette[index % context.theme.palette.length] })), title, subtitle, prefix, suffix, theme: context.theme });
       return writePng(cfg, svg, width, output_path, return_image, context.theme, brandRenderSummary(context.diagnostics));
     },
@@ -108,7 +108,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
     'Render a complete presentation as a local 16:9 PDF from a bounded shared slide model. Existing render_report A4 behavior is unchanged. Returns the PDF path plus a compact render summary; pass diagnostics: "full" only to debug slide layout.',
     { data: slideDeckSchema, output_path: z.string().optional(), ...brandRenderFields, ...slideDiagnosticsField },
     async ({ data, output_path, brand_ref, template_ref, surface, direction, overrides, diagnostics }) => {
-      const resolved = await resolveSlideDeck({ ...data, direction: direction ?? data.direction } as SlideDeck, { brandRoot: cfg.brandDir, brandRef: brand_ref, templateRef: template_ref, surface: surface ?? 'pptx-16x9', overrides: overrides as BrandOverrides | undefined });
+      const resolved = await resolveSlideDeck({ ...data, direction: direction ?? data.direction } as SlideDeck, { brandRoot: cfg.brandDir, brandSourceRoots: cfg.brandSourceRoots, brandRef: brand_ref, templateRef: template_ref, surface: surface ?? 'pptx-16x9', overrides: overrides as BrandOverrides | undefined });
       const out = outputPath(cfg, output_path, 'pdf');
       await writeArtifact(out, await renderSlidesPdf(resolved.deck, resolved.context.theme));
       return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...slideRenderDiagnostics({ diagnostics: resolved.context.diagnostics, slideDiagnostics: resolved.slideDiagnostics, slidePlans: resolved.deck.slidePlans ?? [], notes: slideNotesCarriage(resolved.deck, false) }, diagnostics) } };
@@ -120,7 +120,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
     'Render the shared slide model to deterministic 1600x900 PNG files. Optionally render one zero-based slide_index without regenerating unrelated slides. Returns the written paths plus a compact render summary; pass diagnostics: "full" only to debug slide layout.',
     { data: slideDeckSchema, slide_index: z.number().int().nonnegative().optional(), output_dir: z.string().optional(), filename_prefix: z.string().optional().default('slide'), ...brandRenderFields, ...slideDiagnosticsField },
     async ({ data, slide_index, output_dir, filename_prefix, brand_ref, template_ref, surface, direction, overrides, diagnostics }) => {
-      const resolved = await resolveSlideDeck({ ...data, direction: direction ?? data.direction } as SlideDeck, { brandRoot: cfg.brandDir, brandRef: brand_ref, templateRef: template_ref, surface: surface ?? 'pptx-16x9', overrides: overrides as BrandOverrides | undefined });
+      const resolved = await resolveSlideDeck({ ...data, direction: direction ?? data.direction } as SlideDeck, { brandRoot: cfg.brandDir, brandSourceRoots: cfg.brandSourceRoots, brandRef: brand_ref, templateRef: template_ref, surface: surface ?? 'pptx-16x9', overrides: overrides as BrandOverrides | undefined });
       const directory = output_dir ?? cfg.outputDir;
       await mkdir(directory, { recursive: true });
       const buffers = await renderSlidesPng(resolved.deck, slide_index, resolved.context.theme);
@@ -140,7 +140,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
     'Render the shared slide model to an editable 16:9 PPTX. Text, KPI cards, tables, and basic shapes stay editable; charts are embedded as deterministic images. Returns the PPTX path plus a compact render summary; pass diagnostics: "full" only to debug slide layout.',
     { data: slideDeckSchema, output_path: z.string().optional(), ...brandRenderFields, ...slideDiagnosticsField },
     async ({ data, output_path, brand_ref, template_ref, surface, direction, overrides, diagnostics }) => {
-      const resolved = await resolveSlideDeck({ ...data, direction: direction ?? data.direction } as SlideDeck, { brandRoot: cfg.brandDir, brandRef: brand_ref, templateRef: template_ref, surface: surface ?? 'pptx-16x9', overrides: overrides as BrandOverrides | undefined });
+      const resolved = await resolveSlideDeck({ ...data, direction: direction ?? data.direction } as SlideDeck, { brandRoot: cfg.brandDir, brandSourceRoots: cfg.brandSourceRoots, brandRef: brand_ref, templateRef: template_ref, surface: surface ?? 'pptx-16x9', overrides: overrides as BrandOverrides | undefined });
       const out = outputPath(cfg, output_path, 'pptx');
       await writeArtifact(out, await renderSlidesPptx(resolved.deck, resolved.context.theme));
       return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...slideRenderDiagnostics({ diagnostics: resolved.context.diagnostics, slideDiagnostics: resolved.slideDiagnostics, slidePlans: resolved.deck.slidePlans ?? [], notes: slideNotesCarriage(resolved.deck, true) }, diagnostics) } };
@@ -161,7 +161,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       ...brandRenderFields,
     },
     async ({ cards, title, subtitle, columns, width, output_path, return_image, brand_ref, template_ref, surface, overrides }) => {
-      const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, templateRef: template_ref, surface, overrides: overrides as BrandOverrides | undefined });
+      const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, templateRef: template_ref, surface, overrides: overrides as BrandOverrides | undefined, brandSourceRoots: cfg.brandSourceRoots });
       const svg = metricCards({ cards, title, subtitle, columns, width, theme: context.theme });
       return writePng(cfg, svg, width, output_path, return_image, context.theme, brandRenderSummary(context.diagnostics));
     },
@@ -196,7 +196,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       if (!reportTemplateNames().includes(requestedTemplate)) {
         return { content: [{ type: 'text' as const, text: unknownReportTemplateMessage(requestedTemplate) }], isError: true };
       }
-      const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, templateRef: template_ref ?? template, surface: surface ?? 'pdf-a4', overrides: overrides as BrandOverrides | undefined });
+      const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, templateRef: template_ref ?? template, surface: surface ?? 'pdf-a4', overrides: overrides as BrandOverrides | undefined, brandSourceRoots: cfg.brandSourceRoots });
       await mkdir(cfg.outputDir, { recursive: true });
       const out = outputPath(cfg, output_path, 'pdf');
       const renderWarnings: string[] = [];

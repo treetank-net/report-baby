@@ -22,7 +22,7 @@ export function registerBrandTools(server: McpServer, cfg: ReportConfig): void {
       surface: z.string().optional().describe('Optional output surface used to select light/dark values'),
     },
     async ({ brand_ref, surface }) => {
-      const context = await inspectBrand(cfg.brandDir, brand_ref, surface);
+      const context = await inspectBrand(cfg.brandDir, brand_ref, surface, cfg.brandSourceRoots);
       return {
         content: [{
           type: 'text' as const,

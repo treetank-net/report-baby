@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { getBrandSourceRoots } from './config.js';
 import type { RenderTheme } from './core/model/render-theme.js';
 import { logicalDirection, logicalPlacement, logicalSpacing, type LockupPlacement, type LockupSpacing, type SlideTemplateRef, type TextDirection } from './slide-templates.js';
 import { readTemplateSource } from './template-source.js';
@@ -234,36 +233,35 @@ function brandNameFrom(document: RecordValue): string | undefined {
   return asString(meta.name) ?? asString(meta.short) ?? (isRecord(meta.name) ? asString(meta.name.short) ?? asString(meta.name.full) : undefined);
 }
 
-function assetRoot(brandDir: string, sourceRoot: string | undefined): string {
+function assetRoot(brandDir: string, sourceRoot: string | undefined, brandSourceRoots: string[]): string {
   if (!sourceRoot) return brandDir;
   if (!isAbsolute(sourceRoot)) return resolve(brandDir, sourceRoot);
   const candidate = resolve(sourceRoot);
-  const allowed = getBrandSourceRoots();
-  if (!allowed.some((root) => isInside(root, candidate))) {
+  if (!brandSourceRoots.some((root) => isInside(root, candidate))) {
     throw new Error(`Brand assets.source_root is an absolute path that is not allow-listed: ${sourceRoot}. Add it to REPORT_BABY_BRAND_SOURCE_ROOTS or use a path relative to the brand directory.`);
   }
   return candidate;
 }
 
-function assetPath(brandDir: string, document: RecordValue, key: string): string | undefined {
+function assetPath(brandDir: string, document: RecordValue, key: string, brandSourceRoots: string[]): string | undefined {
   const assets = isRecord(document.assets) ? document.assets : {};
   const requested = asString(assets[key]);
   if (!requested) return undefined;
-  const root = assetRoot(brandDir, asString(assets.source_root));
+  const root = assetRoot(brandDir, asString(assets.source_root), brandSourceRoots);
   const path = safeRelativePath(root, requested, `Brand asset '${key}'`);
   return existsSync(path) ? path : undefined;
 }
 
-function assetWarnings(brandDir: string, document: RecordValue): string[] {
+function assetWarnings(brandDir: string, document: RecordValue, brandSourceRoots: string[]): string[] {
   const assets = isRecord(document.assets) ? document.assets : {};
   const requested = ['logo', 'logo_white', 'logo_mark', 'logo_white_mark', 'background_image', 'cover_image', 'report_header_image', 'font_regular', 'font_bold'];
   return requested.flatMap((key) => {
     if (!asString(assets[key])) return [];
-    return assetPath(brandDir, document, key) ? [] : [`Brand asset '${key}' was not found.`];
+    return assetPath(brandDir, document, key, brandSourceRoots) ? [] : [`Brand asset '${key}' was not found.`];
   });
 }
 
-function extractTheme(brandDir: string, document: RecordValue, surface?: string): { theme: RenderTheme; composition: RenderComposition; brandName?: string; warnings: string[] } {
+function extractTheme(brandDir: string, document: RecordValue, surface: string | undefined, brandSourceRoots: string[]): { theme: RenderTheme; composition: RenderComposition; brandName?: string; warnings: string[] } {
   const color = isRecord(document.color) ? document.color : {};
   const palette = isRecord(color.palette) ? color.palette : {};
   const role = (name: string, fallback: string) => resolveColor(color[name], palette, surface) ?? fallback;
@@ -278,8 +276,8 @@ function extractTheme(brandDir: string, document: RecordValue, surface?: string)
   const paletteValues = [...new Set(series.length > 0 ? series : namedColors)].slice(0, 8);
   const warnings: string[] = [];
   if (document.schema_version === undefined) warnings.push('Brand document has no schema_version; treated as legacy v1.');
-  const fontRegularPath = assetPath(brandDir, document, 'font_regular');
-  const fontBoldPath = assetPath(brandDir, document, 'font_bold');
+  const fontRegularPath = assetPath(brandDir, document, 'font_regular', brandSourceRoots);
+  const fontBoldPath = assetPath(brandDir, document, 'font_bold', brandSourceRoots);
   if (baseFont !== DEFAULT_THEME.fontFamily || headingFont !== DEFAULT_THEME.headingFontFamily) {
     warnings.push(fontRegularPath
       ? `Font '${baseFont}'/'${headingFont}' is loaded from brand assets for PDF, PNG and editable outputs.`
@@ -326,7 +324,7 @@ function extractTheme(brandDir: string, document: RecordValue, surface?: string)
   const headingScale = typeof layout.heading_scale === 'number' ? Math.max(0.5, Math.min(1.5, layout.heading_scale)) : DEFAULT_THEME.headingScale;
   const bodyScale = typeof layout.body_scale === 'number' ? Math.max(0.5, Math.min(1.5, layout.body_scale)) : DEFAULT_THEME.bodyScale;
   const pptxHeadingScale = typeof layout.pptx_heading_scale === 'number' ? Math.max(0.85, Math.min(1.15, layout.pptx_heading_scale)) : DEFAULT_THEME.pptxHeadingScale;
-  warnings.push(...assetWarnings(brandDir, document));
+  warnings.push(...assetWarnings(brandDir, document, brandSourceRoots));
   return {
     brandName: brandNameFrom(document),
     warnings,
@@ -364,13 +362,13 @@ function extractTheme(brandDir: string, document: RecordValue, surface?: string)
       bodyWeight: typeof layout.body_weight === 'number' ? layout.body_weight : DEFAULT_THEME.bodyWeight,
       radius: typeof layout.radius === 'number' ? layout.radius : DEFAULT_THEME.radius,
       logoVariant: logoVariant === 'white' ? 'white' : DEFAULT_THEME.logoVariant,
-      logoPath: assetPath(brandDir, document, 'logo'),
-      logoWhitePath: assetPath(brandDir, document, 'logo_white'),
-      logoMarkPath: assetPath(brandDir, document, 'logo_mark'),
-      logoWhiteMarkPath: assetPath(brandDir, document, 'logo_white_mark'),
-      backgroundImagePath: assetPath(brandDir, document, 'background_image'),
-      coverImagePath: assetPath(brandDir, document, 'cover_image'),
-      reportHeaderImagePath: assetPath(brandDir, document, 'report_header_image'),
+      logoPath: assetPath(brandDir, document, 'logo', brandSourceRoots),
+      logoWhitePath: assetPath(brandDir, document, 'logo_white', brandSourceRoots),
+      logoMarkPath: assetPath(brandDir, document, 'logo_mark', brandSourceRoots),
+      logoWhiteMarkPath: assetPath(brandDir, document, 'logo_white_mark', brandSourceRoots),
+      backgroundImagePath: assetPath(brandDir, document, 'background_image', brandSourceRoots),
+      coverImagePath: assetPath(brandDir, document, 'cover_image', brandSourceRoots),
+      reportHeaderImagePath: assetPath(brandDir, document, 'report_header_image', brandSourceRoots),
       backgroundImageOpacity: Math.max(0, Math.min(1, backgroundImageOpacity)),
       imageTextColor,
       imageTextSafeArea,
@@ -562,7 +560,7 @@ export async function assetDataUri(filePath: string | undefined): Promise<string
 
 export async function resolveBrandContext(
   brandRoot: string,
-  options: { brandRef?: string; templateRef?: string; surface?: string; overrides?: BrandOverrides } = {},
+  options: { brandRef?: string; templateRef?: string; surface?: string; overrides?: BrandOverrides; brandSourceRoots?: string[] } = {},
 ): Promise<RenderBrandContext> {
   const diagnostics: BrandDiagnostics = {
     brandRef: options.brandRef,
@@ -585,7 +583,7 @@ export async function resolveBrandContext(
   }
   diagnostics.profile = profile;
   const brandDir = documentPath ? dirname(documentPath) : await resolveBrandDirectory(brandRoot, reference.brandId as string);
-  const extracted = extractTheme(brandDir, document, options.surface);
+  const extracted = extractTheme(brandDir, document, options.surface, options.brandSourceRoots ?? []);
   diagnostics.warnings.push(...extracted.warnings);
   const theme = applyOverrides(extracted.theme, document, options.overrides, diagnostics);
   return { theme, composition: extracted.composition, brandName: extracted.brandName, diagnostics };
@@ -621,8 +619,8 @@ export async function listBrandbooks(brandRoot: string): Promise<Array<{ id: str
   return result.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export async function inspectBrand(brandRoot: string, brandRef: string, surface?: string): Promise<RenderBrandContext> {
-  return resolveBrandContext(brandRoot, { brandRef, surface });
+export async function inspectBrand(brandRoot: string, brandRef: string, surface?: string, brandSourceRoots: string[] = []): Promise<RenderBrandContext> {
+  return resolveBrandContext(brandRoot, { brandRef, surface, brandSourceRoots });
 }
 
 export async function readBrandShowcase(brandRoot: string, brandRef: string): Promise<RecordValue> {

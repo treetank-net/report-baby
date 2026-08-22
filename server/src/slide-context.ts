@@ -7,6 +7,7 @@ import { slideDeckSchema } from './contract/schema.js';
 
 export interface SlideDeckContextOptions {
   brandRoot: string;
+  brandSourceRoots?: string[];
   brandRef?: string;
   templateRef?: string;
   surface?: string;
@@ -47,6 +48,7 @@ export async function resolveSlideDeck(data: SlideDeck, options: SlideDeckContex
     templateRef: requestedDeckTemplate,
     surface: deckSurface,
     overrides: deckOverrides,
+    brandSourceRoots: options.brandSourceRoots,
   });
   const deckTemplate = requestedDeckTemplate ?? context.composition.templateRef;
   const slideResults = await Promise.all(data.slides.map(async (slide) => {
@@ -55,6 +57,7 @@ export async function resolveSlideDeck(data: SlideDeck, options: SlideDeckContex
       templateRef: slide.template_ref ?? deckTemplate,
       surface: slide.surface ?? deckSurface,
       overrides: mergeOverrides(deckOverrides, slide.overrides),
+      brandSourceRoots: options.brandSourceRoots,
     });
     return item;
   }));

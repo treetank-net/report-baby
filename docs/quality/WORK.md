@@ -168,10 +168,11 @@ say so.
   anyway. The distinction matters beyond tidiness: the G6.4 checker enforces
   whatever layering it is given, so a wrong home here becomes a rule that
   *requires* the wrong structure.
-- [ ] **G6.2 Inject the asset allow-list.** `brand.ts:289` reads
+- [x] **G6.2 Inject the asset allow-list.** `brand.ts:289` reads
   `getBrandSourceRoots()` from ambient state. It is a security boundary, and
   reading it globally is why testing it needs a subprocess with a modified
-  environment.
+  environment. `ReportConfig.brandSourceRoots` is now passed through MCP, CLI
+  and brand-tool into brand resolution; `brand.ts` owns no environment read.
 - [ ] **G6.3 Separate page geometry from text flow in `templates.ts`.** This is
   the item Goal 1 depends on. **Not** one module per section — the split that
   matters is geometry (where boxes are) from flow (how text fills them). The 10
