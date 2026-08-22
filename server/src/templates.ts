@@ -846,6 +846,7 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     family,
     coverage: family === 'DejaVu' ? undefined : fontCoverage(fontSet.regular),
     warnings,
+    hyphenate: geometry.flow.hyphenate,
   };
   const header = await createReportHeader(resolved, theme);
   const cur = new Cursor(doc, theme.background, (cursor) => {

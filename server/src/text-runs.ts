@@ -11,6 +11,7 @@ export interface StyledTextContext {
   boldFamily?: string;
   coverage?: Set<number>;
   warnings?: string[];
+  hyphenate?: boolean;
 }
 
 export const FALLBACK_FAMILY = 'DejaVu';
@@ -216,6 +217,49 @@ function tokenize(runs: StyledRun[]): StyledRun[] {
   return tokens;
 }
 
+const POLISH_VOWELS = new Set(['a', 'ą', 'e', 'ę', 'i', 'o', 'ó', 'u', 'y']);
+const POLISH_DIGRAPHS = ['dzi', 'dź', 'dż', 'ch', 'cz', 'dz', 'rz', 'sz', 'ść', 'śc'];
+const POLISH_INITIAL_CLUSTERS = new Set(['br', 'bl', 'brz', 'ch', 'chw', 'cz', 'dr', 'dl', 'dw', 'dz', 'drz', 'dź', 'gd', 'gl', 'gn', 'gr', 'gw', 'kl', 'kr', 'kw', 'kn', 'pl', 'pr', 'prz', 'rz', 'sk', 'sl', 'sł', 'sm', 'sn', 'sp', 'st', 'sz', 'tr', 'tw', 'trz', 'wl', 'wr', 'wsp', 'wst', 'wz', 'zb', 'zd', 'zg', 'zł', 'zm', 'zn', 'zw', 'zdr', 'żb', 'żr', 'źd']);
+
+function polishBreakPoints(word: string): number[] {
+  const lower = word.toLowerCase();
+  const units: Array<{ text: string; start: number; vowel: boolean }> = [];
+  for (let index = 0; index < lower.length;) {
+    const text = POLISH_DIGRAPHS.find((candidate) => lower.startsWith(candidate, index)) ?? lower[index];
+    units.push({ text, start: index, vowel: false });
+    index += text.length;
+  }
+  units.forEach((unit, index) => {
+    const next = units[index + 1];
+    unit.vowel = unit.text.length === 1 && POLISH_VOWELS.has(unit.text) && !(unit.text === 'i' && next && POLISH_VOWELS.has(next.text[0]));
+  });
+  const vowels = units.map((unit, index) => unit.vowel ? index : -1).filter((index) => index >= 0);
+  const points: number[] = [];
+  for (let index = 0; index + 1 < vowels.length; index += 1) {
+    const cluster = units.slice(vowels[index] + 1, vowels[index + 1]);
+    if (cluster.length === 0) continue;
+    const clusterText = cluster.map((unit) => unit.text).join('');
+    const opensSyllable = cluster.length === 1 || POLISH_INITIAL_CLUSTERS.has(clusterText);
+    points.push(opensSyllable ? cluster[0].start : cluster[1].start);
+  }
+  return points.filter((point) => point >= 2 && lower.length - point >= 3);
+}
+
+function hyphenatedToken(doc: jsPDF, token: StyledRun, width: number, context: StyledTextContext): { head: StyledRun; tail: StyledRun } | undefined {
+  if (!context.hyphenate || /\s/.test(token.text) || token.text.length < 6) return undefined;
+  const points = polishBreakPoints(token.text);
+  let chosen: number | undefined;
+  for (const point of points) {
+    const head = { ...token, text: `${token.text.slice(0, point)}-` };
+    if (runWidth(doc, head, context) <= width) chosen = point;
+  }
+  if (chosen === undefined) return undefined;
+  return {
+    head: { ...token, text: `${token.text.slice(0, chosen)}-` },
+    tail: { ...token, text: token.text.slice(chosen) },
+  };
+}
+
 function mergeAdjacent(runs: StyledRun[]): StyledRun[] {
   const merged: StyledRun[] = [];
   for (const run of runs) {
@@ -236,13 +280,25 @@ export function wrapStyledRuns(doc: jsPDF, runs: StyledRun[], width: number, con
     line = [];
     used = 0;
   };
-  for (const token of tokenize(runs)) {
+  const tokens = tokenize(runs);
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
     if (token.text === '\n') {
       flush();
       continue;
     }
     const tokenWidth = runWidth(doc, token, context);
     const blank = /^\s+$/.test(token.text);
+    if (line.length === 0 && !blank && tokenWidth > width) {
+      const broken = hyphenatedToken(doc, token, width, context);
+      if (broken) {
+        line.push(broken.head);
+        flush();
+        tokens.splice(index, 1, broken.tail);
+        index -= 1;
+        continue;
+      }
+    }
     if (used + tokenWidth > width && line.length > 0) {
       flush();
       if (blank) continue;

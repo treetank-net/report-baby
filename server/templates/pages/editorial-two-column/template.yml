@@ -21,7 +21,7 @@ page:
     narrative: { x: 0.081, y: 0.31, width: 0.838, height: 0.57 }
   flow:
     align: justify
-    hyphenate: false
+    hyphenate: true
 constraints:
   inside_canvas: true
   no_overlap: false
