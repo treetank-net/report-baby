@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
 import { runProcess as run } from '../server/scripts/lib/process.mjs';
 import { findOfficeConverter } from '../server/scripts/lib/office.mjs';
+import { findManifestPaths, manifestOutputPath } from '../server/scripts/lib/showcase.mjs';
 
 const args = process.argv.slice(2);
 const valueFor = (flag, fallback) => {
@@ -16,25 +17,11 @@ const root = resolve(valueFor('--root', 'examples/brand-showcase/generated'));
 const qaRoot = resolve(valueFor('--qa-root', '/tmp/report-baby-brand-showcase-qa'));
 const qaStage = `${qaRoot}.staging-${process.pid}`;
 const requirePptxRender = args.includes('--require-pptx-render');
-const manifests = [];
 const failures = [];
 const findings = [];
 
-async function walk(directory) {
-  const entries = await import('node:fs/promises').then(({ readdir }) => readdir(directory, { withFileTypes: true })).catch(() => []);
-  for (const entry of entries) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) await walk(path);
-    else if (entry.name === 'manifest.json') manifests.push(path);
-  }
-}
-
 function fail(path, message) {
   failures.push(`${path}: ${message}`);
-}
-
-function outputPath(manifestPath, value) {
-  return typeof value === 'string' && !value.startsWith('/') ? join(dirname(manifestPath), value) : value;
 }
 
 function parsePdfInfo(path) {
@@ -168,7 +155,7 @@ async function inspectManifest(manifestPath, converter) {
   if (manifest.schema_version !== 1) fail(manifestPath, `unsupported manifest schema_version: ${manifest.schema_version}`);
 
   for (const report of manifest.outputs?.reports ?? []) {
-    const reportPdf = outputPath(manifestPath, report.outputs?.pdf);
+    const reportPdf = manifestOutputPath(manifestPath, report.outputs?.pdf);
     if (!reportPdf) continue;
     const info = parsePdfInfo(reportPdf);
     const fonts = parsePdfFonts(reportPdf);
@@ -180,14 +167,14 @@ async function inspectManifest(manifestPath, converter) {
   }
 
   for (const deck of manifest.outputs?.decks ?? []) {
-    const nativePdf = outputPath(manifestPath, deck.outputs?.pdf);
+    const nativePdf = manifestOutputPath(manifestPath, deck.outputs?.pdf);
     if (nativePdf) {
       const info = parsePdfInfo(nativePdf);
       const fonts = parsePdfFonts(nativePdf);
       const nativePngDir = join(qaDir, 'native-pdf-png');
       let nativePngs = [];
       try { nativePngs = await renderPdfPages(nativePdf, nativePngDir, deck.id); } catch (error) { fail(nativePdf, error.message); }
-      const directPngs = (deck.outputs?.png ?? []).map((path) => outputPath(manifestPath, path));
+      const directPngs = (deck.outputs?.png ?? []).map((path) => manifestOutputPath(manifestPath, path));
       if (info.available && info.pages !== nativePngs.length) fail(nativePdf, `native PDF page count ${info.pages} does not match rasterized pages ${nativePngs.length}`);
       if (directPngs.length !== nativePngs.length) fail(nativePdf, `native PDF page count ${nativePngs.length} does not match direct PNG count ${directPngs.length}`);
       const nativeComparisons = [];
@@ -203,7 +190,7 @@ async function inspectManifest(manifestPath, converter) {
       }
       record.native.push({ id: deck.id, pdf: nativePdf, pdfInfo: info, fonts, png: nativePngs, pngDimensions: nativePngs.map(pngDimensions), comparisons: nativeComparisons });
     }
-    const pptxPath = outputPath(manifestPath, deck.outputs?.pptx);
+      const pptxPath = manifestOutputPath(manifestPath, deck.outputs?.pptx);
     if (!pptxPath) continue;
     const item = { id: deck.id, pptx: pptxPath, converter, status: 'not-rendered' };
     if (converter) {
@@ -235,7 +222,7 @@ async function inspectManifest(manifestPath, converter) {
         item.pngDimensions = pptxPngs.map(pngDimensions);
         item.textLayoutChecks = textLayoutChecks;
         item.comparisons = [];
-        const directPngs = (deck.outputs?.png ?? []).map((path) => outputPath(manifestPath, path));
+      const directPngs = (deck.outputs?.png ?? []).map((path) => manifestOutputPath(manifestPath, path));
         if (pptxPngs.length !== directPngs.length) fail(pptxPath, `PPTX raster page count ${pptxPngs.length} does not match direct PNG count ${directPngs.length}`);
         for (let page = 0; page < directPngs.length; page += 1) {
           if (!pptxPngs[page]) continue;
@@ -279,12 +266,12 @@ async function inspectManifest(manifestPath, converter) {
   return record;
 }
 
-await walk(root);
+const manifests = await findManifestPaths(root);
 await rm(qaStage, { recursive: true, force: true });
 await mkdir(qaStage, { recursive: true });
 const converter = findOfficeConverter(join(qaStage, 'libreoffice-profile'), { filesystemDirectory: qaStage });
 const records = [];
-for (const manifest of manifests.sort()) records.push(await inspectManifest(manifest, converter));
+for (const manifest of manifests) records.push(await inspectManifest(manifest, converter));
 if (manifests.length === 0) fail(root, 'no manifest.json files found');
 if (requirePptxRender && !converter) fail(root, 'PPTX→PDF converter is required but no LibreOffice CLI or Flatpak installation was found');
 

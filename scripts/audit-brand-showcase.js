@@ -1,26 +1,14 @@
 #!/usr/bin/env node
-import { readdir, readFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { findManifestPaths, manifestOutputPath } from '../server/scripts/lib/showcase.mjs';
 
 const root = resolve(process.argv[2] ?? 'examples/brand-showcase/generated/showcase');
 const failures = [];
-const manifests = [];
-
-async function walk(directory) {
-  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) await walk(path);
-    else if (entry.name === 'manifest.json') manifests.push(path);
-  }
-}
+let manifests;
 
 function fail(path, message) {
   failures.push(`${path}: ${message}`);
-}
-
-function outputPath(manifestPath, value) {
-  return typeof value === 'string' && !value.startsWith('/') ? join(dirname(manifestPath), value) : value;
 }
 
 function hex(value) {
@@ -81,7 +69,7 @@ function auditTheme(path, theme, label) {
   }
 }
 
-await walk(root);
+manifests = await findManifestPaths(root);
 if (manifests.length === 0) fail(root, 'no showcase manifests found; render with --kind showcase first');
 
 const fontFamilies = new Set();
@@ -98,7 +86,7 @@ for (const path of manifests) {
   for (const report of reports) {
     auditTheme(path, report.theme, `report ${report.id}`);
     fontFamilies.add(report.theme?.fontFamily);
-    await assertFile(outputPath(path, report.outputs?.pdf), 'pdf');
+    await assertFile(manifestOutputPath(path, report.outputs?.pdf), 'pdf');
   }
   for (const deck of decks) {
     const profiles = new Set((deck.slideDiagnostics ?? []).map((item) => item.profile));
@@ -108,11 +96,11 @@ for (const path of manifests) {
     auditTheme(path, deck.theme, `deck ${deck.id} base`);
     fontFamilies.add(deck.theme?.fontFamily);
     for (const [index, theme] of (deck.slideThemes ?? []).entries()) auditTheme(path, theme, `deck ${deck.id} slide ${index + 1}`);
-    await assertFile(outputPath(path, deck.outputs?.pdf), 'pdf');
-    await assertFile(outputPath(path, deck.outputs?.pptx), 'pptx');
+    await assertFile(manifestOutputPath(path, deck.outputs?.pdf), 'pdf');
+    await assertFile(manifestOutputPath(path, deck.outputs?.pptx), 'pptx');
     const pngs = deck.outputs?.png ?? [];
     if (pngs.length !== (deck.slideThemes ?? []).length) fail(path, `deck ${deck.id} has ${pngs.length} PNGs for ${(deck.slideThemes ?? []).length} slides`);
-    for (const png of pngs) await assertFile(outputPath(path, png), 'png');
+    for (const png of pngs) await assertFile(manifestOutputPath(path, png), 'png');
   }
 }
 if (manifests.length >= 4 && fontFamilies.size < 4) fail(root, `expected at least 4 distinct showcase fonts, got ${[...fontFamilies].join(', ')}`);
