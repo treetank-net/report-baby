@@ -237,15 +237,16 @@ what P0 is for.
   description of the fields. Six consumers today, no schema, no version field, no
   test; two of them run no renderer at all. **A documentation-only version of this
   item does not close it**, because it would protect nothing. Implemented in
-  `server/src/manifest.ts` and `server/scripts/test-manifest-contract.mjs`.
+  `server/src/manifest.ts` and `server/scripts/test-manifest-contract.mjs` —
+  `d734435`.
 - [x] **G5.2 Record which fields `visual-qa.mjs` depends on.** Today
   `slidePlans`, `slotBoxes`, `slideThemes`. `CLAUDE.md` says the manifest "must
   stay verbose" without saying which parts, which makes it impossible to change
-  safely. The dependency inventory is recorded below.
+  safely. The dependency inventory is recorded below — `d734435`.
 - [x] **G5.3 Put the two manifest-only consumers in the test matrix.**
   `audit-brand-showcase.js` and `inspect-brand-showcase.js` run against a recorded
   manifest tree. `npm run test:manifest-consumers` records a showcase tree, then
-  runs both consumers as separate gates against it.
+  runs both consumers as separate gates against it — `d734435`.
 
 ### G5 manifest fields used by visual QA
 
