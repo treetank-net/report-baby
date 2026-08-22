@@ -4,8 +4,8 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promise
 import { readFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { runProcess as run } from '../server/scripts/lib/process.mjs';
+import { findOfficeConverter } from '../server/scripts/lib/office.mjs';
 
 const args = process.argv.slice(2);
 const valueFor = (flag, fallback) => {
@@ -27,11 +27,6 @@ async function walk(directory) {
     if (entry.isDirectory()) await walk(path);
     else if (entry.name === 'manifest.json') manifests.push(path);
   }
-}
-
-function run(command, commandArgs) {
-  const result = spawnSync(command, commandArgs, { encoding: 'utf8' });
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
 }
 
 function fail(path, message) {
@@ -79,23 +74,6 @@ function pngDimensions(path) {
   const bytes = readFileSync(path);
   if (bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') return null;
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
-}
-
-function findOfficeConverter(profilePath) {
-  const profile = `-env:UserInstallation=${pathToFileURL(profilePath).href}`;
-  for (const command of ['soffice', 'libreoffice']) {
-    const result = run('which', [command]);
-    if (result.status === 0 && result.stdout.trim()) return { command, args: [profile], label: command };
-  }
-  const flatpak = run('flatpak', ['info', 'org.libreoffice.LibreOffice']);
-  if (flatpak.status === 0) {
-    return {
-      command: 'flatpak',
-      args: ['run', '--filesystem=/tmp', '--env=SAL_USE_VCLPLUGIN=svp', 'org.libreoffice.LibreOffice', profile],
-      label: 'flatpak:org.libreoffice.LibreOffice',
-    };
-  }
-  return null;
 }
 
 async function renderPdfPages(pdfPath, outputDir, basename, mode = 'slide') {
@@ -231,7 +209,7 @@ async function inspectManifest(manifestPath, converter) {
     if (converter) {
       const pptxPdfDir = join(qaDir, 'pptx-as-pdf');
       await mkdir(pptxPdfDir, { recursive: true });
-      const result = run(converter.command, [...converter.args, '--headless', '--convert-to', 'pdf', '--outdir', pptxPdfDir, pptxPath]);
+      const result = run(converter.command, [...converter.prefixArgs, '--headless', '--convert-to', 'pdf', '--outdir', pptxPdfDir, pptxPath]);
       const convertedPdf = join(pptxPdfDir, `${pptxPath.split('/').at(-1).replace(/\.pptx$/i, '.pdf')}`);
       if (result.status !== 0 || !existsSync(convertedPdf)) {
         item.status = 'conversion-failed';
@@ -304,7 +282,7 @@ async function inspectManifest(manifestPath, converter) {
 await walk(root);
 await rm(qaStage, { recursive: true, force: true });
 await mkdir(qaStage, { recursive: true });
-const converter = findOfficeConverter(join(qaStage, 'libreoffice-profile'));
+const converter = findOfficeConverter(join(qaStage, 'libreoffice-profile'), { filesystemDirectory: qaStage });
 const records = [];
 for (const manifest of manifests.sort()) records.push(await inspectManifest(manifest, converter));
 if (manifests.length === 0) fail(root, 'no manifest.json files found');

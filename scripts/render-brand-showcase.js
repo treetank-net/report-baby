@@ -2,7 +2,7 @@
 import { mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { runProcess } from '../server/scripts/lib/process.mjs';
 
 const args = process.argv.slice(2);
 const valueFor = (flag, fallback) => {
@@ -28,7 +28,7 @@ await rm(staging, { recursive: true, force: true });
 await mkdir(staging, { recursive: true });
 for (const brand of brands) {
   const stagedBrand = join(staging, brand);
-  const result = spawnSync(process.execPath, [
+  const result = runProcess(process.execPath, [
     'scripts/render-example.js',
     '--kind', 'showcase',
     '--brand-root', brandRoot,

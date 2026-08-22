@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { runProcess } from './lib/process.mjs';
 
 const root = process.cwd();
 const temp = await mkdtemp(join(tmpdir(), 'report-baby-two-column-'));
@@ -23,7 +23,7 @@ try {
       ],
     }],
   }, null, 2));
-  const result = spawnSync(process.execPath, ['example-bundle.cjs', '--kind', 'deck', '--brand-root', '../examples/brand-showcase/brands', '--brand', 'brand://orbit/primary', '--input', input, '--out', output, '--formats', 'pdf,png,pptx'], { cwd: root, encoding: 'utf8' });
+  const result = runProcess(process.execPath, ['example-bundle.cjs', '--kind', 'deck', '--brand-root', '../examples/brand-showcase/brands', '--brand', 'brand://orbit/primary', '--input', input, '--out', output, '--formats', 'pdf,png,pptx'], { cwd: root });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal((await readFile(join(output, 'slides.pdf'))).subarray(0, 5).toString(), '%PDF-');
   assert.equal((await readFile(join(output, 'slides.pptx'))).subarray(0, 2).toString(), 'PK');

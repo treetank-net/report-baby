@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { unzipSync } from 'fflate';
+import { runProcess } from './lib/process.mjs';
 
 const outputDir = await mkdtemp(join(tmpdir(), 'report-baby-test-'));
 const brandDir = join(outputDir, 'brands');
@@ -144,7 +144,7 @@ try {
   const splitPdfText = splitPdf.toString('latin1');
   assert.ok((splitPdfText.match(/\/Type \/Page\b/g) ?? []).length >= 3, 'a long single section did not create at least three PDF pages');
   assert.ok(splitPdf.length > 20_000, 'the long section produced an unexpectedly small PDF');
-  const extractedSplitText = spawnSync('pdftotext', [splitPdfPath, '-'], { encoding: 'utf8', timeout: 10_000 });
+    const extractedSplitText = runProcess('pdftotext', [splitPdfPath, '-'], { timeout: 10_000 });
   if (extractedSplitText.status === 0) {
     const splitPages = extractedSplitText.stdout.split('\f');
     assert.ok(splitPages.length >= 2, 'pdftotext did not expose the split report pages');
@@ -171,7 +171,7 @@ try {
   assert.notEqual(tableSplitReport.isError, true, JSON.stringify(tableSplitReport.content));
   const tableSplitPdf = await readFile(tableSplitPdfPath);
   assert.ok((tableSplitPdf.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length >= 3, 'a long table did not create at least three PDF pages');
-  const extractedTableText = spawnSync('pdftotext', [tableSplitPdfPath, '-'], { encoding: 'utf8', timeout: 10_000 });
+    const extractedTableText = runProcess('pdftotext', [tableSplitPdfPath, '-'], { timeout: 10_000 });
   if (extractedTableText.status === 0) {
     const tablePages = extractedTableText.stdout.split('\f');
     assert.ok(tablePages.slice(0, -1).every((page) => page.includes('Region') && page.includes('Result')), 'the table header was not repeated on every table page');
@@ -310,7 +310,7 @@ try {
   const coverPdf = await readFile(coverPdfPath);
   assert.equal(coverPdf.subarray(0, 5).toString(), '%PDF-');
   assert.ok((coverPdf.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length >= 2, 'title_page did not add a cover page before the body');
-  const extractedCoverText = spawnSync('pdftotext', [coverPdfPath, '-'], { encoding: 'utf8', timeout: 10_000 });
+    const extractedCoverText = runProcess('pdftotext', [coverPdfPath, '-'], { timeout: 10_000 });
   if (extractedCoverText.status === 0) {
     const coverPages = extractedCoverText.stdout.split('\f');
     assert.match(coverPages[0], /Wyniki marketingu/, 'the cover page is missing its title');
@@ -396,7 +396,7 @@ try {
   assert.ok(droppedNotesWarning, 'the PDF response silently dropped the speaker notes');
   assert.equal(droppedNotesWarning.slides, 2, 'the dropped-notes warning does not count the affected slides');
   assert.match(droppedNotesWarning.message, /render_slides_pptx/, 'the dropped-notes warning does not name the format that keeps notes');
-  const extractedNotesText = spawnSync('pdftotext', [notesPdfPath, '-'], { encoding: 'utf8', timeout: 10_000 });
+    const extractedNotesText = runProcess('pdftotext', [notesPdfPath, '-'], { timeout: 10_000 });
   if (extractedNotesText.status === 0) {
     assert.ok(!extractedNotesText.stdout.includes('Zacznij od kontekstu'), 'speaker notes were printed onto the slide PDF');
   }

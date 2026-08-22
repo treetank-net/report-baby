@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { inflateRawSync, inflateSync } from 'node:zlib';
 import { parse as parseYaml } from 'yaml';
 import { pdfContentHash, pptxContentHash, sha256, zipEntries } from './lib/artifact-inspect.mjs';
+import { findOfficeConverter } from './lib/office.mjs';
+import { runProcess as run } from './lib/process.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
@@ -41,11 +42,6 @@ const reportPath = settings.json ? resolve(REPO_ROOT, settings.json) : join(sett
 const templateRoot = settings.templateDir ? resolve(REPO_ROOT, settings.templateDir) : resolve(REPO_ROOT, 'server/templates');
 const renderConfig = parseYaml(readFileSync(join(templateRoot, 'render-config.yml'), 'utf8'));
 const pdfConfig = renderConfig.pdf;
-
-function run(command, commandArgs, options = {}) {
-  const result = spawnSync(command, commandArgs, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...options });
-  return { status: result.status, signal: result.signal, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error?.message };
-}
 
 function which(command) {
   const result = run('which', [command]);
@@ -1205,28 +1201,6 @@ function gateDeterminism(item, rendered, directory, checks, images) {
   }
 }
 
-function findOfficeConverter(profileDirectory) {
-  const profile = `-env:UserInstallation=${pathToFileURL(profileDirectory).href}`;
-  for (const command of ['soffice', 'libreoffice']) {
-    const path = which(command);
-    if (!path) continue;
-    const version = run(command, ['--version']);
-    return { label: command, command, prefixArgs: [profile], version: version.stdout.trim() || version.stderr.trim() || 'unknown', filesystemArgs: [] };
-  }
-  const info = run('flatpak', ['info', 'org.libreoffice.LibreOffice']);
-  if (info.status === 0) {
-    const version = /^\s*Version:\s*(.+)$/m.exec(info.stdout)?.[1]?.trim() ?? 'unknown';
-    return {
-      label: 'flatpak:org.libreoffice.LibreOffice',
-      command: 'flatpak',
-      prefixArgs: ['run', `--filesystem=${settings.out}`, '--env=SAL_USE_VCLPLUGIN=svp', 'org.libreoffice.LibreOffice', profile],
-      version,
-      filesystemArgs: [`--filesystem=${settings.out}`],
-    };
-  }
-  return null;
-}
-
 function rasterisePdf(pdfPath, outputDirectory, prefix) {
   mkdirSync(outputDirectory, { recursive: true });
   if (!which('pdftoppm')) return { available: false, reason: 'pdftoppm (poppler-utils) is not installed' };
@@ -1356,7 +1330,7 @@ function main() {
     console.error(`  report: ${reportPath}`);
     return 1;
   }
-  const converter = settings.office ? findOfficeConverter(join(settings.out, 'libreoffice-profile')) : null;
+  const converter = settings.office ? findOfficeConverter(join(settings.out, 'libreoffice-profile'), { filesystemDirectory: settings.out }) : null;
   const cases = buildCases();
   const records = [];
   for (const item of cases) {

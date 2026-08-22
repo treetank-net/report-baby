@@ -3,8 +3,8 @@
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { runProcess } from '../server/scripts/lib/process.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const temp = await mkdtemp('/tmp/report-baby-brand-contract-');
@@ -25,11 +25,11 @@ await writeFile(input, `${JSON.stringify(deck, null, 2)}\n`);
 const exampleBundle = process.env.REPORT_BABY_EXAMPLE_BUNDLE || 'server/example-bundle.cjs';
 
 function run(args, env) {
-  return spawnSync(process.execPath, [exampleBundle, ...args], { cwd: root, encoding: 'utf8', env: env ? { ...process.env, ...env } : process.env });
+  return runProcess(process.execPath, [exampleBundle, ...args], { cwd: root, env: env ? { ...process.env, ...env } : process.env });
 }
 
 function runBrandTool(args) {
-  return spawnSync(process.execPath, ['scripts/brand-tool.js', ...args], { cwd: root, encoding: 'utf8' });
+  return runProcess(process.execPath, ['scripts/brand-tool.js', ...args], { cwd: root });
 }
 
 const starterRoot = join(temp, 'starter-brands');
@@ -201,7 +201,7 @@ for (const field of ['body', 'callout']) {
 const snapshotWorktree = join(temp, 'snapshot-worktree');
 await cp(join(root, 'examples', 'brand-showcase', 'brands', 'flux'), join(snapshotWorktree, 'flux'), { recursive: true });
 const snapshotStore = join(temp, 'snapshot-store');
-const publishSnapshot = spawnSync(process.execPath, ['scripts/brand-tool.js', 'publish', '--brand-root', snapshotWorktree, '--brand', 'brand://flux/primary', '--store', snapshotStore, '--release', '0.1.0'], { cwd: root, encoding: 'utf8' });
+const publishSnapshot = runProcess(process.execPath, ['scripts/brand-tool.js', 'publish', '--brand-root', snapshotWorktree, '--brand', 'brand://flux/primary', '--store', snapshotStore, '--release', '0.1.0'], { cwd: root });
 if (publishSnapshot.status !== 0) throw new Error(`snapshot publish failed: ${publishSnapshot.stderr || publishSnapshot.stdout}`);
 const snapshotTemplatePath = join(snapshotWorktree, 'flux', 'templates', 'slides', 'title', 'template.yml');
 const changedSource = (await readFile(snapshotTemplatePath, 'utf8')).replace('y: 0.33', 'y: 0.10');
@@ -267,7 +267,7 @@ slots:
   image: { type: image, frame: { x: 0.2, y: 0.2, width: 0.4, height: 0.4 } }
 constraints: { no_overlap: true }
 `);
-const invalidTemplate = spawnSync(process.execPath, ['scripts/brand-tool.js', 'validate', '--brand-root', join(temp, 'invalid-template-brands'), '--brand', 'brand://broken/primary'], { cwd: root, encoding: 'utf8' });
+const invalidTemplate = runProcess(process.execPath, ['scripts/brand-tool.js', 'validate', '--brand-root', join(temp, 'invalid-template-brands'), '--brand', 'brand://broken/primary'], { cwd: root });
 if (invalidTemplate.status === 0) throw new Error('an overlapping brand template was silently accepted');
 
 const boundaryInput = join(temp, 'boundary-report.json');

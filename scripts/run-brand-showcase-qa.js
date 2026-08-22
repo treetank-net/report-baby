@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { runProcess } from '../server/scripts/lib/process.mjs';
 
 const args = process.argv.slice(2);
 const valueFor = (flag, fallback) => {
@@ -15,7 +15,7 @@ const qaRoot = resolve(valueFor('--qa-root', '/tmp/report-baby-brand-showcase-qa
 const formats = valueFor('--formats', 'pdf,png,pptx');
 
 function run(script, scriptArgs) {
-  const result = spawnSync(process.execPath, [script, ...scriptArgs], { stdio: 'inherit' });
+  const result = runProcess(process.execPath, [script, ...scriptArgs], { stdio: 'inherit' });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 

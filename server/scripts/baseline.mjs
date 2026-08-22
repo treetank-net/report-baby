@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pdfContentHash, pptxContentHash, sha256 } from './lib/artifact-inspect.mjs';
+import { runProcess } from './lib/process.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const CORPUS_PATH = resolve(REPO_ROOT, 'docs/quality/corpus-tier-a.json');
@@ -59,7 +59,7 @@ function canonicalCases(cases) {
 function runVisualQa(templateDir, outputDir, reportPath) {
   const qaArgs = [VISUAL_QA_PATH, '--no-office', '--out', outputDir, '--json', reportPath];
   if (templateDir) qaArgs.push('--template-dir', resolve(REPO_ROOT, templateDir));
-  const result = spawnSync(process.execPath, qaArgs, {
+  const result = runProcess(process.execPath, qaArgs, {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
