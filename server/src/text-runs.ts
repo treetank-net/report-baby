@@ -451,6 +451,14 @@ function flowLineContent(doc: jsPDF, words: FlowWord[], nodes: FlowNode[], fromI
   return { runs: merged, naturalWidth: styledLineWidth(doc, merged, context), hyphenated, gaps };
 }
 
+function nextWordBoundary(nodes: FlowNode[], boundary: number): number | undefined {
+  const node = nodes[boundary];
+  if (!node || node.part !== 0) return undefined;
+  let index = boundary + 1;
+  while (index < nodes.length && nodes[index].word === node.word) index += 1;
+  return index < nodes.length ? index : undefined;
+}
+
 function forcedFlowBreak(doc: jsPDF, words: FlowWord[], nodes: FlowNode[], start: number, measure: number, context: StyledTextContext): FlowLine[] {
   const lines: FlowLine[] = [];
   let cursor = start;
@@ -492,6 +500,12 @@ export function breakStyledParagraph(
       const line = flowLineContent(doc, words, nodes, index, target, context);
       const slack = measure - line.naturalWidth;
       const isLast = target === end;
+      const nextBoundary = nextWordBoundary(nodes, target);
+      if (!isLast && !line.hyphenated && line.gaps === 0 && nextBoundary !== undefined) {
+        const withNextWord = flowLineContent(doc, words, nodes, index, nextBoundary, context);
+        const nextShrinkRoom = align === 'justify' ? withNextWord.gaps * doc.getTextWidth(' ') * (1 - FLOW_MAX_SHRINK) : 0;
+        if (withNextWord.naturalWidth <= measure + nextShrinkRoom) continue;
+      }
       const shrinkRoom = align === 'justify' ? line.gaps * doc.getTextWidth(' ') * (1 - FLOW_MAX_SHRINK) : 0;
       if (line.naturalWidth > measure + shrinkRoom) {
         if (target > index + 1) break;

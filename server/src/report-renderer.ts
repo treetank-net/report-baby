@@ -157,7 +157,10 @@ class Cursor {
         x: Math.max(segment.x, frame.x),
         top: Math.max(segment.top, top),
         width: Math.min(segment.x + segment.width, frame.x + frame.width) - Math.max(segment.x, frame.x),
-        bottom: Math.min(segment.bottom, frame.bottom),
+        // The frame defines where the block starts. The footer text baseline
+        // is the usable end of the narrative flow, so this keeps dynamic
+        // columns from ending at the narrative frame's nominal height.
+        bottom: Math.min(PDF_CONFIG.footerTextY, this.geometry.height),
       }))
       .filter((segment) => segment.width > 0 && segment.bottom > segment.top);
     if (segments.length === 0) return;
@@ -605,7 +608,6 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
     const headingSize = sub ? PDF_CONFIG.sectionSubheadingSize : PDF_CONFIG.sectionHeadingSize;
     const headingLineHeight = sub ? PDF_CONFIG.sectionSubheadingLineHeight : PDF_CONFIG.sectionHeadingLineHeight;
     const headingGap = sub ? PDF_CONFIG.sectionSubheadingGap : PDF_CONFIG.sectionHeadingGap;
-    if (!sub && index > 0) cur.y += gaps.sectionChapterTopGap;
     doc.setFont(font, 'bold');
     doc.setFontSize(headingSize);
     const headingLines = layoutStyledText(doc, s.heading, cur.width, text).map(boldRuns);
@@ -614,7 +616,19 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
     doc.setFontSize(PDF_CONFIG.bodySize);
     const bodyLines = s.body.trim().length > 0 ? layoutStyledText(doc, s.body, cur.width, text) : [];
     const leadLines = Math.min(bodyLines.length, PDF_CONFIG.sectionMinLeadLines);
-    cur.keepTogether(headingH + headingGap + bodyLines.length * PDF_CONFIG.bodyLineHeight, headingH + headingGap + leadLines * PDF_CONFIG.bodyLineHeight);
+    if (!sub && index > 0) {
+      const required = headingH + headingGap + (cur.dynamicFlow ? Math.min(leadLines, 2) : leadLines) * PDF_CONFIG.bodyLineHeight;
+      if (!cur.dynamicFlow || cur.bottom - cur.y >= gaps.sectionChapterTopGap + required) cur.y += gaps.sectionChapterTopGap;
+    }
+    if (cur.dynamicFlow) {
+      // Dynamic paragraphs already apply widow/orphan rules while consuming
+      // each segment. Keeping the whole section together here can discard
+      // several usable lines at the bottom of a column just to move a tail
+      // to the next column.
+      cur.ensure(headingH + headingGap + Math.min(leadLines, 2) * PDF_CONFIG.bodyLineHeight);
+    } else {
+      cur.keepTogether(headingH + headingGap + bodyLines.length * PDF_CONFIG.bodyLineHeight, headingH + headingGap + leadLines * PDF_CONFIG.bodyLineHeight);
+    }
     doc.setFont(font, 'bold');
     doc.setFontSize(headingSize);
     doc.setTextColor(...rgb(theme.foreground));
@@ -627,7 +641,9 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
       if (cur.dynamicFlow) drawDynamicParagraph(doc, cur, s.body, PDF_CONFIG.bodyLineHeight, text);
       else drawParagraph(doc, cur, bodyLines, PDF_CONFIG.bodyLineHeight, text);
     }
-    cur.y += bodyLines.length > 0 ? gaps.sectionBottomGap : PDF_CONFIG.sectionSubheadingGap;
+    const sectionGap = bodyLines.length > 0 ? gaps.sectionBottomGap : PDF_CONFIG.sectionSubheadingGap;
+    const nextSectionNeedsSpace = index < sections.length - 1 && cur.dynamicFlow;
+    if (!nextSectionNeedsSpace || cur.bottom - cur.y >= sectionGap + PDF_CONFIG.bodyLineHeight) cur.y += sectionGap;
   });
   if (narrativeFrame) cur.flowFrom(Math.max(cur.y, narrativeFrame.bottom));
 }
