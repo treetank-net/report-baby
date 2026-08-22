@@ -80,7 +80,27 @@ const PAGE_W = PDF_CONFIG.pageWidth;
 const PAGE_H = PDF_CONFIG.pageHeight;
 const MARGIN = PDF_CONFIG.margin;
 const CONTENT_W = PAGE_W - MARGIN * 2;
-const USABLE_H = PAGE_H - MARGIN * 2;
+
+interface PageSegment {
+  x: number;
+  top: number;
+  width: number;
+  bottom: number;
+}
+
+interface PageGeometry {
+  width: number;
+  height: number;
+  margin: number;
+  content: PageSegment;
+}
+
+const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
+  width: PAGE_W,
+  height: PAGE_H,
+  margin: MARGIN,
+  content: { x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN },
+};
 
 interface PdfGaps {
   introBottomGap: number;
@@ -110,34 +130,42 @@ function rgb(hex: string): [number, number, number] {
 }
 
 class Cursor {
-  y = MARGIN;
-  constructor(private doc: jsPDF, private pageBackground: string, private onNewPage?: (cursor: Cursor) => void) {
+  private segment: PageSegment;
+  constructor(private doc: jsPDF, private pageBackground: string, private onNewPage?: (cursor: Cursor) => void, private geometry = DEFAULT_PAGE_GEOMETRY) {
+    this.segment = { ...geometry.content };
     this.paintPage();
   }
+  get x(): number { return this.segment.x; }
+  get y(): number { return this.segment.top; }
+  set y(value: number) { this.segment.top = value; }
+  get width(): number { return this.segment.width; }
+  get bottom(): number { return this.segment.bottom; }
+  moveTo(segment: PageSegment): void { this.segment = { ...segment }; }
   private paintPage(): void {
     this.doc.setFillColor(...rgb(this.pageBackground));
-    this.doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
+    this.doc.rect(0, 0, this.geometry.width, this.geometry.height, 'F');
   }
   ensure(height: number): void {
-    if (this.y + height > PAGE_H - MARGIN) {
+    if (this.y + height > this.bottom) {
       this.doc.addPage();
       this.paintPage();
-      this.y = MARGIN;
+      this.segment = { ...this.geometry.content };
       this.onNewPage?.(this);
     }
   }
   keepTogether(blockHeight: number, minLeadHeight: number): void {
-    const remaining = PAGE_H - MARGIN - this.y;
+    const remaining = this.bottom - this.y;
     if (blockHeight <= remaining) return;
-    const cannotFitOnAnyPage = blockHeight > USABLE_H;
-    const leavesUsableSpaceBehind = remaining >= minLeadHeight && remaining / USABLE_H >= PDF_CONFIG.keepTogetherWasteRatio;
+    const usableHeight = this.geometry.content.bottom - this.geometry.content.top;
+    const cannotFitOnAnyPage = blockHeight > usableHeight;
+    const leavesUsableSpaceBehind = remaining >= minLeadHeight && remaining / usableHeight >= PDF_CONFIG.keepTogetherWasteRatio;
     this.ensure(cannotFitOnAnyPage || leavesUsableSpaceBehind ? minLeadHeight : blockHeight);
   }
   breakPage(): void {
-      this.doc.addPage();
-      this.paintPage();
-      this.y = MARGIN;
-      this.onNewPage?.(this);
+    this.doc.addPage();
+    this.paintPage();
+    this.segment = { ...this.geometry.content };
+    this.onNewPage?.(this);
   }
 }
 
@@ -167,11 +195,11 @@ function splitWithoutWidows(lines: StyledRun[][], available: number): number {
   return 0;
 }
 
-function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight: number, text: StyledTextContext, x = MARGIN): void {
+function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight: number, text: StyledTextContext, x = cur.x): void {
   let remaining = lines;
   let brokeWithoutProgress = false;
   while (remaining.length > 0) {
-    const available = Math.floor((PAGE_H - MARGIN - cur.y) / lineHeight);
+    const available = Math.floor((cur.bottom - cur.y) / lineHeight);
     const take = brokeWithoutProgress ? Math.max(1, Math.min(available, remaining.length)) : splitWithoutWidows(remaining, available);
     if (take <= 0) {
       cur.breakPage();
@@ -362,7 +390,7 @@ function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
   doc.setTextColor(...rgb(theme.foreground));
-  const lines = layoutStyledText(doc, data.intro, CONTENT_W, text);
+  const lines = layoutStyledText(doc, data.intro, cur.width, text);
   cur.keepTogether(lines.length * PDF_CONFIG.introLineHeight + PDF_CONFIG.introKeepPadding, PDF_CONFIG.introLineHeight * PDF_CONFIG.introMinLeadLines);
   drawParagraph(doc, cur, lines, PDF_CONFIG.introLineHeight, text);
   cur.y += gaps.introBottomGap;
@@ -388,7 +416,7 @@ function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThem
   const font = pdfFont(theme);
   const cols = kpiColumnCount(kpis.length);
   const gap = PDF_CONFIG.kpiGap;
-  const cardW = (CONTENT_W - gap * (cols - 1)) / cols;
+  const cardW = (cur.width - gap * (cols - 1)) / cols;
   const cardH = PDF_CONFIG.kpiHeight;
   const rows = Math.ceil(kpis.length / cols);
   cur.ensure(rows * (cardH + gap));
@@ -397,7 +425,7 @@ function renderKpis(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThem
     const col = i % cols;
     const row = Math.floor(i / cols);
     if (col === 0 && row > 0) cur.y += cardH + gap;
-    const x = MARGIN + col * (cardW + gap);
+    const x = cur.x + col * (cardW + gap);
     const y = cur.y;
     doc.setFillColor(...rgb(theme.soft));
     doc.setDrawColor(...rgb(theme.line));
@@ -442,10 +470,10 @@ async function renderCharts(doc: jsPDF, cur: Cursor, data: ReportData, theme: Re
     const png = await renderSvgToPng(svg, CHART_CONFIG.renderWidth, fontSet);
     const pxW = png.readUInt32BE(16);
     const pxH = png.readUInt32BE(20);
-    const h = (pxH / pxW) * CONTENT_W;
+    const h = (pxH / pxW) * cur.width;
     cur.ensure(h + PDF_CONFIG.chartKeepPadding);
     const dataUrl = `data:image/png;base64,${png.toString('base64')}`;
-    doc.addImage(dataUrl, 'PNG', MARGIN, cur.y, CONTENT_W, h);
+    doc.addImage(dataUrl, 'PNG', cur.x, cur.y, cur.width, h);
     cur.y += h + PDF_CONFIG.chartBottomGap;
   }
 }
@@ -461,17 +489,17 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
     if (!sub && index > 0) cur.y += gaps.sectionChapterTopGap;
     doc.setFont(font, 'bold');
     doc.setFontSize(headingSize);
-    const headingLines = layoutStyledText(doc, s.heading, CONTENT_W, text).map(boldRuns);
+    const headingLines = layoutStyledText(doc, s.heading, cur.width, text).map(boldRuns);
     const headingH = headingLines.length * headingLineHeight;
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.bodySize);
-    const bodyLines = s.body.trim().length > 0 ? layoutStyledText(doc, s.body, CONTENT_W, text) : [];
+    const bodyLines = s.body.trim().length > 0 ? layoutStyledText(doc, s.body, cur.width, text) : [];
     const leadLines = Math.min(bodyLines.length, PDF_CONFIG.sectionMinLeadLines);
     cur.keepTogether(headingH + headingGap + bodyLines.length * PDF_CONFIG.bodyLineHeight, headingH + headingGap + leadLines * PDF_CONFIG.bodyLineHeight);
     doc.setFont(font, 'bold');
     doc.setFontSize(headingSize);
     doc.setTextColor(...rgb(theme.foreground));
-    drawStyledLines(doc, headingLines, MARGIN, cur.y, headingLineHeight, text);
+    drawStyledLines(doc, headingLines, cur.x, cur.y, headingLineHeight, text);
     cur.y += headingH;
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.bodySize);
@@ -526,7 +554,7 @@ function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
     doc.setFont(font, 'bold');
     doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
     doc.setTextColor(...rgb(theme.foreground));
-    drawStyledLine(doc, boldRuns(styledRuns(data.table.caption, text)), MARGIN, cur.y, text);
+    drawStyledLine(doc, boldRuns(styledRuns(data.table.caption, text)), cur.x, cur.y, text);
     cur.y += PDF_CONFIG.tableCaptionBottomGap;
   };
   let tableInitialPage = doc.getNumberOfPages();
@@ -534,7 +562,7 @@ function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
     head: [data.table.head.map((c) => stripInlineMarkup(String(c)))],
     body: data.table.body.map((r) => r.map((c) => stripInlineMarkup(String(c)))),
     startY: cur.y + (data.table.caption ? PDF_CONFIG.tableCaptionBottomGap : 0) + PDF_CONFIG.tableStartOffset,
-    margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: MARGIN, right: MARGIN },
+    margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: cur.x, right: PAGE_W - cur.x - cur.width },
     styles: { font, fontSize: PDF_CONFIG.tableFontSize, cellPadding: PDF_CONFIG.tableCellPadding, textColor: rgb(theme.foreground), fillColor: rgb(theme.background), lineColor: rgb(theme.line), lineWidth: PDF_CONFIG.tableLineWidth },
     headStyles: { font, fontStyle: 'bold', fillColor: rgb(theme.primary), textColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)) },
     alternateRowStyles: { fillColor: rgb(theme.soft) },
@@ -609,8 +637,8 @@ function renderHighlights(
   const highlights = data.highlights ?? [];
   if (highlights.length === 0) return;
   const font = pdfFont(theme);
-  const bulletWidth = CONTENT_W - PDF_CONFIG.highlightIndent;
-  const pageBottom = PAGE_H - MARGIN;
+  const bulletWidth = cur.width - PDF_CONFIG.highlightIndent;
+  const pageBottom = cur.bottom;
   doc.setFont(font, 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
   const bulletLines = highlights.map((h) => layoutStyledText(doc, h, bulletWidth, text));
@@ -624,17 +652,17 @@ function renderHighlights(
   doc.setFont(font, 'bold');
   doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
   doc.setTextColor(...rgb(theme.foreground));
-  drawStyledLine(doc, boldRuns(styledRuns(data.highlights_title ?? 'Highlights', text)), MARGIN, cur.y, text);
+  drawStyledLine(doc, boldRuns(styledRuns(data.highlights_title ?? 'Highlights', text)), cur.x, cur.y, text);
   cur.y += headingHeight;
   for (const [pageIndex, indices] of plan.entries()) {
     if (pageIndex > 0) cur.breakPage();
     for (const index of indices) {
       doc.setFillColor(...rgb(theme.primary));
-      doc.circle(MARGIN + PDF_CONFIG.highlightBulletX, cur.y - PDF_CONFIG.highlightBulletY, PDF_CONFIG.highlightBulletRadius, 'F');
+      doc.circle(cur.x + PDF_CONFIG.highlightBulletX, cur.y - PDF_CONFIG.highlightBulletY, PDF_CONFIG.highlightBulletRadius, 'F');
       doc.setFont(font, 'normal');
       doc.setFontSize(PDF_CONFIG.bodySize);
       doc.setTextColor(...rgb(theme.foreground));
-      drawStyledLines(doc, bulletLines[index], MARGIN + PDF_CONFIG.highlightIndent, cur.y, PDF_CONFIG.bodyLineHeight, text);
+      drawStyledLines(doc, bulletLines[index], cur.x + PDF_CONFIG.highlightIndent, cur.y, PDF_CONFIG.bodyLineHeight, text);
       cur.y += heights[index];
     }
   }
