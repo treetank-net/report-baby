@@ -327,3 +327,223 @@ export function drawStyledLine(doc: jsPDF, line: StyledRun[], x: number, y: numb
 export function styledLineWidth(doc: jsPDF, line: StyledRun[], context: StyledTextContext): number {
   return line.reduce((total, run) => total + runWidth(doc, run, context), 0);
 }
+
+export interface FlowLine {
+  runs: StyledRun[];
+  naturalWidth: number;
+  gaps: number;
+  hyphenated: boolean;
+  endNode: number;
+  overfull: boolean;
+  stretchRatio: number;
+}
+
+export interface FlowBreakResult {
+  lines: FlowLine[];
+  endNode: number;
+  forcedLines: number;
+  maxStretch: number;
+  maxConsecutiveHyphenated: number;
+}
+
+interface FlowWord {
+  runs: StyledRun[];
+  text: string;
+}
+
+interface FlowNode {
+  word: number;
+  part: number;
+}
+
+interface FlowCandidate {
+  runs: StyledRun[];
+  naturalWidth: number;
+  hyphenated: boolean;
+  gaps: number;
+}
+
+const FLOW_HYPHEN_PENALTY = { justify: 120, left: 900 };
+const FLOW_CONSECUTIVE_HYPHEN_PENALTY = 900;
+const FLOW_MAX_STRETCH = 1.7;
+const FLOW_MAX_SHRINK = 0.78;
+const FLOW_LAST_LINE_MIN_FILL = 0.12;
+const FLOW_RAGGED_BADNESS = 9000;
+
+function sliceRunText(runs: StyledRun[], from: number, to: number): StyledRun[] {
+  const result: StyledRun[] = [];
+  let cursor = 0;
+  for (const run of runs) {
+    const length = Array.from(run.text).length;
+    const start = Math.max(0, from - cursor);
+    const end = Math.min(length, to - cursor);
+    if (end > start) {
+      const characters = Array.from(run.text);
+      result.push({ ...run, text: characters.slice(start, end).join('') });
+    }
+    cursor += length;
+    if (cursor >= to) break;
+  }
+  return result;
+}
+
+function flowWords(runs: StyledRun[]): FlowWord[] {
+  const words: FlowWord[] = [];
+  let current: StyledRun[] = [];
+  const flush = (): void => {
+    const merged = mergeAdjacent(current);
+    if (merged.length > 0 && merged.some((run) => run.text.length > 0)) {
+      words.push({ runs: merged, text: merged.map((run) => run.text).join('') });
+    }
+    current = [];
+  };
+  for (const run of runs) {
+    for (const part of run.text.split(/(\s+)/)) {
+      if (part.length === 0) continue;
+      if (/^\s+$/.test(part)) flush();
+      else current.push({ ...run, text: part });
+    }
+  }
+  flush();
+  return words;
+}
+
+function flowNodes(words: FlowWord[]): FlowNode[] {
+  const nodes: FlowNode[] = [];
+  for (const [word, value] of words.entries()) {
+    nodes.push({ word, part: 0 });
+    for (const point of polishBreakPoints(value.text)) nodes.push({ word, part: point });
+  }
+  nodes.push({ word: words.length, part: 0 });
+  return nodes;
+}
+
+function flowLineContent(doc: jsPDF, words: FlowWord[], nodes: FlowNode[], fromIndex: number, toIndex: number, context: StyledTextContext): FlowCandidate {
+  const from = nodes[fromIndex];
+  const to = nodes[toIndex];
+  const runs: StyledRun[] = [];
+  let gaps = 0;
+  let hyphenated = false;
+  const append = (value: StyledRun[]): void => { runs.push(...value); };
+  const appendSpace = (): void => {
+    runs.push({ text: ' ', bold: false, fallback: false });
+    gaps += 1;
+  };
+  if (to.word === from.word) {
+    const word = words[from.word];
+    append(sliceRunText(word.runs, from.part, to.part));
+    append([{ text: '-', bold: false, fallback: false }]);
+    hyphenated = true;
+  } else {
+    append(sliceRunText(words[from.word].runs, from.part, Array.from(words[from.word].text).length));
+    for (let index = from.word + 1; index < to.word; index += 1) {
+      appendSpace();
+      append(words[index].runs);
+    }
+    if (to.part > 0) {
+      appendSpace();
+      append(sliceRunText(words[to.word].runs, 0, to.part));
+      append([{ text: '-', bold: false, fallback: false }]);
+      hyphenated = true;
+    }
+  }
+  const merged = mergeAdjacent(runs);
+  return { runs: merged, naturalWidth: styledLineWidth(doc, merged, context), hyphenated, gaps };
+}
+
+function forcedFlowBreak(doc: jsPDF, words: FlowWord[], nodes: FlowNode[], start: number, measure: number, context: StyledTextContext): FlowLine[] {
+  const lines: FlowLine[] = [];
+  let cursor = start;
+  const end = nodes.length - 1;
+  while (cursor < end) {
+    let target = cursor + 1;
+    let chosen = flowLineContent(doc, words, nodes, cursor, target, context);
+    for (let probe = cursor + 2; probe <= end; probe += 1) {
+      const candidate = flowLineContent(doc, words, nodes, cursor, probe, context);
+      if (candidate.naturalWidth > measure) break;
+      chosen = candidate;
+      target = probe;
+    }
+    lines.push({ ...chosen, endNode: target, overfull: chosen.naturalWidth > measure, stretchRatio: 1 });
+    cursor = target;
+  }
+  return lines;
+}
+
+export function breakStyledParagraph(
+  doc: jsPDF,
+  runs: StyledRun[],
+  measure: number,
+  context: StyledTextContext,
+  align: 'justify' | 'left',
+  startNodeIndex = 0,
+): FlowBreakResult {
+  const words = flowWords(runs);
+  const nodes = flowNodes(words);
+  const end = nodes.length - 1;
+  if (words.length === 0 || startNodeIndex >= end) return { lines: [], endNode: end, forcedLines: 0, maxStretch: 1, maxConsecutiveHyphenated: 0 };
+  const start = Math.max(0, startNodeIndex);
+  const best = new Map<number, { cost: number; previous: number; hyphenRun: number; line: FlowCandidate }>();
+  best.set(start, { cost: 0, previous: -1, hyphenRun: 0, line: { runs: [], naturalWidth: 0, hyphenated: false, gaps: 0 } });
+  for (let index = start; index < end; index += 1) {
+    const state = best.get(index);
+    if (!state) continue;
+    for (let target = index + 1; target <= end; target += 1) {
+      const line = flowLineContent(doc, words, nodes, index, target, context);
+      const slack = measure - line.naturalWidth;
+      const isLast = target === end;
+      const shrinkRoom = align === 'justify' ? line.gaps * doc.getTextWidth(' ') * (1 - FLOW_MAX_SHRINK) : 0;
+      if (line.naturalWidth > measure + shrinkRoom) {
+        if (target > index + 1) break;
+        best.set(target, best.get(target) ?? { cost: state.cost + 40000, previous: index, hyphenRun: 0, line: { ...line } });
+        break;
+      }
+      let cost = state.cost;
+      if (!isLast) {
+        if (align === 'justify') {
+          if (line.gaps === 0) cost += 4000;
+          else {
+            const ratio = (doc.getTextWidth(' ') + slack / line.gaps) / doc.getTextWidth(' ');
+            if (ratio > FLOW_MAX_STRETCH) continue;
+            cost += Math.round(1000 * (ratio - 1) * (ratio - 1));
+          }
+        } else {
+          const ragged = slack / measure;
+          cost += Math.round(FLOW_RAGGED_BADNESS * ragged * ragged);
+        }
+      } else if (line.naturalWidth < measure * FLOW_LAST_LINE_MIN_FILL) cost += 500;
+      if (line.hyphenated) cost += FLOW_HYPHEN_PENALTY[align] + state.hyphenRun * FLOW_CONSECUTIVE_HYPHEN_PENALTY;
+      const existing = best.get(target);
+      if (!existing || cost < existing.cost) best.set(target, { cost, previous: index, hyphenRun: line.hyphenated ? state.hyphenRun + 1 : 0, line });
+    }
+  }
+  const rawLines: FlowLine[] = [];
+  let forcedLines = 0;
+  if (!best.has(end)) {
+    rawLines.push(...forcedFlowBreak(doc, words, nodes, start, measure, context));
+    forcedLines = rawLines.filter((line) => line.overfull).length;
+  } else {
+    let cursor = end;
+    while (cursor !== start) {
+      const state = best.get(cursor)!;
+      rawLines.unshift({ ...state.line, endNode: cursor, overfull: false, stretchRatio: 1 });
+      cursor = state.previous;
+    }
+    const lastLine = rawLines.at(-1);
+    for (const line of rawLines.slice(0, -1)) {
+      line.stretchRatio = line.gaps > 0
+        ? (doc.getTextWidth(' ') + (measure - line.naturalWidth) / line.gaps) / doc.getTextWidth(' ')
+        : 1;
+    }
+    if (lastLine) lastLine.stretchRatio = 1;
+  }
+  let consecutive = 0;
+  let maxConsecutiveHyphenated = 0;
+  let maxStretch = 1;
+  for (const line of rawLines) {
+    consecutive = line.hyphenated ? consecutive + 1 : 0;
+    maxConsecutiveHyphenated = Math.max(maxConsecutiveHyphenated, consecutive);
+    maxStretch = Math.max(maxStretch, line.stretchRatio);
+  }
+  return { lines: rawLines, endNode: end, forcedLines, maxStretch, maxConsecutiveHyphenated };
+}

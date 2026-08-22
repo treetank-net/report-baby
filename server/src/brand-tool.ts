@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
-import { inspectBrand, inspectBrandTemplate, listBrandTemplates } from './brand.js';
-import { readBuiltinTemplateText } from './builtin-template-loader.js';
+import { inspectBrand, inspectBrandTemplate, listBrandTemplates } from './brand-context.js';
+import { readBuiltinTemplateText } from './builtin-template-source.js';
 import { getBrandSourceRoots } from './config.js';
 import { runExampleCli } from './example.js';
 

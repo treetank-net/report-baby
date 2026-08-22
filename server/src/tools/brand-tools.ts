@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { inspectBrand, inspectBrandTemplate, listBrandbooks, listBrandTemplates } from '../brand.js';
+import { inspectBrand, inspectBrandTemplate, listBrandbooks, listBrandTemplates } from '../brand-context.js';
 import type { ReportConfig } from '../config.js';
 
 export function registerBrandTools(server: McpServer, cfg: ReportConfig): void {

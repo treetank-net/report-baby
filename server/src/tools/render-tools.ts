@@ -3,15 +3,15 @@ import { mkdir, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import { listBrandTemplates, resolveBrandContext, type BrandOverrides } from '../brand.js';
+import { listBrandTemplates, resolveBrandContext, type BrandOverrides } from '../brand-context.js';
 import type { ReportConfig } from '../config.js';
 import type { RenderTheme } from '../core/model/render-theme.js';
-import { listTemplates, renderReportPdf, type ReportData } from '../templates.js';
+import { listTemplates, renderReportPdf, type ReportData } from '../report-renderer.js';
 import { renderChart, metricCards, type ChartType } from '../svg.js';
-import { loadRenderFontSet, renderSvgToPng } from '../render.js';
+import { loadRenderFontSet, renderSvgToPng } from '../render-primitives.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, type SlideDeck } from '../slides.js';
 import { resolveSlideDeck } from '../slide-context.js';
-import { listBuiltinSlideTemplates, readBuiltinTemplateSource } from '../builtin-template-loader.js';
+import { listBuiltinSlideTemplates, readBuiltinTemplateSource } from '../builtin-template-source.js';
 import { brandRenderSummary, slideNotesCarriage, slideRenderDiagnostics } from '../tool-response.js';
 
 import {

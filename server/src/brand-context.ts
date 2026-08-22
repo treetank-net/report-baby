@@ -3,8 +3,8 @@ import { existsSync } from 'node:fs';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { parse } from 'yaml';
 import type { RenderTheme } from './core/model/render-theme.js';
-import { logicalDirection, logicalPlacement, logicalSpacing, type LockupPlacement, type LockupSpacing, type SlideTemplateRef, type TextDirection } from './slide-templates.js';
-import { readTemplateSource } from './template-source.js';
+import { logicalDirection, logicalPlacement, logicalSpacing, type LockupPlacement, type LockupSpacing, type SlideTemplateRef, type TextDirection } from './slide-template-engine.js';
+import { readTemplateSource } from './template-contract.js';
 
 export type { RenderTheme } from './core/model/render-theme.js';
 
@@ -504,10 +504,10 @@ export async function listBrandTemplates(brandRoot: string, brandRef: string): P
   return result.sort((a, b) => a.templateRef.localeCompare(b.templateRef));
 }
 
-export async function inspectBrandTemplate(brandRoot: string, brandRef: string, templateRef: string): Promise<{ templateRef: string; sourcePath: string; compiled: import('./template-source.js').CompiledTemplate }> {
+export async function inspectBrandTemplate(brandRoot: string, brandRef: string, templateRef: string): Promise<{ templateRef: string; sourcePath: string; compiled: import('./template-contract.js').CompiledTemplate }> {
   const source = await readBrandTemplateSource(brandRoot, brandRef, templateRef);
   if (!source) throw new Error(`Brand template '${templateRef}' was not found for ${brandRef}.`);
-  const { compileTemplateSource } = await import('./template-source.js');
+  const { compileTemplateSource } = await import('./template-contract.js');
   return { templateRef, sourcePath: source.path, compiled: compileTemplateSource(source.source) };
 }
 

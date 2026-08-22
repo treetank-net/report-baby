@@ -1,10 +1,11 @@
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
-import { assetDataUri, defaultRenderTheme } from './brand.js';
-import { readBuiltinPageTemplateSource, readRenderConfig } from './builtin-template-loader.js';
+import { assetDataUri, defaultRenderTheme } from './brand-context.js';
+import { readBuiltinPageTemplateSource, readRenderConfig } from './builtin-template-source.js';
 import type { RenderTheme } from './core/model/render-theme.js';
-import { loadRenderFontSet, newPdf, pdfFont, readableTextColor, renderSvgToPng, type RenderFontSet } from './render.js';
-import { compileTemplateSource, type CompiledTemplate } from './template-source.js';
+import { pageGeometryFromTemplate, type PageGeometry, type PageSegment } from './page-geometry.js';
+import { loadRenderFontSet, newPdf, pdfFont, readableTextColor, renderSvgToPng, type RenderFontSet } from './render-primitives.js';
+import { compileTemplateSource, type CompiledTemplate } from './template-contract.js';
 import {
   drawStyledLine,
   fontCoverage,
@@ -17,6 +18,7 @@ import {
   splitUncovered,
   styledLineWidth,
   styledRuns,
+  breakStyledParagraph,
   type StyledRun,
   type StyledTextContext,
 } from './text-runs.js';
@@ -87,24 +89,6 @@ const PAGE_H = PDF_CONFIG.pageHeight;
 const MARGIN = PDF_CONFIG.margin;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
-interface PageSegment {
-  x: number;
-  top: number;
-  width: number;
-  bottom: number;
-}
-
-interface PageGeometry {
-  width: number;
-  height: number;
-  margin: number;
-  margins: { top: number; right: number; bottom: number; left: number };
-  content: PageSegment;
-  segments: PageSegment[];
-  blockFrames: Record<string, PageSegment>;
-  flow: { align: 'justify' | 'left'; hyphenate: boolean };
-}
-
 const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
   width: PAGE_W,
   height: PAGE_H,
@@ -114,6 +98,7 @@ const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
   segments: [{ x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN }],
   blockFrames: {},
   flow: { align: 'left', hyphenate: false },
+  dynamicFlow: false,
 };
 
 interface PdfGaps {
@@ -146,7 +131,9 @@ function rgb(hex: string): [number, number, number] {
 class Cursor {
   private segment: PageSegment;
   private segmentIndex = 0;
+  private readonly baseSegments: PageSegment[];
   constructor(private doc: jsPDF, private pageBackground: string, private onNewPage?: (cursor: Cursor) => void, private geometry = DEFAULT_PAGE_GEOMETRY) {
+    this.baseSegments = geometry.segments.map((segment) => ({ ...segment }));
     this.segment = { ...geometry.content };
     this.paintPage();
   }
@@ -156,8 +143,26 @@ class Cursor {
   get width(): number { return this.segment.width; }
   get bottom(): number { return this.segment.bottom; }
   get flow(): PageGeometry['flow'] { return this.geometry.flow; }
+  get dynamicFlow(): boolean { return this.geometry.dynamicFlow; }
   block(name: string): PageSegment | undefined { return this.geometry.blockFrames[name]; }
   moveTo(segment: PageSegment): void { this.segment = { ...segment }; }
+  activateBlock(name: string): void {
+    const frame = this.geometry.blockFrames[name];
+    if (!frame) return;
+    const segments = this.baseSegments
+      .filter((segment) => segment.x < frame.x + frame.width && segment.x + segment.width > frame.x)
+      .map((segment) => ({
+        x: Math.max(segment.x, frame.x),
+        top: Math.max(segment.top, frame.top),
+        width: Math.min(segment.x + segment.width, frame.x + frame.width) - Math.max(segment.x, frame.x),
+        bottom: Math.min(segment.bottom, frame.bottom),
+      }))
+      .filter((segment) => segment.width > 0 && segment.bottom > segment.top);
+    if (segments.length === 0) return;
+    this.geometry.segments = segments;
+    this.segmentIndex = 0;
+    this.segment = { ...segments[0] };
+  }
   setFlowTop(top: number): void {
     if (this.geometry.segments.length <= 1) return;
     const nextTop = Math.max(top, this.geometry.segments[0]?.top ?? top);
@@ -165,11 +170,13 @@ class Cursor {
     this.segment = { ...this.geometry.segments[this.segmentIndex] };
   }
   flowFrom(top: number): void {
+    this.geometry.segments = this.baseSegments.map((segment) => ({ ...segment }));
     this.segmentIndex = 0;
     this.setFlowTop(top);
   }
   private resetSegments(): void {
     this.segmentIndex = 0;
+    this.geometry.segments = this.baseSegments.map((segment) => ({ ...segment }));
     this.segment = { ...(this.geometry.segments[0] ?? this.geometry.content) };
   }
   flowBreak(): void {
@@ -276,6 +283,41 @@ function drawParagraph(doc: jsPDF, cur: Cursor, lines: StyledRun[][], lineHeight
     cur.y += chunk.length * lineHeight;
     remaining = remaining.slice(chunk.length);
     if (remaining.length > 0) cur.flowBreak();
+  }
+}
+
+function drawDynamicParagraph(doc: jsPDF, cur: Cursor, content: string, lineHeight: number, text: StyledTextContext): void {
+  const runs = styledRuns(content, text);
+  let startNode = 0;
+  let brokeWithoutProgress = false;
+  while (true) {
+    const result = breakStyledParagraph(doc, runs, cur.width, text, cur.flow.align, startNode);
+    if (result.lines.length === 0) return;
+    const qualityWarnings = [
+      result.forcedLines > 0 ? `Page flow produced ${result.forcedLines} forced overfull line(s).` : undefined,
+      result.maxStretch > 1.7 ? `Page flow stretched a space to ${result.maxStretch.toFixed(2)}x its natural width.` : undefined,
+      result.maxConsecutiveHyphenated > 4 ? `Page flow used hyphenation on ${result.maxConsecutiveHyphenated} consecutive lines.` : undefined,
+    ].filter((warning): warning is string => Boolean(warning));
+    for (const warning of qualityWarnings) if (text.warnings && !text.warnings.includes(warning)) text.warnings.push(warning);
+    const available = Math.floor((cur.bottom - cur.y) / lineHeight);
+    const take = brokeWithoutProgress
+      ? Math.max(1, Math.min(available, result.lines.length))
+      : splitWithoutWidows(result.lines.map((line) => line.runs), available);
+    if (take <= 0) {
+      cur.flowBreak();
+      brokeWithoutProgress = true;
+      continue;
+    }
+    brokeWithoutProgress = false;
+    result.lines.slice(0, take).forEach((line, index) => {
+      const isFinalLine = take === result.lines.length && index === take - 1;
+      if (cur.flow.align === 'justify' && !isFinalLine) drawJustifiedLine(doc, line.runs, cur.x, cur.y + index * lineHeight, cur.width, text);
+      else drawStyledLine(doc, line.runs, cur.x, cur.y + index * lineHeight, text);
+    });
+    cur.y += take * lineHeight;
+    startNode = result.lines[take - 1].endNode;
+    if (startNode >= result.endNode) return;
+    cur.flowBreak();
   }
 }
 
@@ -458,7 +500,8 @@ function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
   if (block) cur.moveTo({ ...block, top: Math.max(block.top, cur.y) });
   const lines = layoutStyledText(doc, data.intro, cur.width, text);
   cur.keepTogether(lines.length * PDF_CONFIG.introLineHeight + PDF_CONFIG.introKeepPadding, PDF_CONFIG.introLineHeight * PDF_CONFIG.introMinLeadLines);
-  drawParagraph(doc, cur, lines, PDF_CONFIG.introLineHeight, text);
+  if (cur.dynamicFlow) drawDynamicParagraph(doc, cur, data.intro, PDF_CONFIG.introLineHeight, text);
+  else drawParagraph(doc, cur, lines, PDF_CONFIG.introLineHeight, text);
   if (block) cur.flowFrom(Math.max(cur.y + gaps.introBottomGap, block.bottom));
   else cur.y += gaps.introBottomGap;
 }
@@ -548,6 +591,8 @@ async function renderCharts(doc: jsPDF, cur: Cursor, data: ReportData, theme: Re
 function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext, gaps: PdfGaps): void {
   const font = pdfFont(theme);
   const sections = data.sections ?? [];
+  const narrativeFrame = cur.dynamicFlow ? cur.block('narrative') : undefined;
+  if (narrativeFrame) cur.activateBlock('narrative');
   sections.forEach((s, index) => {
     const sub = s.level === 2;
     const headingSize = sub ? PDF_CONFIG.sectionSubheadingSize : PDF_CONFIG.sectionHeadingSize;
@@ -571,9 +616,13 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.bodySize);
     doc.setTextColor(...rgb(theme.foreground));
-    if (bodyLines.length > 0) drawParagraph(doc, cur, bodyLines, PDF_CONFIG.bodyLineHeight, text);
+    if (bodyLines.length > 0) {
+      if (cur.dynamicFlow) drawDynamicParagraph(doc, cur, s.body, PDF_CONFIG.bodyLineHeight, text);
+      else drawParagraph(doc, cur, bodyLines, PDF_CONFIG.bodyLineHeight, text);
+    }
     cur.y += bodyLines.length > 0 ? gaps.sectionBottomGap : PDF_CONFIG.sectionSubheadingGap;
   });
+  if (narrativeFrame) cur.flowFrom(Math.max(cur.y, narrativeFrame.bottom));
 }
 
 function warnAboutTableText(table: NonNullable<ReportData['table']>, text: StyledTextContext): void {
@@ -814,41 +863,6 @@ interface RenderReportAttempt {
   buffer: Buffer;
   pages: number;
   lastPageFill: number;
-}
-
-function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeometry {
-  const page = compiled.page;
-  if (!page) throw new Error(`Page template '${compiled.id}' is missing compiled geometry.`);
-  const topBand = Math.max(0, ...Object.values(page.reservedBands)
-    .filter((frame) => frame.y <= 0.000001)
-    .map((frame) => (frame.y + frame.height) * page.height));
-  const bottomBand = Math.min(page.height, ...Object.values(page.reservedBands)
-    .filter((frame) => frame.y + frame.height >= 0.999999)
-    .map((frame) => frame.y * page.height));
-  const top = Math.max(page.margins.top, topBand);
-  const bottom = Math.min(page.height - page.margins.bottom, bottomBand);
-  if (bottom <= top) throw new Error(`Page template '${compiled.id}' leaves no usable flow area between margins and reserved bands.`);
-  const segments: PageSegment[] = [];
-  let x = page.margins.left;
-  for (const width of page.columns.widths) {
-    segments.push({ x, top, width, bottom });
-    x += width + page.columns.gutter;
-  }
-  return {
-    width: page.width,
-    height: page.height,
-    margin: page.margins.left,
-    margins: page.margins,
-    content: { ...segments[0] },
-    segments,
-    blockFrames: Object.fromEntries(Object.entries(page.blockFrames).map(([name, frame]) => [name, {
-      x: frame.x * page.width,
-      top: frame.y * page.height,
-      width: frame.width * page.width,
-      bottom: (frame.y + frame.height) * page.height,
-    }])),
-    flow: page.flow,
-  };
 }
 
 async function renderReportAttempt(name: string, data: ReportData, theme: RenderTheme, gaps: PdfGaps, warnings: string[]): Promise<RenderReportAttempt> {

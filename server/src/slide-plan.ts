@@ -1,8 +1,8 @@
 import type { RenderTheme } from './core/model/render-theme.js';
 import type { ResolvedBox, ResolvedLockupPlan, ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
 import type { Slide } from './contract/schema.js';
-import { logicalDirection, logicalPlacement, logicalSpacing, physicalAlign, physicalSide, resolveSlideTemplate, templateTitleAlign, type LockupPlacement, type LockupSpacing, type SlideTemplateRef, type TextDirection } from './slide-templates.js';
-import { resolvePlan, type CompiledTemplate, type NormalizedFrame } from './template-source.js';
+import { logicalDirection, logicalPlacement, logicalSpacing, physicalAlign, physicalSide, resolveSlideTemplate, templateTitleAlign, type LockupPlacement, type LockupSpacing, type SlideTemplateRef, type TextDirection } from './slide-template-engine.js';
+import { resolvePlan, type CompiledTemplate, type NormalizedFrame } from './template-contract.js';
 
 export type { ResolvedBox, ResolvedLockupPlan, ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
 

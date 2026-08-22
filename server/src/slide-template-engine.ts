@@ -1,5 +1,5 @@
 import type { Slide } from './slides.js';
-import { readBuiltinSlideTemplate, type BuiltinSlideTemplateDocument } from './builtin-template-loader.js';
+import { readBuiltinSlideTemplate, type BuiltinSlideTemplateDocument } from './builtin-template-source.js';
 
 export type SlideTemplateRef = string;
 export type TextDirection = 'ltr' | 'rtl';

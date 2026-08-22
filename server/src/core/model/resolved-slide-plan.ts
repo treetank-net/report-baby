@@ -1,5 +1,5 @@
 import type { Slide } from '../../contract/schema.js';
-import type { LockupPlacement, LockupSpacing, TextDirection } from '../../slide-templates.js';
+import type { LockupPlacement, LockupSpacing, TextDirection } from '../../slide-template-engine.js';
 
 export interface ResolvedBox { x: number; y: number; width: number; height: number }
 

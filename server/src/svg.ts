@@ -1,6 +1,6 @@
 export const FONT_FAMILY = 'DejaVu Sans';
 import type { RenderTheme } from './core/model/render-theme.js';
-import { readRenderConfig } from './builtin-template-loader.js';
+import { readRenderConfig } from './builtin-template-source.js';
 
 const RENDER_CONFIG = readRenderConfig();
 const CHART_CONFIG = RENDER_CONFIG.chart;

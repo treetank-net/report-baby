@@ -14,6 +14,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
 const CANVAS = { width: 1600, height: 900, margin: 80 };
 const PX_TO_PT = 0.6;
+const MM_TO_PT = 72 / 25.4;
 const LARGE_TEXT_PT = 18;
 const LARGE_BOLD_PT = 14;
 const AA_BODY = 4.5;
@@ -309,6 +310,25 @@ function buildCases() {
       determinism: index === 0,
     });
   }
+  cases.push({
+    id: 'page-layout-editorial-two-column',
+    group: 'page-layout',
+    brand: settings.brands[0] ?? 'orbit',
+    profile: 'primary',
+    kind: 'report',
+    formats: ['pdf'],
+    expect: 'render',
+    input: {
+      template: 'pages/editorial-two-column',
+      data: {
+        title: 'Configured page layout',
+        intro: 'The introduction occupies its declared frame before the narrative flow begins.',
+        sections: [{ heading: 'Two-column flow', body: 'This paragraph is deliberately long enough to cross the first column and continue in the second. '.repeat(80) }],
+        highlights: ['Both configured columns carry content.', 'The gutter remains clear.'],
+        footer: 'Page layout QA',
+      },
+    },
+  });
   if (settings.brands.includes('pyrus')) {
     cases.push({
       id: 'formats-pyrus-editorial-report',
@@ -825,6 +845,59 @@ function gatePageFill(item, rendered, checks) {
   }
 }
 
+function gatePageGeometry(item, rendered, checks) {
+  const path = join(rendered.outputDir, 'report.pdf');
+  const buffer = readIfExists(path);
+  if (!buffer) return;
+  const source = parseYaml(readFileSync(join(REPO_ROOT, 'server/templates/pages/editorial-two-column/template.yml'), 'utf8'));
+  const page = source.page;
+  const width = page.width * MM_TO_PT;
+  const height = page.height * MM_TO_PT;
+  const left = page.margins.left * MM_TO_PT;
+  const right = width - page.margins.right * MM_TO_PT;
+  const columns = [];
+  let x = left;
+  for (const columnWidth of page.columns.widths) {
+    columns.push({ x, width: columnWidth * MM_TO_PT });
+    x += (columnWidth + page.columns.gutter) * MM_TO_PT;
+  }
+  const flowTop = Math.max(page.margins.top * MM_TO_PT, (page.reserved_bands.header.y + page.reserved_bands.header.height) * height);
+  const flowBottom = Math.min(height - page.margins.bottom * MM_TO_PT, page.reserved_bands.footer.y * height);
+  const inFlow = (value) => (value >= flowTop - 2 && value <= flowBottom + 2) || (value >= height - flowBottom - 2 && value <= height - flowTop + 2);
+  const streams = pdfPageContentStreams(buffer);
+  const starts = [];
+  const violations = [];
+  for (const stream of streams) {
+    for (const text of pdfTextOnFill(stream).drawn) {
+      if (!inFlow(text.y)) continue;
+      starts.push(text.x);
+      const insideColumn = columns.some((column) => text.x >= column.x - 2 && text.x <= column.x + column.width + 2);
+      if (text.x < left - 2 || text.x > right + 2 || !insideColumn) violations.push(`text start x=${text.x.toFixed(1)} is outside a configured column`);
+    }
+  }
+  checks.push({
+    gate: 'page-layout',
+    name: 'flow text stays inside columns',
+    status: violations.length === 0 ? 'pass' : 'fail',
+    message: violations.length === 0 ? `${starts.length} flow text run(s) stayed inside the configured page columns` : violations.slice(0, 3).join('; '),
+  });
+  const seenColumns = columns.filter((column) => starts.some((start) => Math.abs(start - column.x) <= 2)).length;
+  checks.push({
+    gate: 'page-layout',
+    name: 'both columns receive flow',
+    status: seenColumns === columns.length ? 'pass' : 'fail',
+    message: `${seenColumns} of ${columns.length} configured columns received text starts`,
+  });
+  const warnings = rendered.manifest?.diagnostics?.warnings ?? [];
+  const quality = warnings.filter((warning) => /Page flow (produced|stretched|used hyphenation)/.test(warning));
+  checks.push({
+    gate: 'page-layout',
+    name: 'line quality diagnostics',
+    status: quality.length === 0 ? 'pass' : 'fail',
+    message: quality.length === 0 ? 'no forced overfull lines, extreme stretch or excessive hyphenation was reported' : quality.join(' | '),
+  });
+}
+
 function gateGeometry(item, rendered, checks) {
   const canvas = { x: 0, y: 0, width: CANVAS.width, height: CANVAS.height };
   const slides = item.input.slides ?? [];
@@ -1228,6 +1301,7 @@ function main() {
         gatePdfTextContrast(item, rendered, checks);
         gatePdfFontSwitches(item, rendered, checks);
         if (item.group === 'page-fill') gatePageFill(item, rendered, checks);
+        if (item.group === 'page-layout') gatePageGeometry(item, rendered, checks);
       }
       if (item.kind === 'deck') {
         gateGeometry(item, rendered, checks);
@@ -1278,6 +1352,7 @@ function main() {
       'contrast-measured': 'WCAG AA contrast between the text colour and the pixels actually rendered behind it.',
       'contrast-pdf-text': 'WCAG AA contrast between every A4 text run and the filled rectangle drawn behind it in the PDF content stream.',
       'page-fill': 'Every non-cover A4 page carries enough text baseline span or image surface to avoid a near-empty trailing page.',
+      'page-layout': 'Configured page flow stays inside its columns, uses both columns, and reports no line-quality violation.',
       geometry: 'Every slot box stays inside the canvas, inside its region, and clear of the other slots in use.',
       determinism: 'Two identical renders produce identical content (PNG bytes, PDF and PPTX with timestamps stripped).',
       'pptx-round-trip': 'PPTX converted by LibreOffice to PDF, rasterised, and compared pixel by pixel with the direct render.',

@@ -1,8 +1,8 @@
-import { readBrandTemplateSource, resolveBrandContext, type BrandDiagnostics, type BrandOverrides, type RenderBrandContext } from './brand.js';
-import { readBuiltinTemplateSource } from './builtin-template-loader.js';
+import { readBrandTemplateSource, resolveBrandContext, type BrandDiagnostics, type BrandOverrides, type RenderBrandContext } from './brand-context.js';
+import { readBuiltinTemplateSource } from './builtin-template-source.js';
 import type { SlideDeck } from './slides.js';
 import { resolveSlidePlan } from './slide-plan.js';
-import { compileTemplateSource, type CompiledTemplate } from './template-source.js';
+import { compileTemplateSource, type CompiledTemplate } from './template-contract.js';
 import { slideDeckSchema } from './contract/schema.js';
 
 export interface SlideDeckContextOptions {

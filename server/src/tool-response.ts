@@ -1,4 +1,4 @@
-import type { BrandDiagnostics } from './brand.js';
+import type { BrandDiagnostics } from './brand-context.js';
 import type { ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
 import type { SlideDeck } from './slides.js';
 

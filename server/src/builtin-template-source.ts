@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { BUILTIN_TEMPLATE_FILES } from './generated/builtin-templates.js';
+import { BUILTIN_TEMPLATE_FILES } from './generated/builtin-template-files.js';
 
 export interface BuiltinSlideTemplateDocument {
   id: string;

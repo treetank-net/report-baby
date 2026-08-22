@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import { unzipSync, zipSync } from 'fflate';
 import PptxGenJS from 'pptxgenjs';
-import { assetDataUri, defaultRenderTheme } from './brand.js';
-import { readRenderConfig, type RenderConfig } from './builtin-template-loader.js';
+import { assetDataUri, defaultRenderTheme } from './brand-context.js';
+import { readRenderConfig, type RenderConfig } from './builtin-template-source.js';
 import type { Slide } from './contract/schema.js';
 import type { RenderTheme } from './core/model/render-theme.js';
 import type { ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
-import { loadRenderFontSet, newPdf, readableTextColor, renderSvgToPng } from './render.js';
+import { loadRenderFontSet, newPdf, readableTextColor, renderSvgToPng } from './render-primitives.js';
 import { FONT_FAMILY, PALETTE, renderChart, type MetricCard } from './svg.js';
-import type { CompiledTemplate } from './template-source.js';
+import type { CompiledTemplate } from './template-contract.js';
 import { SLIDE_NOTES_MAX_CHARS } from './contract/schema.js';
 
 export type { Slide } from './contract/schema.js';
@@ -19,8 +19,8 @@ export interface SlideDeck {
   brand_ref?: string;
   template_ref?: string;
   surface?: string;
-  direction?: import('./slide-templates.js').TextDirection;
-  overrides?: import('./brand.js').BrandOverrides;
+  direction?: import('./slide-template-engine.js').TextDirection;
+  overrides?: import('./brand-context.js').BrandOverrides;
   footer?: string;
   slides: Slide[];
   slideThemes?: Array<RenderTheme | undefined>;

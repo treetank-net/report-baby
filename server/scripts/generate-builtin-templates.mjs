@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const serverRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const templateRoot = join(serverRoot, 'templates');
-const outputPath = join(serverRoot, 'src', 'generated', 'builtin-templates.ts');
+const outputPath = join(serverRoot, 'src', 'generated', 'builtin-template-files.ts');
 
 async function collectYamlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

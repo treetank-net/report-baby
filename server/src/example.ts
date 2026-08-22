@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { readBrandShowcase, resolveBrandContext, type BrandOverrides } from './brand.js';
+import { readBrandShowcase, resolveBrandContext, type BrandOverrides } from './brand-context.js';
 import { getBrandSourceRoots } from './config.js';
-import { renderReportPdf } from './templates.js';
+import { renderReportPdf } from './report-renderer.js';
 import type { RenderTheme } from './core/model/render-theme.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnostics, type SlideDeck } from './slides.js';
 import { resolveSlideDeck } from './slide-context.js';

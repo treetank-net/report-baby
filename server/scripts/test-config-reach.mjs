@@ -29,8 +29,11 @@ const variants = {
   ).replace('widths: [85, 85]', 'widths: [80, 80]'),
   columns: (source) => source.replace('count: 2', 'count: 1').replace('gutter: 6', 'gutter: 0').replace('widths: [85, 85]', 'widths: [176]'),
   gutter: (source) => source.replace('gutter: 6', 'gutter: 12').replace('widths: [85, 85]', 'widths: [82, 82]'),
+  widths: (source) => source.replace('widths: [85, 85]', 'widths: [80, 90]'),
   reservedHeader: (source) => source.replace('height: 0.18', 'height: 0.30'),
-  introFrame: (source) => source.replace('height: 0.10', 'height: 0.14'),
+  reservedFooter: (source) => source.replace('y: 0.93, width: 1, height: 0.07', 'y: 0.88, width: 1, height: 0.12'),
+  introFrame: (source) => source.replace('x: 0.081, y: 0.24', 'x: 0.081, y: 0.28'),
+  narrativeFrame: (source) => source.replace('height: 0.53', 'height: 0.46'),
 };
 
 function fail(message) {

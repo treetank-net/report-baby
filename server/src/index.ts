@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { configFromEnv } from './config.js';
-import { registerRenderTools } from './tools/render.js';
-import { registerBrandTools } from './tools/brand.js';
+import { registerRenderTools } from './tools/render-tools.js';
+import { registerBrandTools } from './tools/brand-tools.js';
 import { registerAuthTools } from './tools/auth.js';
 import { SERVER_VERSION } from './version.js';
 
