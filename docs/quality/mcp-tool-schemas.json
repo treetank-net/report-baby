@@ -1,0 +1,3060 @@
+[
+  {
+    "description": "Resolve and inspect one brand profile without rendering an artifact. Use references such as brand://acme/primary.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "surface": {
+          "description": "Optional output surface used to select light/dark values",
+          "type": "string"
+        }
+      },
+      "required": [
+        "brand_ref"
+      ],
+      "type": "object"
+    },
+    "name": "inspect_brand"
+  },
+  {
+    "description": "Inspect and validate one brand-owned template without changing the brandbook.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Brand-local template reference, e.g. slides/title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "brand_ref",
+        "template_ref"
+      ],
+      "type": "object"
+    },
+    "name": "inspect_brand_template"
+  },
+  {
+    "description": "List read-only brand-owned page and slide templates available in a brandbook.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand reference, e.g. brand://acme/primary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "brand_ref"
+      ],
+      "type": "object"
+    },
+    "name": "list_brand_templates"
+  },
+  {
+    "description": "List locally configured brandbooks and their named profiles. Brandbooks are discovered below the configured report-baby brand directory.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {},
+      "type": "object"
+    },
+    "name": "list_brandbooks"
+  },
+  {
+    "description": "List every template a render call can reference: built-in A4 report templates for render_report, built-in slide templates for the render_slides_* tools, and — when brand_ref is given — the brand-owned templates of that brandbook. Each entry says which tools accept it and whether it is builtin or brand-owned.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Optional brand reference, e.g. brand://acme/primary, to also list that brandbook's templates",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_templates"
+  },
+  {
+    "description": "Render a bar, line, or pie chart to a standalone PNG from data values. Returns the path to the written PNG. This is the primary tool for charts to paste into a report or document.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "data": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "direction": {
+          "description": "Logical text/layout direction for slides",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "type": "string"
+        },
+        "output_path": {
+          "type": "string"
+        },
+        "overrides": {
+          "additionalProperties": false,
+          "description": "One-render-only, validated brand/template overrides",
+          "properties": {
+            "emphasis": {
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "fit": {
+              "additionalProperties": false,
+              "properties": {
+                "min_body_pt": {
+                  "type": "number"
+                },
+                "min_heading_pt": {
+                  "type": "number"
+                },
+                "strategy": {
+                  "enum": [
+                    "none",
+                    "shrink-to-fit"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "layout": {
+              "additionalProperties": false,
+              "properties": {
+                "density": {
+                  "enum": [
+                    "comfortable",
+                    "compact"
+                  ],
+                  "type": "string"
+                },
+                "lockup_position": {
+                  "enum": [
+                    "top-start",
+                    "top-end"
+                  ],
+                  "type": "string"
+                },
+                "lockup_spacing": {
+                  "enum": [
+                    "compact",
+                    "normal",
+                    "open"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "typography": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading_role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "return_image": {
+          "default": false,
+          "type": "boolean"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "surface": {
+          "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Composition/template reference, e.g. slides/qbr/executive-summary",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "bar",
+            "line",
+            "pie"
+          ],
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ],
+      "type": "object"
+    },
+    "name": "render_chart"
+  },
+  {
+    "description": "Render a grid of KPI / metric cards (label, big value, optional delta with up/down trend color) to a standalone PNG. Returns the path to the written PNG.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "cards": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "delta": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "trend": {
+                "enum": [
+                  "up",
+                  "down",
+                  "flat"
+                ],
+                "type": "string"
+              },
+              "value": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "columns": {
+          "type": "number"
+        },
+        "direction": {
+          "description": "Logical text/layout direction for slides",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "type": "string"
+        },
+        "output_path": {
+          "type": "string"
+        },
+        "overrides": {
+          "additionalProperties": false,
+          "description": "One-render-only, validated brand/template overrides",
+          "properties": {
+            "emphasis": {
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "fit": {
+              "additionalProperties": false,
+              "properties": {
+                "min_body_pt": {
+                  "type": "number"
+                },
+                "min_heading_pt": {
+                  "type": "number"
+                },
+                "strategy": {
+                  "enum": [
+                    "none",
+                    "shrink-to-fit"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "layout": {
+              "additionalProperties": false,
+              "properties": {
+                "density": {
+                  "enum": [
+                    "comfortable",
+                    "compact"
+                  ],
+                  "type": "string"
+                },
+                "lockup_position": {
+                  "enum": [
+                    "top-start",
+                    "top-end"
+                  ],
+                  "type": "string"
+                },
+                "lockup_spacing": {
+                  "enum": [
+                    "compact",
+                    "normal",
+                    "open"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "typography": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading_role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "return_image": {
+          "default": false,
+          "type": "boolean"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "surface": {
+          "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Composition/template reference, e.g. slides/qbr/executive-summary",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "cards"
+      ],
+      "type": "object"
+    },
+    "name": "render_metric_cards"
+  },
+  {
+    "description": "Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished multi-page A4 PDF (branded header, KPI grid, embedded charts, narrative sections, data table, highlights, footer). All data fields are optional — only present blocks render, in the order: header, intro, kpis, charts, sections, table, highlights. Returns the path to the written PDF. Use this for the final client-facing report.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": false,
+          "properties": {
+            "brand": {
+              "description": "Client/company name shown in the top-left corner",
+              "type": "string"
+            },
+            "charts": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "color": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "value"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "prefix": {
+                    "description": "Prepended to values, e.g. \"$\"",
+                    "type": "string"
+                  },
+                  "subtitle": {
+                    "type": "string"
+                  },
+                  "suffix": {
+                    "description": "Appended to values, e.g. \"%\"",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "bar",
+                      "line",
+                      "pie"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "data"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "footer": {
+              "description": "Shown on every page; keep under ~120 chars",
+              "type": "string"
+            },
+            "highlights": {
+              "description": "Bullet list rendered under a \"Highlights\" heading",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "highlights_title": {
+              "description": "Heading above the bullet list; defaults to \"Highlights\"",
+              "type": "string"
+            },
+            "intro": {
+              "description": "Lead paragraph under the title",
+              "type": "string"
+            },
+            "kpis": {
+              "description": "KPI cards; keep labels under ~28 chars to avoid clipping",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "delta": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "trend": {
+                    "enum": [
+                      "up",
+                      "down",
+                      "flat"
+                    ],
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "period": {
+              "description": "Reporting period shown in the top-right corner; keep short",
+              "type": "string"
+            },
+            "sections": {
+              "description": "Narrative sections; heading stays on the same page as the body. level 2 renders a subheading under the preceding level 1 chapter. Body text accepts **bold** inline markup",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "heading": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "enum": [
+                      1,
+                      2
+                    ],
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "heading",
+                  "body"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "subtitle": {
+              "type": "string"
+            },
+            "table": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "items": {
+                    "items": {
+                      "type": [
+                        "string",
+                        "number"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "type": "array"
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "head": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "head",
+                "body"
+              ],
+              "type": "object"
+            },
+            "title": {
+              "type": "string"
+            },
+            "title_page": {
+              "additionalProperties": false,
+              "description": "Full-bleed cover page rendered as page 1 instead of the compact header; the body starts on page 2",
+              "properties": {
+                "eyebrow": {
+                  "description": "Small uppercase kicker above the cover title",
+                  "type": "string"
+                },
+                "period": {
+                  "description": "Reporting period shown in the cover top-right corner",
+                  "type": "string"
+                },
+                "subtitle": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "direction": {
+          "description": "Logical text/layout direction for slides",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "type": "string"
+        },
+        "output_path": {
+          "type": "string"
+        },
+        "overrides": {
+          "additionalProperties": false,
+          "description": "One-render-only, validated brand/template overrides",
+          "properties": {
+            "emphasis": {
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "fit": {
+              "additionalProperties": false,
+              "properties": {
+                "min_body_pt": {
+                  "type": "number"
+                },
+                "min_heading_pt": {
+                  "type": "number"
+                },
+                "strategy": {
+                  "enum": [
+                    "none",
+                    "shrink-to-fit"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "layout": {
+              "additionalProperties": false,
+              "properties": {
+                "density": {
+                  "enum": [
+                    "comfortable",
+                    "compact"
+                  ],
+                  "type": "string"
+                },
+                "lockup_position": {
+                  "enum": [
+                    "top-start",
+                    "top-end"
+                  ],
+                  "type": "string"
+                },
+                "lockup_spacing": {
+                  "enum": [
+                    "compact",
+                    "normal",
+                    "open"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "typography": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading_role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "surface": {
+          "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
+          "type": "string"
+        },
+        "template": {
+          "default": "default-report",
+          "description": "Built-in A4 report template name, from list_templates: default-report or campaign-summary",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Alternative way to name the built-in A4 report template; must be one of the list_templates report names. Slide composition references such as slides/two-column are rejected here — they belong to the render_slides_* tools",
+          "type": "string"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "type": "object"
+    },
+    "name": "render_report"
+  },
+  {
+    "description": "Render a complete presentation as a local 16:9 PDF from a bounded shared slide model. Existing render_report A4 behavior is unchanged. Returns the PDF path plus a compact render summary; pass diagnostics: \"full\" only to debug slide layout.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": false,
+          "properties": {
+            "brand": {
+              "type": "string"
+            },
+            "brand_ref": {
+              "type": "string"
+            },
+            "direction": {
+              "enum": [
+                "ltr",
+                "rtl"
+              ],
+              "type": "string"
+            },
+            "footer": {
+              "type": "string"
+            },
+            "overrides": {
+              "additionalProperties": false,
+              "properties": {
+                "emphasis": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "role": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "fit": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "min_body_pt": {
+                      "type": "number"
+                    },
+                    "min_heading_pt": {
+                      "type": "number"
+                    },
+                    "strategy": {
+                      "enum": [
+                        "none",
+                        "shrink-to-fit"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "layout": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "density": {
+                      "enum": [
+                        "comfortable",
+                        "compact"
+                      ],
+                      "type": "string"
+                    },
+                    "lockup_position": {
+                      "enum": [
+                        "top-start",
+                        "top-end"
+                      ],
+                      "type": "string"
+                    },
+                    "lockup_spacing": {
+                      "enum": [
+                        "compact",
+                        "normal",
+                        "open"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "typography": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "body": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "family": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "heading": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "family": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "heading_role": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "slides": {
+              "items": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "enum": [
+                          "ltr",
+                          "rtl"
+                        ],
+                        "type": "string"
+                      },
+                      "eyebrow": {
+                        "type": "string"
+                      },
+                      "notes": {
+                        "description": "Speaker notes / narration for this slide: never drawn on the slide. render_slides_pptx writes them to the PowerPoint notes slide shown in presenter view; render_slides_pdf and render_slides_png drop them and report it as a warning.",
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "overrides": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "emphasis": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "role": {
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "fit": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "min_body_pt": {
+                                "type": "number"
+                              },
+                              "min_heading_pt": {
+                                "type": "number"
+                              },
+                              "strategy": {
+                                "enum": [
+                                  "none",
+                                  "shrink-to-fit"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "layout": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "density": {
+                                "enum": [
+                                  "comfortable",
+                                  "compact"
+                                ],
+                                "type": "string"
+                              },
+                              "lockup_position": {
+                                "enum": [
+                                  "top-start",
+                                  "top-end"
+                                ],
+                                "type": "string"
+                              },
+                              "lockup_spacing": {
+                                "enum": [
+                                  "compact",
+                                  "normal",
+                                  "open"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "typography": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "family": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "scale": {
+                                    "type": "number"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "heading": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "family": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "scale": {
+                                    "type": "number"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "heading_role": {
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "subtitle": {
+                        "type": "string"
+                      },
+                      "surface": {
+                        "type": "string"
+                      },
+                      "template_ref": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "const": "title",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "callout": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "metrics": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "delta": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "note": {
+                              "type": "string"
+                            },
+                            "trend": {
+                              "enum": [
+                                "up",
+                                "down",
+                                "flat"
+                              ],
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": [
+                                "string",
+                                "number"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 6,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "metrics",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "metrics"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "chart": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "data": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "color": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "label",
+                                "value"
+                              ],
+                              "type": "object"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "prefix": {
+                            "type": "string"
+                          },
+                          "suffix": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "enum": [
+                              "bar",
+                              "line",
+                              "pie"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "data"
+                        ],
+                        "type": "object"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "chart",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "chart"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "items": {
+                          "items": {
+                            "type": [
+                              "string",
+                              "number"
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "head": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "table",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "head",
+                      "body"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "highlights": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 4,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "narrative",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "body"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "items": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 7,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "conclusions",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "items"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "columns": {
+                        "description": "Exactly two side-by-side columns; pair it with template_ref \"slides/two-column\" for the matching layout",
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "body": {
+                              "type": "string"
+                            },
+                            "heading": {
+                              "type": "string"
+                            },
+                            "highlights": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 3,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "body"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "type": "array"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "columns",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "columns"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "surface": {
+              "type": "string"
+            },
+            "template_ref": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "slides"
+          ],
+          "type": "object"
+        },
+        "diagnostics": {
+          "default": "summary",
+          "description": "Response detail. \"summary\" (default) returns the written path plus the resolved brand profile, template_ref, slide count and deduplicated warnings. \"full\" adds the per-slide pixel layout plans (slidePlans, slotRules, slot boxes) — thousands of tokens per deck, so ask for it only when debugging a layout.",
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "type": "string"
+        },
+        "direction": {
+          "description": "Logical text/layout direction for slides",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "type": "string"
+        },
+        "output_path": {
+          "type": "string"
+        },
+        "overrides": {
+          "$ref": "#/properties/data/properties/overrides",
+          "description": "One-render-only, validated brand/template overrides"
+        },
+        "surface": {
+          "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Composition/template reference, e.g. slides/qbr/executive-summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "type": "object"
+    },
+    "name": "render_slides_pdf"
+  },
+  {
+    "description": "Render the shared slide model to deterministic 1600x900 PNG files. Optionally render one zero-based slide_index without regenerating unrelated slides. Returns the written paths plus a compact render summary; pass diagnostics: \"full\" only to debug slide layout.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": false,
+          "properties": {
+            "brand": {
+              "type": "string"
+            },
+            "brand_ref": {
+              "type": "string"
+            },
+            "direction": {
+              "enum": [
+                "ltr",
+                "rtl"
+              ],
+              "type": "string"
+            },
+            "footer": {
+              "type": "string"
+            },
+            "overrides": {
+              "additionalProperties": false,
+              "properties": {
+                "emphasis": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "role": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "fit": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "min_body_pt": {
+                      "type": "number"
+                    },
+                    "min_heading_pt": {
+                      "type": "number"
+                    },
+                    "strategy": {
+                      "enum": [
+                        "none",
+                        "shrink-to-fit"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "layout": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "density": {
+                      "enum": [
+                        "comfortable",
+                        "compact"
+                      ],
+                      "type": "string"
+                    },
+                    "lockup_position": {
+                      "enum": [
+                        "top-start",
+                        "top-end"
+                      ],
+                      "type": "string"
+                    },
+                    "lockup_spacing": {
+                      "enum": [
+                        "compact",
+                        "normal",
+                        "open"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "typography": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "body": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "family": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "heading": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "family": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "heading_role": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "slides": {
+              "items": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "enum": [
+                          "ltr",
+                          "rtl"
+                        ],
+                        "type": "string"
+                      },
+                      "eyebrow": {
+                        "type": "string"
+                      },
+                      "notes": {
+                        "description": "Speaker notes / narration for this slide: never drawn on the slide. render_slides_pptx writes them to the PowerPoint notes slide shown in presenter view; render_slides_pdf and render_slides_png drop them and report it as a warning.",
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "overrides": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "emphasis": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "role": {
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "fit": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "min_body_pt": {
+                                "type": "number"
+                              },
+                              "min_heading_pt": {
+                                "type": "number"
+                              },
+                              "strategy": {
+                                "enum": [
+                                  "none",
+                                  "shrink-to-fit"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "layout": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "density": {
+                                "enum": [
+                                  "comfortable",
+                                  "compact"
+                                ],
+                                "type": "string"
+                              },
+                              "lockup_position": {
+                                "enum": [
+                                  "top-start",
+                                  "top-end"
+                                ],
+                                "type": "string"
+                              },
+                              "lockup_spacing": {
+                                "enum": [
+                                  "compact",
+                                  "normal",
+                                  "open"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "typography": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "family": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "scale": {
+                                    "type": "number"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "heading": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "family": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "scale": {
+                                    "type": "number"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "heading_role": {
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "subtitle": {
+                        "type": "string"
+                      },
+                      "surface": {
+                        "type": "string"
+                      },
+                      "template_ref": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "const": "title",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "callout": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "metrics": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "delta": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "note": {
+                              "type": "string"
+                            },
+                            "trend": {
+                              "enum": [
+                                "up",
+                                "down",
+                                "flat"
+                              ],
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": [
+                                "string",
+                                "number"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 6,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "metrics",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "metrics"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "chart": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "data": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "color": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "label",
+                                "value"
+                              ],
+                              "type": "object"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "prefix": {
+                            "type": "string"
+                          },
+                          "suffix": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "enum": [
+                              "bar",
+                              "line",
+                              "pie"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "data"
+                        ],
+                        "type": "object"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "chart",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "chart"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "items": {
+                          "items": {
+                            "type": [
+                              "string",
+                              "number"
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "head": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "table",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "head",
+                      "body"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "highlights": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 4,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "narrative",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "body"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "items": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 7,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "conclusions",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "items"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "columns": {
+                        "description": "Exactly two side-by-side columns; pair it with template_ref \"slides/two-column\" for the matching layout",
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "body": {
+                              "type": "string"
+                            },
+                            "heading": {
+                              "type": "string"
+                            },
+                            "highlights": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 3,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "body"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "type": "array"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "columns",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "columns"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "surface": {
+              "type": "string"
+            },
+            "template_ref": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "slides"
+          ],
+          "type": "object"
+        },
+        "diagnostics": {
+          "default": "summary",
+          "description": "Response detail. \"summary\" (default) returns the written path plus the resolved brand profile, template_ref, slide count and deduplicated warnings. \"full\" adds the per-slide pixel layout plans (slidePlans, slotRules, slot boxes) — thousands of tokens per deck, so ask for it only when debugging a layout.",
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "type": "string"
+        },
+        "direction": {
+          "description": "Logical text/layout direction for slides",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "type": "string"
+        },
+        "filename_prefix": {
+          "default": "slide",
+          "type": "string"
+        },
+        "output_dir": {
+          "type": "string"
+        },
+        "overrides": {
+          "$ref": "#/properties/data/properties/overrides",
+          "description": "One-render-only, validated brand/template overrides"
+        },
+        "slide_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "surface": {
+          "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Composition/template reference, e.g. slides/qbr/executive-summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "type": "object"
+    },
+    "name": "render_slides_png"
+  },
+  {
+    "description": "Render the shared slide model to an editable 16:9 PPTX. Text, KPI cards, tables, and basic shapes stay editable; charts are embedded as deterministic images. Returns the PPTX path plus a compact render summary; pass diagnostics: \"full\" only to debug slide layout.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": false,
+          "properties": {
+            "brand": {
+              "type": "string"
+            },
+            "brand_ref": {
+              "type": "string"
+            },
+            "direction": {
+              "enum": [
+                "ltr",
+                "rtl"
+              ],
+              "type": "string"
+            },
+            "footer": {
+              "type": "string"
+            },
+            "overrides": {
+              "additionalProperties": false,
+              "properties": {
+                "emphasis": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "role": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "fit": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "min_body_pt": {
+                      "type": "number"
+                    },
+                    "min_heading_pt": {
+                      "type": "number"
+                    },
+                    "strategy": {
+                      "enum": [
+                        "none",
+                        "shrink-to-fit"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "layout": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "density": {
+                      "enum": [
+                        "comfortable",
+                        "compact"
+                      ],
+                      "type": "string"
+                    },
+                    "lockup_position": {
+                      "enum": [
+                        "top-start",
+                        "top-end"
+                      ],
+                      "type": "string"
+                    },
+                    "lockup_spacing": {
+                      "enum": [
+                        "compact",
+                        "normal",
+                        "open"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "typography": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "body": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "family": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "heading": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "family": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "type": "number"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "heading_role": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "slides": {
+              "items": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "enum": [
+                          "ltr",
+                          "rtl"
+                        ],
+                        "type": "string"
+                      },
+                      "eyebrow": {
+                        "type": "string"
+                      },
+                      "notes": {
+                        "description": "Speaker notes / narration for this slide: never drawn on the slide. render_slides_pptx writes them to the PowerPoint notes slide shown in presenter view; render_slides_pdf and render_slides_png drop them and report it as a warning.",
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "overrides": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "emphasis": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "role": {
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "fit": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "min_body_pt": {
+                                "type": "number"
+                              },
+                              "min_heading_pt": {
+                                "type": "number"
+                              },
+                              "strategy": {
+                                "enum": [
+                                  "none",
+                                  "shrink-to-fit"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "layout": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "density": {
+                                "enum": [
+                                  "comfortable",
+                                  "compact"
+                                ],
+                                "type": "string"
+                              },
+                              "lockup_position": {
+                                "enum": [
+                                  "top-start",
+                                  "top-end"
+                                ],
+                                "type": "string"
+                              },
+                              "lockup_spacing": {
+                                "enum": [
+                                  "compact",
+                                  "normal",
+                                  "open"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "typography": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "body": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "family": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "scale": {
+                                    "type": "number"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "heading": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "family": {
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "scale": {
+                                    "type": "number"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              "heading_role": {
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "subtitle": {
+                        "type": "string"
+                      },
+                      "surface": {
+                        "type": "string"
+                      },
+                      "template_ref": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "const": "title",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "callout": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "metrics": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "delta": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "note": {
+                              "type": "string"
+                            },
+                            "trend": {
+                              "enum": [
+                                "up",
+                                "down",
+                                "flat"
+                              ],
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": [
+                                "string",
+                                "number"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 6,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "metrics",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "metrics"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "chart": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "data": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "color": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "label",
+                                "value"
+                              ],
+                              "type": "object"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "prefix": {
+                            "type": "string"
+                          },
+                          "suffix": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "enum": [
+                              "bar",
+                              "line",
+                              "pie"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "data"
+                        ],
+                        "type": "object"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "chart",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "chart"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "items": {
+                          "items": {
+                            "type": [
+                              "string",
+                              "number"
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "head": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "table",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "head",
+                      "body"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "highlights": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 4,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "narrative",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "body"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "items": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 7,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "conclusions",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "items"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "brand_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/brand_ref"
+                      },
+                      "columns": {
+                        "description": "Exactly two side-by-side columns; pair it with template_ref \"slides/two-column\" for the matching layout",
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "body": {
+                              "type": "string"
+                            },
+                            "heading": {
+                              "type": "string"
+                            },
+                            "highlights": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 3,
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "body"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "type": "array"
+                      },
+                      "direction": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/direction"
+                      },
+                      "notes": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/notes"
+                      },
+                      "overrides": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/overrides"
+                      },
+                      "subtitle": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/subtitle"
+                      },
+                      "surface": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/surface"
+                      },
+                      "template_ref": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/template_ref"
+                      },
+                      "title": {
+                        "$ref": "#/properties/data/properties/slides/items/anyOf/0/properties/title"
+                      },
+                      "type": {
+                        "const": "columns",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "title",
+                      "columns"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            "surface": {
+              "type": "string"
+            },
+            "template_ref": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "slides"
+          ],
+          "type": "object"
+        },
+        "diagnostics": {
+          "default": "summary",
+          "description": "Response detail. \"summary\" (default) returns the written path plus the resolved brand profile, template_ref, slide count and deduplicated warnings. \"full\" adds the per-slide pixel layout plans (slidePlans, slotRules, slot boxes) — thousands of tokens per deck, so ask for it only when debugging a layout.",
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "type": "string"
+        },
+        "direction": {
+          "description": "Logical text/layout direction for slides",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "type": "string"
+        },
+        "output_path": {
+          "type": "string"
+        },
+        "overrides": {
+          "$ref": "#/properties/data/properties/overrides",
+          "description": "One-render-only, validated brand/template overrides"
+        },
+        "surface": {
+          "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Composition/template reference, e.g. slides/qbr/executive-summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "type": "object"
+    },
+    "name": "render_slides_pptx"
+  },
+  {
+    "description": "Rasterize an arbitrary SVG string to a PNG (escape hatch for fully custom graphics). Text needs font-family=\"DejaVu Sans\" to render. Returns the path to the written PNG.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "output_path": {
+          "type": "string"
+        },
+        "return_image": {
+          "default": false,
+          "type": "boolean"
+        },
+        "svg": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "svg"
+      ],
+      "type": "object"
+    },
+    "name": "render_svg"
+  },
+  {
+    "description": "Check for plugin updates and download them. Reports the version installed on disk separately from the version this process is actually running, because a running MCP server cannot swap its own bundle — the download only takes effect after a session restart.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {},
+      "type": "object"
+    },
+    "name": "update_plugin"
+  }
+]

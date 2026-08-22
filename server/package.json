@@ -14,6 +14,8 @@
     "baseline:verify": "node scripts/baseline.mjs verify",
     "test:manifest": "npm run build:example && node scripts/test-manifest-contract.mjs",
     "test:manifest-consumers": "node scripts/test-showcase-manifest-consumers.mjs",
+    "goals:input-errors": "node scripts/test-input-errors.mjs",
+    "test:mcp-schema": "node scripts/test-mcp-schema-snapshot.mjs",
     "goals:script-dup": "node scripts/script-dup.mjs",
     "test:brand": "node ../scripts/test-brand-contract.js",
     "test": "node scripts/test-public-behavior.mjs",

@@ -87,12 +87,12 @@ meant to protect.
 Changes behaviour on purpose: inputs that render today will be rejected. Follow
 the baseline-change procedure in [BASELINE.md](BASELINE.md).
 
-- [ ] **G2.1 Build the bad-input corpus.** Generate mutations from the zod schema:
+- [x] **G2.1 Build the bad-input corpus.** Generate mutations from the zod schema:
   drop a required field, wrong type, enum typo, wrong nesting depth, array where
   an object is expected. Committed as files, reviewed like code — a gate over an
   empty list is green and meaningless, so the corpus needs its own minimum-size
-  check.
-- [ ] **G2.2 One validator per model, and the schema owns itself.** The deck model
+  check. The corpus contains 12 cases in `docs/quality/input-error-corpus.json`.
+- [x] **G2.2 One validator per model, and the schema owns itself.** The deck model
   has two validators that already drifted once (`ROADMAP.md:105`). Keep the zod
   contract, delete the hand-written checks in `slide-context.ts`, and make the CLI
   use the same contract instead of passing parsed JSON to `renderReportPdf`.
@@ -110,17 +110,19 @@ the baseline-change procedure in [BASELINE.md](BASELINE.md).
   Without this step the obvious implementation is `example.ts → tools/render.ts`,
   which makes the CLI depend on MCP registration. That edge **does not exist
   today** — verified — and this task must not create it.
-- [ ] **G2.3 Enumerate the flips before writing them.** Every input shape that
+- [x] **G2.3 Enumerate the flips before writing them.** Every input shape that
   renders today and will be rejected after G2.2, with what it renders now. This is
-  the release note. Silent tightening is the failure mode.
-- [ ] **G2.4 Message quality as a gate, not a side effect.** Every rejection, on
+  the release note. Silent tightening is the failure mode. See
+  `docs/quality/INPUT_ERRORS.md`.
+- [x] **G2.4 Message quality as a gate, not a side effect.** Every rejection, on
   every path, names the offending field and the expected type. MCP already does
   this — copy the shape. Zero messages matching
   `is not a function|Cannot read propert|undefined is not`.
-- [ ] **G2.5 Wire the gate.** `goals:input-errors` runs the corpus through both
+- [x] **G2.5 Wire the gate.** `goals:input-errors` runs the corpus through both
   fronts and asserts exit code, field name presence and absence of crash shapes.
-- [ ] **G2.6 A schema snapshot.** MCP tool schemas are a public contract parity
-  cannot see; a snapshot test catches accidental changes.
+- [x] **G2.6 A schema snapshot.** MCP tool schemas are a public contract parity
+  cannot see; `npm run test:mcp-schema` compares all tool schemas against
+  `docs/quality/mcp-tool-schemas.json`.
 
 ## G4 — standalone scripts share code (Goal 4)
 

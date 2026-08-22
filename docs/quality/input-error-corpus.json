@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "deck-missing-slides",
+      "kind": "deck",
+      "input": { "title": "Brak slajdów" },
+      "field": "slides",
+      "expected_pattern": "array|Required"
+    },
+    {
+      "id": "deck-slides-object",
+      "kind": "deck",
+      "input": { "slides": { "type": "title", "title": "Nie tablica" } },
+      "field": "slides",
+      "expected_pattern": "array|Expected"
+    },
+    {
+      "id": "deck-invalid-discriminator",
+      "kind": "deck",
+      "input": { "slides": [{ "type": "titel", "title": "Literówka" }] },
+      "field": "type",
+      "expected_pattern": "discriminator|Invalid"
+    },
+    {
+      "id": "deck-title-wrong-type",
+      "kind": "deck",
+      "input": { "slides": [{ "type": "title", "title": 42 }] },
+      "field": "title",
+      "expected_pattern": "string|Expected"
+    },
+    {
+      "id": "deck-metrics-empty",
+      "kind": "deck",
+      "input": { "slides": [{ "type": "metrics", "title": "Puste KPI", "metrics": [] }] },
+      "field": "metrics",
+      "expected_pattern": "at least 1|too_small|Array"
+    },
+    {
+      "id": "deck-columns-three",
+      "kind": "deck",
+      "input": {
+        "slides": [{
+          "type": "columns",
+          "title": "Za dużo kolumn",
+          "columns": [
+            { "body": "Lewa" },
+            { "body": "Środek" },
+            { "body": "Prawa" }
+          ]
+        }]
+      },
+      "field": "columns",
+      "expected_pattern": "exactly 2|length|Array"
+    },
+    {
+      "id": "deck-metrics-value-object",
+      "kind": "deck",
+      "input": {
+        "slides": [{
+          "type": "metrics",
+          "title": "Zagnieżdżona wartość",
+          "metrics": [{ "label": "KPI", "value": { "raw": 42 } }]
+        }]
+      },
+      "field": "value",
+      "expected_pattern": "string|number|Expected"
+    },
+    {
+      "id": "report-kpis-object",
+      "kind": "report",
+      "input": { "title": "KPI nie są tablicą", "kpis": {} },
+      "field": "kpis",
+      "expected_pattern": "array|Expected"
+    },
+    {
+      "id": "report-chart-data-empty",
+      "kind": "report",
+      "input": { "charts": [{ "type": "bar", "data": [] }] },
+      "field": "data",
+      "expected_pattern": "at least 1|too_small|Array"
+    },
+    {
+      "id": "report-chart-type-typo",
+      "kind": "report",
+      "input": { "charts": [{ "type": "column", "data": [{ "label": "A", "value": 1 }] }] },
+      "field": "type",
+      "expected_pattern": "bar|line|pie|Invalid"
+    },
+    {
+      "id": "report-table-head-missing",
+      "kind": "report",
+      "input": { "table": { "body": [["SEO", 42]] } },
+      "field": "head",
+      "expected_pattern": "Required|array|Expected"
+    },
+    {
+      "id": "report-section-level-invalid",
+      "kind": "report",
+      "input": { "sections": [{ "heading": "Rozdział", "body": "Treść", "level": 3 }] },
+      "field": "level",
+      "expected_pattern": "1|2|Invalid"
+    }
+  ]
+}

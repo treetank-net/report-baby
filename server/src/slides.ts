@@ -7,6 +7,7 @@ import { loadRenderFontSet, newPdf, readableTextColor, renderSvgToPng } from './
 import { FONT_FAMILY, PALETTE, renderChart, type ChartDatum, type ChartType, type MetricCard } from './svg.js';
 import type { ResolvedSlidePlan } from './slide-plan.js';
 import type { CompiledTemplate } from './template-source.js';
+import { SLIDE_NOTES_MAX_CHARS } from './contract/schema.js';
 
 export type Slide =
   | SlideBase & { type: 'title'; eyebrow?: string }
@@ -42,8 +43,6 @@ export interface SlideDeck {
   slidePlans?: Array<ResolvedSlidePlan | undefined>;
   slideTemplateSources?: Array<CompiledTemplate | undefined>;
 }
-
-export const SLIDE_NOTES_MAX_CHARS = 4000;
 
 const RENDER_CONFIG: RenderConfig = readRenderConfig();
 const WIDTH = RENDER_CONFIG.canvas.width;

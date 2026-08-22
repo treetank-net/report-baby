@@ -6,6 +6,7 @@ import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnost
 import { resolveSlideDeck } from './slide-context.js';
 import { slidePlanSummary } from './slide-plan.js';
 import { validateRenderManifest } from './manifest.js';
+import { reportDataSchema, slideDeckSchema } from './contract/schema.js';
 
 export { validateRenderManifest };
 
@@ -141,7 +142,8 @@ async function renderReportData(args: CliArgs, input: any): Promise<Record<strin
     surface: args.surface ?? 'pdf-a4',
     overrides: input.overrides as BrandOverrides | undefined,
   });
-  const data = { ...inputData, brand: inputData.brand ?? context.brandName };
+  const parsedData = reportDataSchema.parse(inputData);
+  const data = { ...parsedData, brand: parsedData.brand ?? context.brandName };
   const outputs: Record<string, string> = {};
   const renderWarnings: string[] = [];
   if (args.formats.includes('pdf')) {
@@ -161,7 +163,7 @@ async function renderReportExample(args: CliArgs, input: any): Promise<Record<st
 }
 
 async function renderDeckData(args: CliArgs, input: any): Promise<Record<string, unknown>> {
-  const data = (input.data ?? input) as SlideDeck;
+  const data = slideDeckSchema.parse(input.data ?? input) as SlideDeck;
   const resolved = await resolveSlideDeck(data, {
     brandRoot: args.brandRoot,
     brandRef: input.brand_ref ?? args.brand,
