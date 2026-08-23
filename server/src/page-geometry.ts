@@ -14,6 +14,9 @@ export interface PageGeometry {
   margins: { top: number; right: number; bottom: number; left: number };
   content: PageSegment;
   segments: PageSegment[];
+  bands: Record<string, PageSegment>;
+  continuationTop?: number;
+  continuationBottom?: number;
   blockFrames: Record<string, PageSegment>;
   flow: { align: 'justify' | 'left'; hyphenate: boolean };
   dynamicFlow: boolean;
@@ -77,6 +80,9 @@ export function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeomet
     margins: page.margins,
     content,
     segments,
+    bands: Object.fromEntries(Object.entries(page.reservedBands).map(([name, frame]) => [name, physicalFrame(frame, page.width, page.height)])),
+    continuationTop: bands.find((band) => band.top === 0)?.bottom,
+    continuationBottom: bands.find((band) => band.bottom === page.height)?.top,
     blockFrames: Object.fromEntries(Object.entries(page.blockFrames).map(([name, frame]) => [name, physicalFrame(frame, page.width, page.height)])),
     flow: page.flow,
     dynamicFlow: true,

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { inflateRawSync, inflateSync } from 'node:zlib';
 import { parse as parseYaml } from 'yaml';
 import { pdfContentHash, pptxContentHash, sha256, zipEntries } from './lib/artifact-inspect.mjs';
-import { buildDeck as deck, gapTighteningReport, inlineMarkupReport, longWords, multipageReport, pageFillReport, standardDeck, standardReport } from './lib/fixtures.mjs';
+import { buildDeck as deck, editorialRegressionReport, gapTighteningReport, inlineMarkupReport, longWords, multipageReport, pageFillReport, standardDeck, standardReport } from './lib/fixtures.mjs';
 import { findOfficeConverter } from './lib/office.mjs';
 import { runProcess as run } from './lib/process.mjs';
 
@@ -309,6 +309,28 @@ function buildCases() {
       input: standardReport(),
       determinism: index === 0,
     });
+    cases.push({
+      id: `formats-${brand}-campaign-report`,
+      group: 'formats',
+      brand,
+      profile: 'primary',
+      kind: 'report',
+      formats: ['pdf'],
+      expect: 'render',
+      input: { ...standardReport(), template: 'campaign-summary' },
+    });
+    for (const variant of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']) {
+      cases.push({
+        id: `layout-${brand}-${variant.toLowerCase()}`,
+        group: 'formats',
+        brand,
+        profile: 'primary',
+        kind: 'report',
+        formats: ['pdf'],
+        expect: 'render',
+        input: editorialRegressionReport(variant),
+      });
+    }
   }
   cases.push({
     id: 'page-layout-editorial-two-column',

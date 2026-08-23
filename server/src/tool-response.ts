@@ -1,5 +1,7 @@
 import type { BrandDiagnostics } from './brand-context.js';
 import type { ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
+import type { ResolvedReportPlan } from './core/model/resolved-report-plan.js';
+import type { ReportDrawing } from './report-drawing-recorder.js';
 import type { SlideDeck } from './slides.js';
 
 export type DiagnosticsDetail = 'summary' | 'full';
@@ -72,4 +74,23 @@ export function slideRenderDiagnostics(input: SlideRenderDiagnosticsInput, detai
   });
   if (detail !== 'full') return summary;
   return { ...summary, slideDiagnostics: input.slideDiagnostics, slidePlans: input.slidePlans };
+}
+
+export interface ReportRenderDiagnosticsInput {
+  diagnostics: BrandDiagnostics;
+  plan: ResolvedReportPlan;
+  drawings: ReportDrawing[];
+}
+
+export function reportRenderDiagnostics(input: ReportRenderDiagnosticsInput, detail: DiagnosticsDetail): Record<string, unknown> {
+  const summary = withoutEmptyValues({
+    pages: input.plan.pages.length,
+    brandRef: input.diagnostics.brandRef,
+    profile: input.diagnostics.profile,
+    templateRef: input.plan.templateRef,
+    surface: input.diagnostics.surface,
+    appliedOverrides: input.diagnostics.appliedOverrides,
+  });
+  if (detail !== 'full') return summary;
+  return { ...summary, reportPlan: input.plan, drawings: input.drawings };
 }

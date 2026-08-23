@@ -1,6 +1,6 @@
 {
   "name": "report-baby",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "type": "module",
   "description": "Self-contained data → PNG charts / PDF reports render MCP server (resvg-wasm + jsPDF).",
   "author": "Jacek Mariański <jmarianski@trans.eu>",

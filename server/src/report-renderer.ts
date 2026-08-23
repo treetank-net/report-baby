@@ -4,7 +4,11 @@ import { statSync } from 'node:fs';
 import { assetDataUri, defaultRenderTheme } from './brand-context.js';
 import { readBuiltinPageTemplateSource, readRenderConfig } from './builtin-template-source.js';
 import type { RenderTheme } from './core/model/render-theme.js';
+import type { ResolvedReportPlan } from './core/model/resolved-report-plan.js';
 import { pageGeometryFromTemplate, type PageGeometry, type PageSegment } from './page-geometry.js';
+import { resolveReportPlan } from './report-plan.js';
+import { assertReportPlan } from './report-plan-assertions.js';
+import { installReportDrawingRecorder, type ReportDrawing } from './report-drawing-recorder.js';
 import { loadRenderFontSet, newPdf, pdfFont, readableTextColor, renderSvgToPng, type RenderFontSet } from './render-primitives.js';
 import { compileTemplateSource, type CompiledTemplate } from './template-contract.js';
 import {
@@ -97,8 +101,13 @@ const DEFAULT_PAGE_GEOMETRY: PageGeometry = {
   height: PAGE_H,
   margin: MARGIN,
   margins: { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN },
-  content: { x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN },
-  segments: [{ x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PAGE_H - MARGIN }],
+  content: { x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PDF_CONFIG.footerY - PDF_CONFIG.footerFontSize },
+  segments: [{ x: MARGIN, top: MARGIN, width: CONTENT_W, bottom: PDF_CONFIG.footerY - PDF_CONFIG.footerFontSize }],
+  bands: {
+    footer: { x: 0, top: PDF_CONFIG.footerY - PDF_CONFIG.footerFontSize, width: PAGE_W, bottom: PAGE_H },
+  },
+  continuationTop: PDF_CONFIG.headerRepeatHeight + PDF_CONFIG.headerRepeatBottomGap,
+  continuationBottom: PDF_CONFIG.footerY - PDF_CONFIG.footerFontSize,
   blockFrames: {},
   flow: { align: 'left', hyphenate: false },
   dynamicFlow: false,
@@ -136,7 +145,7 @@ class Cursor {
   private segmentIndex = 0;
   private activeBlockName: string | undefined;
   private readonly baseSegments: PageSegment[];
-  constructor(private doc: jsPDF, private pageBackground: string, private onNewPage?: (cursor: Cursor) => void, private geometry = DEFAULT_PAGE_GEOMETRY) {
+  constructor(private doc: jsPDF, private pageBackground: string, private onNewPage?: (cursor: Cursor) => void, private geometry = DEFAULT_PAGE_GEOMETRY, private reportPlan?: ResolvedReportPlan) {
     this.baseSegments = geometry.segments.map((segment) => ({ ...segment }));
     this.segment = { ...geometry.content };
     this.paintPage();
@@ -150,8 +159,16 @@ class Cursor {
   get dynamicFlow(): boolean { return this.geometry.dynamicFlow; }
   block(name: string): PageSegment | undefined { return this.geometry.blockFrames[name]; }
   moveTo(segment: PageSegment): void { this.segment = { ...segment }; }
+  private usableBottom(): number {
+    return this.geometry.bands.footer?.top ?? Math.min(PDF_CONFIG.footerTextY, this.geometry.height);
+  }
   activateBlock(name: string, minimumTop?: number): void {
-    const frame = this.geometry.blockFrames[name];
+    const planBlockId = name === 'narrative' ? 'flow' : name;
+    const planPage = this.reportPlan?.pages[Math.min(this.doc.getNumberOfPages() - 1, (this.reportPlan.pages.length - 1))];
+    const planned = planPage?.blocks.find((item) => item.id === planBlockId && !item.parentId);
+    const frame = planned
+      ? { x: planned.box.x, top: planned.box.y, width: planned.box.width, bottom: planned.box.y + planned.box.height }
+      : this.geometry.blockFrames[name];
     if (!frame) return;
     const top = minimumTop === undefined ? frame.top : Math.max(frame.top, minimumTop);
     const segments = this.baseSegments
@@ -160,10 +177,7 @@ class Cursor {
         x: Math.max(segment.x, frame.x),
         top: Math.max(segment.top, top),
         width: Math.min(segment.x + segment.width, frame.x + frame.width) - Math.max(segment.x, frame.x),
-        // The frame defines where the block starts. The footer text baseline
-        // is the usable end of the narrative flow, so this keeps dynamic
-        // columns from ending at the narrative frame's nominal height.
-        bottom: Math.min(PDF_CONFIG.footerTextY, this.geometry.height),
+        bottom: Math.min(this.usableBottom(), frame.bottom),
       }))
       .filter((segment) => segment.width > 0 && segment.bottom > segment.top);
     if (segments.length === 0) return;
@@ -193,7 +207,7 @@ class Cursor {
       .map((segment) => ({
         ...segment,
         top: Math.max(segment.top, flowTop),
-        bottom: this.dynamicFlow ? Math.min(PDF_CONFIG.footerTextY, this.geometry.height) : segment.bottom,
+        bottom: this.dynamicFlow ? Math.min(this.usableBottom(), segment.bottom) : segment.bottom,
       }))
       .filter((segment) => segment.bottom > segment.top);
     this.segmentIndex = Math.min(currentIndex, Math.max(0, this.geometry.segments.length - 1));
@@ -205,7 +219,7 @@ class Cursor {
     this.geometry.segments = this.baseSegments
       .map((segment) => ({
         ...segment,
-        bottom: this.dynamicFlow ? Math.min(PDF_CONFIG.footerTextY, this.geometry.height) : segment.bottom,
+        bottom: this.dynamicFlow ? Math.min(this.usableBottom(), segment.bottom) : segment.bottom,
       }))
       .filter((segment) => segment.bottom > segment.top);
     this.segment = { ...(this.geometry.segments[0] ?? this.geometry.content) };
@@ -803,7 +817,7 @@ function renderDynamicTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: Re
   const tableOptions: UserOptions = {
     head: [tableHead],
     body: tableBody,
-    margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: cur.x, right: PAGE_W - cur.x - cur.width, bottom: 0 },
+    margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: cur.x, right: PAGE_W - cur.x - cur.width, bottom: PAGE_H - PDF_CONFIG.footerY + PDF_CONFIG.footerFontSize },
     styles: { font, fontSize: PDF_CONFIG.tableFontSize, cellPadding: PDF_CONFIG.tableCellPadding, textColor: rgb(theme.foreground), fillColor: rgb(theme.background), lineColor: rgb(theme.line), lineWidth: PDF_CONFIG.tableLineWidth },
     headStyles: { font, fontStyle: 'bold', fillColor: rgb(theme.primary), textColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)) },
     alternateRowStyles: { fillColor: rgb(theme.soft) },
@@ -890,7 +904,7 @@ function renderTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
     head: [data.table.head.map((c) => stripInlineMarkup(String(c)))],
     body: data.table.body.map((r) => r.map((c) => stripInlineMarkup(String(c)))),
     startY: cur.y + (data.table.caption ? PDF_CONFIG.tableCaptionBottomGap : 0) + PDF_CONFIG.tableStartOffset,
-    margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: cur.x, right: PAGE_W - cur.x - cur.width },
+    margin: { top: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap, left: cur.x, right: PAGE_W - cur.x - cur.width, bottom: PAGE_H - PDF_CONFIG.footerY + PDF_CONFIG.footerFontSize },
     styles: { font, fontSize: PDF_CONFIG.tableFontSize, cellPadding: PDF_CONFIG.tableCellPadding, textColor: rgb(theme.foreground), fillColor: rgb(theme.background), lineColor: rgb(theme.line), lineWidth: PDF_CONFIG.tableLineWidth },
     headStyles: { font, fontStyle: 'bold', fillColor: rgb(theme.primary), textColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)) },
     alternateRowStyles: { fillColor: rgb(theme.soft) },
@@ -1105,10 +1119,17 @@ async function renderTitlePage(doc: jsPDF, data: ReportData, theme: RenderTheme)
   }
 }
 
+export interface ReportRenderDiagnostics {
+  plan: ResolvedReportPlan;
+  drawings: ReportDrawing[];
+}
+
 interface RenderReportAttempt {
   buffer: Buffer;
   pages: number;
   lastPageFill: number;
+  plan: ResolvedReportPlan;
+  drawings: ReportDrawing[];
 }
 
 async function renderReportAttempt(name: string, data: ReportData, theme: RenderTheme, gaps: PdfGaps, warnings: string[]): Promise<RenderReportAttempt> {
@@ -1117,6 +1138,8 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
   const geometry = template.page ? pageGeometryFromTemplate(template.compiled!) : DEFAULT_PAGE_GEOMETRY;
   const fontSet = await loadRenderFontSet(theme);
   const doc = newPdf('portrait', template.page ? [geometry.width, geometry.height] : 'a4', fontSet);
+  const drawings: ReportDrawing[] = [];
+  installReportDrawingRecorder(doc, drawings);
   const family = pdfFont(theme);
   const text: StyledTextContext = {
     family,
@@ -1125,10 +1148,34 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     hyphenate: geometry.flow.hyphenate,
   };
   const header = await createReportHeader(resolved, theme);
+  const flowFooterTop = geometry.dynamicFlow
+    ? Math.max(geometry.bands.footer?.top ?? PDF_CONFIG.footerY, PDF_CONFIG.footerY)
+    : geometry.bands.footer?.top ?? PDF_CONFIG.footerY;
+  const renderGeometry: PageGeometry = {
+    ...geometry,
+    bands: {
+      ...geometry.bands,
+      footer: geometry.bands.footer
+        ? { ...geometry.bands.footer, top: flowFooterTop }
+        : { x: 0, top: flowFooterTop, width: geometry.width, bottom: geometry.height },
+    },
+    continuationTop: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap,
+    continuationBottom: geometry.dynamicFlow
+      ? Math.max(geometry.continuationBottom ?? 0, PDF_CONFIG.footerY)
+      : geometry.continuationBottom ?? flowFooterTop,
+  };
+  const planGeometry: PageGeometry = {
+    ...renderGeometry,
+    bands: {
+      ...renderGeometry.bands,
+      header: renderGeometry.bands.header ?? { x: 0, top: 0, width: renderGeometry.width, bottom: PDF_CONFIG.headerBandHeight + PDF_CONFIG.headerBottomGap },
+    },
+  };
+  const plan = resolveReportPlan({ templateRef: name, data: resolved, theme, geometry: planGeometry, pageCount: 2 });
   const cur = new Cursor(doc, theme.background, (cursor) => {
     header.drawFollowingPage(doc, cursor);
     cursor.setFlowTop(cursor.y);
-  }, geometry);
+  }, renderGeometry, plan);
   if (resolved.title_page) {
     await renderTitlePage(doc, resolved, theme);
     cur.breakPage();
@@ -1149,27 +1196,33 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
   renderSections(doc, cur, resolved, theme, text, gaps);
   renderTable(doc, cur, resolved, theme, header, text, fontSet);
   renderHighlights(doc, cur, resolved, theme, text, gaps, header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap);
-  renderFooter(doc, resolved, theme, geometry);
+  renderFooter(doc, resolved, theme, renderGeometry);
   const pages = doc.getNumberOfPages();
   const contentStart = header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap;
   const contentHeight = geometry.height - geometry.margins.bottom - contentStart;
   const lastPageFill = pages > 1 && contentHeight > 0
     ? Math.max(0, Math.min(1, (cur.y - contentStart) / contentHeight))
     : 1;
-  return { buffer: Buffer.from(doc.output('arraybuffer')), pages, lastPageFill };
+  const finalPlan = resolveReportPlan({ templateRef: name, data: resolved, theme, geometry: planGeometry, pageCount: pages });
+  assertReportPlan(finalPlan);
+  return { buffer: Buffer.from(doc.output('arraybuffer')), pages, lastPageFill, plan: finalPlan, drawings };
 }
 
-export async function renderReportPdf(name: string, data: ReportData, theme = defaultRenderTheme(), warnings: string[] = []): Promise<Buffer> {
+export async function renderReportPdfDetailed(name: string, data: ReportData, theme = defaultRenderTheme(), warnings: string[] = []): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
   const original = await renderReportAttempt(name, data, theme, pdfGaps(), warnings);
-  if (original.pages <= 1 || original.lastPageFill >= PDF_CONFIG.minLastPageFill) return original.buffer;
+  if (original.pages <= 1 || original.lastPageFill >= PDF_CONFIG.minLastPageFill) return { buffer: original.buffer, diagnostics: { plan: original.plan, drawings: original.drawings } };
   for (const factor of [PDF_CONFIG.lastPageGapFactor1, PDF_CONFIG.lastPageGapFactor2]) {
     const tightened = await renderReportAttempt(name, data, theme, pdfGaps(factor), warnings);
     if (tightened.pages < original.pages) {
       warnings.push(`A4 report gaps tightened by factor ${factor} to avoid a near-empty final page.`);
-      return tightened.buffer;
+      return { buffer: tightened.buffer, diagnostics: { plan: tightened.plan, drawings: tightened.drawings } };
     }
   }
-  return original.buffer;
+  return { buffer: original.buffer, diagnostics: { plan: original.plan, drawings: original.drawings } };
+}
+
+export async function renderReportPdf(name: string, data: ReportData, theme = defaultRenderTheme(), warnings: string[] = []): Promise<Buffer> {
+  return (await renderReportPdfDetailed(name, data, theme, warnings)).buffer;
 }
 
 interface ResolvedReportTemplate {

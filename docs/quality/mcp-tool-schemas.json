@@ -692,6 +692,15 @@
           },
           "type": "object"
         },
+        "diagnostics": {
+          "default": "summary",
+          "description": "Response detail. \"summary\" (default) returns the written path, resolved brand profile, page count and warnings. \"full\" adds the resolved report layout plan for every page.",
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "type": "string"
+        },
         "direction": {
           "description": "Logical text/layout direction for slides",
           "enum": [

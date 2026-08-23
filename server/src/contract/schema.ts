@@ -142,6 +142,14 @@ export const slideDiagnosticsField = {
     .describe('Response detail. "summary" (default) returns the written path plus the resolved brand profile, template_ref, slide count and deduplicated warnings. "full" adds the per-slide pixel layout plans (slidePlans, slotRules, slot boxes) — thousands of tokens per deck, so ask for it only when debugging a layout.'),
 };
 
+export const reportDiagnosticsField = {
+  diagnostics: z
+    .enum(['summary', 'full'])
+    .optional()
+    .default('summary')
+    .describe('Response detail. "summary" (default) returns the written path, resolved brand profile, page count and warnings. "full" adds the resolved report layout plan for every page.'),
+};
+
 export type ReportInput = z.infer<typeof reportDataSchema>;
 export type Slide = z.infer<typeof slideSchema>;
 export type SlideInput = z.infer<typeof slideSchema>;

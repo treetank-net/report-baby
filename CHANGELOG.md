@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.4
+
+- Added a deterministic report layout plan covering report blocks, columns,
+  headers, footers, and continuation pages.
+- Added plan-level and drawing-level containment checks, report-layout
+  diagnostics, and regression coverage for editorial flow and page geometry.
+- Preserved rendered output with expanded baselines and LibreOffice visual-QA
+  coverage.
+
 ## v0.9.3
 
 - Prepared raster brand assets during publish with cropped, resized derivatives,
