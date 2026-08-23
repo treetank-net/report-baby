@@ -185,10 +185,12 @@ class Cursor {
   releaseBlock(): void {
     const currentTop = this.y;
     const currentIndex = this.segmentIndex;
+    const flowTop = this.geometry.segments[0]?.top ?? currentTop;
     this.activeBlockName = undefined;
     this.geometry.segments = this.baseSegments
       .map((segment) => ({
         ...segment,
+        top: Math.max(segment.top, flowTop),
         bottom: this.dynamicFlow ? Math.min(PDF_CONFIG.footerTextY, this.geometry.height) : segment.bottom,
       }))
       .filter((segment) => segment.bottom > segment.top);
@@ -527,7 +529,17 @@ function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
   doc.setFontSize(PDF_CONFIG.bodySize);
   doc.setTextColor(...rgb(theme.foreground));
   const block = cur.block('intro');
-  if (block) cur.moveTo({ ...block, top: Math.max(block.top, cur.y) });
+  const narrative = cur.dynamicFlow ? cur.block('narrative') : undefined;
+  if (block) {
+    // The nominal intro frame is sized for the usual one-line lead. In a
+    // dynamic page, a longer intro must consume the space before narrative
+    // flow instead of being moved into a column by keepTogether().
+    cur.moveTo({
+      ...block,
+      top: Math.max(block.top, cur.y),
+      bottom: Math.max(block.bottom, narrative?.bottom ?? block.bottom),
+    });
+  }
   const lines = layoutStyledText(doc, data.intro, cur.width, text);
   cur.keepTogether(lines.length * PDF_CONFIG.introLineHeight + PDF_CONFIG.introKeepPadding, PDF_CONFIG.introLineHeight * PDF_CONFIG.introMinLeadLines);
   if (cur.dynamicFlow) drawDynamicParagraph(doc, cur, data.intro, PDF_CONFIG.introLineHeight, text);
@@ -622,7 +634,7 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
   const font = pdfFont(theme);
   const sections = data.sections ?? [];
   const narrativeFrame = cur.dynamicFlow ? cur.block('narrative') : undefined;
-  if (narrativeFrame) cur.activateBlock('narrative');
+  if (narrativeFrame) cur.activateBlock('narrative', cur.y);
   sections.forEach((s, index) => {
     const sub = s.level === 2;
     const headingSize = sub ? PDF_CONFIG.sectionSubheadingSize : PDF_CONFIG.sectionHeadingSize;

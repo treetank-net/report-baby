@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.2
+
+- Fixed long `intro` blocks in `pages/editorial-two-column` so their consumed
+  height is carried into section flow without overlapping text or the footer.
+- Improved cursor continuity after column/page transitions and rejected wide
+  solitary hyphen fragments in dynamic text flow.
+- Expanded editorial-flow regression coverage to 480 matrix variants, four
+  demo brands, seeded fixtures, and word-bounding-box overlap checks.
+
 ## v0.9.1
 
 - Fixed `pages/editorial-two-column` flow for tables and highlights: both

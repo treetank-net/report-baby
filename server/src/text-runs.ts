@@ -1,4 +1,5 @@
 import type { jsPDF } from 'jspdf';
+import { readRenderConfig } from './builtin-template-source.js';
 
 export interface StyledRun {
   text: string;
@@ -365,6 +366,7 @@ interface FlowCandidate {
 
 const FLOW_HYPHEN_PENALTY = { justify: 3000, left: 900 };
 const FLOW_CONSECUTIVE_HYPHEN_PENALTY = 900;
+const FLOW_SOLITARY_HYPHEN_MAX_SLACK = readRenderConfig().pdf.flowSolitaryHyphenMaxSlack;
 const FLOW_MAX_STRETCH = 2.2;
 const FLOW_MAX_SHRINK = 0.78;
 const FLOW_LAST_LINE_MIN_FILL = 0.12;
@@ -500,6 +502,7 @@ export function breakStyledParagraph(
       const line = flowLineContent(doc, words, nodes, index, target, context);
       const slack = measure - line.naturalWidth;
       const isLast = target === end;
+      if (!isLast && line.hyphenated && line.gaps === 0 && slack > FLOW_SOLITARY_HYPHEN_MAX_SLACK) continue;
       const nextBoundary = nextWordBoundary(nodes, target);
       if (!isLast && !line.hyphenated && line.gaps === 0 && nextBoundary !== undefined) {
         const withNextWord = flowLineContent(doc, words, nodes, index, nextBoundary, context);

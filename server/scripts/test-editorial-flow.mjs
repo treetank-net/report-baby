@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
@@ -8,8 +9,41 @@ import { join } from 'node:path';
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
 const brandDir = join(root, '..', 'examples', 'brand-showcase', 'brands');
+const brandRefs = ['flux', 'orbit', 'parcelia', 'pyrus'];
+const corpus = [
+  'transport.txt',
+  'labour-market.txt',
+].map((name) => readFileSync(join(root, 'scripts', 'corpus', name), 'utf8').trim());
 const baseBody = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny przewozow dlugodystansowych. Firmy spedycyjne reaguja konsolidacja floty i inwestycjami w cyfrowe platformy wymiany ladunkow. Ten raport podsumowuje najwazniejsze obserwacje z ostatniego kwartalu i wskazuje kierunki na kolejne miesiace.';
 const twoSentenceBody = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny.';
+
+function mulberry32(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6D2B79F5;
+    let value = Math.imul(state ^ state >>> 15, 1 | state);
+    value ^= value + Math.imul(value ^ value >>> 7, 61 | value);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function seededText(seed, wordCount) {
+  const random = mulberry32(seed);
+  const words = corpus.flatMap((text) => text.split(/\s+/));
+  const result = [];
+  while (result.length < wordCount) result.push(words[Math.floor(random() * words.length)]);
+  return result.join(' ');
+}
+
+function scaledIntro(lines, seed, marker) {
+  if (lines === 0) return undefined;
+  const wordCount = { 1: 16, 3: 52, 8: 132 }[lines];
+  return `Intro ${marker} ${seededText(seed, wordCount)}`;
+}
+
+function scaledHighlights(count, marker, seed) {
+  return Array.from({ length: count }, (_, index) => `Wniosek ${marker} ${index + 1}: ${seededText(seed + index, 12)}`);
+}
 
 function section(heading, body = baseBody, level) {
   return { heading, body, ...(level === undefined ? {} : { level }) };
@@ -83,6 +117,20 @@ const reproducers = [
       },
     },
   },
+  {
+    name: 'reproducer-E-long-intro-overlap',
+    input: {
+      template: 'pages/editorial-two-column',
+      brand_ref: 'brand://flux/primary',
+      data: {
+        title: 'Kierowcow brakuje juz niemal w kazdym powiecie',
+        subtitle: 'Podtytul',
+        intro: 'Transport stanowi fundament gospodarki, a jednoczesnie przechodzi jeden z najglebszych kryzysow kadrowych w swojej historii. Niedobor kierowcow dotyczy juz wiekszosci regionow, a prognozy wskazuja, ze bedzie sie poglebial. Firmy transportowe coraz wyrazniej widza, ze same podwyzki nie rozwiaza problemu rekrutacji.',
+        sections: Array.from({ length: 6 }, (_, index) => section(`S${index + 1}`, `${twoSentenceBody} ${twoSentenceBody}`)),
+        footer: 'f',
+      },
+    },
+  },
 ];
 
 const matrixFixtures = [];
@@ -92,12 +140,14 @@ const blockVariants = [
   { name: 'table-2', tableRows: 2, highlights: false },
   { name: 'table-6', tableRows: 6, highlights: false },
   { name: 'table-20', tableRows: 20, highlights: false },
-  { name: 'highlights', tableRows: 0, highlights: true },
-  { name: 'both-2', tableRows: 2, highlights: true },
-  { name: 'both-6', tableRows: 6, highlights: true },
-  { name: 'both-20', tableRows: 20, highlights: true },
+  { name: 'highlights-1', tableRows: 0, highlights: 1 },
+  { name: 'highlights-5', tableRows: 0, highlights: 5 },
+  { name: 'highlights-15', tableRows: 0, highlights: 15 },
+  { name: 'both-2-5', tableRows: 2, highlights: 5 },
+  { name: 'both-6-5', tableRows: 6, highlights: 5 },
+  { name: 'both-20-5', tableRows: 20, highlights: 5 },
 ];
-for (const hasIntro of [false, true]) {
+for (const introLines of [0, 1, 3, 8]) {
   for (const sectionCount of [1, 2, 4, 8]) {
     for (const length of ['short', 'boundary', 'long']) {
       for (const blockVariant of blockVariants) {
@@ -107,12 +157,15 @@ for (const hasIntro of [false, true]) {
         const bodySeed = length === 'short' ? twoSentenceBody : baseBody;
         const sections = Array.from({ length: sectionCount }, (_, index) => {
           const heading = `${marker}_S${index + 1}`;
-          const body = `Dane ${marker} ${bodySeed} `.repeat(repeatCount).trim();
+          const body = `${seededText(matrixIndex * 17 + index, 8)} ${bodySeed} `.repeat(repeatCount).trim();
           return section(heading, body, sectionCount > 1 && index === sectionCount - 1 ? 2 : undefined);
         });
         const data = {
-          title: `Editorial matrix ${marker}`,
-          ...(hasIntro ? { intro: `Intro ${marker} sprawdza odzyskanie szerokosci po poprzednim bloku.` } : {}),
+          title: matrixIndex % 2 === 0
+            ? `Editorial matrix ${marker}`
+            : `Editorial matrix ${marker} z bardzo dlugim naglowkiem testujacym zawijanie tytulu`,
+          ...(matrixIndex % 3 === 0 ? { subtitle: `Podtytul ${marker} sprawdza zawijanie dodatkowego kontekstu raportu.` } : {}),
+          ...(introLines > 0 ? { intro: scaledIntro(introLines, matrixIndex * 31, marker) } : {}),
           sections,
           ...(blockVariant.tableRows > 0 ? {
             table: {
@@ -122,16 +175,45 @@ for (const hasIntro of [false, true]) {
             },
           } : {}),
           ...(blockVariant.highlights ? {
-            highlights: [`Wniosek ${marker} pierwszy`, `Wniosek ${marker} drugi`],
+            highlights: scaledHighlights(blockVariant.highlights, marker, matrixIndex * 43),
             highlights_title: `Najwazniejsze ${marker}`,
           } : {}),
           footer: `matrix ${marker}`,
         };
         matrixFixtures.push({
-          name: `matrix-${marker}-${hasIntro ? 'intro' : 'no-intro'}-${sectionCount}-${length}-${blockVariant.name}`,
+          name: `matrix-${marker}-intro-${introLines}-${sectionCount}-${length}-${blockVariant.name}`,
           input: { template: 'pages/editorial-two-column', brand_ref: 'brand://flux/primary', data },
         });
       }
+    }
+  }
+}
+
+const seededSeeds = [0x10203040, 0x55667788, 0x9ABCDEF0, 0x13579BDF];
+const seededFixtures = [];
+for (const brand of brandRefs) {
+  for (const seed of seededSeeds) {
+    for (const introLines of [0, 1, 3, 8]) {
+      const marker = `${brand}-${seed.toString(16)}-${introLines}`;
+      const sections = Array.from({ length: 4 }, (_, index) => section(
+        `${marker}_S${index + 1}`,
+        seededText(seed + index * 101, 92),
+      ));
+      const data = {
+        title: introLines === 8
+          ? `Dlugie dane ${marker} sprawdzaja zawijanie naglowka i stabilnosc skladu`
+          : `Dane ${marker}`,
+        ...(seed % 2 === 0 ? { subtitle: `Rozszerzony podtytul dla przypadku ${marker} z dodatkowymi informacjami.` } : {}),
+        ...(introLines > 0 ? { intro: scaledIntro(introLines, seed, marker) } : {}),
+        sections,
+        highlights: scaledHighlights(5, marker, seed + 700),
+        highlights_title: `Najwazniejsze ${marker}`,
+        footer: `seed ${seed.toString(16)}`,
+      };
+      seededFixtures.push({
+        name: `seed-${seed.toString(16)}-${brand}-intro-${introLines}`,
+        input: { template: 'pages/editorial-two-column', brand_ref: `brand://${brand}/primary`, data },
+      });
     }
   }
 }
@@ -174,23 +256,37 @@ function parseBbox(xml) {
   });
 }
 
-function bodyTokens(input) {
-  const body = (input.data.sections ?? []).flatMap((sectionData) => sectionData.body.split(/\s+/).map(normalize));
-  const nonBody = [
-    input.data.title,
-    input.data.subtitle,
-    input.data.brand,
-    input.data.period,
-    input.data.intro,
-    input.data.footer,
-    input.data.highlights_title,
-    ...(input.data.highlights ?? []),
-    input.data.table?.caption,
-    ...(input.data.table?.head ?? []),
-    ...(input.data.table?.body ?? []).flat(),
-  ].filter(Boolean).flatMap((value) => String(value).split(/\s+/).map(normalize));
-  const nonBodyTokens = new Set(nonBody);
-  return new Set(body.filter((token) => !nonBodyTokens.has(token)));
+function assertNoWordOverlaps(pages) {
+  const tolerance = 1;
+  for (const page of pages) {
+    const words = page.words.filter((word) => word.text.trim().length > 0);
+    for (let leftIndex = 0; leftIndex < words.length; leftIndex += 1) {
+      const left = words[leftIndex];
+      for (let rightIndex = leftIndex + 1; rightIndex < words.length; rightIndex += 1) {
+        const right = words[rightIndex];
+        if (Math.abs(left.yMin - right.yMin) > 0.3) continue;
+        const xOverlap = Math.min(left.xMax, right.xMax) - Math.max(left.xMin, right.xMin);
+        const yOverlap = Math.min(left.yMax, right.yMax) - Math.max(left.yMin, right.yMin);
+        if (xOverlap > tolerance && yOverlap > tolerance) {
+          assert.fail(`page ${page.pageIndex + 1}: overlapping words '${left.text}' (${left.xMin.toFixed(2)},${left.yMin.toFixed(2)}) and '${right.text}' (${right.xMin.toFixed(2)},${right.yMin.toFixed(2)}) (${xOverlap.toFixed(2)} x ${yOverlap.toFixed(2)}pt)`);
+        }
+      }
+    }
+  }
+}
+
+function assertNoWideSolitaryHyphenLines(pages) {
+  for (const page of pages) {
+    const bodyLines = page.lines.filter((line) => line.yMin > page.height * 0.25 && line.yMin < page.footerY);
+    const leftWords = page.words.filter((word) => word.xMin < page.width / 2 && word.yMin < page.footerY);
+    const leftEdge = Math.min(...leftWords.map((word) => word.xMin));
+    const rightEdge = page.width - (page.width / 2 - leftEdge);
+    for (const line of bodyLines) {
+      if (line.words.length !== 1 || !line.words[0].text.endsWith('-')) continue;
+      const available = (line.column === 0 ? page.width / 2 : rightEdge) - line.xMax;
+      assert.ok(available <= 25, `page ${page.pageIndex + 1}, column ${line.column + 1}: solitary hyphenated fragment '${line.words[0].text}' leaves ${available.toFixed(2)}pt unused`);
+    }
+  }
 }
 
 function contentTokens(input) {
@@ -269,11 +365,13 @@ function assertColumnBreaksFillTheColumn(pages, input) {
     ...(input.data.table?.head ?? []),
     ...(input.data.table?.body ?? []).flat(),
   ].filter(Boolean).flatMap((value) => String(value).split(/\s+/).map(normalize)));
+  const headingTokens = new Set((input.data.sections ?? []).flatMap((sectionData) => String(sectionData.heading).split(/\s+/).map(normalize)));
   for (const page of pages) {
     const bodyLines = contentLines(page, input).map((line) => ({ ...line, bodyWords: line.contentWords }));
     const left = bodyLines.filter((line) => line.column === 0);
     const right = bodyLines.filter((line) => line.column === 1);
     if (left.length === 0 || right.length === 0) continue;
+    if (right[0].tokens.some((token) => headingTokens.has(token))) continue;
     if (right.some((line) => line.tokens.some((token) => blockTokens.has(token)))) continue;
     const leftY = left.flatMap((line) => line.bodyWords.map((word) => word.yMax));
     const lineDeltas = [...new Set(bodyLines.map((line) => line.column))].flatMap((column) => {
@@ -286,7 +384,7 @@ function assertColumnBreaksFillTheColumn(pages, input) {
     // remaining gap is the actual unused column space being tested.
     const usableBottom = page.footerY - lineHeight;
     const gap = usableBottom - Math.max(...leftY);
-    assert.ok(gap <= lineHeight * 2.5, `page ${page.pageIndex + 1}: left column broke ${gap.toFixed(2)}pt before footer, more than 2.5 lines (${lineHeight.toFixed(2)}pt)`);
+    assert.ok(gap <= lineHeight * 2.5, `page ${page.pageIndex + 1}: left column broke ${gap.toFixed(2)}pt before footer, more than 2.5 lines (${lineHeight.toFixed(2)}pt); last left '${left.at(-1)?.text ?? ''}' at y=${left.at(-1)?.yMin.toFixed(2)}, first right '${right.at(0)?.text ?? ''}' at y=${right.at(0)?.yMin.toFixed(2)}`);
   }
 }
 
@@ -327,7 +425,11 @@ function assertNoInternalColumnHoles(pages, input) {
   const tableBoundaryTokens = new Set([
     input.data.table?.caption,
     ...(input.data.table?.head ?? []),
-  ].filter(Boolean).map((value) => normalize(value)));
+  ].filter(Boolean).flatMap((value) => String(value).split(/\s+/).map(normalize)));
+  const blockBoundaryTokens = new Set([
+    ...tableBoundaryTokens,
+    input.data.highlights_title,
+  ].filter(Boolean).flatMap((value) => String(value).split(/\s+/).map(normalize)));
   for (const page of pages) {
     const lines = contentLines(page, input);
     const deltas = lines.flatMap((line) => {
@@ -342,8 +444,8 @@ function assertNoInternalColumnHoles(pages, input) {
       for (let index = 1; index < columnLines.length; index += 1) {
         const gap = columnLines[index].yMin - columnLines[index - 1].yMin;
         if (
-          columnLines[index - 1].tokens.some((token) => headingTokens.has(token) || tableBoundaryTokens.has(token))
-          || columnLines[index].tokens.some((token) => headingTokens.has(token) || tableBoundaryTokens.has(token))
+          columnLines[index - 1].tokens.some((token) => headingTokens.has(token) || blockBoundaryTokens.has(token))
+          || columnLines[index].tokens.some((token) => headingTokens.has(token) || blockBoundaryTokens.has(token))
           || columnLines[index - 1].tokens.some((token) => introTokens.has(token))
           || columnLines[index].tokens.some((token) => introTokens.has(token))
         ) continue;
@@ -355,7 +457,7 @@ function assertNoInternalColumnHoles(pages, input) {
 
 async function renderAndMeasure(name, input, workDir) {
   const outputPath = join(workDir, `${name}.pdf`);
-  const renderResult = await execFileAsync(process.execPath, ['cli-bundle.cjs', 'render_report', JSON.stringify({ ...input, output_path: outputPath })], {
+  await execFileAsync(process.execPath, ['cli-bundle.cjs', 'render_report', JSON.stringify({ ...input, output_path: outputPath })], {
     cwd: root,
     env: { ...process.env, REPORT_BABY_DATA: workDir, REPORT_BABY_BRAND_DIR: brandDir },
     maxBuffer: 1024 * 1024,
@@ -379,39 +481,49 @@ const workDir = await mkdtemp(join(tmpdir(), 'report-baby-editorial-'));
 const failures = [];
 let selectedFixtureCount = 0;
 try {
-  const fixtures = [...reproducers, ...matrixFixtures];
+  const fixtures = [...reproducers, ...matrixFixtures, ...seededFixtures];
   const selectedFixtures = process.env.EDITORIAL_FLOW_FILTER
     ? fixtures.filter((fixture) => fixture.name.includes(process.env.EDITORIAL_FLOW_FILTER))
     : fixtures;
   selectedFixtureCount = selectedFixtures.length;
-  for (const fixture of selectedFixtures) {
-    try {
-      const result = await renderAndMeasure(fixture.name, fixture.input, workDir);
-      const fixtureFailures = [];
-      for (const check of [
-        () => assertNoOrphanedFirstLines(result.pages, fixture.input),
-        () => assertColumnBreaksFillTheColumn(result.pages, fixture.input),
-        () => assertNoEmptyContentColumns(result.pages, fixture.input),
-        () => assertTablesDoNotStartInAnEmptyColumn(result.pages, fixture.input),
-        () => assertNoInternalColumnHoles(result.pages, fixture.input),
-      ]) {
-        try {
-          check();
-        } catch (error) {
-          fixtureFailures.push(error.message);
+  if (selectedFixtures.length === 0) throw new Error(`No editorial-flow fixtures matched EDITORIAL_FLOW_FILTER='${process.env.EDITORIAL_FLOW_FILTER}'.`);
+  const requestedConcurrency = Number.parseInt(process.env.EDITORIAL_FLOW_CONCURRENCY ?? '4', 10);
+  const concurrency = Math.max(1, Math.min(4, Number.isFinite(requestedConcurrency) ? requestedConcurrency : 4));
+  let nextFixture = 0;
+  async function worker() {
+    while (nextFixture < selectedFixtures.length) {
+      const fixture = selectedFixtures[nextFixture];
+      nextFixture += 1;
+      try {
+        const result = await renderAndMeasure(fixture.name, fixture.input, workDir);
+        const fixtureFailures = [];
+        for (const check of [
+          () => assertNoWordOverlaps(result.pages),
+          () => assertNoWideSolitaryHyphenLines(result.pages),
+          () => assertNoOrphanedFirstLines(result.pages, fixture.input),
+          () => assertColumnBreaksFillTheColumn(result.pages, fixture.input),
+          () => assertNoEmptyContentColumns(result.pages, fixture.input),
+          () => assertTablesDoNotStartInAnEmptyColumn(result.pages, fixture.input),
+          () => assertNoInternalColumnHoles(result.pages, fixture.input),
+        ]) {
+          try {
+            check();
+          } catch (error) {
+            fixtureFailures.push(error.message);
+          }
         }
+        if (fixtureFailures.length > 0) throw new Error(fixtureFailures.join(' | '));
+        console.log(`${fixture.name}: ${result.pages.length} page(s) OK`);
+      } catch (error) {
+        failures.push(`${fixture.name}: ${error.message}`);
+        console.error(`${fixture.name}: FAIL — ${error.message}`);
       }
-      if (fixtureFailures.length > 0) throw new Error(fixtureFailures.join(' | '));
-      console.log(`${fixture.name}: ${result.pages.length} page(s) OK`);
-    } catch (error) {
-      failures.push(`${fixture.name}: ${error.message}`);
-      console.error(`${fixture.name}: FAIL — ${error.message}`);
     }
   }
-  if (selectedFixtures.length === 0) throw new Error(`No editorial-flow fixtures matched EDITORIAL_FLOW_FILTER='${process.env.EDITORIAL_FLOW_FILTER}'.`);
+  await Promise.all(Array.from({ length: Math.min(concurrency, selectedFixtures.length) }, () => worker()));
 } finally {
   await rm(workDir, { recursive: true, force: true });
 }
 
 if (failures.length > 0) assert.fail(failures.join('\n'));
-console.log(`Editorial dynamic flow: ${selectedFixtureCount} fixture(s) OK (${reproducers.length} reproducers, ${matrixFixtures.length} matrix variants available)`);
+console.log(`Editorial dynamic flow: ${selectedFixtureCount} fixture(s) OK (${reproducers.length} reproducers, ${matrixFixtures.length} matrix variants, ${seededSeeds.length} seeds [${seededSeeds.map((seed) => `0x${seed.toString(16)}`).join(', ')}], ${seededFixtures.length} seeded fixtures available)`);
