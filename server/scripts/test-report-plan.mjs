@@ -53,6 +53,16 @@ try {
     },
     pageCount: 2,
   });
+  const noIntroPlan = resolveReportPlan({
+    templateRef: 'pages/editorial-two-column',
+    theme,
+    geometry,
+    data: {
+      title: 'Plan coverage contract',
+      sections: [{ heading: 'Body', body: 'Text.' }],
+    },
+    pageCount: 1,
+  });
 
   assert.equal(plan.schemaVersion, 1);
   assert.equal(plan.templateRef, 'pages/editorial-two-column');
@@ -65,6 +75,7 @@ try {
   assert.ok(first.blocks.some((item) => item.id === 'highlights' && item.container), 'highlights must be represented as a logical container');
   assert.ok(first.blocks.find((item) => item.id === 'footer'), 'footer must be a planned block');
   assertReportPlan(plan);
+  assertReportPlan(noIntroPlan, { requireCoverage: true, maxCoverageGap: 18 });
   for (const page of plan.pages) {
     for (const item of page.blocks) {
       assert.ok(item.box.x >= 0 && item.box.y >= 0, `${item.id} starts outside the page`);

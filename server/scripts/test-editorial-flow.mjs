@@ -5,10 +5,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { prepareDemoBrandStore } from './lib/brand-store.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
-const brandDir = join(root, '..', 'examples', 'brand-showcase', 'brands');
 const brandRefs = ['flux', 'orbit', 'parcelia', 'pyrus'];
 const corpus = [
   'transport.txt',
@@ -472,6 +472,7 @@ function assertNoInternalColumnHoles(pages, input) {
   const blockBoundaryTokens = new Set([
     ...tableBoundaryTokens,
     input.data.highlights_title,
+    ...(input.data.highlights ?? []),
   ].filter(Boolean).flatMap((value) => String(value).split(/\s+/).map(normalize)));
   for (const page of pages) {
     const lines = contentLines(page, input);
@@ -498,14 +499,14 @@ function assertNoInternalColumnHoles(pages, input) {
   }
 }
 
-function renderBatch(fixtures, workDir, concurrency) {
+function renderBatch(fixtures, workDir, concurrency, brandStore, planOnly = false) {
   const batchCount = Math.min(concurrency, fixtures.length);
   const batches = Array.from({ length: batchCount }, () => []);
   fixtures.forEach((fixture, index) => batches[index % batchCount].push(fixture));
   return Promise.all(batches.map((batch) => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['cli-bundle.cjs', '--batch'], {
       cwd: root,
-      env: { ...process.env, REPORT_BABY_DATA: workDir, REPORT_BABY_BRAND_DIR: brandDir },
+      env: { ...process.env, REPORT_BABY_DATA: workDir, REPORT_BABY_BRAND_STORE: brandStore },
     });
     let stderr = '';
     child.stdout.setEncoding('utf8');
@@ -519,16 +520,15 @@ function renderBatch(fixtures, workDir, concurrency) {
     });
     child.stdin.end(JSON.stringify(batch.map((fixture) => ({
       tool: 'render_report',
-      args: { ...fixture.input, output_path: join(workDir, `${fixture.name}.pdf`) },
+      args: planOnly ? { ...fixture.input, dry_run: true } : { ...fixture.input, output_path: join(workDir, `${fixture.name}.pdf`) },
     }))));
   })));
 }
 
 async function measureRendered(name, input, workDir) {
   const outputPath = join(workDir, `${name}.pdf`);
-  const { stdout } = await execFileAsync('pdftotext', [outputPath, '-']);
   const { stdout: bbox } = await execFileAsync('pdftotext', ['-bbox-layout', outputPath, '-']);
-  return { pages: parseBbox(bbox), text: stdout };
+  return { pages: parseBbox(bbox) };
 }
 
 try {
@@ -542,6 +542,7 @@ try {
 }
 
 const workDir = await mkdtemp(join(tmpdir(), 'report-baby-editorial-'));
+const brandStore = join(workDir, 'brand-store');
 const failures = [];
 let selectedFixtureCount = 0;
 try {
@@ -553,11 +554,15 @@ try {
   if (selectedFixtures.length === 0) throw new Error(`No editorial-flow fixtures matched EDITORIAL_FLOW_FILTER='${process.env.EDITORIAL_FLOW_FILTER}'.`);
   const requestedConcurrency = Number.parseInt(process.env.EDITORIAL_FLOW_CONCURRENCY ?? '8', 10);
   const concurrency = Math.max(1, Math.min(8, Number.isFinite(requestedConcurrency) ? requestedConcurrency : 8));
-  await renderBatch(selectedFixtures, workDir, concurrency);
+  prepareDemoBrandStore(join(root, '..'), brandStore, 'editorial-test');
+  const matrixSelected = selectedFixtures.filter((fixture) => fixture.name.startsWith('matrix-'));
+  const pdfSelected = selectedFixtures.filter((fixture) => !fixture.name.startsWith('matrix-'));
+  await renderBatch(matrixSelected, workDir, concurrency, brandStore, true);
+  await renderBatch(pdfSelected, workDir, concurrency, brandStore);
   let nextFixture = 0;
   async function worker() {
-    while (nextFixture < selectedFixtures.length) {
-      const fixture = selectedFixtures[nextFixture];
+    while (nextFixture < pdfSelected.length) {
+      const fixture = pdfSelected[nextFixture];
       nextFixture += 1;
       try {
         const result = await measureRendered(fixture.name, fixture.input, workDir);
@@ -586,7 +591,7 @@ try {
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, selectedFixtures.length) }, () => worker()));
+  await Promise.all(Array.from({ length: Math.min(concurrency, pdfSelected.length) }, () => worker()));
 } finally {
   await rm(workDir, { recursive: true, force: true });
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.5
+
+- Added report-plan coverage checks and fixed the unused lead band when an
+  editorial report has no intro, restoring the one-page table reproducer.
+- Reserved a separate footer text area from the page number and added cache
+  coverage for raster assets on the unprepared brand path.
+- Added report plan-only diagnostics, prepared brand stores in regression
+  harnesses, reproducers A–I in the baseline, and parallel visual QA to keep
+  the full baseline below three minutes.
+
 ## v0.9.4
 
 - Added a deterministic report layout plan covering report blocks, columns,

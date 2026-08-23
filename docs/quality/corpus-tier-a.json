@@ -22,6 +22,7 @@
     { "id": "layout-flux-f", "kind": "report", "brand": "flux", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-flux-g", "kind": "report", "brand": "flux", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-flux-h", "kind": "report", "brand": "flux", "profile": "primary", "formats": ["pdf"] },
+    { "id": "layout-flux-i", "kind": "report", "brand": "flux", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-orbit-a", "kind": "report", "brand": "orbit", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-orbit-b", "kind": "report", "brand": "orbit", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-orbit-c", "kind": "report", "brand": "orbit", "profile": "primary", "formats": ["pdf"] },
@@ -30,6 +31,7 @@
     { "id": "layout-orbit-f", "kind": "report", "brand": "orbit", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-orbit-g", "kind": "report", "brand": "orbit", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-orbit-h", "kind": "report", "brand": "orbit", "profile": "primary", "formats": ["pdf"] },
+    { "id": "layout-orbit-i", "kind": "report", "brand": "orbit", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-parcelia-a", "kind": "report", "brand": "parcelia", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-parcelia-b", "kind": "report", "brand": "parcelia", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-parcelia-c", "kind": "report", "brand": "parcelia", "profile": "primary", "formats": ["pdf"] },
@@ -38,6 +40,7 @@
     { "id": "layout-parcelia-f", "kind": "report", "brand": "parcelia", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-parcelia-g", "kind": "report", "brand": "parcelia", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-parcelia-h", "kind": "report", "brand": "parcelia", "profile": "primary", "formats": ["pdf"] },
+    { "id": "layout-parcelia-i", "kind": "report", "brand": "parcelia", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-pyrus-a", "kind": "report", "brand": "pyrus", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-pyrus-b", "kind": "report", "brand": "pyrus", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-pyrus-c", "kind": "report", "brand": "pyrus", "profile": "primary", "formats": ["pdf"] },
@@ -46,5 +49,6 @@
     { "id": "layout-pyrus-f", "kind": "report", "brand": "pyrus", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-pyrus-g", "kind": "report", "brand": "pyrus", "profile": "primary", "formats": ["pdf"] },
     { "id": "layout-pyrus-h", "kind": "report", "brand": "pyrus", "profile": "primary", "formats": ["pdf"] }
+    ,{ "id": "layout-pyrus-i", "kind": "report", "brand": "pyrus", "profile": "primary", "formats": ["pdf"] }
   ]
 }

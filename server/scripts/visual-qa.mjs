@@ -3,6 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import { inflateRawSync, inflateSync } from 'node:zlib';
 import { parse as parseYaml } from 'yaml';
 import { pdfContentHash, pptxContentHash, sha256, zipEntries } from './lib/artifact-inspect.mjs';
@@ -39,6 +40,7 @@ const settings = {
   office: !flag('no-office'),
   requireOffice: flag('require-office'),
   json: option('json', undefined),
+  parallel: Math.max(1, Math.min(8, Number.parseInt(option('parallel', '1'), 10) || 1)),
 };
 const reportPath = settings.json ? resolve(REPO_ROOT, settings.json) : join(settings.out, 'qa-report.json');
 const templateRoot = settings.templateDir ? resolve(REPO_ROOT, settings.templateDir) : resolve(REPO_ROOT, 'server/templates');
@@ -319,7 +321,7 @@ function buildCases() {
       expect: 'render',
       input: { ...standardReport(), template: 'campaign-summary' },
     });
-    for (const variant of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']) {
+    for (const variant of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']) {
       cases.push({
         id: `layout-${brand}-${variant.toLowerCase()}`,
         group: 'formats',
@@ -450,14 +452,28 @@ function buildCases() {
   return settings.only ? cases.filter((item) => item.id.includes(settings.only)) : cases;
 }
 
-function renderCase(item, directory) {
+function runAsync(command, args, options = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { cwd: options.cwd, env: options.env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => resolve({ status: null, signal: null, stdout, stderr, error }));
+    child.on('close', (status, signal) => resolve({ status, signal, stdout, stderr }));
+  });
+}
+
+async function renderCase(item, directory) {
   mkdirSync(directory, { recursive: true });
   const inputPath = join(directory, 'input.json');
   writeFileSync(inputPath, `${JSON.stringify(item.input, null, 2)}\n`);
   const outputDir = join(directory, 'out');
   const environment = { ...process.env };
   if (settings.templateDir) environment.REPORT_BABY_TEMPLATE_DIR = resolve(REPO_ROOT, settings.templateDir);
-  const result = run(process.execPath, [
+  const result = await runAsync(process.execPath, [
     settings.bundle,
     '--kind', item.kind,
     '--brand-root', settings.brandRoot,
@@ -474,6 +490,20 @@ function renderCase(item, directory) {
     .map((line) => line.trim())
     .filter(Boolean);
   return { result, outputDir, manifest, message: diagnosticLines.filter((line) => !line.startsWith('at ') && !line.startsWith('Node.js')).join('\n'), stderr: result.stderr };
+}
+
+async function mapWithConcurrency(items, limit, callback) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await callback(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
 }
 
 function themeContrastPairs(theme, kind) {
@@ -1115,8 +1145,8 @@ function gateInk(item, rendered, checks, images) {
   }
 }
 
-function gateDeterminism(item, rendered, directory, checks, images) {
-  const repeat = renderCase(item, join(directory, 'repeat'));
+async function gateDeterminism(item, rendered, directory, checks, images) {
+  const repeat = await renderCase(item, join(directory, 'repeat'));
   if (repeat.result.status !== 0) {
     checks.push({ gate: 'determinism', name: 'repeat render', status: 'fail', message: `the repeat render failed: ${repeat.message}` });
     return;
@@ -1240,7 +1270,7 @@ function summarise(checks) {
   return totals;
 }
 
-function preflight() {
+async function preflight() {
   const probe = {
     id: 'preflight',
     group: 'preflight',
@@ -1251,11 +1281,11 @@ function preflight() {
     expect: 'render',
     input: deck([{ type: 'narrative', title: 'Preflight', body: 'One line.' }]),
   };
-  const rendered = renderCase(probe, join(settings.out, 'cases', 'preflight'));
+  const rendered = await renderCase(probe, join(settings.out, 'cases', 'preflight'));
   return { ok: rendered.result.status === 0, message: rendered.message, stderr: rendered.stderr.slice(0, 2000) };
 }
 
-function main() {
+async function main() {
   mkdirSync(settings.out, { recursive: true });
   const environment = {
     node: process.version,
@@ -1272,7 +1302,7 @@ function main() {
     return 1;
   }
   const checkStarted = Date.now();
-  const gate = preflight();
+  const gate = await preflight();
   if (!gate.ok) {
     const report = {
       schemaVersion: 1,
@@ -1291,9 +1321,11 @@ function main() {
   const converter = settings.office ? findOfficeConverter(join(settings.out, 'libreoffice-profile'), { filesystemDirectory: settings.out }) : null;
   const cases = buildCases();
   const records = [];
-  for (const item of cases) {
+  const renderedCases = await mapWithConcurrency(cases, settings.parallel, async (item) => {
     const directory = join(settings.out, 'cases', item.id);
-    const rendered = renderCase(item, directory);
+    return { item, directory, rendered: await renderCase(item, directory) };
+  });
+  for (const { item, directory, rendered } of renderedCases) {
     const checks = [];
     const images = [];
     if (item.expect === 'reject') {
@@ -1331,7 +1363,7 @@ function main() {
         gateMeasuredContrast(item, rendered, checks, images);
         if (item.inkGate) gateInk(item, rendered, checks, images);
       }
-      if (item.determinism) gateDeterminism(item, rendered, directory, checks, images);
+      if (item.determinism) await gateDeterminism(item, rendered, directory, checks, images);
       if (item.office && settings.office) gateOfficeRoundTrip(item, rendered, directory, checks, images, converter);
     }
     const totals = summarise(checks);
@@ -1409,4 +1441,4 @@ function main() {
   return status === 'FAIL' ? 1 : 0;
 }
 
-process.exitCode = main();
+process.exitCode = await main();

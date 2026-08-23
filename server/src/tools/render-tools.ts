@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { listBrandTemplates, resolveBrandContext, type BrandOverrides } from '../brand-context.js';
 import type { ReportConfig } from '../config.js';
 import type { RenderTheme } from '../core/model/render-theme.js';
-import { listTemplates, renderReportPdfDetailed, type ReportData } from '../report-renderer.js';
+import { listTemplates, renderReportPdfDetailed, resolveReportPlanOnly, type ReportData } from '../report-renderer.js';
 import { renderChart, metricCards, type ChartType } from '../svg.js';
 import { loadRenderFontSet, renderSvgToPng } from '../render-primitives.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, type SlideDeck } from '../slides.js';
@@ -193,16 +193,21 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       ...reportDiagnosticsField,
       template_ref: z.string().optional().describe('Alternative way to name the built-in A4 report template; must be one of the list_templates report names. Slide composition references such as slides/two-column are rejected here — they belong to the render_slides_* tools'),
     },
-    async ({ template, data, output_path, brand_ref, template_ref, surface, overrides, diagnostics }) => {
+    async ({ template, data, output_path, brand_ref, template_ref, surface, overrides, dry_run, diagnostics }) => {
       const requestedTemplate = template_ref ?? template;
       if (!reportTemplateNames().includes(requestedTemplate)) {
         return { content: [{ type: 'text' as const, text: unknownReportTemplateMessage(requestedTemplate) }], isError: true };
       }
       const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, templateRef: template_ref ?? template, surface: surface ?? 'pdf-a4', overrides: overrides as BrandOverrides | undefined, brandSourceRoots: cfg.brandSourceRoots });
+      const resolvedData = { ...data, brand: data.brand ?? context.brandName } as ReportData;
+      if (dry_run) {
+        const plan = resolveReportPlanOnly(requestedTemplate, resolvedData, context.theme);
+        return { content: [{ type: 'text' as const, text: 'Report plan resolved without rendering.' }], structuredContent: { ...brandRenderSummary(context.diagnostics), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan, drawings: [] }, 'full'), dryRun: true } };
+      }
       await mkdir(cfg.outputDir, { recursive: true });
       const out = outputPath(cfg, output_path, 'pdf');
       const renderWarnings: string[] = [];
-      const rendered = await renderReportPdfDetailed(requestedTemplate, { ...data, brand: data.brand ?? context.brandName } as ReportData, context.theme, renderWarnings);
+      const rendered = await renderReportPdfDetailed(requestedTemplate, resolvedData, context.theme, renderWarnings);
       await writeFile(out, rendered.buffer);
       return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...brandRenderSummary(context.diagnostics, renderWarnings), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan: rendered.diagnostics.plan, drawings: rendered.diagnostics.drawings }, diagnostics) } };
     },

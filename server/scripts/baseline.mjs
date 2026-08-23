@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pdfContentHash, pptxContentHash, sha256 } from './lib/artifact-inspect.mjs';
+import { prepareDemoBrandStore } from './lib/brand-store.mjs';
 import { runProcess } from './lib/process.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -56,11 +57,12 @@ function canonicalCases(cases) {
   return JSON.stringify(cases.map(normaliseCase).sort((left, right) => left.id.localeCompare(right.id)));
 }
 
-function runVisualQa(templateDir, outputDir, reportPath) {
-  const qaArgs = [VISUAL_QA_PATH, '--no-office', '--out', outputDir, '--json', reportPath];
+function runVisualQa(templateDir, outputDir, reportPath, brandStore) {
+  const qaArgs = [VISUAL_QA_PATH, '--no-office', '--parallel', '4', '--out', outputDir, '--json', reportPath];
   if (templateDir) qaArgs.push('--template-dir', resolve(REPO_ROOT, templateDir));
   const result = runProcess(process.execPath, qaArgs, {
     cwd: REPO_ROOT,
+    env: { ...process.env, REPORT_BABY_BRAND_STORE: brandStore },
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -115,8 +117,10 @@ function collectArtifacts(cases, report) {
 function collectCurrent(cases, templateDir) {
   const outputDir = mkdtempSync(join(tmpdir(), 'report-baby-baseline-'));
   const reportPath = join(outputDir, 'qa-report.json');
+  const brandStore = join(outputDir, 'brand-store');
   try {
-    const report = runVisualQa(templateDir, outputDir, reportPath);
+    prepareDemoBrandStore(REPO_ROOT, brandStore, 'baseline-test');
+    const report = runVisualQa(templateDir, outputDir, reportPath, brandStore);
     return { cases, artifacts: collectArtifacts(cases, report) };
   } finally {
     rmSync(outputDir, { recursive: true, force: true });

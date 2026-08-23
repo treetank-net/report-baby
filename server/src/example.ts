@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { readBrandShowcase, resolveBrandContext, type BrandOverrides } from './brand-context.js';
-import { getBrandSourceRoots } from './config.js';
+import { getBrandDir, getBrandSourceRoots } from './config.js';
 import { renderReportPdf } from './report-renderer.js';
 import type { RenderTheme } from './core/model/render-theme.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnostics, type SlideDeck } from './slides.js';
@@ -20,6 +20,10 @@ interface CliArgs {
   out: string;
   formats: string[];
   surface?: string;
+}
+
+function configuredBrandRoot(args: CliArgs): string {
+  return process.env.REPORT_BABY_BRAND_STORE ? getBrandDir() : args.brandRoot;
 }
 
 function usage(): never {
@@ -138,7 +142,7 @@ async function renderReportData(args: CliArgs, input: any): Promise<Record<strin
   const inputData = input.data ?? input;
   const template = input.template ?? input.template_ref ?? 'default-report';
   const brandRef = input.brand_ref ?? args.brand;
-  const context = await resolveBrandContext(args.brandRoot, {
+  const context = await resolveBrandContext(configuredBrandRoot(args), {
     brandRef,
     templateRef: input.template_ref ?? template,
     surface: args.surface ?? 'pdf-a4',
@@ -168,7 +172,7 @@ async function renderReportExample(args: CliArgs, input: any): Promise<Record<st
 async function renderDeckData(args: CliArgs, input: any): Promise<Record<string, unknown>> {
   const data = slideDeckSchema.parse(input.data ?? input) as SlideDeck;
   const resolved = await resolveSlideDeck(data, {
-    brandRoot: args.brandRoot,
+    brandRoot: configuredBrandRoot(args),
     brandSourceRoots: getBrandSourceRoots(),
     brandRef: input.brand_ref ?? args.brand,
     templateRef: input.template_ref,
@@ -233,7 +237,7 @@ function showcaseSlide(slide: any, baseBrand: string): any {
 }
 
 async function renderShowcaseExample(args: CliArgs): Promise<Record<string, unknown>> {
-  const showcase = await readBrandShowcase(args.brandRoot, args.brand) as any;
+  const showcase = await readBrandShowcase(configuredBrandRoot(args), args.brand) as any;
   const reports: unknown[] = [];
   for (const report of showcaseEntries(showcase.reports ?? showcase.report, 'report')) {
     const directory = join(args.out, 'reports', report.id ?? 'report');

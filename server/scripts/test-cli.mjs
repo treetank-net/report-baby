@@ -39,6 +39,16 @@ try {
   assert.equal(rendered.stdout.trim(), outputPath);
   assert.equal((await readFile(outputPath)).subarray(0, 5).toString(), '%PDF-');
 
+  const planOnly = await run(['render_report'], JSON.stringify({
+    template: 'pages/editorial-two-column',
+    dry_run: true,
+    data: { title: 'Plan only', sections: [{ heading: 'Works', body: 'The layout plan resolves without producing a PDF.' }] },
+  }));
+  assert.equal(planOnly.code, 0, planOnly.stderr);
+  const planResult = JSON.parse(planOnly.stdout);
+  assert.equal(planResult.dryRun, true);
+  assert.ok(Array.isArray(planResult.reportPlan?.pages));
+
   const brandedPath = join(outputDir, 'branded-report.pdf');
   const branded = await run([
     '--brand-url', join(root, '..'),

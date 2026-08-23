@@ -1,6 +1,6 @@
 {
   "name": "report-baby-server",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "Self-contained SVG/data \u2192 PNG/PDF render MCP server (resvg-wasm + jsPDF, zero runtime deps)",
   "type": "module",
   "main": "bundle.cjs",
@@ -23,6 +23,7 @@
     "test:brand": "node ../scripts/test-brand-contract.js",
     "test:brand-assets": "node scripts/test-brand-assets.mjs",
     "test:report-plan": "node scripts/test-report-plan.mjs",
+    "test:fallback-cache": "node scripts/test-fallback-cache.mjs",
     "test:report-layout": "node scripts/test-report-layout.mjs",
     "test:cli": "node scripts/test-cli.mjs",
     "test:editorial-flow": "node scripts/test-editorial-flow.mjs",

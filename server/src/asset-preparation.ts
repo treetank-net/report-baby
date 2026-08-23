@@ -151,6 +151,14 @@ function encodePng(image: PngImage): Buffer {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(raw, { level: 9 })), pngChunk('IEND', Buffer.alloc(0))]);
 }
 
+export function preparePngBuffer(source: Buffer, width: number, height: number, anchorY: number): Buffer | undefined {
+  try {
+    return encodePng(resizeCover(decodePng(source), { role: 'runtime', width, height, dpi: 0, anchorY }).image);
+  } catch {
+    return undefined;
+  }
+}
+
 function cropForTarget(source: PngImage, target: PreparedTarget): [number, number, number, number] {
   const sourceAspect = source.width / source.height;
   const targetAspect = target.width / target.height;

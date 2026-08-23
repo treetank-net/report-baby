@@ -4,6 +4,8 @@ import type { ResolvedReportBlock, ResolvedReportPagePlan, ResolvedReportPlan } 
 export interface ReportPlanAssertionOptions {
   tolerance?: number;
   requireContinuationFill?: boolean;
+  requireCoverage?: boolean;
+  maxCoverageGap?: number;
 }
 
 function right(box: ResolvedBox): number {
@@ -82,6 +84,21 @@ function assertContinuationFill(page: ResolvedReportPagePlan, tolerance: number)
   }
 }
 
+function assertPageCoverage(page: ResolvedReportPagePlan, tolerance: number, maxGap: number): void {
+  const topLevel = page.blocks
+    .filter((block) => !block.parentId)
+    .filter((block) => ['header', 'intro', 'flow', 'footer'].includes(block.id))
+    .sort((left, rightBlock) => left.box.y - rightBlock.box.y);
+  for (let index = 1; index < topLevel.length; index += 1) {
+    const previous = topLevel[index - 1];
+    const current = topLevel[index];
+    const gap = current.box.y - bottom(previous.box);
+    if (gap > maxGap + tolerance) {
+      throw new Error(`report plan page ${page.page}: unassigned coverage gap between '${previous.id}' and '${current.id}' is ${gap.toFixed(2)}`);
+    }
+  }
+}
+
 /** Validate the report layout contract without touching jsPDF or the filesystem. */
 export function assertReportPlan(plan: ResolvedReportPlan, options: ReportPlanAssertionOptions = {}): void {
   const tolerance = options.tolerance ?? 0.001;
@@ -89,5 +106,6 @@ export function assertReportPlan(plan: ResolvedReportPlan, options: ReportPlanAs
     assertPageContainment(page, tolerance);
     assertPageDisjointness(page, tolerance);
     if (options.requireContinuationFill ?? true) assertContinuationFill(page, tolerance);
+    if (options.requireCoverage) assertPageCoverage(page, tolerance, options.maxCoverageGap ?? 0);
   }
 }

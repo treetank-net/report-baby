@@ -127,6 +127,9 @@ pdf:
   highlight_bullet_y: 1.4
   highlight_bullet_radius: 0.9
   footer_text_y: 290
+  footer_number_gap: 6
+  footer_text_line_height: 3.5
+  plan_coverage_max_gap: 18
   footer_font_size: 8
   title_logo_width: 28
   title_logo_height: 7

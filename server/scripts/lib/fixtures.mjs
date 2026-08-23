@@ -123,6 +123,14 @@ export function editorialRegressionReport(variant) {
   if (variant === 'F') report.data = { ...report.data, sections: [section('Deficyt obejmuje niemal cala Polske', `${prose} ${prose}`)], table: { head: ['Wskaznik', 'Wartosc'], body: [['Pozycja 1', '11'], ['Pozycja 2', '22']], caption: 'Dane z raportu przytoczone w artykule' }, highlights_title: 'Najwazniejsze obserwacje', highlights: ['Rynek pracy kierowcow pozostaje napiety', 'Koszty operacyjne rosna szybciej niz przychody'] };
   if (variant === 'G') report.template = 'default-report', report.data = { ...standardReport().data, title: 'Table footer regression', sections: [{ heading: 'Context', body: 'Short context.' }], table: { head: ['Wskaznik', 'Wartosc'], body: Array.from({ length: 70 }, (_, index) => [`Pozycja ${index + 1}`, `${index + 100}`]), caption: 'Dane' }, footer: 'Regression G' };
   if (variant === 'H') report.data = { ...report.data, sections: Array.from({ length: 6 }, (_, index) => section(index + 1, Array.from({ length: 320 }, (_, word) => `Body${word + index * 320}`).join(' '))) };
+  if (variant === 'I') {
+    const reprose = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny przewozow dlugodystansowych. ';
+    report.data = {
+      ...report.data,
+      sections: Array.from({ length: 4 }, (_, index) => section(index + 1, reprose.repeat(2))),
+      table: { head: ['Wskaznik', 'Wartosc'], body: Array.from({ length: 6 }, (_, index) => [`Pozycja ${index + 1}`, `${index + 11}`]), caption: 'Dane' },
+    };
+  }
   return report;
 }
 

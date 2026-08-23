@@ -1,7 +1,8 @@
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { assetDataUri, defaultRenderTheme } from './brand-context.js';
+import { preparePngBuffer } from './asset-preparation.js';
 import { readBuiltinPageTemplateSource, readRenderConfig } from './builtin-template-source.js';
 import type { RenderTheme } from './core/model/render-theme.js';
 import type { ResolvedReportPlan } from './core/model/resolved-report-plan.js';
@@ -375,18 +376,52 @@ interface PdfAsset {
 }
 
 const preparedBrandAssetCache = new Map<string, PdfAsset>();
+const preparedFallbackAssetKeys = new Set<string>();
+let preparedBrandAssetCacheHits = 0;
+let preparedBrandAssetCacheMisses = 0;
+let preparedFallbackAssetCacheHits = 0;
 
 export function clearPreparedBrandAssetCache(): void {
   preparedBrandAssetCache.clear();
+  preparedFallbackAssetKeys.clear();
+  preparedBrandAssetCacheHits = 0;
+  preparedBrandAssetCacheMisses = 0;
+  preparedFallbackAssetCacheHits = 0;
 }
 
-async function prepareBrandAsset(path: string | undefined, width: number): Promise<PdfAsset | undefined> {
+export function preparedBrandAssetCacheStats(): { entries: number; hits: number; misses: number; fallbackEntries: number; fallbackHits: number } {
+  return { entries: preparedBrandAssetCache.size, hits: preparedBrandAssetCacheHits, misses: preparedBrandAssetCacheMisses, fallbackEntries: preparedFallbackAssetKeys.size, fallbackHits: preparedFallbackAssetCacheHits };
+}
+
+interface PreparedBrandAssetTarget {
+  role: string;
+  width: number;
+  height: number;
+  dpi: number;
+  anchorY: number;
+}
+
+async function prepareBrandAsset(path: string | undefined, width: number, target?: PreparedBrandAssetTarget): Promise<PdfAsset | undefined> {
   if (!path) return undefined;
   const metadata = statSync(path);
   const targetPx = Math.round(width * PDF_CONFIG.assetRasterDensity);
-  const cacheKey = `${path}|${metadata.mtimeMs}|${targetPx}|${PDF_CONFIG.assetRasterDensity}`;
+  const cacheKey = `${path}|${metadata.mtimeMs}|${target?.width ?? targetPx}x${target?.height ?? targetPx}|${target?.dpi ?? PDF_CONFIG.assetRasterDensity}`;
   const cached = preparedBrandAssetCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    preparedBrandAssetCacheHits += 1;
+    if (preparedFallbackAssetKeys.has(cacheKey)) preparedFallbackAssetCacheHits += 1;
+    return cached;
+  }
+  preparedBrandAssetCacheMisses += 1;
+  if (target && !path.includes('/_prepared/') && !path.includes('\\_prepared\\')) {
+    const prepared = preparePngBuffer(readFileSync(path), target.width, target.height, target.anchorY);
+    if (prepared) {
+      const asset = { data: `data:image/png;base64,${prepared.toString('base64')}`, format: 'PNG' as const };
+      preparedBrandAssetCache.set(cacheKey, asset);
+      preparedFallbackAssetKeys.add(cacheKey);
+      return asset;
+    }
+  }
   const uri = await assetDataUri(path);
   if (!uri) return undefined;
   if (uri.startsWith('data:image/svg+xml')) {
@@ -461,7 +496,13 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
   const logoHeight = PDF_CONFIG.headerLogoHeight;
   const title = data.title ?? 'Report';
   const backgroundAsset = reportHeaderStyle === 'image-band'
-    ? await prepareBrandAsset(theme.reportHeaderImagePath ?? theme.backgroundImagePath, PAGE_W)
+    ? await prepareBrandAsset(theme.reportHeaderImagePath ?? theme.backgroundImagePath, PAGE_W, {
+      role: 'report_header_band',
+      width: RENDER_CONFIG.assets.reportHeaderBandWidthPx,
+      height: RENDER_CONFIG.assets.reportHeaderBandHeightPx,
+      dpi: RENDER_CONFIG.assets.reportHeaderBandDpi,
+      anchorY: RENDER_CONFIG.assets.reportHeaderBandAnchorY,
+    })
     : undefined;
   const logoAsset = await prepareBrandAsset(logoMarkPath ?? logoPath, logoWidth);
 
@@ -1061,8 +1102,15 @@ function renderFooter(doc: jsPDF, data: ReportData, theme: RenderTheme, geometry
     doc.setFontSize(PDF_CONFIG.footerFontSize);
     doc.setTextColor(...rgb(footerText));
     const footerTextY = geometry.height - (PAGE_H - PDF_CONFIG.footerTextY);
-    if (data.footer) doc.text(String(data.footer), geometry.margins.left, footerTextY);
-    doc.text(`${p} / ${pages}`, geometry.width - geometry.margins.right, footerTextY, { align: 'right' });
+    const pageLabel = `${p} / ${pages}`;
+    const pageNumberX = geometry.width - geometry.margins.right;
+    const pageNumberWidth = doc.getTextWidth(pageLabel);
+    const footerWidth = Math.max(1, pageNumberX - geometry.margins.left - PDF_CONFIG.footerNumberGap - pageNumberWidth);
+    if (data.footer) {
+      const footerLines = doc.splitTextToSize(String(data.footer), footerWidth) as string[];
+      footerLines.forEach((line, index) => doc.text(line, geometry.margins.left, footerTextY + index * PDF_CONFIG.footerTextLineHeight));
+    }
+    doc.text(pageLabel, pageNumberX, footerTextY, { align: 'right' });
   }
 }
 
@@ -1070,7 +1118,13 @@ async function renderTitlePage(doc: jsPDF, data: ReportData, theme: RenderTheme)
   const page = data.title_page;
   if (!page) return;
   const font = pdfFont(theme);
-  const backgroundAsset = await prepareBrandAsset(theme.coverImagePath, PAGE_W);
+  const backgroundAsset = await prepareBrandAsset(theme.coverImagePath, PAGE_W, {
+    role: 'cover',
+    width: RENDER_CONFIG.assets.coverWidthPx,
+    height: RENDER_CONFIG.assets.coverHeightPx,
+    dpi: RENDER_CONFIG.assets.coverDpi,
+    anchorY: RENDER_CONFIG.assets.coverAnchorY,
+  });
   const coverBand = theme.headerStyle === 'accent-band' ? theme.primary : theme.headerStyle === 'dark-band' ? theme.background : undefined;
   const hasGraphic = Boolean(backgroundAsset) || Boolean(coverBand) || Boolean(theme.coverBackground);
   doc.setFillColor(...rgb(theme.coverBackground ?? coverBand ?? theme.background));
@@ -1204,7 +1258,7 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     ? Math.max(0, Math.min(1, (cur.y - contentStart) / contentHeight))
     : 1;
   const finalPlan = resolveReportPlan({ templateRef: name, data: resolved, theme, geometry: planGeometry, pageCount: pages });
-  assertReportPlan(finalPlan);
+  assertReportPlan(finalPlan, { requireCoverage: geometry.dynamicFlow, maxCoverageGap: PDF_CONFIG.planCoverageMaxGap });
   return { buffer: Buffer.from(doc.output('arraybuffer')), pages, lastPageFill, plan: finalPlan, drawings };
 }
 
@@ -1249,4 +1303,38 @@ function resolveTemplate(name: string, data: ReportData): ResolvedReportTemplate
     };
   }
   throw new Error(`Unknown template: ${name}. Available: ${TEMPLATES.map((t) => t.name).join(', ')}`);
+}
+
+export function resolveReportPlanOnly(name: string, data: ReportData, theme = defaultRenderTheme()): ResolvedReportPlan {
+  const template = resolveTemplate(name, data);
+  const geometry = template.page ? pageGeometryFromTemplate(template.compiled!) : DEFAULT_PAGE_GEOMETRY;
+  const hasHeaderBand = theme.reportHeaderStyle === 'accent-band' || theme.reportHeaderStyle === 'dark-band';
+  const hasHeaderImage = theme.reportHeaderStyle === 'image-band' && Boolean(theme.reportHeaderImagePath ?? theme.backgroundImagePath);
+  const followingPageHeight = hasHeaderBand || hasHeaderImage ? PDF_CONFIG.headerRepeatBandHeight : PDF_CONFIG.headerRepeatHeight;
+  const flowFooterTop = geometry.dynamicFlow
+    ? Math.max(geometry.bands.footer?.top ?? PDF_CONFIG.footerY, PDF_CONFIG.footerY)
+    : geometry.bands.footer?.top ?? PDF_CONFIG.footerY;
+  const renderGeometry: PageGeometry = {
+    ...geometry,
+    bands: {
+      ...geometry.bands,
+      footer: geometry.bands.footer
+        ? { ...geometry.bands.footer, top: flowFooterTop }
+        : { x: 0, top: flowFooterTop, width: geometry.width, bottom: geometry.height },
+    },
+    continuationTop: followingPageHeight + PDF_CONFIG.headerRepeatBottomGap,
+    continuationBottom: geometry.dynamicFlow
+      ? Math.max(geometry.continuationBottom ?? 0, PDF_CONFIG.footerY)
+      : geometry.continuationBottom ?? flowFooterTop,
+  };
+  const planGeometry: PageGeometry = {
+    ...renderGeometry,
+    bands: {
+      ...renderGeometry.bands,
+      header: renderGeometry.bands.header ?? { x: 0, top: 0, width: renderGeometry.width, bottom: PDF_CONFIG.headerBandHeight + PDF_CONFIG.headerBottomGap },
+    },
+  };
+  const plan = resolveReportPlan({ templateRef: name, data: template.data, theme, geometry: planGeometry, pageCount: 1 });
+  assertReportPlan(plan, { requireCoverage: geometry.dynamicFlow, maxCoverageGap: PDF_CONFIG.planCoverageMaxGap });
+  return plan;
 }

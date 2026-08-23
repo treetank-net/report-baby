@@ -143,6 +143,7 @@ export const slideDiagnosticsField = {
 };
 
 export const reportDiagnosticsField = {
+  dry_run: z.boolean().optional().default(false).describe('Resolve and validate the report layout plan without rasterizing or writing a PDF.'),
   diagnostics: z
     .enum(['summary', 'full'])
     .optional()

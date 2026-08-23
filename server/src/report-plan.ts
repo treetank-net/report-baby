@@ -36,6 +36,11 @@ function logicalBlocks(data: ReportData, frame: PageSegment): ResolvedReportBloc
   return blocks;
 }
 
+function firstPageFlowTop(geometry: PageGeometry, data: ReportData, narrative: PageSegment): number {
+  if (data.intro) return narrative.top;
+  return geometry.bands.header?.bottom ?? geometry.content.top;
+}
+
 function pageBlocks(input: ResolveReportPlanInput, page: number): ResolvedReportBlock[] {
   const { geometry, data } = input;
   const blocks: ResolvedReportBlock[] = [];
@@ -51,6 +56,7 @@ function pageBlocks(input: ResolveReportPlanInput, page: number): ResolvedReport
   if (narrative && page === 1) {
     const firstPageFlow: PageSegment = {
       ...narrative,
+      top: firstPageFlowTop(geometry, data, narrative),
       bottom: geometry.bands.footer?.top ?? geometry.continuationBottom ?? geometry.content.bottom,
     };
     blocks.push(block('flow', 'flow', firstPageFlow, undefined, undefined, true));

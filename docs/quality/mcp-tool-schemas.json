@@ -709,6 +709,11 @@
           ],
           "type": "string"
         },
+        "dry_run": {
+          "default": false,
+          "description": "Resolve and validate the report layout plan without rasterizing or writing a PDF.",
+          "type": "boolean"
+        },
         "output_path": {
           "type": "string"
         },

@@ -6,11 +6,12 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { prepareDemoBrandStore } from './lib/brand-store.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
 const bundle = process.env.REPORT_BABY_TEST_BUNDLE ?? 'cli-bundle.cjs';
-const brandDir = join(root, '..', 'examples', 'brand-showcase', 'brands');
+let brandStore;
 const config = parseYaml(readFileSync(join(root, 'templates', 'render-config.yml'), 'utf8')).pdf;
 const editorialTemplate = parseYaml(readFileSync(join(root, 'templates', 'pages/editorial-two-column/template.yml'), 'utf8')).page;
 
@@ -29,7 +30,7 @@ async function render(input, outputPath) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [bundle, '--json', 'render_report'], {
       cwd: root,
-      env: { ...process.env, REPORT_BABY_DATA: join(outputPath, '..'), REPORT_BABY_BRAND_DIR: brandDir },
+      env: { ...process.env, REPORT_BABY_DATA: join(outputPath, '..'), REPORT_BABY_BRAND_STORE: brandStore },
     });
     let stdout = '';
     let stderr = '';
@@ -108,6 +109,8 @@ try {
 }
 
 const work = await mkdtemp(join(tmpdir(), 'report-baby-layout-'));
+brandStore = join(work, 'brand-store');
+prepareDemoBrandStore(join(root, '..'), brandStore, 'layout-test');
 try {
   const tableReport = {
     template: 'default-report',
@@ -138,17 +141,50 @@ try {
       footer: 'layout-test',
     },
   };
+  const reproC = {
+    template: 'pages/editorial-two-column',
+    brand_ref: 'brand://flux/primary',
+    data: {
+      title: 'Tabela w przeplywie',
+      sections: Array.from({ length: 4 }, (_, index) => ({ heading: `S${index + 1}`, body: 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny przewozow dlugodystansowych. '.repeat(2) })),
+      table: { head: ['Wskaznik', 'Wartosc'], body: Array.from({ length: 6 }, (_, index) => [`Pozycja ${index + 1}`, `${index + 11}`]), caption: 'Dane' },
+      footer: 'layout-test',
+    },
+  };
+  const footerCollisionReport = {
+    template: 'pages/editorial-two-column',
+    brand_ref: 'brand://flux/primary',
+    data: {
+      title: 'Stopka',
+      sections: [{ heading: 'Body', body: 'Short context.' }],
+      footer: 'Streszczenie artykulu: transport drogowy i rynek przewozow w Europie Srodkowej, dane za pierwszy kwartal 2026 roku',
+    },
+  };
   const table = await render(tableReport, join(work, 'table.pdf'));
   const continuation = await render(continuationReport, join(work, 'continuation.pdf'));
   const editorialTable = await render(editorialTableReport, join(work, 'editorial-table.pdf'));
+  const c = await render(reproC, join(work, 'repro-c.pdf'));
+  const footerCollisions = await Promise.all(['flux', 'orbit', 'parcelia', 'pyrus'].map((brand) => render({
+    ...footerCollisionReport,
+    brand_ref: `brand://${brand}/primary`,
+  }, join(work, `footer-collision-${brand}.pdf`))));
   assertFooterExclusion(table, tableReport.data.footer);
   assertFooterExclusion(editorialTable, editorialTableReport.data.footer);
   assertContinuationStartsAtFlow(continuation);
   assertDrawingsContained(editorialTable);
   assertDrawingsContained(continuation);
+  assert.equal(c.pages.length, 1, 'reproducer C must fit on one page');
+  for (const [index, footerCollision] of footerCollisions.entries()) {
+    const footerNumbers = footerCollision.pages.flatMap((page) => page.words.filter((word) => /^\d+$/.test(word.text)));
+    const footerWords = footerCollision.pages.flatMap((page) => page.words.filter((word) => word.yMin >= 285 && !/^\d+$/.test(word.text)));
+    assert.ok(footerNumbers.length > 0, `footer page number is missing for ${['flux', 'orbit', 'parcelia', 'pyrus'][index]}`);
+    for (const word of footerWords) {
+      assert.ok(!footerNumbers.some((number) => word.xMax > number.xMin && number.xMax > word.xMin && word.yMax > number.yMin && number.yMax > word.yMin), `footer word '${word.text}' overlaps the page number for ${['flux', 'orbit', 'parcelia', 'pyrus'][index]}`);
+    }
+  }
   assert.equal(table.result.reportPlan?.pages.length ?? table.pages.length, table.pages.length, 'table diagnostics page count disagrees with PDF');
   assert.equal(continuation.result.reportPlan.pages.length, continuation.pages.length, 'continuation diagnostics page count disagrees with PDF');
-  console.log(`report layout: footer containment and continuation flow PASS (${table.pages.length + editorialTable.pages.length + continuation.pages.length} pages)`);
+  console.log(`report layout: footer containment, coverage, and continuation flow PASS (${table.pages.length + editorialTable.pages.length + continuation.pages.length + c.pages.length + footerCollisions.reduce((sum, item) => sum + item.pages.length, 0)} pages)`);
 } finally {
   await rm(work, { recursive: true, force: true });
 }
