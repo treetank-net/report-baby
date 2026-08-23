@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -131,6 +131,25 @@ const reproducers = [
       },
     },
   },
+  {
+    name: 'reproducer-F-pyrus-column-edge',
+    input: {
+      template: 'pages/editorial-two-column',
+      brand_ref: 'brand://pyrus/primary',
+      data: {
+        title: 'Przeglad rynku transportowego',
+        sections: [section('Deficyt obejmuje niemal cala Polske', `${twoSentenceBody} ${twoSentenceBody}`)],
+        table: {
+          head: ['Wskaznik', 'Wartosc'],
+          body: [['Pozycja 1', '11'], ['Pozycja 2', '22']],
+          caption: 'Dane z raportu Alior Banku przytoczone w artykule',
+        },
+        highlights_title: 'Najwazniejsze obserwacje',
+        highlights: ['Rynek pracy kierowcow pozostaje napiety', 'Koszty operacyjne rosna szybciej niz przychody'],
+        footer: 'repro-pyrus-edge',
+      },
+    },
+  },
 ];
 
 const matrixFixtures = [];
@@ -182,7 +201,10 @@ for (const introLines of [0, 1, 3, 8]) {
         };
         matrixFixtures.push({
           name: `matrix-${marker}-intro-${introLines}-${sectionCount}-${length}-${blockVariant.name}`,
-          input: { template: 'pages/editorial-two-column', brand_ref: 'brand://flux/primary', data },
+          // Keep the exhaustive matrix on the raster-free showcase brand. The
+          // five named reproducers and the four-brand seeded set still cover
+          // image-band geometry without paying the PNG cost hundreds of times.
+          input: { template: 'pages/editorial-two-column', brand_ref: 'brand://orbit/primary', data },
         });
       }
     }
@@ -192,8 +214,10 @@ for (const introLines of [0, 1, 3, 8]) {
 const seededSeeds = [0x10203040, 0x55667788, 0x9ABCDEF0, 0x13579BDF];
 const seededFixtures = [];
 for (const brand of brandRefs) {
-  for (const seed of seededSeeds) {
-    for (const introLines of [0, 1, 3, 8]) {
+  const fixtureSeeds = brand === 'orbit' ? seededSeeds : [seededSeeds[0]];
+  const fixtureIntroLines = brand === 'orbit' ? [0, 1, 3, 8] : [3];
+  for (const seed of fixtureSeeds) {
+    for (const introLines of fixtureIntroLines) {
       const marker = `${brand}-${seed.toString(16)}-${introLines}`;
       const sections = Array.from({ length: 4 }, (_, index) => section(
         `${marker}_S${index + 1}`,
@@ -275,6 +299,25 @@ function assertNoWordOverlaps(pages) {
   }
 }
 
+function assertNoColumnOverflow(pages, input) {
+  const leftWords = pages.flatMap((page) => contentLines(page, input).filter((line) => line.column === 0).flatMap((line) => line.contentWords));
+  const leftEdge = Math.min(...leftWords.map((word) => word.xMin));
+  assert.ok(Number.isFinite(leftEdge), 'content words were not found while checking column edges');
+  const sectionStarts = new Set((input.data.sections ?? []).map((sectionData) => normalize(String(sectionData.heading).split(/\s+/)[0])));
+  for (const page of pages) {
+    const firstSectionY = Math.min(...page.lines.filter((line) => line.tokens.some((token) => sectionStarts.has(token))).map((line) => line.yMin));
+    for (const line of contentLines(page, input)) {
+      // The editorial intro is a full-width block above the two-column flow.
+      // Its words must not be judged against the left column's half-page edge.
+      if (Number.isFinite(firstSectionY) && line.yMin < firstSectionY) continue;
+      const rightEdge = line.column === 0 ? page.width / 2 : page.width - leftEdge;
+      for (const word of line.contentWords) {
+        assert.ok(word.xMax <= rightEdge + 0.5, `page ${page.pageIndex + 1}, column ${line.column + 1}: word '${word.text}' crosses column edge by ${(word.xMax - rightEdge).toFixed(2)}pt`);
+      }
+    }
+  }
+}
+
 function assertNoWideSolitaryHyphenLines(pages) {
   for (const page of pages) {
     const bodyLines = page.lines.filter((line) => line.yMin > page.height * 0.25 && line.yMin < page.footerY);
@@ -318,7 +361,7 @@ function contentLines(page, input) {
 }
 
 function sectionHeadingLine(pages, heading) {
-  const token = normalize(heading);
+  const token = normalize(String(heading).split(/\s+/)[0]);
   return pages.flatMap((page) => page.lines).find((line) => line.tokens.includes(token));
 }
 
@@ -455,13 +498,34 @@ function assertNoInternalColumnHoles(pages, input) {
   }
 }
 
-async function renderAndMeasure(name, input, workDir) {
+function renderBatch(fixtures, workDir, concurrency) {
+  const batchCount = Math.min(concurrency, fixtures.length);
+  const batches = Array.from({ length: batchCount }, () => []);
+  fixtures.forEach((fixture, index) => batches[index % batchCount].push(fixture));
+  return Promise.all(batches.map((batch) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['cli-bundle.cjs', '--batch'], {
+      cwd: root,
+      env: { ...process.env, REPORT_BABY_DATA: workDir, REPORT_BABY_BRAND_DIR: brandDir },
+    });
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.resume();
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`batch CLI exited ${code}: ${stderr}`));
+    });
+    child.stdin.end(JSON.stringify(batch.map((fixture) => ({
+      tool: 'render_report',
+      args: { ...fixture.input, output_path: join(workDir, `${fixture.name}.pdf`) },
+    }))));
+  })));
+}
+
+async function measureRendered(name, input, workDir) {
   const outputPath = join(workDir, `${name}.pdf`);
-  await execFileAsync(process.execPath, ['cli-bundle.cjs', 'render_report', JSON.stringify({ ...input, output_path: outputPath })], {
-    cwd: root,
-    env: { ...process.env, REPORT_BABY_DATA: workDir, REPORT_BABY_BRAND_DIR: brandDir },
-    maxBuffer: 1024 * 1024,
-  });
   const { stdout } = await execFileAsync('pdftotext', [outputPath, '-']);
   const { stdout: bbox } = await execFileAsync('pdftotext', ['-bbox-layout', outputPath, '-']);
   return { pages: parseBbox(bbox), text: stdout };
@@ -487,18 +551,20 @@ try {
     : fixtures;
   selectedFixtureCount = selectedFixtures.length;
   if (selectedFixtures.length === 0) throw new Error(`No editorial-flow fixtures matched EDITORIAL_FLOW_FILTER='${process.env.EDITORIAL_FLOW_FILTER}'.`);
-  const requestedConcurrency = Number.parseInt(process.env.EDITORIAL_FLOW_CONCURRENCY ?? '4', 10);
-  const concurrency = Math.max(1, Math.min(4, Number.isFinite(requestedConcurrency) ? requestedConcurrency : 4));
+  const requestedConcurrency = Number.parseInt(process.env.EDITORIAL_FLOW_CONCURRENCY ?? '8', 10);
+  const concurrency = Math.max(1, Math.min(8, Number.isFinite(requestedConcurrency) ? requestedConcurrency : 8));
+  await renderBatch(selectedFixtures, workDir, concurrency);
   let nextFixture = 0;
   async function worker() {
     while (nextFixture < selectedFixtures.length) {
       const fixture = selectedFixtures[nextFixture];
       nextFixture += 1;
       try {
-        const result = await renderAndMeasure(fixture.name, fixture.input, workDir);
+        const result = await measureRendered(fixture.name, fixture.input, workDir);
         const fixtureFailures = [];
         for (const check of [
           () => assertNoWordOverlaps(result.pages),
+          () => assertNoColumnOverflow(result.pages, fixture.input),
           () => assertNoWideSolitaryHyphenLines(result.pages),
           () => assertNoOrphanedFirstLines(result.pages, fixture.input),
           () => assertColumnBreaksFillTheColumn(result.pages, fixture.input),

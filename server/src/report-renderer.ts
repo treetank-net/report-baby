@@ -1,5 +1,6 @@
 import type { jsPDF } from 'jspdf';
 import type { UserOptions } from 'jspdf-autotable';
+import { statSync } from 'node:fs';
 import { assetDataUri, defaultRenderTheme } from './brand-context.js';
 import { readBuiltinPageTemplateSource, readRenderConfig } from './builtin-template-source.js';
 import type { RenderTheme } from './core/model/render-theme.js';
@@ -18,6 +19,7 @@ import {
   splitUncovered,
   styledLineWidth,
   styledRuns,
+  wrapStyledRuns,
   breakStyledParagraph,
   type StyledRun,
   type StyledTextContext,
@@ -323,7 +325,7 @@ function drawDynamicParagraph(doc: jsPDF, cur: Cursor, content: string, lineHeig
   let startNode = 0;
   let brokeWithoutProgress = false;
   while (true) {
-    const result = breakStyledParagraph(doc, runs, cur.width, text, cur.flow.align, startNode);
+    const result = breakStyledParagraph(doc, runs, cur.width * PDF_CONFIG.dynamicTextWidthFactor, text, cur.flow.align, startNode);
     if (result.lines.length === 0) return;
     const qualityWarnings = [
       result.forcedLines > 0 ? `Page flow produced ${result.forcedLines} forced overfull line(s).` : undefined,
@@ -343,7 +345,7 @@ function drawDynamicParagraph(doc: jsPDF, cur: Cursor, content: string, lineHeig
     brokeWithoutProgress = false;
     result.lines.slice(0, take).forEach((line, index) => {
       const isFinalLine = take === result.lines.length && index === take - 1;
-      if (cur.flow.align === 'justify' && !isFinalLine) drawJustifiedLine(doc, line.runs, cur.x, cur.y + index * lineHeight, cur.width, text);
+      if (cur.flow.align === 'justify' && !isFinalLine) drawJustifiedLine(doc, line.runs, cur.x, cur.y + index * lineHeight, cur.width * PDF_CONFIG.dynamicTextWidthFactor, text);
       else drawStyledLine(doc, line.runs, cur.x, cur.y + index * lineHeight, text);
     });
     cur.y += take * lineHeight;
@@ -358,15 +360,31 @@ interface PdfAsset {
   format: 'PNG' | 'JPEG';
 }
 
+const preparedBrandAssetCache = new Map<string, PdfAsset>();
+
+export function clearPreparedBrandAssetCache(): void {
+  preparedBrandAssetCache.clear();
+}
+
 async function prepareBrandAsset(path: string | undefined, width: number): Promise<PdfAsset | undefined> {
+  if (!path) return undefined;
+  const metadata = statSync(path);
+  const targetPx = Math.round(width * PDF_CONFIG.assetRasterDensity);
+  const cacheKey = `${path}|${metadata.mtimeMs}|${targetPx}|${PDF_CONFIG.assetRasterDensity}`;
+  const cached = preparedBrandAssetCache.get(cacheKey);
+  if (cached) return cached;
   const uri = await assetDataUri(path);
   if (!uri) return undefined;
   if (uri.startsWith('data:image/svg+xml')) {
     const svg = Buffer.from(uri.slice(uri.indexOf(',') + 1), 'base64').toString('utf8');
-    const png = await renderSvgToPng(svg, Math.round(width * PDF_CONFIG.assetRasterDensity));
-    return { data: `data:image/png;base64,${png.toString('base64')}`, format: 'PNG' };
+    const png = await renderSvgToPng(svg, targetPx);
+    const asset = { data: `data:image/png;base64,${png.toString('base64')}`, format: 'PNG' as const };
+    preparedBrandAssetCache.set(cacheKey, asset);
+    return asset;
   }
-  return { data: uri, format: uri.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG' };
+  const asset = { data: uri, format: uri.startsWith('data:image/jpeg') ? 'JPEG' as const : 'PNG' as const };
+  preparedBrandAssetCache.set(cacheKey, asset);
+  return asset;
 }
 
 function addPreparedBrandAsset(doc: jsPDF, asset: PdfAsset | undefined, x: number, y: number, width: number, height: number): void {
@@ -642,7 +660,9 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
     const headingGap = sub ? PDF_CONFIG.sectionSubheadingGap : PDF_CONFIG.sectionHeadingGap;
     doc.setFont(font, 'bold');
     doc.setFontSize(headingSize);
-    const headingLines = layoutStyledText(doc, s.heading, cur.width, text).map(boldRuns);
+    const headingLines = cur.dynamicFlow
+      ? wrapStyledRuns(doc, boldRuns(styledRuns(s.heading, text)), cur.width * PDF_CONFIG.headingCaptionWidthFactor, text)
+      : layoutStyledText(doc, s.heading, cur.width, text).map(boldRuns);
     const headingH = headingLines.length * headingLineHeight;
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.bodySize);
@@ -792,7 +812,12 @@ function renderDynamicTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: Re
     },
   };
   const measurements = measureTableRows(tableOptions, fontSet);
-  const captionHeight = data.table.caption ? PDF_CONFIG.tableCaptionGap + PDF_CONFIG.tableCaptionBottomGap : 0;
+  const captionLines = data.table.caption && cur.dynamicFlow
+    ? wrapStyledRuns(doc, boldRuns(styledRuns(data.table.caption, text)), cur.width * PDF_CONFIG.headingCaptionWidthFactor, text)
+    : [];
+
+  const captionLineHeight = PDF_CONFIG.sectionHeadingLineHeight;
+  const captionHeight = data.table.caption ? captionLines.length * captionLineHeight + PDF_CONFIG.tableCaptionGap + PDF_CONFIG.tableCaptionBottomGap : 0;
   const minimumRows = Math.min(PDF_CONFIG.tableWidowMinRows - 1, tableBody.length);
   const fallbackRowHeight = PDF_CONFIG.tableFontSize * PT_TO_MM + PDF_CONFIG.tableCellPadding * 2;
   const minimumTableHeight = (measurements.head || fallbackRowHeight)
@@ -802,8 +827,8 @@ function renderDynamicTable(doc: jsPDF, cur: Cursor, data: ReportData, theme: Re
     doc.setFont(font, 'bold');
     doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
     doc.setTextColor(...rgb(theme.foreground));
-    drawStyledLine(doc, boldRuns(styledRuns(data.table.caption, text)), cur.x, cur.y, text);
-    cur.y += PDF_CONFIG.tableCaptionBottomGap;
+    drawStyledLines(doc, captionLines, cur.x, cur.y, captionLineHeight, text);
+    cur.y += captionLines.length * captionLineHeight + PDF_CONFIG.tableCaptionBottomGap;
   }
 
   const columnCount = Math.max(tableHead.length, ...tableBody.map((row) => row.length), 1);
@@ -981,16 +1006,17 @@ function renderDynamicHighlights(doc: jsPDF, cur: Cursor, data: ReportData, them
   const font = pdfFont(theme);
   doc.setFont(font, 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
-  const bulletLines = highlights.map((highlight) => layoutStyledText(doc, highlight, cur.width - PDF_CONFIG.highlightIndent, text));
+  const bulletLines = highlights.map((highlight) => layoutStyledText(doc, highlight, (cur.width - PDF_CONFIG.highlightIndent) * PDF_CONFIG.dynamicTextWidthFactor, text));
   const heights = bulletLines.map((lines) => lines.length * PDF_CONFIG.bodyLineHeight + gaps.highlightLineGap);
-  const headingHeight = PDF_CONFIG.highlightsHeadingHeight;
+  const headingLines = wrapStyledRuns(doc, boldRuns(styledRuns(data.highlights_title ?? 'Highlights', text)), cur.width * PDF_CONFIG.headingCaptionWidthFactor, text);
+  const headingHeight = headingLines.length * PDF_CONFIG.sectionHeadingLineHeight;
   const firstRows = Math.min(PDF_CONFIG.widowMinBullets, highlights.length);
   const firstHeight = headingHeight + heights.slice(0, firstRows).reduce((sum, height) => sum + height, 0);
   while (cur.y + firstHeight > cur.bottom) cur.flowBreak();
   doc.setFont(font, 'bold');
   doc.setFontSize(PDF_CONFIG.sectionHeadingSize);
   doc.setTextColor(...rgb(theme.foreground));
-  drawStyledLine(doc, boldRuns(styledRuns(data.highlights_title ?? 'Highlights', text)), cur.x, cur.y, text);
+  drawStyledLines(doc, headingLines, cur.x, cur.y, PDF_CONFIG.sectionHeadingLineHeight, text);
   cur.y += headingHeight;
   for (const [index, lines] of bulletLines.entries()) {
     if (cur.y + heights[index] > cur.bottom) cur.flowBreak();

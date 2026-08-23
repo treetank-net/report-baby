@@ -15,6 +15,7 @@ export interface BuiltinSlideTemplateDocument {
 
 export interface RenderConfig {
   canvas: { width: number; height: number; pptxWidth: number; pptxHeight: number; pointsPerInch: number };
+  assets: Record<string, number>;
   pdf: Record<string, number>;
   chart: Record<string, number>;
   spacing: { margin: number; contentWidth: number; footerY: number; footerHeight: number; contentGap: number; cardGap: number; cardPaddingX: number; cardPaddingY: number; columnPadding: number; fallbackHeaderLine: number; fallbackContentBottom: number; fallbackHeaderTitle: number; fallbackHeaderSubtitle: number; chartSidePadding: number; tableTopAdjustment: number; narrativeOffset: number; conclusionsOffset: number; maxChartHeight: number };
@@ -106,7 +107,8 @@ export function readRenderConfig(): RenderConfig {
   const camelDictionary = (name: string): Record<string, number> => Object.fromEntries(Object.entries(numberDictionary(name)).map(([key, value]) => [key.replace(/_([a-z0-9])/g, (_match, character: string) => character.toUpperCase()), value]));
   return {
     canvas: { width: get(canvas, 'width'), height: get(canvas, 'height'), pptxWidth: get(canvas, 'pptx_width'), pptxHeight: get(canvas, 'pptx_height'), pointsPerInch: get(canvas, 'points_per_inch') },
-      pdf: camelDictionary('pdf'),
+    assets: camelDictionary('assets'),
+    pdf: camelDictionary('pdf'),
     chart: camelDictionary('chart'),
     spacing: { margin: get(spacing, 'margin'), contentWidth: get(spacing, 'content_width'), footerY: get(spacing, 'footer_y'), footerHeight: get(spacing, 'footer_height'), contentGap: get(spacing, 'content_gap'), cardGap: get(spacing, 'card_gap'), cardPaddingX: get(spacing, 'card_padding_x'), cardPaddingY: get(spacing, 'card_padding_y'), columnPadding: get(spacing, 'column_padding'), fallbackHeaderLine: get(spacing, 'fallback_header_line'), fallbackContentBottom: get(spacing, 'fallback_content_bottom'), fallbackHeaderTitle: get(spacing, 'fallback_header_title'), fallbackHeaderSubtitle: get(spacing, 'fallback_header_subtitle'), chartSidePadding: get(spacing, 'chart_side_padding'), tableTopAdjustment: get(spacing, 'table_top_adjustment'), narrativeOffset: get(spacing, 'narrative_offset'), conclusionsOffset: get(spacing, 'conclusions_offset'), maxChartHeight: get(spacing, 'max_chart_height') },
     typography: { title: get(typography, 'title'), subtitle: get(typography, 'subtitle'), eyebrow: get(typography, 'eyebrow'), headerTitle: get(typography, 'header_title'), headerSubtitle: get(typography, 'header_subtitle'), body: get(typography, 'body'), small: get(typography, 'small'), metricLabel: get(typography, 'metric_label'), metricValue: get(typography, 'metric_value'), metricDelta: get(typography, 'metric_delta'), metricNote: get(typography, 'metric_note'), table: get(typography, 'table'), narrative: get(typography, 'narrative'), highlight: get(typography, 'highlight'), conclusion: get(typography, 'conclusion'), footer: get(typography, 'footer') },

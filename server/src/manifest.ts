@@ -157,10 +157,35 @@ const manifestBaseSchema = z.object({
   formats: z.array(formatSchema),
 });
 
+const preparedAssetSourceSchema = z.object({
+  path: z.string().min(1),
+  bytes: z.number().int().nonnegative(),
+  px: z.tuple([z.number().int().positive(), z.number().int().positive()]),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+}).strict();
+
+const preparedAssetDerivativeSchema = z.object({
+  role: z.string().min(1),
+  path: z.string().min(1),
+  px: z.tuple([z.number().int().positive(), z.number().int().positive()]),
+  dpi: z.number().positive(),
+  crop: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  bytes: z.number().int().nonnegative(),
+}).strict();
+
+const preparedAssetEntrySchema = z.object({
+  kind: z.literal('prepared-assets'),
+  source: preparedAssetSourceSchema,
+  derivatives: z.array(preparedAssetDerivativeSchema),
+  generatedAt: z.string().min(1),
+  toolVersion: z.string().min(1),
+}).strict();
+
 export const renderManifestSchema = z.discriminatedUnion('kind', [
   manifestBaseSchema.extend({ kind: z.literal('report') }).merge(reportPayloadSchema),
   manifestBaseSchema.extend({ kind: z.literal('deck') }).merge(deckPayloadSchema),
   manifestBaseSchema.extend({ kind: z.literal('showcase') }).merge(showcasePayloadSchema),
+  z.object({ schema_version: z.literal(1), kind: z.literal('prepared-assets'), assets: z.array(preparedAssetEntrySchema) }).strict(),
 ]);
 
 export type RenderManifest = z.infer<typeof renderManifestSchema>;

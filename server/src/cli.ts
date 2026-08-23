@@ -41,6 +41,7 @@ interface CliOptions {
   brandPath?: string;
   gitRef?: string;
   json: boolean;
+  batch: boolean;
 }
 
 function parseCliOptions(argv: string[]): CliOptions {
@@ -49,10 +50,15 @@ function parseCliOptions(argv: string[]): CliOptions {
   let brandPath: string | undefined;
   let gitRef: string | undefined;
   let json = false;
+  let batch = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--json') {
       json = true;
+      continue;
+    }
+    if (arg === '--batch') {
+      batch = true;
       continue;
     }
     if (arg === '--brand-url' || arg === '--brand-path' || arg === '--git-ref') {
@@ -67,7 +73,7 @@ function parseCliOptions(argv: string[]): CliOptions {
     toolArgs.push(arg);
   }
   if (brandPath && !brandUrl) throw new Error('--brand-path requires --brand-url.');
-  return { toolArgs, brandUrl, brandPath, gitRef, json };
+  return { toolArgs, brandUrl, brandPath, gitRef, json, batch };
 }
 
 async function prepareBrandDirectory(options: CliOptions): Promise<void> {
@@ -90,6 +96,29 @@ async function prepareBrandDirectory(options: CliOptions): Promise<void> {
   process.env.REPORT_BABY_BRAND_DIR = join(checkout, brandPath);
 }
 
+async function readStdin(): Promise<string> {
+  return new Promise((resolve) => {
+    let buffer = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => (buffer += chunk));
+    process.stdin.on('end', () => resolve(buffer));
+  });
+}
+
+async function runBatch(): Promise<void> {
+  const requests = JSON.parse(await readStdin()) as Array<{ tool: string; args?: unknown }>;
+  if (!Array.isArray(requests)) throw new Error('--batch expects a JSON array on stdin.');
+  for (const request of requests) {
+    const tool = tools.get(request.tool);
+    if (!tool) throw new Error(`unknown tool in batch: ${request.tool}`);
+    const input = request.args ?? {};
+    const parsed = Object.keys(tool.shape ?? {}).length ? z.object(tool.shape).parse(input) : input;
+    const result = await tool.handler(parsed, {});
+    if (result?.isError) throw new Error(JSON.stringify(result));
+    process.stdout.write(`${JSON.stringify(result?.structuredContent ?? result)}\n`);
+  }
+}
+
 async function main(): Promise<void> {
   const options = parseCliOptions(process.argv.slice(2));
   await prepareBrandDirectory(options);
@@ -97,6 +126,11 @@ async function main(): Promise<void> {
   registerAuthTools(collector, cfg);
   registerBrandTools(collector, cfg);
   registerRenderTools(collector, cfg);
+
+  if (options.batch) {
+    await runBatch();
+    return;
+  }
 
   const [nameArg, jsonArg] = options.toolArgs;
   if (!nameArg || nameArg === '--list' || nameArg === '-l') {

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.3
+
+- Prepared raster brand assets during publish with cropped, resized derivatives,
+  source-hash validation, render-time caching, and diagnostics for slow fallback
+  rendering.
+- Fixed editorial headings and table/highlights captions crossing column edges,
+  including coverage for the wider Pyrus font metrics.
+- Reduced editorial-flow regression runtime with batched CLI rendering and
+  parallel PDF measurement.
+
 ## v0.9.2
 
 - Fixed long `intro` blocks in `pages/editorial-two-column` so their consumed

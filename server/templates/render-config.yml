@@ -5,6 +5,20 @@ canvas:
   pptx_width: 13.333
   pptx_height: 7.5
   points_per_inch: 72
+assets:
+  report_header_band_width_px: 640
+  report_header_band_height_px: 154
+  report_header_band_dpi: 78
+  report_header_band_anchor_y: 0.28
+  asset_preparation_warning_multiplier: 4
+  slide_background_width_px: 1600
+  slide_background_height_px: 900
+  slide_background_dpi: 96
+  slide_background_anchor_y: 0.5
+  cover_width_px: 1600
+  cover_height_px: 900
+  cover_dpi: 96
+  cover_anchor_y: 0.5
 pdf:
   page_width: 210
   page_height: 297
@@ -76,6 +90,8 @@ pdf:
   chart_keep_padding: 8
   chart_bottom_gap: 10
   section_heading_line_height: 6
+  heading_caption_width_factor: 0.78
+  dynamic_text_width_factor: 0.98
   section_heading_gap: 2
   section_min_lead_lines: 3
   keep_together_waste_ratio: 0.15

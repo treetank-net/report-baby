@@ -3,9 +3,11 @@ import { cp, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { parseDocument } from 'yaml';
 import { inspectBrand, inspectBrandTemplate, listBrandTemplates } from './brand-context.js';
+import { prepareBrandAssets } from './asset-preparation.js';
 import { readBuiltinTemplateText } from './builtin-template-source.js';
 import { getBrandSourceRoots } from './config.js';
 import { runExampleCli } from './example.js';
+import { SERVER_VERSION } from './version.js';
 
 function valueFor(args: string[], flag: string, fallback?: string): string | undefined {
   const index = args.indexOf(flag);
@@ -329,6 +331,7 @@ async function publish(args: string[]): Promise<void> {
   await mkdir(compiledDir, { recursive: true });
   const sourceBrandDir = join(brandRoot, brandId);
   await cp(sourceBrandDir, join(releaseDir, 'brand'), { recursive: true });
+  const preparedAssets = await prepareBrandAssets(join(releaseDir, 'brand'), SERVER_VERSION);
   const entries = [];
   for (const template of templates) {
     const item = await inspectBrandTemplate(brandRoot, brandRef, template.templateRef);
@@ -337,7 +340,7 @@ async function publish(args: string[]): Promise<void> {
     await writeFile(output, `${JSON.stringify(item.compiled, null, 2)}\n`);
     entries.push({ template_ref: template.templateRef, source: template.path, compiled: output });
   }
-  const manifest = { schema_version: 1, brand: brandId, release, source_brand_root: brandRoot, templates: entries, diagnostics: brand.diagnostics };
+  const manifest = { schema_version: 1, brand: brandId, release, source_brand_root: brandRoot, templates: entries, prepared_assets: preparedAssets.assets, diagnostics: brand.diagnostics };
   await writeFile(join(releaseDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   const active = join(store, brandId, 'active.json');
   const activeTemp = `${active}.tmp-${process.pid}`;
