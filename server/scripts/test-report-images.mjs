@@ -57,8 +57,28 @@ try {
     },
   });
   const introContent = JSON.parse(introResult.stdout.trim().split('\n')[0]);
+  const introImage = introContent.drawings.find((drawing) => drawing.kind === 'image');
+  const introCaption = introContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text === 'Intro caption');
+  const introLead = introContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text.includes('lead remains selectable'));
   assert.equal(introContent.drawings.filter((drawing) => drawing.kind === 'image').length, 1);
-  assert.ok(introContent.drawings.find((drawing) => drawing.kind === 'image' && drawing.y < 110), JSON.stringify(introContent.drawings));
+  assert.ok(introImage && introImage.y < 110, JSON.stringify(introContent.drawings));
+  assert.ok(introCaption && introCaption.x > introImage.x, JSON.stringify(introContent.drawings));
+  assert.ok(introCaption && introCaption.y > introImage.y + introImage.height, JSON.stringify(introContent.drawings));
+  const controlOutput = join(temporary, 'intro-control-report.pdf');
+  const controlResult = await runCli({
+    template: 'pages/editorial-two-column',
+    content_root: contentRoot,
+    output_path: controlOutput,
+    diagnostics: 'full',
+    data: {
+      title: 'Intro control report',
+      intro: 'The lead remains selectable text below the image.',
+      sections: [{ heading: 'Editorial body', body: 'The editorial body follows the Markdown-enabled intro block.' }],
+    },
+  });
+  const controlContent = JSON.parse(controlResult.stdout.trim().split('\n')[0]);
+  const controlLead = controlContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text.includes('lead remains selectable'));
+  assert.ok(introLead && controlLead && Math.abs(introLead.width - controlLead.width) < 0.01, JSON.stringify({ introLead, controlLead }));
   const structuredOutput = join(temporary, 'structured-report.pdf');
   const structuredResult = await runCli({
     content_root: contentRoot,
@@ -73,16 +93,24 @@ try {
   assert.equal(structuredContent.drawings.filter((drawing) => drawing.kind === 'image').length, 1, JSON.stringify(structuredContent));
   const archivePath = join(temporary, 'brand-source.zip');
   const hero = await readFile(join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png'));
-  await writeFile(archivePath, Buffer.from(zipSync({ '_brand.yml': Buffer.from('schema_version: 1\nmeta:\n  name: ZIP\n'), 'assets/map.png': hero })));
+  await writeFile(archivePath, Buffer.from(zipSync({
+    'brands/zip/_brand.yml': Buffer.from('schema_version: 1\nmeta:\n  name: ZIP\nlayout:\n  report_image_caption:\n    align: left\n    color: primary\n    padding_x: 4\n'),
+    'brands/zip/profiles/primary.yml': Buffer.from('schema_version: 1\n'),
+    'brands/zip/assets/map.png': hero,
+  })));
   const zipOutput = join(temporary, 'zip-report.pdf');
   const zipResult = await runCli({
-    brand_source: { zip_path: archivePath },
+    brand_ref: 'brand://zip/profiles/primary',
+    brand_source: { zip_path: archivePath, brand_path: 'brands' },
     output_path: zipOutput,
     diagnostics: 'full',
-    data: { title: 'ZIP image report', sections: [{ heading: 'Map', body: '![ZIP map](brand://assets/map.png)' }] },
+    data: { title: 'ZIP image report', sections: [{ heading: 'Map', body: '![ZIP map](brand://zip/assets/map.png "ZIP caption")' }] },
   });
   const zipContent = JSON.parse(zipResult.stdout.trim().split('\n')[0]);
+  const zipImage = zipContent.drawings.find((drawing) => drawing.kind === 'image');
+  const zipCaption = zipContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text === 'ZIP caption');
   assert.equal(zipContent.drawings.filter((drawing) => drawing.kind === 'image').length, 1);
+  assert.ok(zipImage && zipCaption && Math.abs(zipCaption.x - (zipImage.x + 4)) < 0.01, JSON.stringify(zipContent.drawings));
   console.log('report images: Markdown image rendered with caption and diagnostics passed');
 } finally {
   await rm(temporary, { recursive: true, force: true });

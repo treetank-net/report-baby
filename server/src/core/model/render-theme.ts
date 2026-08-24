@@ -45,6 +45,15 @@ export interface RenderTheme {
   imageTextColor: string;
   imageTextSafeArea: { x: number; y: number; width: number; height: number };
   imageScrim?: { color: string; opacity: number };
+  reportImageCaption?: {
+    align?: 'left' | 'center' | 'right';
+    color?: string;
+    size?: number;
+    lineHeight?: number;
+    gap?: number;
+    paddingX?: number;
+    bottomGap?: number;
+  };
   fontRegularPath?: string;
   fontBoldPath?: string;
 }

@@ -43,8 +43,11 @@ pdf:
   footer_y: 285
   footer_line_width: 0.3
   header_band_height: 54
-  image_caption_gap: 2.5
-  image_caption_line_height: 5
+  image_caption_gap: 3.5
+  image_caption_bottom_gap: 2
+  image_caption_line_height: 4.2
+  image_caption_size: 8.5
+  image_caption_padding_x: 1.5
   header_logo_y: 7
   header_logo_height: 7
   header_title_size: 22

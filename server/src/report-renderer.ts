@@ -285,6 +285,19 @@ function drawStyledLines(doc: jsPDF, lines: StyledRun[][], x: number, y: number,
   lines.forEach((line, index) => drawStyledLine(doc, line, x, y + index * lineHeight, text));
 }
 
+function drawCenteredStyledLines(doc: jsPDF, lines: StyledRun[][], x: number, y: number, width: number, lineHeight: number, text: StyledTextContext): void {
+  lines.forEach((line, index) => {
+    const lineWidth = styledLineWidth(doc, line, text);
+    drawStyledLine(doc, line, x + Math.max(0, (width - lineWidth) / 2), y + index * lineHeight, text);
+  });
+}
+
+function resetReportBodyStyle(doc: jsPDF, theme: RenderTheme): void {
+  doc.setFont(pdfFont(theme), 'normal');
+  doc.setFontSize(PDF_CONFIG.bodySize);
+  doc.setTextColor(...rgb(theme.foreground));
+}
+
 function lineHasInk(line: StyledRun[]): boolean {
   return line.some((run) => run.text.trim().length > 0);
 }
@@ -429,12 +442,25 @@ async function renderFigure(doc: jsPDF, cur: Cursor, image: Extract<NormalizedCo
   let width = requestedWidth;
   let height = width * asset.height / asset.width;
   const caption = image.caption ?? image.title;
-  doc.setFontSize(PDF_CONFIG.bodySize);
-  const captionLines = caption ? layoutStyledText(doc, caption, width, text) : [];
-  const captionHeight = captionLines.length * PDF_CONFIG.imageCaptionLineHeight;
-  const totalHeight = height + (captionLines.length ? PDF_CONFIG.imageCaptionGap + captionHeight : 0);
+  const captionStyle = theme.reportImageCaption;
+  const captionAlign = captionStyle?.align ?? 'center';
+  const captionColor = captionStyle?.color ?? theme.muted;
+  const captionSize = captionStyle?.size ?? PDF_CONFIG.imageCaptionSize;
+  const captionLineHeight = captionStyle?.lineHeight ?? PDF_CONFIG.imageCaptionLineHeight;
+  const captionGap = captionStyle?.gap ?? PDF_CONFIG.imageCaptionGap;
+  const captionPaddingX = captionStyle?.paddingX ?? PDF_CONFIG.imageCaptionPaddingX;
+  const captionBottomGap = captionStyle?.bottomGap ?? PDF_CONFIG.imageCaptionBottomGap;
+  const captionWidth = Math.max(1, width - captionPaddingX * 2);
+  doc.setFont(pdfFont(theme), 'normal');
+  doc.setFontSize(captionSize);
+  const captionLines = caption ? layoutStyledText(doc, caption, captionWidth, text) : [];
+  const captionHeight = captionLines.length * captionLineHeight;
+  const captionBlockHeight = captionLines.length
+    ? captionGap + captionHeight + captionBottomGap
+    : 0;
+  const totalHeight = height + captionBlockHeight;
   if (cur.y + totalHeight > cur.bottom) cur.flowBreak();
-  const availableHeight = cur.bottom - cur.y - (captionLines.length ? PDF_CONFIG.imageCaptionGap + captionHeight : 0);
+  const availableHeight = cur.bottom - cur.y - captionBlockHeight;
   if (height > availableHeight && availableHeight > 0) {
     const scale = availableHeight / height;
     width *= scale;
@@ -445,13 +471,18 @@ async function renderFigure(doc: jsPDF, cur: Cursor, image: Extract<NormalizedCo
   doc.addImage(asset.data, asset.format, x, cur.y, width, height);
   cur.y += height;
   if (captionLines.length) {
-    cur.y += PDF_CONFIG.imageCaptionGap;
+    cur.y += captionGap;
     doc.setFont(pdfFont(theme), 'normal');
-    doc.setFontSize(PDF_CONFIG.bodySize);
-    doc.setTextColor(...rgb(theme.foreground));
-    drawStyledLines(doc, captionLines, x, cur.y, PDF_CONFIG.imageCaptionLineHeight, text);
-    cur.y += captionHeight;
+    doc.setFontSize(captionSize);
+    doc.setTextColor(...rgb(captionColor));
+    const captionX = x + captionPaddingX;
+    const captionContentWidth = width - captionPaddingX * 2;
+    if (captionAlign === 'left') drawStyledLines(doc, captionLines, captionX, cur.y, captionLineHeight, text);
+    else if (captionAlign === 'right') captionLines.forEach((line, index) => drawStyledLine(doc, line, captionX + Math.max(0, captionContentWidth - styledLineWidth(doc, line, text)), cur.y + index * captionLineHeight, text));
+    else drawCenteredStyledLines(doc, captionLines, captionX, cur.y, captionContentWidth, captionLineHeight, text);
+    cur.y += captionHeight + captionBottomGap;
   }
+  resetReportBodyStyle(doc, theme);
 }
 
 async function renderNormalizedDocument(doc: jsPDF, cur: Cursor, document: ReturnType<typeof normalizeMarkdown>, sourceContext: SourceContext, theme: RenderTheme, text: StyledTextContext, warnings: string[], imageState: ImageRenderState): Promise<void> {

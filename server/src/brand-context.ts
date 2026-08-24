@@ -81,6 +81,7 @@ export interface BrandCapabilities {
     report_header_style: string;
     title_align: string;
     logo_variant: string;
+    report_image_caption?: NonNullable<RenderTheme['reportImageCaption']>;
   };
 }
 
@@ -436,6 +437,20 @@ function extractTheme(brandDir: string, document: RecordValue, surface: string |
     || imageTextSafeArea.y + imageTextSafeArea.height > 1) {
     throw new Error(`Invalid layout.image_text_safe_area in ${brandDir}; values must be normalized and stay within 0..1.`);
   }
+  const caption = isRecord(layout.report_image_caption) ? layout.report_image_caption : undefined;
+  const captionAlign = asString(caption?.align);
+  const resolvedCaptionAlign: 'left' | 'center' | 'right' | undefined = captionAlign === 'left' || captionAlign === 'right' || captionAlign === 'center'
+    ? captionAlign
+    : undefined;
+  const reportImageCaption = caption ? {
+    align: resolvedCaptionAlign,
+    color: resolveColor(caption.color, palette, surface),
+    size: typeof caption.size === 'number' && Number.isFinite(caption.size) && caption.size > 0 ? caption.size : undefined,
+    lineHeight: typeof caption.line_height === 'number' && Number.isFinite(caption.line_height) && caption.line_height > 0 ? caption.line_height : undefined,
+    gap: typeof caption.gap === 'number' && Number.isFinite(caption.gap) && caption.gap >= 0 ? caption.gap : undefined,
+    paddingX: typeof caption.padding_x === 'number' && Number.isFinite(caption.padding_x) && caption.padding_x >= 0 ? caption.padding_x : undefined,
+    bottomGap: typeof caption.bottom_gap === 'number' && Number.isFinite(caption.bottom_gap) && caption.bottom_gap >= 0 ? caption.bottom_gap : undefined,
+  } : undefined;
   const scrim = isRecord(layout.image_scrim) ? layout.image_scrim : undefined;
   const imageScrimColor = scrim ? resolveColor(scrim.color, palette, surface) : undefined;
   const imageScrim = imageScrimColor ? { color: imageScrimColor, opacity: Math.max(0, Math.min(1, typeof scrim?.opacity === 'number' ? scrim.opacity : 0.12)) } : undefined;
@@ -500,6 +515,7 @@ function extractTheme(brandDir: string, document: RecordValue, surface: string |
       imageTextColor,
       imageTextSafeArea,
       imageScrim,
+      reportImageCaption,
       fontRegularPath,
       fontBoldPath,
     },
@@ -791,6 +807,7 @@ export function brandCapabilities(context: RenderBrandContext): BrandCapabilitie
       report_header_style: theme.reportHeaderStyle,
       title_align: theme.titleAlign,
       logo_variant: theme.logoVariant,
+      report_image_caption: theme.reportImageCaption,
     },
   };
 }

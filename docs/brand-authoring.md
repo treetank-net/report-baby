@@ -69,6 +69,26 @@ image, set `report_header_style: image-band` and provide
 `layout.cover_background` to a deliberate solid color. Do not rely on
 stretching the same image into both shapes.
 
+Report image captions can be tuned by the selected brand with
+`layout.report_image_caption`. The values are optional and fall back to the
+shared render configuration:
+
+```yaml
+layout:
+  report_image_caption:
+    align: center
+    color: muted
+    size: 8.5
+    line_height: 4.2
+    gap: 3.5
+    padding_x: 1.5
+    bottom_gap: 2
+```
+
+`color` is resolved through the brand palette and semantic color roles. The
+caption remains ordinary selectable PDF text; this block controls its visual
+treatment rather than changing the Markdown image itself.
+
 ## Start with the external tool
 
 The easiest way to create a first working brand is to let the bundled
