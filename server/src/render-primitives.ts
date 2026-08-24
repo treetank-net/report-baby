@@ -59,18 +59,22 @@ export async function renderSvgToPng(svg: string, width?: number, fontSet?: Rend
   return Buffer.from(png);
 }
 
+export function registerPdfFontSet(doc: jsPDF, fontSet: RenderFontSet): void {
+  if (fontSet.family === 'DejaVu Sans') return;
+  const fileStem = `Brand-${fontSet.family.replace(/[^a-z0-9]+/gi, '-')}`;
+  doc.addFileToVFS(`${fileStem}-Regular.ttf`, Buffer.from(fontSet.regular).toString('base64'));
+  doc.addFont(`${fileStem}-Regular.ttf`, fontSet.family, 'normal');
+  doc.addFileToVFS(`${fileStem}-Bold.ttf`, Buffer.from(fontSet.bold).toString('base64'));
+  doc.addFont(`${fileStem}-Bold.ttf`, fontSet.family, 'bold');
+}
+
 export function newPdf(orientation: 'portrait' | 'landscape' = 'portrait', format: string | [number, number] = 'a4', fontSet?: RenderFontSet): jsPDF {
   const doc = new jsPDF({ orientation, unit: 'mm', format, compress: true });
   doc.addFileToVFS('DejaVuSans.ttf', fontRegularBase64);
   doc.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
   doc.addFileToVFS('DejaVuSans-Bold.ttf', fontBoldBase64);
   doc.addFont('DejaVuSans-Bold.ttf', 'DejaVu', 'bold');
-  if (fontSet && fontSet.family !== 'DejaVu Sans') {
-    doc.addFileToVFS('Brand-Regular.ttf', Buffer.from(fontSet.regular).toString('base64'));
-    doc.addFont('Brand-Regular.ttf', fontSet.family, 'normal');
-    doc.addFileToVFS('Brand-Bold.ttf', Buffer.from(fontSet.bold).toString('base64'));
-    doc.addFont('Brand-Bold.ttf', fontSet.family, 'bold');
-  }
+  if (fontSet) registerPdfFontSet(doc, fontSet);
   doc.setFont(fontSet?.family === 'DejaVu Sans' ? 'DejaVu' : fontSet?.family ?? 'DejaVu', 'normal');
   return doc;
 }

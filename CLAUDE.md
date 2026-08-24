@@ -94,10 +94,8 @@ for development.
 - `render_metric_cards` `{ cards: [{label,value,delta?,trend?,note?}], title?, subtitle?, columns?, width?, output_path?, return_image? }` — KPI card grid → PNG.
 - `render_svg` `{ svg, width?, output_path?, return_image? }` — arbitrary SVG → PNG (escape hatch; text requires `font-family="DejaVu Sans"`).
 - `render_report` `{ template?='default-report', data, output_path? }` — opinionated template + data → multi-page PDF.
-- `render_report_png` `{ template?, data, output_dir?, filename_prefix? }` — same report layout → one raster PNG per A4 page; requires Poppler `pdftoppm`.
-- `render_report_pptx` `{ template?, data, output_path? }` — same report layout → portrait PPTX with rasterized page images; report text is not editable.
-- `render_slides_pdf` `{ data, output_path?, diagnostics?='summary' }` — shared slide model → local 16:9 PDF.
-- `render_slides_png` `{ data, slide_index?, output_dir?, filename_prefix?, diagnostics?='summary' }` — all slides or one selected slide → 1600×900 PNG.
+- `render_slides_pdf` `{ data, output_path?, diagnostics?='summary' }` — shared slide model → local 16:9 PDF with selectable text.
+- `render_slides_png` `{ data, slide_index?, output_dir?, filename_prefix?, diagnostics?='summary' }` — rasterized pages of the canonical slide PDF → 1600×900 PNG.
 - `render_slides_pptx` `{ data, output_path?, diagnostics?='summary' }` — same model → PPTX; text/KPIs/tables/shapes are editable and charts are images.
 - Every slide of the shared model accepts `notes` (at most 4000 characters, `SLIDE_NOTES_MAX_CHARS` in `slides.ts`): speaker narration that is never drawn on the slide. `render_slides_pptx` writes it to the PowerPoint notes slide (`ppt/notesSlides/notesSlideN.xml` via `pptxgenjs` `slide.addNotes()`), which PowerPoint, Google Slides, Keynote, and LibreOffice show in presenter view. PDF and PNG have no notes channel: they drop it and say so — `notesSlides` counts the slides that carried notes and the warnings list gains one counted entry naming `render_slides_pptx`.
 - `diagnostics: 'full'` on the three slide tools adds `slideDiagnostics` and the full `slidePlans`; the default `'summary'` omits them. `inspect_brand_template` is not a substitute — it only compiles brand-owned template sources (normalized 0..1 frames) and throws for built-in templates.

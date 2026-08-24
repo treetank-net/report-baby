@@ -13,7 +13,7 @@ async function main() {
   }, {
     instructions: [
       'This server is a self-contained render engine: it turns structured data into polished PNG charts and PDF reports locally. No accounts, no auth, no headless browser — pure compute, fully bundled.',
-      'Charts and metric cards produce standalone PNGs. render_report produces the canonical multi-page A4 PDF; render_report_png rasterizes its pages to PNG and render_report_pptx embeds those pages in a portrait PPTX. Presentation tools share one bounded slide model and produce 16:9 PDF, selected or complete PNG slides, and editable PPTX.',
+      'Charts and metric cards produce standalone PNGs. render_report produces the canonical multi-page A4 PDF. Presentation tools share one bounded slide model: render_slides_pdf produces the selectable-text PDF, render_slides_png rasterizes that PDF for visual inspection, and render_slides_pptx produces the editable presentation.',
       'A slide can carry notes: speaker narration that is never drawn on the slide. Only render_slides_pptx keeps it (in the PowerPoint notes slide shown in presenter view); render_slides_pdf and render_slides_png drop it and report a counted warning.',
       'For a chart, pass the raw data values (label/value pairs) — do NOT hand-build SVG unless you need something the chart types do not cover (then use render_svg; text needs font-family="DejaVu Sans").',
       'Render tools return the PATH to the written file plus a compact summary: resolved brand profile, template_ref, slide count and deduplicated warnings. Do NOT pull rendered images into context to read numbers — you already have the source data. Only pass return_image: true when you must visually judge layout or aesthetics.',

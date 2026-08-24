@@ -174,6 +174,11 @@ try {
   const slidesPdf = await readFile(slidesPdfPath);
   assert.equal(slidesPdf.subarray(0, 5).toString(), '%PDF-');
   assert.equal((slidesPdf.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length, deck.slides.length);
+  const extractedSlidesText = runProcess('pdftotext', [slidesPdfPath, '-']);
+  assert.equal(extractedSlidesText.status, 0, extractedSlidesText.stderr);
+  assert.match(extractedSlidesText.stdout, /Wyniki kwartalne/);
+  assert.match(extractedSlidesText.stdout, /Najważniejsze KPI/);
+  assert.match(extractedSlidesText.stdout, /Utrzymać inwestycję w SEO/);
 
   const allPngResult = await client.callTool({ name: 'render_slides_png', arguments: { brand_ref: 'brand://acme/primary', data: deck, output_dir: outputDir, filename_prefix: 'deck' } });
   assert.notEqual(allPngResult.isError, true);
@@ -191,10 +196,9 @@ try {
   assert.notEqual(templateListing.isError, true, JSON.stringify(templateListing.content));
   const listedTemplates = JSON.parse(templateListing.content?.[0]?.text ?? '{}').templates ?? [];
   const listedRefs = new Map(listedTemplates.map((template) => [template.template_ref, template]));
-  assert.equal(listedRefs.get('default-report')?.owner, 'builtin', 'list_templates lost the built-in report templates');
+    assert.equal(listedRefs.get('default-report')?.owner, 'builtin', 'list_templates lost the built-in report templates');
     assert.ok(listedRefs.get('default-report')?.use_with?.includes('render_report'));
-    assert.ok(listedRefs.get('default-report')?.use_with?.includes('render_report_png'));
-    assert.ok(listedRefs.get('default-report')?.use_with?.includes('render_report_pptx'));
+    assert.deepEqual(listedRefs.get('default-report')?.use_with, ['render_report']);
   for (const slideTemplate of ['slides/standard', 'slides/compact', 'slides/centered-title', 'slides/two-column']) {
     const entry = listedRefs.get(slideTemplate);
     assert.ok(entry, `list_templates does not expose the built-in slide template ${slideTemplate}`);

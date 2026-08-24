@@ -19,7 +19,7 @@ _brand.yml + profiles/*.yml   → resolveBrandContext  → RenderTheme + RenderC
 templates/**/template.yml     → compileTemplateSource → CompiledTemplate
                               → resolvePlan           → ResolvedTemplatePlan
                               → resolveSlidePlan      → ResolvedSlidePlan (1600×900 px)
-                              → SVG/PNG, PDF (raster), PPTX
+                              → SVG/PNG, PDF (text/vector), PPTX
 ```
 
 Parts that are working well and should not be disturbed:
@@ -239,9 +239,10 @@ unified system.
   profiles, yet `layout` accepts `title_logo_width_px`,
   `title_logo_height_px` and `image_text_safe_area`. Either document these as a
   deliberate exception or move them into `lockup`/`image` slots of a template.
-- **The presentation PDF is a raster.** `renderSlidesPdf` places a 1600×900 PNG
-  on a 400×225 mm page (about 101 DPI). Acceptable on screen, not for print;
-  worth stating in the tool description, since "PDF" implies vector.
+- **Resolved: the presentation PDF is now text/vector based.**
+  `renderSlidesPdf` converts the shared SVG composition to PDF vectors and
+  writes slide text as real PDF text; `renderSlidesPng` rasterizes that PDF for
+  visual QA. Charts and other image slots remain raster assets by design.
 
 ## 6. Suggested repair order
 

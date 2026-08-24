@@ -26,8 +26,6 @@ try {
   const listed = await run(['--list']);
   assert.equal(listed.code, 0, listed.stderr);
   assert.match(listed.stdout, /render_report/);
-  assert.match(listed.stdout, /render_report_png/);
-  assert.match(listed.stdout, /render_report_pptx/);
   assert.match(listed.stdout, /render_slides_pptx/);
   assert.match(listed.stdout, /inspect_brand/);
 

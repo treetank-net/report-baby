@@ -4,7 +4,11 @@ canvas:
   height: 900
   pptx_width: 13.333
   pptx_height: 7.5
+  pdf_width_mm: 400
+  pdf_height_mm: 225
   points_per_inch: 72
+quality:
+  pptx_text_region_max_changed_pixel_ratio: 0.20
 assets:
   report_header_band_width_px: 640
   report_header_band_height_px: 154
@@ -32,10 +36,6 @@ images:
   max_per_document: 32
   remote_timeout_ms: 15000
   remote_max_redirects: 3
-report_output:
-  png_width_px: 1600
-  pptx_width_inches: 8.27
-  pptx_height_inches: 11.69
 pdf:
   page_width: 210
   page_height: 297

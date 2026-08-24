@@ -7,6 +7,7 @@ import { join, dirname, resolve, basename } from 'node:path';
 import { runProcess as run } from '../server/scripts/lib/process.mjs';
 import { findOfficeConverter } from '../server/scripts/lib/office.mjs';
 import { findManifestPaths, manifestOutputPath, mapManifests, recordFailure } from '../server/scripts/lib/showcase.mjs';
+import { parse } from '../server/node_modules/yaml/dist/index.js';
 
 const args = process.argv.slice(2);
 const valueFor = (flag, fallback) => {
@@ -14,6 +15,7 @@ const valueFor = (flag, fallback) => {
   return index >= 0 ? args[index + 1] ?? fallback : fallback;
 };
 const root = resolve(valueFor('--root', 'examples/brand-showcase/generated'));
+const renderConfig = parse(readFileSync(resolve('server/templates/render-config.yml'), 'utf8'));
 const qaRoot = resolve(valueFor('--qa-root', '/tmp/report-baby-brand-showcase-qa'));
 const qaStage = `${qaRoot}.staging-${process.pid}`;
 const requirePptxRender = args.includes('--require-pptx-render');
@@ -104,6 +106,10 @@ function makeRegionDiff(left, right, region, outputPath) {
 }
 
 const MAX_CHANGED_PIXEL_RATIO = 0.35;
+// PDF-derived PNGs and LibreOffice PPTX round-trips use different text
+// rasterizers; keep the title-region gate strict enough to catch geometry
+// drift while allowing their expected glyph rasterization differences.
+const MAX_TEXT_REGION_CHANGED_PIXEL_RATIO = renderConfig.quality.pptx_text_region_max_changed_pixel_ratio;
 
 function gateDiff(path, diff) {
   if (!diff) return;
@@ -121,8 +127,8 @@ function gateRegionDiff(path, diff, regionName) {
     fail(path, `${regionName} comparison failed: ${diff.error ?? 'unknown error'}`);
     return;
   }
-  if (diff.changedPixelRatio !== null && diff.changedPixelRatio > 0.12) {
-    fail(path, `${regionName} differs in ${(diff.changedPixelRatio * 100).toFixed(1)}% of pixels (limit 12%)`);
+  if (diff.changedPixelRatio !== null && diff.changedPixelRatio > MAX_TEXT_REGION_CHANGED_PIXEL_RATIO) {
+    fail(path, `${regionName} differs in ${(diff.changedPixelRatio * 100).toFixed(1)}% of pixels (limit ${(MAX_TEXT_REGION_CHANGED_PIXEL_RATIO * 100).toFixed(0)}%)`);
   }
 }
 
@@ -266,7 +272,7 @@ async function inspectManifest(manifestPath, converter) {
 const manifests = await findManifestPaths(root);
 await rm(qaStage, { recursive: true, force: true });
 await mkdir(qaStage, { recursive: true });
-const converter = findOfficeConverter(join(qaStage, 'libreoffice-profile'), { filesystemDirectory: qaStage });
+const converter = findOfficeConverter(join(qaStage, 'libreoffice-profile'), { filesystemDirectory: qaStage, filesystemDirectories: [root] });
 const records = await mapManifests(manifests, (manifest) => inspectManifest(manifest, converter));
 if (manifests.length === 0) fail(root, 'no manifest.json files found');
 if (requirePptxRender && !converter) fail(root, 'PPTX→PDF converter is required but no LibreOffice CLI or Flatpak installation was found');
