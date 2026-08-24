@@ -11,6 +11,24 @@ It records decisions already made, the dependency between the plans, and the
 remaining implementation uncertainties. It is a coordination document, not a
 replacement for either detailed plan.
 
+## Implementation status — 2026-08-24
+
+M0–M4 and the core M5 report path are implemented and covered by the source,
+CommonMark, ZIP, image, CLI, MCP-schema, plan, and public-behavior gates. The
+breaking `brand://` contract now treats the first component as a directory and
+the remaining component as a path to a YAML/JSON profile (for example,
+`brand://flux/primary` resolves `flux/primary.yml`); the former implicit
+`profiles/` lookup is gone. Fixtures, starter generation, and authoring docs
+were migrated accordingly.
+
+The remaining M5 adapter item is explicit: normalized images currently render
+through the report PDF entry point, while no report-specific PNG/PPTX adapter
+exists in this repository. Slide output continues to use its existing image
+slots (charts/backgrounds), not arbitrary report content nodes. M6 is complete
+for the source/image contract and future seams; release metadata remains on
+the pre-release line until the missing report adapters are either added or
+explicitly removed from the release scope.
+
 An independent read-only review by Sol was used to challenge the order and
 risks. Its recommendations are integrated below where they do not conflict
 with the decisions already accepted in this thread.
@@ -201,8 +219,10 @@ Before drawing images, route existing text through a normalized content model
 using the current supported Markdown behavior. Add parser tests for all text
 fields and ensure reports without images retain their current output baseline.
 
-Research recommendation: evaluate `remark-parse`/mdast first, with a small
-adapter into the renderer-owned model. The research record is
+Selected implementation: `remark-parse`/mdast through `unified`, with a small
+adapter into the renderer-owned model. The adapter is parser-independent at
+the renderer seam, and its CommonMark mapping/diagnostics are covered by the
+normalizer fixture. The research record is
 [docs/research/commonmark-engine.md](docs/research/commonmark-engine.md).
 
 Exit criterion: the renderer consumes normalized nodes rather than deciding
@@ -235,17 +255,13 @@ examples with the final source and image contract. Record the future seams for:
 - constrained float/anchored placement;
 - tagged accessibility-aware output.
 
-## Genuine uncertainty
+## Resolved parser choice
 
-Only one implementation validation remains intentionally open:
-
-- Whether `remark-parse`/mdast has an acceptable bundled size and adapter cost
-  in the actual esbuild output, compared with the simpler `commonmark.js`
-  fallback.
-
-The implementation should evaluate this with a small parser spike and fixture
-corpus. The choice must not leak parser-specific nodes into the public schema;
-the product direction is already to use a parser-independent normalized model.
+The CommonMark spike selected `remark-parse`/mdast through `unified`. It passed
+the repository's Node 18/esbuild build, the normalized Markdown fixture, and
+the public model remains parser-independent. `commonmark.js` stays a possible
+future fallback only if dependency policy changes; it is no longer an open
+implementation decision for this wave.
 
 ## Technical risks to prove, not decisions to defer
 

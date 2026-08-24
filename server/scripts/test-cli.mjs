@@ -58,7 +58,7 @@ try {
     template: 'default-report',
     brand_ref: 'brand://flux/primary',
     output_path: brandedPath,
-    data: { title: 'Fetched brand', sections: [{ heading: 'Works', body: 'The cached sparse checkout resolved the brand.' }] },
+    data: { title: 'Fetched brand', sections: [{ heading: 'Works', body: 'The shared source resolver resolved the brand.' }] },
   }));
   assert.equal(branded.code, 0, branded.stderr);
   assert.equal(branded.stdout.trim(), brandedPath);

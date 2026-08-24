@@ -93,8 +93,77 @@
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "description": "Path-based brand/profile reference, e.g. brand://acme/primary",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Request-level brand source. It overrides the process-level source without mutating it."
         },
         "data": {
           "items": {
@@ -283,8 +352,77 @@
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "description": "Path-based brand/profile reference, e.g. brand://acme/primary",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Request-level brand source. It overrides the process-level source without mutating it."
         },
         "cards": {
           "items": {
@@ -475,7 +613,80 @@
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "description": "Path-based brand/profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Request-level brand source. It overrides the process-level source without mutating it."
+        },
+        "content_root": {
+          "description": "Explicit root for bare relative content and image paths.",
           "type": "string"
         },
         "data": {
@@ -611,6 +822,164 @@
                   "body": {
                     "type": "string"
                   },
+                  "content": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "text",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "content": {
+                              "items": {
+                                "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                              },
+                              "type": "array"
+                            },
+                            "href": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "strong",
+                                "emphasis",
+                                "link"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "content"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "fit": {
+                              "const": "contain",
+                              "default": "contain",
+                              "type": "string"
+                            },
+                            "keep_with_caption": {
+                              "default": true,
+                              "type": "boolean"
+                            },
+                            "src": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "image",
+                              "type": "string"
+                            },
+                            "width": {
+                              "anyOf": [
+                                {
+                                  "const": "full",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^(?:100|[1-9]?[0-9])%$",
+                                  "type": "string"
+                                }
+                              ],
+                              "default": "full"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "src"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "content": {
+                              "items": {
+                                "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "type": {
+                              "const": "paragraph",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "content"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "items": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "content": {
+                                    "items": {
+                                      "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                                    },
+                                    "minItems": 1,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "content"
+                                ],
+                                "type": "object"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "ordered": {
+                              "default": false,
+                              "type": "boolean"
+                            },
+                            "type": {
+                              "const": "list",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "items"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
                   "heading": {
                     "type": "string"
                   },
@@ -623,8 +992,7 @@
                   }
                 },
                 "required": [
-                  "heading",
-                  "body"
+                  "heading"
                 ],
                 "type": "object"
               },
@@ -847,8 +1215,77 @@
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "description": "Path-based brand/profile reference, e.g. brand://acme/primary",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Request-level brand source. It overrides the process-level source without mutating it."
         },
         "data": {
           "additionalProperties": false,
@@ -1576,8 +2013,77 @@
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "description": "Path-based brand/profile reference, e.g. brand://acme/primary",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Request-level brand source. It overrides the process-level source without mutating it."
         },
         "data": {
           "additionalProperties": false,
@@ -2313,8 +2819,77 @@
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "description": "Path-based brand/profile reference, e.g. brand://acme/primary",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Request-level brand source. It overrides the process-level source without mutating it."
         },
         "data": {
           "additionalProperties": false,

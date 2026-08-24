@@ -14,9 +14,8 @@ Use a directory rather than a single file:
 ```text
 brands/acme/
   _brand.yml
-  profiles/
-    primary.yml
-    dark.yml
+  primary.yml
+  dark.yml
   templates/
     slides/
       innovation-story/

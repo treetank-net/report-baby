@@ -19,7 +19,7 @@ report-baby sources or building a new bundle.
 brands/acme/
   # schema_version: 1 in _brand.yml and showcase.yml
   _brand.yml
-  profiles/primary.yml
+  primary.yml
   templates/slides/innovation-story/template.yml
   templates/slides/innovation-story/cases.yml
   assets/logos/acme.svg

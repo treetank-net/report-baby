@@ -19,6 +19,19 @@ assets:
   cover_height_px: 900
   cover_dpi: 96
   cover_anchor_y: 0.5
+sources:
+  zip_max_entries: 2000
+  zip_max_file_bytes: 52428800
+  zip_max_total_bytes: 209715200
+  zip_max_compression_ratio: 100
+  zip_max_nested_archives: 0
+images:
+  max_asset_bytes: 20971520
+  max_decoded_pixels: 40000000
+  max_dimension_px: 10000
+  max_per_document: 32
+  remote_timeout_ms: 15000
+  remote_max_redirects: 3
 pdf:
   page_width: 210
   page_height: 297
@@ -26,6 +39,8 @@ pdf:
   footer_y: 285
   footer_line_width: 0.3
   header_band_height: 54
+  image_caption_gap: 2.5
+  image_caption_line_height: 5
   header_logo_y: 7
   header_logo_height: 7
   header_title_size: 22

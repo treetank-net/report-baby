@@ -27,14 +27,14 @@ function runBrandTool(args) {
 const starterRoot = join(temp, 'starter-brands');
 const starterInit = runBrandTool(['init', '--out', starterRoot, '--brand', 'northstar', '--name', 'Northstar', '--preset', 'campaign']);
 if (starterInit.status !== 0) throw new Error(`brand-tool init failed: ${starterInit.stderr || starterInit.stdout}`);
-for (const file of ['_brand.yml', 'profiles/primary.yml', 'showcase.yml', 'templates/slides/primary/template.yml', 'templates/slides/primary/cases.yml', 'assets/logos/logo.svg']) {
+for (const file of ['_brand.yml', 'primary.yml', 'showcase.yml', 'templates/slides/primary/template.yml', 'templates/slides/primary/cases.yml', 'assets/logos/logo.svg']) {
   try { await readFile(join(starterRoot, 'northstar', file)); } catch (error) { throw new Error(`brand-tool init did not create ${file}: ${error}`); }
 }
 const starterValidation = runBrandTool(['validate', '--brand-root', starterRoot, '--brand', 'brand://northstar/primary']);
 if (starterValidation.status !== 0) throw new Error(`generated starter did not validate: ${starterValidation.stderr || starterValidation.stdout}`);
 const starterSet = runBrandTool(['set', '--brand-root', starterRoot, '--brand', 'brand://northstar/primary', '--path', 'layout.title_align', '--value', 'center']);
 if (starterSet.status !== 0) throw new Error(`brand-tool set failed: ${starterSet.stderr || starterSet.stdout}`);
-if (!(await readFile(join(starterRoot, 'northstar/profiles/primary.yml'), 'utf8')).includes('title_align: center')) throw new Error('brand-tool set did not update the selected profile');
+if (!(await readFile(join(starterRoot, 'northstar/primary.yml'), 'utf8')).includes('title_align: center')) throw new Error('brand-tool set did not update the selected profile');
 const starterPreview = runBrandTool(['preview', '--kind', 'showcase', '--brand-root', starterRoot, '--brand', 'brand://northstar/primary', '--out', join(temp, 'starter-preview'), '--formats', 'pdf,png,pptx']);
 if (starterPreview.status !== 0) throw new Error(`generated starter preview failed: ${starterPreview.stderr || starterPreview.stdout}`);
 for (const file of ['reports/primary-report/report.pdf', 'decks/primary-deck/slides.pdf', 'decks/primary-deck/slides.pptx', 'decks/primary-deck/png/slide-01.png']) {

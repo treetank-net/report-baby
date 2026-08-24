@@ -4,10 +4,13 @@ import type { SlideDeck } from './slides.js';
 import { resolveSlidePlan } from './slide-plan.js';
 import { compileTemplateSource, type CompiledTemplate } from './template-contract.js';
 import { slideDeckSchema } from './contract/schema.js';
+import type { BrandSourceDescriptor } from './source-contract.js';
 
 export interface SlideDeckContextOptions {
   brandRoot: string;
   brandSourceRoots?: string[];
+  brandSource?: BrandSourceDescriptor;
+  contentRoot?: string;
   brandRef?: string;
   templateRef?: string;
   surface?: string;
@@ -49,6 +52,8 @@ export async function resolveSlideDeck(data: SlideDeck, options: SlideDeckContex
     surface: deckSurface,
     overrides: deckOverrides,
     brandSourceRoots: options.brandSourceRoots,
+    brandSource: options.brandSource,
+    contentRoot: options.contentRoot,
   });
   const deckTemplate = requestedDeckTemplate ?? context.composition.templateRef;
   const slideResults = await Promise.all(data.slides.map(async (slide) => {
@@ -58,6 +63,8 @@ export async function resolveSlideDeck(data: SlideDeck, options: SlideDeckContex
       surface: slide.surface ?? deckSurface,
       overrides: mergeOverrides(deckOverrides, slide.overrides),
       brandSourceRoots: options.brandSourceRoots,
+      brandSource: options.brandSource,
+      contentRoot: options.contentRoot,
     });
     return item;
   }));

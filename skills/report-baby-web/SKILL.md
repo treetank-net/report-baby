@@ -32,7 +32,7 @@ not save an HTML error page that Node reports later as a confusing syntax error.
 
 ## Fetch and verify a brandbook
 
-A brand is a directory containing YAML/JSON metadata, profiles, templates, and
+A brand is a directory containing YAML/JSON metadata, profile files, templates, and
 binary assets. Clone the repository sparsely and shallowly:
 
 ```bash
@@ -60,9 +60,10 @@ node /tmp/rb/server/cli-bundle.cjs list_templates
 node /tmp/rb/server/cli-bundle.cjs inspect_brand '{"brand_ref":"brand://flux/primary"}'
 ```
 
-Use `brand://<id>/<profile>` explicitly, for example
-`brand://flux/primary`. A brand URL is a repository URL, not a URL to one YAML
-file, because the brandbook includes fonts, logos, and backgrounds.
+Use the path-based `brand://<directory>/<profile>` explicitly, for example
+`brand://flux/primary`. `flux` is a directory and `primary` resolves to
+`primary.yml` inside it; it is not a host name or an implicit `profiles/`
+lookup.
 
 ## Render from a JSON file
 
@@ -96,7 +97,7 @@ The report input has this shape:
     "intro": "One short lead paragraph.",
     "kpis": [{"label":"Revenue","value":"124 300 zł","delta":"+18%","trend":"up"}],
     "charts": [{"type":"bar","title":"Spend by channel","data":[{"label":"Search","value":18200}]}],
-    "sections": [{"heading":"What worked","body":"The narrative supports **bold** inline text."}],
+    "sections": [{"heading":"What worked","body":"The narrative supports **bold** inline text and ![a chart](root://assets/chart.png)."}],
     "table": {"head":["Channel","Result"],"body":[["SEO",42]]},
     "highlights": ["One short takeaway"],
     "footer": "Source: verified analytics data"
@@ -110,6 +111,11 @@ The tool accepts `default-report`, `campaign-summary`, and the built-in
 `render_slides_pptx`, not `render_report`. Use `list_templates` for the current
 complete list.
 
+For a structured image, use a section's `content` instead of `body`, for
+example `{ "type": "image", "src": "brand://assets/map.png", "alt": "Map", "caption": "Source map", "width": "80%", "fit": "contain" }`.
+`root://` resolves under `content_root`, `brand://` under the selected brand
+directory, and `source://` under the complete materialized ZIP/Git source.
+
 The checkout can be automated when the brandbook lives in a Git repository:
 
 ```bash
@@ -119,11 +125,11 @@ node /tmp/rb/server/cli-bundle.cjs \
   render_report < report.json
 ```
 
-The CLI performs a shallow sparse clone and caches it under the configured data
-directory by URL, git ref, and brand path. Pass `--git-ref main` (or another
-branch/tag) when the default ref is not appropriate. The JSON still needs an
-explicit `brand_ref` matching the checked-out brand, such as
-`brand://client/primary`.
+The CLI materializes the complete Git or ZIP source and caches the immutable
+result under the configured data directory by source identity. Pass
+`--git-ref main` (or another branch/tag) for Git sources and `--brand-path` to
+select a subdirectory. The JSON still needs an explicit path-based
+`brand_ref`, such as `brand://client/primary`.
 
 Charts use raw numeric values. Keep KPI labels below roughly 28 characters,
 periods short, and footers below roughly 120 characters. TTF/OTF fonts work in

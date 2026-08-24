@@ -92,8 +92,9 @@ node /tmp/rb/server/cli-bundle.cjs \
   render_report < report.json
 ```
 
-It uses a shallow sparse checkout and caches it under `REPORT_BABY_DATA`; the
-JSON still supplies the explicit `brand_ref`.
+It materializes the complete source, validates it, and caches the immutable
+result under `REPORT_BABY_DATA`; `--brand-path` selects a subdirectory and the
+JSON still supplies the explicit path-based `brand_ref`.
 
 The web distribution path is deliberately `raw.githubusercontent.com`.
 Do not introduce a dependency on `api.github.com` or `codeload.github.com`:
@@ -110,9 +111,11 @@ directory used for prototyping.
 ## Brandbooks
 
 Brandbooks are external inputs, not plugin content. Keep each customer brand in
-its own repository or configured data directory, with `_brand.yml`, profiles,
-and assets next to the source brand. Select a profile explicitly with
-`brand://...` and configure its parent directory with `REPORT_BABY_BRAND_DIR`.
+its own repository or configured data directory, with `_brand.yml`, profile
+YAML files, and assets next to the source brand. Select a profile explicitly
+with a path-based reference such as `brand://acme/primary`; `acme` is a
+directory and `primary` resolves to `primary.yml` inside it. Configure the
+source root with `REPORT_BABY_BRAND_DIR`.
 
 For a Node-only local prototype, use the same renderer path as MCP:
 
@@ -197,10 +200,10 @@ Architecture and trade-offs: `CLAUDE.md`. Plans: `ROADMAP.md`.
 
 - `REPORT_BABY_DATA` — data directory (default `~/.report-baby`); output is in
   `<data>/out`.
-- `REPORT_BABY_BRAND_DIR` — brandbook directory (default
-  `<REPORT_BABY_DATA>/brands`). Renderers accept `brand_ref`, for example
-  `brand://acme/primary`; `list_brandbooks` and `inspect_brand` help discover
-  and validate profiles.
+- `REPORT_BABY_BRAND_DIR` — brandbook source directory (default
+  `<REPORT_BABY_DATA>/brands`). Renderers accept path-based `brand_ref`, for
+  example `brand://acme/primary`; `list_brandbooks` and `inspect_brand` help
+  discover and validate profiles.
 - `REPORT_BABY_BRAND_STORE` — optional published-release directory; it takes
   precedence over `REPORT_BABY_BRAND_DIR`.
 - `REPORT_BABY_BRAND_SOURCE_ROOTS` — `:`-separated allow-list of directories a
@@ -210,6 +213,16 @@ Architecture and trade-offs: `CLAUDE.md`. Plans: `ROADMAP.md`.
   brandbook.
 - `REPORT_BABY_TEMPLATE_DIR` — optional override for the built-in render
   configuration and slide recipes embedded in the bundle.
+
+### Source and image references
+
+Rendering tools accept `brand_source` descriptors for a local directory, ZIP,
+ZIP URL, or Git URL, plus optional `brand_path`. `content_root` is the explicit
+root for local report content. Image references use `root://` for that content
+root, `brand://` for the selected brand directory, `source://` for the complete
+materialized source, or an explicit HTTP(S) URL. Markdown images default to
+full-width flow; structured image nodes may set a percentage `width`,
+`caption`, `alt`, `title`, and `fit: "contain"`.
 
 ## License
 

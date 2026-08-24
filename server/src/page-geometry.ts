@@ -73,6 +73,28 @@ export function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeomet
     width: page.width - page.margins.left - page.margins.right,
     bottom,
   };
+  const frameEntries: Array<[string, PageSegment]> = Object.entries(page.blockFrames).map(([name, frame]) => {
+    let segment = physicalFrame(frame, page.width, page.height);
+    const coveringBand = bands
+      .filter((band) => band.x < segment.x + segment.width && band.x + band.width > segment.x && band.top <= segment.top && band.bottom > segment.top)
+      .sort((left, right) => right.bottom - left.bottom)[0];
+    if (coveringBand) {
+      const height = segment.bottom - segment.top;
+      segment = { ...segment, top: coveringBand.bottom, bottom: coveringBand.bottom + height };
+    }
+    return [name, segment];
+  });
+  frameEntries.sort((left, right) => left[1].top - right[1].top);
+  const adjustedFrames: Array<[string, PageSegment]> = frameEntries.map(([name, segment], index) => {
+    const entries = frameEntries;
+    const previous = entries.slice(0, index).map((entry) => entry[1]).filter((candidate) => candidate.x < segment.x + segment.width && candidate.x + candidate.width > segment.x).sort((left, right) => right.bottom - left.bottom)[0];
+    if (previous && segment.top < previous.bottom) {
+      const height = segment.bottom - segment.top;
+      return [name, { ...segment, top: previous.bottom, bottom: previous.bottom + height }];
+    }
+    return [name, segment];
+  });
+  const blockFrames: Record<string, PageSegment> = Object.fromEntries(adjustedFrames);
   return {
     width: page.width,
     height: page.height,
@@ -83,7 +105,7 @@ export function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeomet
     bands: Object.fromEntries(Object.entries(page.reservedBands).map(([name, frame]) => [name, physicalFrame(frame, page.width, page.height)])),
     continuationTop: bands.find((band) => band.top === 0)?.bottom,
     continuationBottom: bands.find((band) => band.bottom === page.height)?.top,
-    blockFrames: Object.fromEntries(Object.entries(page.blockFrames).map(([name, frame]) => [name, physicalFrame(frame, page.width, page.height)])),
+    blockFrames,
     flow: page.flow,
     dynamicFlow: true,
   };

@@ -269,7 +269,7 @@ Environment variables:
   output goes to `<data>/out`.
 - `REPORT_BABY_BRAND_DIR` — brandbook directory (default
   `<REPORT_BABY_DATA>/brands`); profiles use references such as
-  `brand://acme/primary`.
+  path-based references such as `brand://acme/primary` (`acme/primary.yml`).
 - `REPORT_BABY_BRAND_STORE` — published-release directory; takes precedence over
   `REPORT_BABY_BRAND_DIR` so MCP can ignore working-tree drafts.
 - `REPORT_BABY_BRAND_SOURCE_ROOTS` — `:`-separated allow-list for absolute

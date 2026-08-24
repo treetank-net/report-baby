@@ -8,6 +8,9 @@ import { logicalDirection, logicalPlacement, logicalSpacing, type LockupPlacemen
 import { readRenderConfig } from './builtin-template-source.js';
 import { readTemplateSource } from './template-contract.js';
 import type { PreparedAssetsManifest, PreparedAssetEntry } from './asset-preparation.js';
+import type { BrandSourceDescriptor } from './source-contract.js';
+import { createSourceContext, type SourceContext } from './source-context.js';
+import { materializeBrandSource } from './source-materialization.js';
 
 export type { RenderTheme } from './core/model/render-theme.js';
 
@@ -51,6 +54,7 @@ export interface RenderBrandContext {
   composition: RenderComposition;
   brandName?: string;
   diagnostics: BrandDiagnostics;
+  sourceContext?: SourceContext;
 }
 
 interface RecordValue {
@@ -187,7 +191,10 @@ async function readProfile(rootDir: string, brandId: string, profile?: string, s
   if (!base) throw new Error(`Brand document not found for ${brandId}`);
   if (!profile) return { document: base.document };
 
-  const profilePath = safeRelativePath(brandDir, join('profiles', profile.replace(/\.(ya?ml|json)$/i, '') + '.yml'));
+  // `brand://flux/primary` is a path reference: `flux` selects a directory
+  // and `primary` selects `primary.yml` directly inside it. The former
+  // implicit `profiles/` lookup is intentionally not part of the contract.
+  const profilePath = safeRelativePath(brandDir, `${profile.replace(/\.(ya?ml|json)$/i, '')}.yml`);
   if (seen.has(profilePath)) throw new Error(`Circular brand profile inheritance: ${profile}`);
   seen.add(profilePath);
   const profileDoc = await readDocument(profilePath).catch(async () => {
@@ -661,7 +668,7 @@ export async function assetDataUri(filePath: string | undefined): Promise<string
 
 export async function resolveBrandContext(
   brandRoot: string,
-  options: { brandRef?: string; templateRef?: string; surface?: string; overrides?: BrandOverrides; brandSourceRoots?: string[] } = {},
+  options: { brandRef?: string; templateRef?: string; surface?: string; overrides?: BrandOverrides; brandSourceRoots?: string[]; brandSource?: BrandSourceDescriptor; contentRoot?: string } = {},
 ): Promise<RenderBrandContext> {
   const diagnostics: BrandDiagnostics = {
     brandRef: options.brandRef,
@@ -670,24 +677,28 @@ export async function resolveBrandContext(
     appliedOverrides: [],
     warnings: [],
   };
-  if (!options.brandRef) return { theme: applyOverrides(defaultRenderTheme(), {}, options.overrides, diagnostics), composition: { templateRef: 'slides/standard', direction: 'ltr', lockupPlacement: 'top-start', lockupSpacing: 'normal' }, diagnostics };
+  const materialized = await materializeBrandSource(options.brandSource, brandRoot);
+  const sourceContext = createSourceContext({ contentRoot: options.contentRoot ?? materialized.sourceRoot, sourceRoot: materialized.sourceRoot, brandRoot: materialized.brandRoot });
+  const effectiveBrandRoot = sourceContext.brandRoot;
+  diagnostics.warnings.push(...materialized.warnings);
+  if (!options.brandRef) return { theme: applyOverrides(defaultRenderTheme(), {}, options.overrides, diagnostics), composition: { templateRef: 'slides/standard', direction: 'ltr', lockupPlacement: 'top-start', lockupSpacing: 'normal' }, diagnostics, sourceContext };
 
   const reference = parseReference(options.brandRef);
   let document: RecordValue;
   let profile: string | undefined;
-  const documentPath = reference.filePath ? safeRelativePath(brandRoot, reference.filePath, 'Brand reference') : undefined;
+  const documentPath = reference.filePath ? safeRelativePath(effectiveBrandRoot, reference.filePath, 'Brand reference') : undefined;
   if (documentPath) {
     document = await readDocument(documentPath, true);
   } else {
     profile = reference.profile;
-    document = (await readProfile(brandRoot, reference.brandId as string, profile)).document;
+    document = (await readProfile(effectiveBrandRoot, reference.brandId as string, profile)).document;
   }
   diagnostics.profile = profile;
-  const brandDir = documentPath ? dirname(documentPath) : await resolveBrandDirectory(brandRoot, reference.brandId as string);
+  const brandDir = documentPath ? dirname(documentPath) : await resolveBrandDirectory(effectiveBrandRoot, reference.brandId as string);
   const extracted = extractTheme(brandDir, document, options.surface, options.templateRef, options.brandSourceRoots ?? [], readPreparedAssets(brandDir));
   diagnostics.warnings.push(...extracted.warnings);
   const theme = applyOverrides(extracted.theme, document, options.overrides, diagnostics);
-  return { theme, composition: extracted.composition, brandName: extracted.brandName, diagnostics };
+  return { theme, composition: extracted.composition, brandName: extracted.brandName, diagnostics, sourceContext };
 }
 
 export async function listBrandbooks(brandRoot: string): Promise<Array<{ id: string; name?: string; profiles: string[] }>> {
@@ -698,8 +709,8 @@ export async function listBrandbooks(brandRoot: string): Promise<Array<{ id: str
     for (const entry of entries) {
       if (entry.name.startsWith('.')) continue;
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) names.push(...await profileNames(join(directory, entry.name), relative));
-      else if (entry.isFile() && /\.(ya?ml|json)$/i.test(entry.name)) names.push(relative.replace(/\.(ya?ml|json)$/i, ''));
+      if (entry.isDirectory() && !['assets', 'releases', 'templates'].includes(entry.name)) names.push(...await profileNames(join(directory, entry.name), relative));
+      else if (entry.isFile() && /\.(ya?ml|json)$/i.test(entry.name) && !['_brand', 'brand', 'showcase'].includes(entry.name.replace(/\.(ya?ml|json)$/i, ''))) names.push(relative.replace(/\.(ya?ml|json)$/i, ''));
     }
     return names;
   }
@@ -710,11 +721,10 @@ export async function listBrandbooks(brandRoot: string): Promise<Array<{ id: str
     const brandDir = await resolveBrandDirectory(brandRoot, entry.name);
     const base = await readFirstDocument(documentCandidates(brandDir), false, true);
     if (!base) continue;
-    const profileDir = join(brandDir, 'profiles');
     result.push({
       id: entry.name,
       name: brandNameFrom(base.document),
-      profiles: (await profileNames(profileDir)).sort(),
+      profiles: (await profileNames(brandDir)).sort(),
     });
   }
   return result.sort((a, b) => a.id.localeCompare(b.id));

@@ -15,7 +15,7 @@ node scripts/brand-tool.js validate --brand-root . --brand brand://northstar/pri
 node scripts/brand-tool.js preview --kind showcase --brand-root . --brand brand://northstar/primary --out ./prototype --formats pdf,png,pptx
 ```
 
-Edit `_brand.yml` for shared identity, `profiles/primary.yml` for a surface
+Edit `_brand.yml` for shared identity, `primary.yml` for a surface
 variant, `templates/slides/primary/template.yml` for box positions and
 `showcase.yml` for the examples that prove the brand.
 

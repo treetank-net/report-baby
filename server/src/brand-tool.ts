@@ -23,12 +23,12 @@ function required(args: string[], flag: string): string {
 function help(): never {
   console.error(`Usage:
   node scripts/brand-tool.js init --out PATH --brand NAME [--name DISPLAY NAME] [--preset starter|campaign]
-  node scripts/brand-tool.js set --brand-root PATH --brand brand://name/profile --path color.primary --value VALUE [--file profile|brand|showcase]
-  node scripts/brand-tool.js validate --brand-root PATH --brand brand://name/profile
-  node scripts/brand-tool.js template inspect --brand-root PATH --brand brand://name/profile --template slides/title
-  node scripts/brand-tool.js template copy --brand-root PATH --brand brand://name/profile --from slides/two-column --to slides/two-column
-  node scripts/brand-tool.js preview --kind report|deck --brand-root PATH --brand brand://name/profile --input FILE --out DIR --formats pdf,png,pptx
-  node scripts/brand-tool.js publish --brand-root PATH --brand brand://name/profile --store DIR --release VERSION`);
+  node scripts/brand-tool.js set --brand-root PATH --brand brand://path/to/profile --path color.primary --value VALUE [--file profile|brand|showcase]
+  node scripts/brand-tool.js validate --brand-root PATH --brand brand://path/to/profile
+  node scripts/brand-tool.js template inspect --brand-root PATH --brand brand://path/to/profile --template slides/title
+  node scripts/brand-tool.js template copy --brand-root PATH --brand brand://path/to/profile --from slides/two-column --to slides/two-column
+  node scripts/brand-tool.js preview --kind report|deck --brand-root PATH --brand brand://path/to/profile --input FILE --out DIR --formats pdf,png,pptx
+  node scripts/brand-tool.js publish --brand-root PATH --brand brand://path/to/profile --store DIR --release VERSION`);
   process.exit(2);
 }
 
@@ -39,7 +39,7 @@ function absolute(value: string): string {
 function brandParts(brandRef: string): { brandId: string; profileId: string } {
   const normalized = brandRef.replace(/^brand:\/\//, '').replace(/^brand:/, '');
   const parts = normalized.split('/').filter(Boolean);
-  if (parts.length < 1) throw new Error(`Invalid brand reference '${brandRef}'. Expected brand://name/profile.`);
+  if (parts.length < 1) throw new Error(`Invalid brand reference '${brandRef}'. Expected brand://path/to/profile.`);
   return { brandId: parts[0], profileId: parts.slice(1).join('/') || 'primary' };
 }
 
@@ -227,7 +227,7 @@ node scripts/brand-tool.js validate --brand-root . --brand brand://${brandId}/pr
 node scripts/brand-tool.js preview --kind showcase --brand-root . --brand brand://${brandId}/primary --out ./prototype --formats pdf,png,pptx
 \`\`\`
 
-Edit \`_brand.yml\` for shared identity, \`profiles/primary.yml\` for a surface
+Edit \`_brand.yml\` for shared identity, \`primary.yml\` for a surface
 variant, \`templates/slides/primary/template.yml\` for box positions and
 \`showcase.yml\` for the examples that prove the brand.
 
@@ -253,11 +253,11 @@ async function init(args: string[]): Promise<void> {
   if (preset !== 'starter' && preset !== 'campaign') throw new Error(`Unknown preset '${preset}'. Use starter or campaign.`);
   const brandDir = join(out, brandId);
   if (existsSync(brandDir)) throw new Error(`Brand directory already exists: ${brandDir}`);
-  await mkdir(join(brandDir, 'profiles'), { recursive: true });
+  await mkdir(brandDir, { recursive: true });
   await mkdir(join(brandDir, 'templates', 'slides', 'primary'), { recursive: true });
   await mkdir(join(brandDir, 'assets', 'logos'), { recursive: true });
   await writeFile(join(brandDir, '_brand.yml'), starterBrandSource(name, preset));
-  await writeFile(join(brandDir, 'profiles', 'primary.yml'), starterProfileSource(preset));
+  await writeFile(join(brandDir, 'primary.yml'), starterProfileSource(preset));
   await writeFile(join(brandDir, 'templates', 'slides', 'primary', 'template.yml'), starterTemplateSource());
   await writeFile(join(brandDir, 'templates', 'slides', 'primary', 'cases.yml'), starterCasesSource());
   await writeFile(join(brandDir, 'showcase.yml'), starterShowcaseSource(name));
@@ -278,7 +278,7 @@ async function setValue(args: string[]): Promise<void> {
   const { brandId, profileId } = brandParts(brandRef);
   const brandDir = safeBrandPath(brandRoot, brandId);
   const fileKind = valueFor(args, '--file', 'profile')!;
-  const requested = fileKind === 'brand' ? '_brand.yml' : fileKind === 'showcase' ? 'showcase.yml' : fileKind === 'profile' ? join('profiles', `${profileId}.yml`) : fileKind;
+  const requested = fileKind === 'brand' ? '_brand.yml' : fileKind === 'showcase' ? 'showcase.yml' : fileKind === 'profile' ? `${profileId}.yml` : fileKind;
   const filePath = safeBrandPath(brandDir, requested);
   if (!existsSync(filePath)) throw new Error(`Brand file does not exist: ${filePath}`);
   const document = parseDocument(await readFile(filePath, 'utf8'));

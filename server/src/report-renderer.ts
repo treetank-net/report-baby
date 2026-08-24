@@ -30,6 +30,10 @@ import {
   type StyledTextContext,
 } from './text-runs.js';
 import { renderChart, type ChartDatum, type ChartType } from './svg.js';
+import type { NormalizedContentNode } from './content-model.js';
+import { normalizeMarkdown, normalizeStructuredContent } from './markdown-normalizer.js';
+import { resolveImageAsset } from './image-resolver.js';
+import type { SourceContext } from './source-context.js';
 
 export interface TemplateInfo {
   name: string;
@@ -79,7 +83,7 @@ export interface ReportData {
   intro?: string;
   kpis?: Array<{ label: string; value: string | number; delta?: string; trend?: 'up' | 'down' | 'flat'; note?: string }>;
   charts?: ReportChart[];
-  sections?: Array<{ heading: string; body: string; level?: 1 | 2 }>;
+  sections?: Array<{ heading: string; body?: string; content?: unknown[]; level?: 1 | 2 }>;
   table?: { head: string[]; body: Array<Array<string | number>>; caption?: string };
   highlights?: string[];
   highlights_title?: string;
@@ -164,9 +168,9 @@ class Cursor {
     return this.geometry.bands.footer?.top ?? Math.min(PDF_CONFIG.footerTextY, this.geometry.height);
   }
   activateBlock(name: string, minimumTop?: number): void {
-    const planBlockId = name === 'narrative' ? 'flow' : name;
+    const planBlockId = name === 'narrative' ? undefined : name;
     const planPage = this.reportPlan?.pages[Math.min(this.doc.getNumberOfPages() - 1, (this.reportPlan.pages.length - 1))];
-    const planned = planPage?.blocks.find((item) => item.id === planBlockId && !item.parentId);
+    const planned = planBlockId ? planPage?.blocks.find((item) => item.id === planBlockId && !item.parentId) : undefined;
     const frame = planned
       ? { x: planned.box.x, top: planned.box.y, width: planned.box.width, bottom: planned.box.y + planned.box.height }
       : this.geometry.blockFrames[name];
@@ -368,6 +372,114 @@ function drawDynamicParagraph(doc: jsPDF, cur: Cursor, content: string, lineHeig
     if (startNode >= result.endNode) return;
     cur.flowBreak();
   }
+}
+
+function normalizedInlineMarkdown(nodes: NormalizedContentNode[]): string {
+  return nodes.map((node) => {
+    if (node.type === 'text') return node.value;
+    if (node.type === 'image') return '';
+    if (node.type === 'strong') return `**${normalizedInlineMarkdown(node.children)}**`;
+    if (node.type === 'emphasis') return `*${normalizedInlineMarkdown(node.children)}*`;
+    if (node.type === 'link') return `[${normalizedInlineMarkdown(node.children)}](${node.href ?? ''})`;
+    if (node.type === 'heading' || node.type === 'paragraph') return normalizedInlineMarkdown(node.children);
+    if (node.type === 'list') return node.items.map((item) => normalizedInlineMarkdown(item.children)).join('\n');
+    if (node.type === 'table') return [...node.head, ...node.body.flat()].join(' ');
+    if (node.type === 'chart') return [node.chart.title, node.chart.subtitle].filter(Boolean).join(' ');
+    return '';
+  }).join('');
+}
+
+function containsImage(nodes: NormalizedContentNode[]): boolean {
+  return nodes.some((node) => {
+    if (node.type === 'image') return true;
+    if (node.type === 'list') return node.items.some((item) => containsImage(item.children));
+    if ('children' in node) return containsImage(node.children);
+    return false;
+  });
+}
+
+interface ImageRenderState {
+  count: number;
+}
+
+async function renderFigure(doc: jsPDF, cur: Cursor, image: Extract<NormalizedContentNode, { type: 'image' }>, sourceContext: SourceContext, theme: RenderTheme, text: StyledTextContext, warnings: string[], imageState: ImageRenderState): Promise<void> {
+  imageState.count += 1;
+  if (imageState.count > RENDER_CONFIG.images.maxPerDocument) {
+    throw new Error(`Report contains more than the configured ${RENDER_CONFIG.images.maxPerDocument} images.`);
+  }
+  let asset;
+  try {
+    asset = await resolveImageAsset(image.src, sourceContext);
+  } catch (error: any) {
+    throw new Error(`Image '${image.src}' could not be rendered: ${error?.message ?? error}`);
+  }
+  const requestedWidth = image.width === 'full' ? cur.width : cur.width * (Number.parseFloat(image.width) / 100);
+  let width = requestedWidth;
+  let height = width * asset.height / asset.width;
+  const caption = image.caption ?? image.title;
+  doc.setFontSize(PDF_CONFIG.bodySize);
+  const captionLines = caption ? layoutStyledText(doc, caption, width, text) : [];
+  const captionHeight = captionLines.length * PDF_CONFIG.imageCaptionLineHeight;
+  const totalHeight = height + (captionLines.length ? PDF_CONFIG.imageCaptionGap + captionHeight : 0);
+  if (cur.y + totalHeight > cur.bottom) cur.flowBreak();
+  const availableHeight = cur.bottom - cur.y - (captionLines.length ? PDF_CONFIG.imageCaptionGap + captionHeight : 0);
+  if (height > availableHeight && availableHeight > 0) {
+    const scale = availableHeight / height;
+    width *= scale;
+    height *= scale;
+    warnings.push(`Image '${image.src}' was scaled down to fit the available page height.`);
+  }
+  const x = cur.x + (cur.width - width) / 2;
+  doc.addImage(asset.data, asset.format, x, cur.y, width, height);
+  cur.y += height;
+  if (captionLines.length) {
+    cur.y += PDF_CONFIG.imageCaptionGap;
+    doc.setFont(pdfFont(theme), 'normal');
+    doc.setFontSize(PDF_CONFIG.bodySize);
+    doc.setTextColor(...rgb(theme.foreground));
+    drawStyledLines(doc, captionLines, x, cur.y, PDF_CONFIG.imageCaptionLineHeight, text);
+    cur.y += captionHeight;
+  }
+}
+
+async function renderNormalizedDocument(doc: jsPDF, cur: Cursor, document: ReturnType<typeof normalizeMarkdown>, sourceContext: SourceContext, theme: RenderTheme, text: StyledTextContext, warnings: string[], imageState: ImageRenderState): Promise<void> {
+  warnings.push(...document.diagnostics.filter((warning) => !warnings.includes(warning)));
+  for (const node of document.nodes) {
+    if (node.type === 'paragraph' || node.type === 'heading') {
+      const children = node.children;
+      let textNodes: NormalizedContentNode[] = [];
+      const flushText = () => {
+        const value = normalizedInlineMarkdown(textNodes).trim();
+        if (!value) { textNodes = []; return; }
+        const lines = layoutStyledText(doc, value, cur.width, text);
+        if (cur.dynamicFlow) drawDynamicParagraph(doc, cur, value, PDF_CONFIG.bodyLineHeight, text);
+        else drawParagraph(doc, cur, lines, PDF_CONFIG.bodyLineHeight, text);
+        textNodes = [];
+      };
+      for (const child of children) {
+        if (child.type === 'image') {
+          flushText();
+          await renderFigure(doc, cur, child, sourceContext, theme, text, warnings, imageState);
+        } else textNodes.push(child);
+      }
+      flushText();
+      cur.y += PDF_CONFIG.sectionBottomGap;
+    } else if (node.type === 'list') {
+      for (const item of node.items) {
+        const value = `${node.ordered ? '1. ' : '• '}${normalizedInlineMarkdown(item.children)}`;
+        const lines = layoutStyledText(doc, value, cur.width, text);
+        if (cur.dynamicFlow) drawDynamicParagraph(doc, cur, value, PDF_CONFIG.bodyLineHeight, text);
+        else drawParagraph(doc, cur, lines, PDF_CONFIG.bodyLineHeight, text);
+      }
+      cur.y += PDF_CONFIG.sectionBottomGap;
+    } else if (node.type === 'image') {
+      await renderFigure(doc, cur, node, sourceContext, theme, text, warnings, imageState);
+    }
+  }
+}
+
+async function renderNormalizedBody(doc: jsPDF, cur: Cursor, markdown: string, sourceContext: SourceContext, theme: RenderTheme, text: StyledTextContext, warnings: string[], imageState: ImageRenderState): Promise<void> {
+  await renderNormalizedDocument(doc, cur, normalizeMarkdown(markdown), sourceContext, theme, text, warnings, imageState);
 }
 
 interface PdfAsset {
@@ -703,12 +815,14 @@ async function renderCharts(doc: jsPDF, cur: Cursor, data: ReportData, theme: Re
   }
 }
 
-function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext, gaps: PdfGaps): void {
+async function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext, gaps: PdfGaps, sourceContext: SourceContext, warnings: string[]): Promise<void> {
   const font = pdfFont(theme);
   const sections = data.sections ?? [];
   const narrativeFrame = cur.dynamicFlow ? cur.block('narrative') : undefined;
+  const imageState: ImageRenderState = { count: 0 };
   if (narrativeFrame) cur.activateBlock('narrative', cur.y);
-  sections.forEach((s, index) => {
+  for (let index = 0; index < sections.length; index += 1) {
+    const s = sections[index];
     const sub = s.level === 2;
     const headingSize = sub ? PDF_CONFIG.sectionSubheadingSize : PDF_CONFIG.sectionHeadingSize;
     const headingLineHeight = sub ? PDF_CONFIG.sectionSubheadingLineHeight : PDF_CONFIG.sectionHeadingLineHeight;
@@ -721,7 +835,10 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
     const headingH = headingLines.length * headingLineHeight;
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.bodySize);
-    const bodyLines = s.body.trim().length > 0 ? layoutStyledText(doc, s.body, cur.width, text) : [];
+    const body = s.body ?? '';
+    const normalized = s.content ? normalizeStructuredContent(s.content) : body.trim().length > 0 ? normalizeMarkdown(body) : undefined;
+    const hasImage = normalized ? containsImage(normalized.nodes) : false;
+    const bodyLines = body.trim().length > 0 && !s.content && !hasImage ? layoutStyledText(doc, body, cur.width, text) : [];
     const leadLines = Math.min(bodyLines.length, PDF_CONFIG.sectionMinLeadLines);
     if (!sub && index > 0) {
       const required = headingH + headingGap + (cur.dynamicFlow ? Math.min(leadLines, 2) : leadLines) * PDF_CONFIG.bodyLineHeight;
@@ -744,14 +861,16 @@ function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: Render
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.bodySize);
     doc.setTextColor(...rgb(theme.foreground));
-    if (bodyLines.length > 0) {
-      if (cur.dynamicFlow) drawDynamicParagraph(doc, cur, s.body, PDF_CONFIG.bodyLineHeight, text);
+    if (s.content || hasImage) {
+      await renderNormalizedDocument(doc, cur, normalized as ReturnType<typeof normalizeMarkdown>, sourceContext, theme, text, warnings, imageState);
+    } else if (bodyLines.length > 0) {
+      if (cur.dynamicFlow) drawDynamicParagraph(doc, cur, body, PDF_CONFIG.bodyLineHeight, text);
       else drawParagraph(doc, cur, bodyLines, PDF_CONFIG.bodyLineHeight, text);
     }
     const sectionGap = bodyLines.length > 0 ? gaps.sectionBottomGap : PDF_CONFIG.sectionSubheadingGap;
     const nextSectionNeedsSpace = index < sections.length - 1 && cur.dynamicFlow;
     if (!nextSectionNeedsSpace || cur.bottom - cur.y >= sectionGap + PDF_CONFIG.bodyLineHeight) cur.y += sectionGap;
-  });
+  }
   if (narrativeFrame) cur.releaseBlock();
 }
 
@@ -1096,12 +1215,14 @@ function renderFooter(doc: jsPDF, data: ReportData, theme: RenderTheme, geometry
     const footerText = coverPage ? theme.titleSubtitleColor : theme.muted;
     doc.setDrawColor(...rgb(footerLine));
     doc.setLineWidth(PDF_CONFIG.footerLineWidth);
-    const footerY = geometry.height - (PAGE_H - PDF_CONFIG.footerY);
+    const footerY = geometry.bands.footer?.top ?? geometry.height - (PAGE_H - PDF_CONFIG.footerY);
     doc.line(geometry.margins.left, footerY, geometry.width - geometry.margins.right, footerY);
     doc.setFont(font, 'normal');
     doc.setFontSize(PDF_CONFIG.footerFontSize);
     doc.setTextColor(...rgb(footerText));
-    const footerTextY = geometry.height - (PAGE_H - PDF_CONFIG.footerTextY);
+    const footerTextY = geometry.bands.footer
+      ? footerY + (PDF_CONFIG.footerTextY - PDF_CONFIG.footerY)
+      : geometry.height - (PAGE_H - PDF_CONFIG.footerTextY);
     const pageLabel = `${p} / ${pages}`;
     const pageNumberX = geometry.width - geometry.margins.right;
     const pageNumberWidth = doc.getTextWidth(pageLabel);
@@ -1186,7 +1307,7 @@ interface RenderReportAttempt {
   drawings: ReportDrawing[];
 }
 
-async function renderReportAttempt(name: string, data: ReportData, theme: RenderTheme, gaps: PdfGaps, warnings: string[]): Promise<RenderReportAttempt> {
+async function renderReportAttempt(name: string, data: ReportData, theme: RenderTheme, gaps: PdfGaps, warnings: string[], sourceContext?: SourceContext): Promise<RenderReportAttempt> {
   const template = resolveTemplate(name, data);
   const resolved = template.data;
   const geometry = template.page ? pageGeometryFromTemplate(template.compiled!) : DEFAULT_PAGE_GEOMETRY;
@@ -1203,7 +1324,7 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
   };
   const header = await createReportHeader(resolved, theme);
   const flowFooterTop = geometry.dynamicFlow
-    ? Math.max(geometry.bands.footer?.top ?? PDF_CONFIG.footerY, PDF_CONFIG.footerY)
+    ? geometry.bands.footer?.top ?? PDF_CONFIG.footerY
     : geometry.bands.footer?.top ?? PDF_CONFIG.footerY;
   const renderGeometry: PageGeometry = {
     ...geometry,
@@ -1215,7 +1336,7 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     },
     continuationTop: header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap,
     continuationBottom: geometry.dynamicFlow
-      ? Math.max(geometry.continuationBottom ?? 0, PDF_CONFIG.footerY)
+      ? geometry.continuationBottom ?? flowFooterTop
       : geometry.continuationBottom ?? flowFooterTop,
   };
   const planGeometry: PageGeometry = {
@@ -1247,7 +1368,8 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     if (resolved.kpis?.length) addUnsupportedPageBlockWarning(name, 'KPI', warnings);
     if (resolved.charts?.length) addUnsupportedPageBlockWarning(name, 'chart', warnings);
   }
-  renderSections(doc, cur, resolved, theme, text, gaps);
+  if (resolved.sections?.some((section) => section.body?.includes('![')) && !sourceContext) throw new Error('Image content requires an explicit source context.');
+  await renderSections(doc, cur, resolved, theme, text, gaps, sourceContext as SourceContext, warnings);
   renderTable(doc, cur, resolved, theme, header, text, fontSet);
   renderHighlights(doc, cur, resolved, theme, text, gaps, header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap);
   renderFooter(doc, resolved, theme, renderGeometry);
@@ -1262,11 +1384,11 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
   return { buffer: Buffer.from(doc.output('arraybuffer')), pages, lastPageFill, plan: finalPlan, drawings };
 }
 
-export async function renderReportPdfDetailed(name: string, data: ReportData, theme = defaultRenderTheme(), warnings: string[] = []): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
-  const original = await renderReportAttempt(name, data, theme, pdfGaps(), warnings);
+export async function renderReportPdfDetailed(name: string, data: ReportData, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
+  const original = await renderReportAttempt(name, data, theme, pdfGaps(), warnings, sourceContext);
   if (original.pages <= 1 || original.lastPageFill >= PDF_CONFIG.minLastPageFill) return { buffer: original.buffer, diagnostics: { plan: original.plan, drawings: original.drawings } };
   for (const factor of [PDF_CONFIG.lastPageGapFactor1, PDF_CONFIG.lastPageGapFactor2]) {
-    const tightened = await renderReportAttempt(name, data, theme, pdfGaps(factor), warnings);
+    const tightened = await renderReportAttempt(name, data, theme, pdfGaps(factor), warnings, sourceContext);
     if (tightened.pages < original.pages) {
       warnings.push(`A4 report gaps tightened by factor ${factor} to avoid a near-empty final page.`);
       return { buffer: tightened.buffer, diagnostics: { plan: tightened.plan, drawings: tightened.drawings } };
@@ -1275,8 +1397,8 @@ export async function renderReportPdfDetailed(name: string, data: ReportData, th
   return { buffer: original.buffer, diagnostics: { plan: original.plan, drawings: original.drawings } };
 }
 
-export async function renderReportPdf(name: string, data: ReportData, theme = defaultRenderTheme(), warnings: string[] = []): Promise<Buffer> {
-  return (await renderReportPdfDetailed(name, data, theme, warnings)).buffer;
+export async function renderReportPdf(name: string, data: ReportData, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext): Promise<Buffer> {
+  return (await renderReportPdfDetailed(name, data, theme, warnings, sourceContext)).buffer;
 }
 
 interface ResolvedReportTemplate {
@@ -1312,7 +1434,7 @@ export function resolveReportPlanOnly(name: string, data: ReportData, theme = de
   const hasHeaderImage = theme.reportHeaderStyle === 'image-band' && Boolean(theme.reportHeaderImagePath ?? theme.backgroundImagePath);
   const followingPageHeight = hasHeaderBand || hasHeaderImage ? PDF_CONFIG.headerRepeatBandHeight : PDF_CONFIG.headerRepeatHeight;
   const flowFooterTop = geometry.dynamicFlow
-    ? Math.max(geometry.bands.footer?.top ?? PDF_CONFIG.footerY, PDF_CONFIG.footerY)
+    ? geometry.bands.footer?.top ?? PDF_CONFIG.footerY
     : geometry.bands.footer?.top ?? PDF_CONFIG.footerY;
   const renderGeometry: PageGeometry = {
     ...geometry,
@@ -1324,7 +1446,7 @@ export function resolveReportPlanOnly(name: string, data: ReportData, theme = de
     },
     continuationTop: followingPageHeight + PDF_CONFIG.headerRepeatBottomGap,
     continuationBottom: geometry.dynamicFlow
-      ? Math.max(geometry.continuationBottom ?? 0, PDF_CONFIG.footerY)
+      ? geometry.continuationBottom ?? flowFooterTop
       : geometry.continuationBottom ?? flowFooterTop,
   };
   const planGeometry: PageGeometry = {

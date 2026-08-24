@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BrandSourceDescriptor } from '../source-contract.js';
 
 export const SLIDE_NOTES_MAX_CHARS = 4000;
 
@@ -25,6 +26,48 @@ export const reportChartSchema = z.object({
   data: z.array(datumSchema).min(1),
 });
 
+const brandSourceBase = {
+  brand_path: z.string().optional().describe('Path to the selected brand directory within the complete source root'),
+};
+
+export const brandSourceSchema = z.union([
+  z.object({ directory_path: z.string(), ...brandSourceBase }).strict(),
+  z.object({ zip_path: z.string(), ...brandSourceBase }).strict(),
+  z.object({ zip_url: z.string(), ...brandSourceBase }).strict(),
+  z.object({ git_url: z.string(), ...brandSourceBase, ref: z.string().optional() }).strict(),
+]) as z.ZodType<BrandSourceDescriptor>;
+
+const contentWidthSchema = z.union([z.literal('full'), z.string().regex(/^(?:100|[1-9]?[0-9])%$/)]);
+const contentNodeSchema: z.ZodTypeAny = z.lazy(() => z.union([
+  z.object({ type: z.literal('text'), text: z.string() }),
+  z.object({ type: z.enum(['strong', 'emphasis', 'link']), content: z.array(contentNodeSchema), href: z.string().optional() }),
+  z.object({
+    type: z.literal('image'),
+    src: z.string(),
+    alt: z.string().optional(),
+    title: z.string().optional(),
+    caption: z.string().optional(),
+    width: contentWidthSchema.optional().default('full'),
+    fit: z.literal('contain').optional().default('contain'),
+    keep_with_caption: z.boolean().optional().default(true),
+  }),
+  z.object({ type: z.literal('paragraph'), content: z.array(contentNodeSchema).min(1) }),
+  z.object({ type: z.literal('list'), ordered: z.boolean().optional().default(false), items: z.array(z.object({ content: z.array(contentNodeSchema).min(1) })).min(1) }),
+]));
+
+export const reportContentNodeSchema = contentNodeSchema;
+
+const reportSectionSchema = z.object({
+  heading: z.string(),
+  body: z.string().optional(),
+  content: z.array(reportContentNodeSchema).optional(),
+  level: z.union([z.literal(1), z.literal(2)]).optional(),
+}).superRefine((section, context) => {
+  if ((section.body === undefined) === (section.content === undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'A section must provide exactly one of body or content.' });
+  }
+});
+
 export const reportDataSchema = z.object({
   title: z.string().optional(),
   subtitle: z.string().optional(),
@@ -34,7 +77,7 @@ export const reportDataSchema = z.object({
   kpis: z.array(cardSchema).optional().describe('KPI cards; keep labels under ~28 chars to avoid clipping'),
   charts: z.array(reportChartSchema).optional(),
   sections: z
-    .array(z.object({ heading: z.string(), body: z.string(), level: z.union([z.literal(1), z.literal(2)]).optional() }))
+    .array(reportSectionSchema)
     .optional()
     .describe('Narrative sections; heading stays on the same page as the body. level 2 renders a subheading under the preceding level 1 chapter. Body text accepts **bold** inline markup'),
   table: z
@@ -127,11 +170,16 @@ export const slideDeckSchema = z.object({
 });
 
 export const brandRenderFields = {
-  brand_ref: z.string().optional().describe('Brand profile reference, e.g. brand://acme/primary'),
+  brand_ref: z.string().optional().describe('Path-based brand/profile reference, e.g. brand://acme/primary'),
+  brand_source: brandSourceSchema.optional().describe('Request-level brand source. It overrides the process-level source without mutating it.'),
   template_ref: z.string().optional().describe('Composition/template reference, e.g. slides/qbr/executive-summary'),
   surface: z.string().optional().describe('Output surface, e.g. pdf-a4 or pptx-16x9'),
   direction: z.enum(['ltr', 'rtl']).optional().describe('Logical text/layout direction for slides'),
   overrides: brandOverrideSchema.optional().describe('One-render-only, validated brand/template overrides'),
+};
+
+export const reportContentFields = {
+  content_root: z.string().optional().describe('Explicit root for bare relative content and image paths.'),
 };
 
 export const slideDiagnosticsField = {

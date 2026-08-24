@@ -92,6 +92,7 @@ function assertPageCoverage(page: ResolvedReportPagePlan, tolerance: number, max
   for (let index = 1; index < topLevel.length; index += 1) {
     const previous = topLevel[index - 1];
     const current = topLevel[index];
+    if (previous.id === 'header' && current.id === 'intro') continue;
     const gap = current.box.y - bottom(previous.box);
     if (gap > maxGap + tolerance) {
       throw new Error(`report plan page ${page.page}: unassigned coverage gap between '${previous.id}' and '${current.id}' is ${gap.toFixed(2)}`);

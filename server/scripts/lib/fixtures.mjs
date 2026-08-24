@@ -4,7 +4,7 @@ import { join } from 'node:path';
 export const longWords = (count, word) => Array.from({ length: count }, (_, index) => `${word}${index + 1}`).join(' ');
 
 export async function writePublicBrandFixture(brandDir) {
-  await mkdir(join(brandDir, 'acme', 'profiles'), { recursive: true });
+  await mkdir(join(brandDir, 'acme'), { recursive: true });
   await writeFile(join(brandDir, 'acme', '_brand.yml'), `
 schema_version: 1
 meta:
@@ -35,7 +35,7 @@ typography:
     innovation-display:
       family: "Aptos Display"
 `, 'utf8');
-  await writeFile(join(brandDir, 'acme', 'profiles', 'primary.yml'), `
+  await writeFile(join(brandDir, 'acme', 'primary.yml'), `
 color:
   primary: orange
 `, 'utf8');

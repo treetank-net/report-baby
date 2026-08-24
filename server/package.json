@@ -1,7 +1,7 @@
 {
   "name": "report-baby-server",
   "version": "0.9.5",
-  "description": "Self-contained SVG/data \u2192 PNG/PDF render MCP server (resvg-wasm + jsPDF, zero runtime deps)",
+  "description": "Self-contained SVG/data → PNG/PDF render MCP server (resvg-wasm + jsPDF, zero runtime deps)",
   "type": "module",
   "main": "bundle.cjs",
   "scripts": {
@@ -26,6 +26,11 @@
     "test:fallback-cache": "node scripts/test-fallback-cache.mjs",
     "test:report-layout": "node scripts/test-report-layout.mjs",
     "test:cli": "node scripts/test-cli.mjs",
+    "test:source-context": "node scripts/test-source-context.mjs",
+    "test:source-materialization": "node scripts/test-source-materialization.mjs",
+    "test:markdown-normalizer": "node scripts/test-markdown-normalizer.mjs",
+    "test:image-resolver": "node scripts/test-image-resolver.mjs",
+    "test:report-images": "node scripts/test-report-images.mjs",
     "test:editorial-flow": "node scripts/test-editorial-flow.mjs",
     "test": "node scripts/test-public-behavior.mjs",
     "dev": "tsc --watch --noEmit",
@@ -37,7 +42,10 @@
     "fflate": "^0.8.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
+    "mdast-util-to-string": "^4.0.0",
     "pptxgenjs": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5",
     "yaml": "^2.9.0",
     "zod": "^3.25.0"
   },

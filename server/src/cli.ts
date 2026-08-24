@@ -1,10 +1,6 @@
 import { z } from 'zod';
-import { mkdir } from 'fs/promises';
-import { createHash } from 'crypto';
-import { execFile } from 'child_process';
-import { join } from 'path';
-import { promisify } from 'util';
-import { configFromEnv, getConfigDir } from './config.js';
+import { existsSync, statSync } from 'node:fs';
+import { configFromEnv } from './config.js';
 import { registerRenderTools } from './tools/render-tools.js';
 import { registerBrandTools } from './tools/brand-tools.js';
 import { registerAuthTools } from './tools/auth.js';
@@ -12,8 +8,6 @@ import { registerAuthTools } from './tools/auth.js';
 type Handler = (args: any, extra?: any) => any;
 
 const tools = new Map<string, { shape: any; handler: Handler }>();
-const execFileAsync = promisify(execFile);
-
 const collector: any = {
   tool(...args: any[]) {
     const name = args[0] as string;
@@ -38,8 +32,10 @@ async function readInput(jsonArg: string | undefined, shape: any): Promise<strin
 interface CliOptions {
   toolArgs: string[];
   brandUrl?: string;
+  brandZip?: string;
   brandPath?: string;
   gitRef?: string;
+  contentRoot?: string;
   json: boolean;
   batch: boolean;
 }
@@ -47,8 +43,10 @@ interface CliOptions {
 function parseCliOptions(argv: string[]): CliOptions {
   const toolArgs: string[] = [];
   let brandUrl: string | undefined;
+  let brandZip: string | undefined;
   let brandPath: string | undefined;
   let gitRef: string | undefined;
+  let contentRoot: string | undefined;
   let json = false;
   let batch = false;
   for (let index = 0; index < argv.length; index += 1) {
@@ -61,39 +59,42 @@ function parseCliOptions(argv: string[]): CliOptions {
       batch = true;
       continue;
     }
-    if (arg === '--brand-url' || arg === '--brand-path' || arg === '--git-ref') {
+    if (arg === '--brand-url' || arg === '--brand-zip' || arg === '--brand-path' || arg === '--git-ref' || arg === '--content-root') {
       const value = argv[index + 1];
       if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value.`);
       if (arg === '--brand-url') brandUrl = value;
+      if (arg === '--brand-zip') brandZip = value;
       if (arg === '--brand-path') brandPath = value;
       if (arg === '--git-ref') gitRef = value;
+      if (arg === '--content-root') contentRoot = value;
       index += 1;
       continue;
     }
     toolArgs.push(arg);
   }
-  if (brandPath && !brandUrl) throw new Error('--brand-path requires --brand-url.');
-  return { toolArgs, brandUrl, brandPath, gitRef, json, batch };
+  if (brandUrl && brandZip) throw new Error('--brand-url and --brand-zip are mutually exclusive.');
+  if (brandPath && !brandUrl && !brandZip) throw new Error('--brand-path requires --brand-url or --brand-zip.');
+  return { toolArgs, brandUrl, brandZip, brandPath, gitRef, contentRoot, json, batch };
 }
 
-async function prepareBrandDirectory(options: CliOptions): Promise<void> {
-  if (!options.brandUrl) return;
-  const ref = options.gitRef ?? 'HEAD';
-  const brandPath = options.brandPath ?? '.';
-  const key = createHash('sha256').update(JSON.stringify([options.brandUrl, ref, brandPath])).digest('hex').slice(0, 32);
-  const cacheRoot = join(getConfigDir(), 'brand-cache');
-  const checkout = join(cacheRoot, key);
-  await mkdir(cacheRoot, { recursive: true });
-  try {
-    await execFileAsync('git', ['-C', checkout, 'rev-parse', '--is-inside-work-tree']);
-  } catch {
-    const cloneArgs = ['clone', '--depth', '1', '--filter=blob:none', '--sparse'];
-    if (options.gitRef) cloneArgs.push('--branch', options.gitRef);
-    cloneArgs.push(options.brandUrl, checkout);
-    await execFileAsync('git', cloneArgs, { maxBuffer: 1024 * 1024 });
-  }
-  await execFileAsync('git', ['-C', checkout, 'sparse-checkout', 'set', brandPath], { maxBuffer: 1024 * 1024 });
-  process.env.REPORT_BABY_BRAND_DIR = join(checkout, brandPath);
+function cliBrandSource(options: CliOptions): Record<string, string> | undefined {
+  if (options.brandZip) return { zip_path: options.brandZip, ...(options.brandPath ? { brand_path: options.brandPath } : {}) };
+  if (!options.brandUrl) return undefined;
+  if (existsSync(options.brandUrl)) return statSync(options.brandUrl).isDirectory()
+    ? { directory_path: options.brandUrl, ...(options.brandPath ? { brand_path: options.brandPath } : {}) }
+    : { zip_path: options.brandUrl, ...(options.brandPath ? { brand_path: options.brandPath } : {}) };
+  const isGit = /\.git(?:$|[?#])/i.test(options.brandUrl);
+  return isGit
+    ? { git_url: options.brandUrl, ...(options.brandPath ? { brand_path: options.brandPath } : {}), ...(options.gitRef ? { ref: options.gitRef } : {}) }
+    : { zip_url: options.brandUrl, ...(options.brandPath ? { brand_path: options.brandPath } : {}) };
+}
+
+function applyCliOverrides(input: any, options: CliOptions): any {
+  const output = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
+  if (options.contentRoot && output.content_root === undefined) output.content_root = options.contentRoot;
+  const source = cliBrandSource(options);
+  if (source && output.brand_source === undefined) output.brand_source = source;
+  return output;
 }
 
 async function readStdin(): Promise<string> {
@@ -105,13 +106,13 @@ async function readStdin(): Promise<string> {
   });
 }
 
-async function runBatch(): Promise<void> {
+async function runBatch(options: CliOptions): Promise<void> {
   const requests = JSON.parse(await readStdin()) as Array<{ tool: string; args?: unknown }>;
   if (!Array.isArray(requests)) throw new Error('--batch expects a JSON array on stdin.');
   for (const request of requests) {
     const tool = tools.get(request.tool);
     if (!tool) throw new Error(`unknown tool in batch: ${request.tool}`);
-    const input = request.args ?? {};
+    const input = applyCliOverrides(request.args ?? {}, options);
     const parsed = Object.keys(tool.shape ?? {}).length ? z.object(tool.shape).parse(input) : input;
     const result = await tool.handler(parsed, {});
     if (result?.isError) throw new Error(JSON.stringify(result));
@@ -121,14 +122,13 @@ async function runBatch(): Promise<void> {
 
 async function main(): Promise<void> {
   const options = parseCliOptions(process.argv.slice(2));
-  await prepareBrandDirectory(options);
   const cfg = configFromEnv();
   registerAuthTools(collector, cfg);
   registerBrandTools(collector, cfg);
   registerRenderTools(collector, cfg);
 
   if (options.batch) {
-    await runBatch();
+    await runBatch(options);
     return;
   }
 
@@ -149,7 +149,7 @@ async function main(): Promise<void> {
   }
 
   const raw = await readInput(jsonArg, tool.shape);
-  const input = raw && raw.trim() ? JSON.parse(raw) : {};
+  const input = applyCliOverrides(raw && raw.trim() ? JSON.parse(raw) : {}, options);
   const parsed = Object.keys(tool.shape ?? {}).length ? z.object(tool.shape).parse(input) : input;
   const result = await tool.handler(parsed, {});
 
