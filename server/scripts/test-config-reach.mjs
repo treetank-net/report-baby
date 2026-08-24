@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pdfContentHash } from './lib/artifact-inspect.mjs';
 import { runProcess } from './lib/process.mjs';
+import { fail } from './lib/fail.mjs';
 
 const repoRoot = resolve(new URL('../..', import.meta.url).pathname);
 const serverRoot = join(repoRoot, 'server');
@@ -35,10 +36,6 @@ const variants = {
   introFrame: (source) => source.replace('x: 0.081, y: 0.24', 'x: 0.081, y: 0.28'),
   narrativeFrame: (source) => source.replace('height: 0.53', 'height: 0.46'),
 };
-
-function fail(message) {
-  throw new Error(message);
-}
 
 async function render(templateRoot, outputRoot) {
   await mkdir(outputRoot, { recursive: true });

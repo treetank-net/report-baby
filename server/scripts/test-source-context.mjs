@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
+import { childProcessFailure } from './lib/process.mjs';
 
 const root = resolve(dirname(new URL(import.meta.url).pathname), '..');
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-source-context-'));
@@ -14,7 +15,7 @@ function run(command, args) {
     let stderr = '';
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
-    child.on('exit', (code) => code === 0 ? resolvePromise() : reject(new Error(stderr || `${command} exited with ${code}`)));
+    child.on('exit', (code, signal) => code === 0 ? resolvePromise() : reject(new Error(childProcessFailure(command, { status: code, signal, stderr }))));
   });
 }
 

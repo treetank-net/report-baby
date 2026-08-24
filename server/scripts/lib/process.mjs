@@ -10,3 +10,13 @@ export function runProcess(command, args = [], options = {}) {
     error: result.error,
   };
 }
+
+export function childProcessFailure(label, { status, signal, stdout = '', stderr = '', error } = {}) {
+  const output = [stderr, stdout].filter((value) => value && value.trim()).join('\n').trim();
+  const details = error?.message ?? output;
+  const silentFailure = status !== 0 && !signal && !details;
+  const sandboxHint = silentFailure
+    ? ' No output was captured; restricted child-process execution in a sandbox or CI runner is a possible cause. Rerun this test on the host runner as described in AGENTS.md.'
+    : '';
+  return `${label} exited with code=${status ?? 'null'} signal=${signal ?? 'none'}${details ? `: ${details}` : ''}.${sandboxHint}`;
+}

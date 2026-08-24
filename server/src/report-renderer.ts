@@ -168,11 +168,23 @@ class Cursor {
     return this.geometry.bands.footer?.top ?? Math.min(PDF_CONFIG.footerTextY, this.geometry.height);
   }
   activateBlock(name: string, minimumTop?: number): void {
-    const planBlockId = name === 'narrative' ? undefined : name;
+    const planBlockId = name === 'narrative' ? 'flow' : name;
     const planPage = this.reportPlan?.pages[Math.min(this.doc.getNumberOfPages() - 1, (this.reportPlan.pages.length - 1))];
     const planned = planBlockId ? planPage?.blocks.find((item) => item.id === planBlockId && !item.parentId) : undefined;
     const frame = planned
-      ? { x: planned.box.x, top: planned.box.y, width: planned.box.width, bottom: planned.box.y + planned.box.height }
+      ? {
+        x: planned.box.x,
+        top: planned.box.y,
+        width: planned.box.width,
+        bottom: name === 'narrative'
+          ? Math.min(
+            planned.box.y + planned.box.height,
+            this.doc.getNumberOfPages() === 1 && planned.box.y === this.geometry.blockFrames.narrative?.top
+              ? this.geometry.blockFrames.narrative?.bottom ?? Number.POSITIVE_INFINITY
+              : Number.POSITIVE_INFINITY,
+          )
+          : planned.box.y + planned.box.height,
+      }
       : this.geometry.blockFrames[name];
     if (!frame) return;
     const top = minimumTop === undefined ? frame.top : Math.max(frame.top, minimumTop);

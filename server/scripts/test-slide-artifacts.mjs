@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { unzipSync } from 'fflate';
 import { parse } from 'yaml';
+import { childProcessFailure } from './lib/process.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
@@ -28,7 +29,7 @@ function runCli(requests) {
     child.on('error', reject);
     child.on('close', (code, signal) => code === 0
       ? resolvePromise({ stdout, stderr })
-      : reject(new Error(`${stderr || stdout || `CLI exited with code=${code} signal=${signal}`}`)));
+      : reject(new Error(childProcessFailure('slide-artifact CLI', { status: code, signal, stdout, stderr }))));
     child.stdin.end(JSON.stringify(requests));
   });
 }

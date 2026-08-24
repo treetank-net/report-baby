@@ -67,7 +67,7 @@ const officeDefinitions = definitions(/(?:export\s+)?function\s+findOfficeConver
 const fixtureModule = join(ROOT, 'server', 'scripts', 'lib', 'fixtures.mjs');
 const fixtureConsumers = FIXTURE_CONSUMERS.filter((path) => sources.has(join(ROOT, path)) && /lib\/fixtures\.mjs/.test(sources.get(join(ROOT, path))));
 const processOwners = files.filter((path) => /spawnSync\s*\(/.test(sources.get(path)));
-const processImports = files.filter((path) => /from ['"]node:child_process['"]/.test(sources.get(path)));
+const processImports = files.filter((path) => /from ['"]node:child_process['"]/.test(sources.get(path)) && /spawnSync\s*\(/.test(sources.get(path)));
 const directManifestLoops = files.filter((path) => !path.endsWith('/showcase.mjs') && /for\s*\(\s*const\s+\w+\s+of\s+manifests\b/.test(sources.get(path)));
 const sharedManifestIteratorUses = files.filter((path) => /(?:forEachManifest|mapManifests)\s*\(/.test(sources.get(path)) && !path.endsWith('/showcase.mjs'));
 

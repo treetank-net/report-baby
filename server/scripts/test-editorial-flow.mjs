@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { prepareDemoBrandStore } from './lib/brand-store.mjs';
+import { childProcessFailure } from './lib/process.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
@@ -509,19 +510,21 @@ function renderBatch(fixtures, workDir, concurrency, brandStore, planOnly = fals
       env: { ...process.env, REPORT_BABY_DATA: workDir, REPORT_BABY_BRAND_STORE: brandStore },
     });
     let stderr = '';
+    let stdout = '';
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
-    child.stdout.resume();
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
     child.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`batch CLI exited ${code}: ${stderr}`));
+      else reject(new Error(childProcessFailure('batch CLI', { status: code, stdout, stderr })));
     });
-    child.stdin.end(JSON.stringify(batch.map((fixture) => ({
+    const payload = JSON.stringify(batch.map((fixture) => ({
       tool: 'render_report',
       args: planOnly ? { ...fixture.input, dry_run: true } : { ...fixture.input, output_path: join(workDir, `${fixture.name}.pdf`) },
-    }))));
+    })));
+    child.stdin.end(payload);
   })));
 }
 

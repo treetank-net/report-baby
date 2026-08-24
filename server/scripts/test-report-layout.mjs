@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { prepareDemoBrandStore } from './lib/brand-store.mjs';
+import { childProcessFailure } from './lib/process.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
@@ -40,7 +41,7 @@ async function render(input, outputPath) {
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
     child.on('close', async (code) => {
-      if (code !== 0) return reject(new Error(stderr || stdout));
+      if (code !== 0) return reject(new Error(childProcessFailure('report CLI', { status: code, stdout, stderr })));
       try {
         const result = JSON.parse(stdout);
         const { stdout: bbox } = await execFileAsync('pdftotext', ['-bbox-layout', outputPath, '-']);

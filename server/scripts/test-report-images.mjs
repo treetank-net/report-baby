@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { zipSync } from 'fflate';
+import { childProcessFailure } from './lib/process.mjs';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-report-images-'));
@@ -22,7 +23,7 @@ function runCli(input) {
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
-    child.on('close', (code, signal) => code === 0 ? resolvePromise({ stdout, stderr }) : reject(new Error(`${stderr || stdout || `CLI exited with code=${code} signal=${signal}`}\nstdout=${JSON.stringify(stdout)} stderr=${JSON.stringify(stderr)}`)));
+    child.on('close', (code, signal) => code === 0 ? resolvePromise({ stdout, stderr }) : reject(new Error(childProcessFailure('report-image CLI', { status: code, signal, stdout, stderr }))));
     child.stdin.end(JSON.stringify([{ tool: 'render_report', args: input }]));
   });
 }

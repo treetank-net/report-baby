@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { pdfContentHash, pptxContentHash, sha256 } from './lib/artifact-inspect.mjs';
 import { prepareDemoBrandStore } from './lib/brand-store.mjs';
 import { runProcess } from './lib/process.mjs';
+import { fail } from './lib/fail.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const CORPUS_PATH = resolve(REPO_ROOT, 'docs/quality/corpus-tier-a.json');
@@ -20,10 +21,6 @@ const command = args[0] ?? 'verify';
 function option(name) {
   const index = args.indexOf(`--${name}`);
   return index >= 0 && args[index + 1] && !args[index + 1].startsWith('--') ? args[index + 1] : undefined;
-}
-
-function fail(message) {
-  throw new Error(message);
 }
 
 function readJson(path) {
