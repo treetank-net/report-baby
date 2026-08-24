@@ -32,6 +32,10 @@ images:
   max_per_document: 32
   remote_timeout_ms: 15000
   remote_max_redirects: 3
+report_output:
+  png_width_px: 1600
+  pptx_width_inches: 8.27
+  pptx_height_inches: 11.69
 pdf:
   page_width: 210
   page_height: 297

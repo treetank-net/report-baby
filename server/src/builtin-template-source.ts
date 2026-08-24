@@ -18,6 +18,7 @@ export interface RenderConfig {
   assets: Record<string, number>;
   sources: { zipMaxEntries: number; zipMaxFileBytes: number; zipMaxTotalBytes: number; zipMaxCompressionRatio: number; zipMaxNestedArchives: number };
   images: { maxAssetBytes: number; maxDecodedPixels: number; maxDimensionPx: number; maxPerDocument: number; remoteTimeoutMs: number; remoteMaxRedirects: number };
+  reportOutput: { pngWidthPx: number; pptxWidthInches: number; pptxHeightInches: number };
   pdf: Record<string, number>;
   chart: Record<string, number>;
   spacing: { margin: number; contentWidth: number; footerY: number; footerHeight: number; contentGap: number; cardGap: number; cardPaddingX: number; cardPaddingY: number; columnPadding: number; fallbackHeaderLine: number; fallbackContentBottom: number; fallbackHeaderTitle: number; fallbackHeaderSubtitle: number; chartSidePadding: number; tableTopAdjustment: number; narrativeOffset: number; conclusionsOffset: number; maxChartHeight: number };
@@ -99,6 +100,7 @@ export function readRenderConfig(): RenderConfig {
   const canvas = source.canvas as Record<string, unknown>;
   const sources = source.sources as Record<string, unknown>;
   const images = source.images as Record<string, unknown>;
+  const reportOutput = source.report_output as Record<string, unknown>;
   const spacing = source.spacing as Record<string, unknown>;
   const typography = source.typography as Record<string, unknown>;
   const shapes = source.shapes as Record<string, unknown>;
@@ -114,6 +116,7 @@ export function readRenderConfig(): RenderConfig {
     assets: camelDictionary('assets'),
     sources: { zipMaxEntries: get(sources, 'zip_max_entries'), zipMaxFileBytes: get(sources, 'zip_max_file_bytes'), zipMaxTotalBytes: get(sources, 'zip_max_total_bytes'), zipMaxCompressionRatio: get(sources, 'zip_max_compression_ratio'), zipMaxNestedArchives: get(sources, 'zip_max_nested_archives') },
     images: { maxAssetBytes: get(images, 'max_asset_bytes'), maxDecodedPixels: get(images, 'max_decoded_pixels'), maxDimensionPx: get(images, 'max_dimension_px'), maxPerDocument: get(images, 'max_per_document'), remoteTimeoutMs: get(images, 'remote_timeout_ms'), remoteMaxRedirects: get(images, 'remote_max_redirects') },
+    reportOutput: { pngWidthPx: get(reportOutput, 'png_width_px'), pptxWidthInches: get(reportOutput, 'pptx_width_inches'), pptxHeightInches: get(reportOutput, 'pptx_height_inches') },
     pdf: camelDictionary('pdf'),
     chart: camelDictionary('chart'),
     spacing: { margin: get(spacing, 'margin'), contentWidth: get(spacing, 'content_width'), footerY: get(spacing, 'footer_y'), footerHeight: get(spacing, 'footer_height'), contentGap: get(spacing, 'content_gap'), cardGap: get(spacing, 'card_gap'), cardPaddingX: get(spacing, 'card_padding_x'), cardPaddingY: get(spacing, 'card_padding_y'), columnPadding: get(spacing, 'column_padding'), fallbackHeaderLine: get(spacing, 'fallback_header_line'), fallbackContentBottom: get(spacing, 'fallback_content_bottom'), fallbackHeaderTitle: get(spacing, 'fallback_header_title'), fallbackHeaderSubtitle: get(spacing, 'fallback_header_subtitle'), chartSidePadding: get(spacing, 'chart_side_padding'), tableTopAdjustment: get(spacing, 'table_top_adjustment'), narrativeOffset: get(spacing, 'narrative_offset'), conclusionsOffset: get(spacing, 'conclusions_offset'), maxChartHeight: get(spacing, 'max_chart_height') },

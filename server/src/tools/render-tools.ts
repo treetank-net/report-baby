@@ -10,6 +10,7 @@ import { listTemplates, renderReportPdfDetailed, resolveReportPlanOnly, type Rep
 import { renderChart, metricCards, type ChartType } from '../svg.js';
 import { loadRenderFontSet, renderSvgToPng } from '../render-primitives.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, type SlideDeck } from '../slides.js';
+import { renderReportPngFiles, renderReportPptx } from '../report-artifacts.js';
 import { resolveSlideDeck } from '../slide-context.js';
 import { listBuiltinSlideTemplates, readBuiltinTemplateSource } from '../builtin-template-source.js';
 import { brandRenderSummary, reportRenderDiagnostics, slideNotesCarriage, slideRenderDiagnostics } from '../tool-response.js';
@@ -26,6 +27,7 @@ import {
 } from '../contract/schema.js';
 
 const SLIDE_RENDER_TOOLS = ['render_slides_pdf', 'render_slides_png', 'render_slides_pptx'];
+const REPORT_RENDER_TOOLS = ['render_report', 'render_report_png', 'render_report_pptx'];
 
 function reportTemplateNames(): string[] {
   return listTemplates().map((template) => template.name);
@@ -56,7 +58,7 @@ function brandTemplateEntry(brandRef: string, template: { templateRef: string; p
 function unknownReportTemplateMessage(requested: string): string {
   return [
     `Unknown report template '${requested}'.`,
-    `render_report renders built-in A4 report templates only: ${reportTemplateNames().join(', ')}.`,
+    `render_report, render_report_png, and render_report_pptx render built-in A4 report templates only: ${reportTemplateNames().join(', ')}.`,
     `Pass one of those names as "template" (or as "template_ref"), and use brand_ref for brand styling.`,
     `Slide composition references such as slides/two-column belong to ${SLIDE_RENDER_TOOLS.join(', ')}. Call list_templates to see every built-in template.`,
   ].join(' ');
@@ -184,6 +186,68 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
   );
 
   server.tool(
+    'render_report_png',
+    'Render a complete A4 report to deterministic PNG pages. The report uses the same layout and image/content contract as render_report; each page is rasterized through the system pdftoppm adapter. Returns the written PNG paths plus page diagnostics.',
+    {
+      template: z.string().optional().default('default-report').describe('Built-in A4 report template name, from list_templates: default-report, campaign-summary or a pages/* template'),
+      data: reportDataSchema,
+      output_dir: z.string().optional(),
+      filename_prefix: z.string().optional().default('report-page'),
+      ...reportContentFields,
+      ...brandRenderFields,
+      ...reportDiagnosticsField,
+      template_ref: z.string().optional().describe('Alternative way to name the built-in A4 report template'),
+    },
+    async ({ template, data, output_dir, filename_prefix, content_root, brand_ref, brand_source, template_ref, surface, overrides, dry_run, diagnostics }) => {
+      const requestedTemplate = template_ref ?? template;
+      if (!reportTemplateNames().includes(requestedTemplate)) return { content: [{ type: 'text' as const, text: unknownReportTemplateMessage(requestedTemplate) }], isError: true };
+      const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, brandSource: brand_source, contentRoot: content_root, templateRef: requestedTemplate, surface: surface ?? 'png-a4', overrides: overrides as BrandOverrides | undefined, brandSourceRoots: cfg.brandSourceRoots });
+      const resolvedData = { ...data, brand: data.brand ?? context.brandName } as ReportData;
+      if (dry_run) {
+        const plan = resolveReportPlanOnly(requestedTemplate, resolvedData, context.theme);
+        return { content: [{ type: 'text' as const, text: 'Report plan resolved without rasterizing.' }], structuredContent: { ...brandRenderSummary(context.diagnostics), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan, drawings: [] }, 'full'), dryRun: true } };
+      }
+      const directory = output_dir ?? cfg.outputDir;
+      await mkdir(directory, { recursive: true });
+      const renderWarnings: string[] = [];
+      const rendered = await renderReportPdfDetailed(requestedTemplate, resolvedData, context.theme, renderWarnings, context.sourceContext);
+      const paths = await renderReportPngFiles(rendered.buffer, directory, filename_prefix);
+      return { content: [{ type: 'text' as const, text: paths.join('\n') }], structuredContent: { paths, pages: paths.length, ...brandRenderSummary(context.diagnostics, renderWarnings), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan: rendered.diagnostics.plan, drawings: rendered.diagnostics.drawings }, diagnostics) } };
+    },
+  );
+
+  server.tool(
+    'render_report_pptx',
+    'Render a complete A4 report to a portrait PPTX. Pages are embedded as full-page PNGs through the same report layout; the adapter is intentionally rasterized, so report text is not editable. Returns the PPTX path plus page diagnostics.',
+    {
+      template: z.string().optional().default('default-report').describe('Built-in A4 report template name, from list_templates: default-report, campaign-summary or a pages/* template'),
+      data: reportDataSchema,
+      output_path: z.string().optional(),
+      ...reportContentFields,
+      ...brandRenderFields,
+      ...reportDiagnosticsField,
+      template_ref: z.string().optional().describe('Alternative way to name the built-in A4 report template'),
+    },
+    async ({ template, data, output_path, content_root, brand_ref, brand_source, template_ref, surface, overrides, dry_run, diagnostics }) => {
+      const requestedTemplate = template_ref ?? template;
+      if (!reportTemplateNames().includes(requestedTemplate)) return { content: [{ type: 'text' as const, text: unknownReportTemplateMessage(requestedTemplate) }], isError: true };
+      const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, brandSource: brand_source, contentRoot: content_root, templateRef: requestedTemplate, surface: surface ?? 'pptx-a4', overrides: overrides as BrandOverrides | undefined, brandSourceRoots: cfg.brandSourceRoots });
+      const resolvedData = { ...data, brand: data.brand ?? context.brandName } as ReportData;
+      if (dry_run) {
+        const plan = resolveReportPlanOnly(requestedTemplate, resolvedData, context.theme);
+        return { content: [{ type: 'text' as const, text: 'Report plan resolved without rasterizing.' }], structuredContent: { ...brandRenderSummary(context.diagnostics), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan, drawings: [] }, 'full'), dryRun: true } };
+      }
+      await mkdir(cfg.outputDir, { recursive: true });
+      const out = outputPath(cfg, output_path, 'pptx');
+      const renderWarnings: string[] = ['Report PPTX pages are rasterized; use render_report for the canonical PDF with selectable text.'];
+      const rendered = await renderReportPdfDetailed(requestedTemplate, resolvedData, context.theme, renderWarnings, context.sourceContext);
+      const artifact = await renderReportPptx(rendered.buffer);
+      await writeArtifact(out, artifact.buffer);
+      return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, pages: artifact.pages, ...brandRenderSummary(context.diagnostics, renderWarnings), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan: rendered.diagnostics.plan, drawings: rendered.diagnostics.drawings }, diagnostics) } };
+    },
+  );
+
+  server.tool(
     'render_report',
     'Opinionated end-of-task deliverable: a built-in styled template plus structured data → polished A4 PDF (default-report/campaign-summary or a configurable page template such as pages/editorial-two-column). All data fields are optional — only present blocks render, in the order: header, intro, kpis, charts, sections, table, highlights. Returns the path to the written PDF. Use this for the final client-facing report.',
     {
@@ -217,14 +281,14 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
 
   server.tool(
     'list_templates',
-    'List every template a render call can reference: built-in A4 report templates for render_report, built-in slide templates for the render_slides_* tools, and — when brand_ref is given — the brand-owned templates of that brandbook. Each entry says which tools accept it and whether it is builtin or brand-owned.',
+    'List every template a render call can reference: built-in A4 report templates for the render_report* tools, built-in slide templates for the render_slides_* tools, and — when brand_ref is given — the brand-owned templates of that brandbook. Each entry says which tools accept it and whether it is builtin or brand-owned.',
     { brand_ref: z.string().optional().describe('Optional brand reference, e.g. brand://acme/primary, to also list that brandbook\'s templates') },
     async ({ brand_ref }) => {
       const reportTemplates = listTemplates().map((template) => ({
         template_ref: template.name,
         kind: 'report' as const,
         owner: 'builtin' as const,
-        use_with: ['render_report'],
+        use_with: REPORT_RENDER_TOOLS,
         description: template.description,
       }));
       const builtinSlideTemplates = listBuiltinSlideTemplates().map((template) => ({

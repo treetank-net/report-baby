@@ -13,21 +13,20 @@ replacement for either detailed plan.
 
 ## Implementation status — 2026-08-24
 
-M0–M4 and the core M5 report path are implemented and covered by the source,
-CommonMark, ZIP, image, CLI, MCP-schema, plan, and public-behavior gates. The
+M0–M5 are implemented and covered by the source, CommonMark, ZIP, image, CLI,
+MCP-schema, adapter, plan, and public-behavior gates. The
 breaking `brand://` contract now treats the first component as a directory and
 the remaining component as a path to a YAML/JSON profile (for example,
 `brand://flux/primary` resolves `flux/primary.yml`); the former implicit
 `profiles/` lookup is gone. Fixtures, starter generation, and authoring docs
 were migrated accordingly.
 
-The remaining M5 adapter item is explicit: normalized images currently render
-through the report PDF entry point, while no report-specific PNG/PPTX adapter
-exists in this repository. Slide output continues to use its existing image
-slots (charts/backgrounds), not arbitrary report content nodes. M6 is complete
-for the source/image contract and future seams; release metadata remains on
-the pre-release line until the missing report adapters are either added or
-explicitly removed from the release scope.
+The report PNG/PPTX adapters now reuse the canonical PDF render and rasterize
+its pages through system Poppler. PPTX is deliberately a portrait, page-image
+container rather than an editable text surface. Slide output continues to use
+its existing image slots (charts/backgrounds), not arbitrary report content
+nodes. M6 is complete for the source/image contract and future seams; release
+metadata remains on the pre-release line until the final release gate.
 
 An independent read-only review by Sol was used to challenge the order and
 risks. Its recommendations are integrated below where they do not conflict

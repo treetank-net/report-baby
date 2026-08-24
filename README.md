@@ -14,6 +14,11 @@ data and receive a path to a finished PDF or PNG.
 - Rasterize custom SVG to PNG.
 - Opinionated `render_report`: built-in styled template + your data → a
   multi-page client-facing PDF report.
+- `render_report_png`: the same multi-page A4 report rasterized to one PNG per
+  page; requires the system `pdftoppm` command from Poppler.
+- `render_report_pptx`: the same report in a portrait PPTX with one full-page
+  PNG per slide; this adapter is intentionally rasterized and is not an
+  editable report text surface.
 - One bounded slide model → 16:9 PDF, a PNG of the whole deck or one slide,
   and an editable PPTX.
 - Optional per-slide `notes`: speaker narration that never appears in the
@@ -36,6 +41,8 @@ data and receive a path to a finished PDF or PNG.
 | `render_metric_cards` | KPI → PNG card grid |
 | `render_svg` | arbitrary SVG → PNG (`return_image` optional) |
 | `render_report` | template + data → multi-page PDF report |
+| `render_report_png` | same report → one PNG per A4 page |
+| `render_report_pptx` | same report → portrait PPTX with rasterized pages |
 | `render_slides_pdf` | shared slide model → 16:9 PDF |
 | `render_slides_png` | whole deck or selected slide → 1600×900 PNG |
 | `render_slides_pptx` | shared slide model → editable PPTX, with per-slide speaker notes |
@@ -213,6 +220,9 @@ Architecture and trade-offs: `CLAUDE.md`. Plans: `ROADMAP.md`.
   brandbook.
 - `REPORT_BABY_TEMPLATE_DIR` — optional override for the built-in render
   configuration and slide recipes embedded in the bundle.
+
+Report PNG/PPTX adapters rasterize the canonical PDF with `pdftoppm`; install
+Poppler (`poppler-utils` on Debian/Ubuntu) when using those two tools.
 
 ### Source and image references
 

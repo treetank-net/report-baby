@@ -94,6 +94,8 @@ for development.
 - `render_metric_cards` `{ cards: [{label,value,delta?,trend?,note?}], title?, subtitle?, columns?, width?, output_path?, return_image? }` — KPI card grid → PNG.
 - `render_svg` `{ svg, width?, output_path?, return_image? }` — arbitrary SVG → PNG (escape hatch; text requires `font-family="DejaVu Sans"`).
 - `render_report` `{ template?='default-report', data, output_path? }` — opinionated template + data → multi-page PDF.
+- `render_report_png` `{ template?, data, output_dir?, filename_prefix? }` — same report layout → one raster PNG per A4 page; requires Poppler `pdftoppm`.
+- `render_report_pptx` `{ template?, data, output_path? }` — same report layout → portrait PPTX with rasterized page images; report text is not editable.
 - `render_slides_pdf` `{ data, output_path?, diagnostics?='summary' }` — shared slide model → local 16:9 PDF.
 - `render_slides_png` `{ data, slide_index?, output_dir?, filename_prefix?, diagnostics?='summary' }` — all slides or one selected slide → 1600×900 PNG.
 - `render_slides_pptx` `{ data, output_path?, diagnostics?='summary' }` — same model → PPTX; text/KPIs/tables/shapes are editable and charts are images.
@@ -268,8 +270,8 @@ Environment variables:
 - `REPORT_BABY_DATA` — data/configuration directory (default `~/.report-baby`);
   output goes to `<data>/out`.
 - `REPORT_BABY_BRAND_DIR` — brandbook directory (default
-  `<REPORT_BABY_DATA>/brands`); profiles use references such as
-  path-based references such as `brand://acme/primary` (`acme/primary.yml`).
+  `<REPORT_BABY_DATA>/brands`); profiles use path-based references such as
+  `brand://acme/primary` (`acme/primary.yml`).
 - `REPORT_BABY_BRAND_STORE` — published-release directory; takes precedence over
   `REPORT_BABY_BRAND_DIR` so MCP can ignore working-tree drafts.
 - `REPORT_BABY_BRAND_SOURCE_ROOTS` — `:`-separated allow-list for absolute

@@ -72,6 +72,7 @@ apostrophes, Polish characters, and multiline text:
 
 ```bash
 node /tmp/rb/server/cli-bundle.cjs render_report < report.json
+node /tmp/rb/server/cli-bundle.cjs render_report_png < report.json
 ```
 
 When a render writes an artifact, stdout contains only its path so shell
@@ -115,6 +116,11 @@ For a structured image, use a section's `content` instead of `body`, for
 example `{ "type": "image", "src": "brand://assets/map.png", "alt": "Map", "caption": "Source map", "width": "80%", "fit": "contain" }`.
 `root://` resolves under `content_root`, `brand://` under the selected brand
 directory, and `source://` under the complete materialized ZIP/Git source.
+
+`render_report_png` shares the same input and writes one PNG per report page;
+`render_report_pptx` writes a portrait PPTX containing one rasterized page image
+per slide. Both reuse the canonical PDF layout, and the PNG/PPTX adapters need
+the system `pdftoppm` command from Poppler.
 
 The checkout can be automated when the brandbook lives in a Git repository:
 

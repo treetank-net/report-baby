@@ -72,7 +72,7 @@
     "name": "list_brandbooks"
   },
   {
-    "description": "List every template a render call can reference: built-in A4 report templates for render_report, built-in slide templates for the render_slides_* tools, and — when brand_ref is given — the brand-owned templates of that brandbook. Each entry says which tools accept it and whether it is builtin or brand-owned.",
+    "description": "List every template a render call can reference: built-in A4 report templates for the render_report* tools, built-in slide templates for the render_slides_* tools, and — when brand_ref is given — the brand-owned templates of that brandbook. Each entry says which tools accept it and whether it is builtin or brand-owned.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "additionalProperties": false,
@@ -1207,6 +1207,1214 @@
       "type": "object"
     },
     "name": "render_report"
+  },
+  {
+    "description": "Render a complete A4 report to deterministic PNG pages. The report uses the same layout and image/content contract as render_report; each page is rasterized through the system pdftoppm adapter. Returns the written PNG paths plus page diagnostics.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Path-based brand/profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Request-level brand source. It overrides the process-level source without mutating it."
+        },
+        "content_root": {
+          "description": "Explicit root for bare relative content and image paths.",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": false,
+          "properties": {
+            "brand": {
+              "description": "Client/company name shown in the top-left corner",
+              "type": "string"
+            },
+            "charts": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "color": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "value"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "prefix": {
+                    "description": "Prepended to values, e.g. \"$\"",
+                    "type": "string"
+                  },
+                  "subtitle": {
+                    "type": "string"
+                  },
+                  "suffix": {
+                    "description": "Appended to values, e.g. \"%\"",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "bar",
+                      "line",
+                      "pie"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "data"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "footer": {
+              "description": "Shown on every page; keep under ~120 chars",
+              "type": "string"
+            },
+            "highlights": {
+              "description": "Bullet list rendered under a \"Highlights\" heading",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "highlights_title": {
+              "description": "Heading above the bullet list; defaults to \"Highlights\"",
+              "type": "string"
+            },
+            "intro": {
+              "description": "Lead paragraph under the title",
+              "type": "string"
+            },
+            "kpis": {
+              "description": "KPI cards; keep labels under ~28 chars to avoid clipping",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "delta": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "trend": {
+                    "enum": [
+                      "up",
+                      "down",
+                      "flat"
+                    ],
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "period": {
+              "description": "Reporting period shown in the top-right corner; keep short",
+              "type": "string"
+            },
+            "sections": {
+              "description": "Narrative sections; heading stays on the same page as the body. level 2 renders a subheading under the preceding level 1 chapter. Body text accepts **bold** inline markup",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "text",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "content": {
+                              "items": {
+                                "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                              },
+                              "type": "array"
+                            },
+                            "href": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "strong",
+                                "emphasis",
+                                "link"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "content"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "fit": {
+                              "const": "contain",
+                              "default": "contain",
+                              "type": "string"
+                            },
+                            "keep_with_caption": {
+                              "default": true,
+                              "type": "boolean"
+                            },
+                            "src": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "image",
+                              "type": "string"
+                            },
+                            "width": {
+                              "anyOf": [
+                                {
+                                  "const": "full",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^(?:100|[1-9]?[0-9])%$",
+                                  "type": "string"
+                                }
+                              ],
+                              "default": "full"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "src"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "content": {
+                              "items": {
+                                "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "type": {
+                              "const": "paragraph",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "content"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "items": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "content": {
+                                    "items": {
+                                      "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                                    },
+                                    "minItems": 1,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "content"
+                                ],
+                                "type": "object"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "ordered": {
+                              "default": false,
+                              "type": "boolean"
+                            },
+                            "type": {
+                              "const": "list",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "items"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "heading": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "enum": [
+                      1,
+                      2
+                    ],
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "subtitle": {
+              "type": "string"
+            },
+            "table": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "items": {
+                    "items": {
+                      "type": [
+                        "string",
+                        "number"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "type": "array"
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "head": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "head",
+                "body"
+              ],
+              "type": "object"
+            },
+            "title": {
+              "type": "string"
+            },
+            "title_page": {
+              "additionalProperties": false,
+              "description": "Full-bleed cover page rendered as page 1 instead of the compact header; the body starts on page 2",
+              "properties": {
+                "eyebrow": {
+                  "description": "Small uppercase kicker above the cover title",
+                  "type": "string"
+                },
+                "period": {
+                  "description": "Reporting period shown in the cover top-right corner",
+                  "type": "string"
+                },
+                "subtitle": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "diagnostics": {
+          "default": "summary",
+          "description": "Response detail. \"summary\" (default) returns the written path, resolved brand profile, page count and warnings. \"full\" adds the resolved report layout plan for every page.",
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "type": "string"
+        },
+        "direction": {
+          "description": "Logical text/layout direction for slides",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "type": "string"
+        },
+        "dry_run": {
+          "default": false,
+          "description": "Resolve and validate the report layout plan without rasterizing or writing a PDF.",
+          "type": "boolean"
+        },
+        "filename_prefix": {
+          "default": "report-page",
+          "type": "string"
+        },
+        "output_dir": {
+          "type": "string"
+        },
+        "overrides": {
+          "additionalProperties": false,
+          "description": "One-render-only, validated brand/template overrides",
+          "properties": {
+            "emphasis": {
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "fit": {
+              "additionalProperties": false,
+              "properties": {
+                "min_body_pt": {
+                  "type": "number"
+                },
+                "min_heading_pt": {
+                  "type": "number"
+                },
+                "strategy": {
+                  "enum": [
+                    "none",
+                    "shrink-to-fit"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "layout": {
+              "additionalProperties": false,
+              "properties": {
+                "density": {
+                  "enum": [
+                    "comfortable",
+                    "compact"
+                  ],
+                  "type": "string"
+                },
+                "lockup_position": {
+                  "enum": [
+                    "top-start",
+                    "top-end"
+                  ],
+                  "type": "string"
+                },
+                "lockup_spacing": {
+                  "enum": [
+                    "compact",
+                    "normal",
+                    "open"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "typography": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading_role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "surface": {
+          "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
+          "type": "string"
+        },
+        "template": {
+          "default": "default-report",
+          "description": "Built-in A4 report template name, from list_templates: default-report, campaign-summary or a pages/* template",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Alternative way to name the built-in A4 report template",
+          "type": "string"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "type": "object"
+    },
+    "name": "render_report_png"
+  },
+  {
+    "description": "Render a complete A4 report to a portrait PPTX. Pages are embedded as full-page PNGs through the same report layout; the adapter is intentionally rasterized, so report text is not editable. Returns the PPTX path plus page diagnostics.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "brand_ref": {
+          "description": "Path-based brand/profile reference, e.g. brand://acme/primary",
+          "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Request-level brand source. It overrides the process-level source without mutating it."
+        },
+        "content_root": {
+          "description": "Explicit root for bare relative content and image paths.",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": false,
+          "properties": {
+            "brand": {
+              "description": "Client/company name shown in the top-left corner",
+              "type": "string"
+            },
+            "charts": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "color": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "value"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "prefix": {
+                    "description": "Prepended to values, e.g. \"$\"",
+                    "type": "string"
+                  },
+                  "subtitle": {
+                    "type": "string"
+                  },
+                  "suffix": {
+                    "description": "Appended to values, e.g. \"%\"",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "bar",
+                      "line",
+                      "pie"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "data"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "footer": {
+              "description": "Shown on every page; keep under ~120 chars",
+              "type": "string"
+            },
+            "highlights": {
+              "description": "Bullet list rendered under a \"Highlights\" heading",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "highlights_title": {
+              "description": "Heading above the bullet list; defaults to \"Highlights\"",
+              "type": "string"
+            },
+            "intro": {
+              "description": "Lead paragraph under the title",
+              "type": "string"
+            },
+            "kpis": {
+              "description": "KPI cards; keep labels under ~28 chars to avoid clipping",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "delta": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "trend": {
+                    "enum": [
+                      "up",
+                      "down",
+                      "flat"
+                    ],
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "period": {
+              "description": "Reporting period shown in the top-right corner; keep short",
+              "type": "string"
+            },
+            "sections": {
+              "description": "Narrative sections; heading stays on the same page as the body. level 2 renders a subheading under the preceding level 1 chapter. Body text accepts **bold** inline markup",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "text",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "content": {
+                              "items": {
+                                "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                              },
+                              "type": "array"
+                            },
+                            "href": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": [
+                                "strong",
+                                "emphasis",
+                                "link"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "content"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "fit": {
+                              "const": "contain",
+                              "default": "contain",
+                              "type": "string"
+                            },
+                            "keep_with_caption": {
+                              "default": true,
+                              "type": "boolean"
+                            },
+                            "src": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "const": "image",
+                              "type": "string"
+                            },
+                            "width": {
+                              "anyOf": [
+                                {
+                                  "const": "full",
+                                  "type": "string"
+                                },
+                                {
+                                  "pattern": "^(?:100|[1-9]?[0-9])%$",
+                                  "type": "string"
+                                }
+                              ],
+                              "default": "full"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "src"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "content": {
+                              "items": {
+                                "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "type": {
+                              "const": "paragraph",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "content"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "items": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "content": {
+                                    "items": {
+                                      "$ref": "#/properties/data/properties/sections/items/properties/content/items"
+                                    },
+                                    "minItems": 1,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "content"
+                                ],
+                                "type": "object"
+                              },
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "ordered": {
+                              "default": false,
+                              "type": "boolean"
+                            },
+                            "type": {
+                              "const": "list",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "items"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "heading": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "enum": [
+                      1,
+                      2
+                    ],
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "heading"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "subtitle": {
+              "type": "string"
+            },
+            "table": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "items": {
+                    "items": {
+                      "type": [
+                        "string",
+                        "number"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "type": "array"
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "head": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "head",
+                "body"
+              ],
+              "type": "object"
+            },
+            "title": {
+              "type": "string"
+            },
+            "title_page": {
+              "additionalProperties": false,
+              "description": "Full-bleed cover page rendered as page 1 instead of the compact header; the body starts on page 2",
+              "properties": {
+                "eyebrow": {
+                  "description": "Small uppercase kicker above the cover title",
+                  "type": "string"
+                },
+                "period": {
+                  "description": "Reporting period shown in the cover top-right corner",
+                  "type": "string"
+                },
+                "subtitle": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "diagnostics": {
+          "default": "summary",
+          "description": "Response detail. \"summary\" (default) returns the written path, resolved brand profile, page count and warnings. \"full\" adds the resolved report layout plan for every page.",
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "type": "string"
+        },
+        "direction": {
+          "description": "Logical text/layout direction for slides",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "type": "string"
+        },
+        "dry_run": {
+          "default": false,
+          "description": "Resolve and validate the report layout plan without rasterizing or writing a PDF.",
+          "type": "boolean"
+        },
+        "output_path": {
+          "type": "string"
+        },
+        "overrides": {
+          "additionalProperties": false,
+          "description": "One-render-only, validated brand/template overrides",
+          "properties": {
+            "emphasis": {
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "fit": {
+              "additionalProperties": false,
+              "properties": {
+                "min_body_pt": {
+                  "type": "number"
+                },
+                "min_heading_pt": {
+                  "type": "number"
+                },
+                "strategy": {
+                  "enum": [
+                    "none",
+                    "shrink-to-fit"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "layout": {
+              "additionalProperties": false,
+              "properties": {
+                "density": {
+                  "enum": [
+                    "comfortable",
+                    "compact"
+                  ],
+                  "type": "string"
+                },
+                "lockup_position": {
+                  "enum": [
+                    "top-start",
+                    "top-end"
+                  ],
+                  "type": "string"
+                },
+                "lockup_spacing": {
+                  "enum": [
+                    "compact",
+                    "normal",
+                    "open"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "typography": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "family": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "scale": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "heading_role": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "surface": {
+          "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
+          "type": "string"
+        },
+        "template": {
+          "default": "default-report",
+          "description": "Built-in A4 report template name, from list_templates: default-report, campaign-summary or a pages/* template",
+          "type": "string"
+        },
+        "template_ref": {
+          "description": "Alternative way to name the built-in A4 report template",
+          "type": "string"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "type": "object"
+    },
+    "name": "render_report_pptx"
   },
   {
     "description": "Render a complete presentation as a local 16:9 PDF from a bounded shared slide model. Existing render_report A4 behavior is unchanged. Returns the PDF path plus a compact render summary; pass diagnostics: \"full\" only to debug slide layout.",

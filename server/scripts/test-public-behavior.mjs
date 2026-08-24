@@ -192,7 +192,9 @@ try {
   const listedTemplates = JSON.parse(templateListing.content?.[0]?.text ?? '{}').templates ?? [];
   const listedRefs = new Map(listedTemplates.map((template) => [template.template_ref, template]));
   assert.equal(listedRefs.get('default-report')?.owner, 'builtin', 'list_templates lost the built-in report templates');
-  assert.ok(listedRefs.get('default-report')?.use_with?.includes('render_report'));
+    assert.ok(listedRefs.get('default-report')?.use_with?.includes('render_report'));
+    assert.ok(listedRefs.get('default-report')?.use_with?.includes('render_report_png'));
+    assert.ok(listedRefs.get('default-report')?.use_with?.includes('render_report_pptx'));
   for (const slideTemplate of ['slides/standard', 'slides/compact', 'slides/centered-title', 'slides/two-column']) {
     const entry = listedRefs.get(slideTemplate);
     assert.ok(entry, `list_templates does not expose the built-in slide template ${slideTemplate}`);
