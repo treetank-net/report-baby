@@ -756,6 +756,8 @@ async function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: Ren
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
   doc.setTextColor(...rgb(theme.foreground));
+  const normalized = normalizeMarkdown(data.intro);
+  const hasImage = containsImage(normalized.nodes);
   const block = cur.block('intro');
   const narrative = cur.dynamicFlow ? cur.block('narrative') : undefined;
   if (block) {
@@ -764,15 +766,14 @@ async function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: Ren
     // flow instead of being moved into a column by keepTogether().
     cur.moveTo({
       ...block,
-      top: Math.max(block.top, cur.y),
+      top: hasImage ? cur.y : Math.max(block.top, cur.y),
       bottom: Math.max(block.bottom, narrative?.bottom ?? block.bottom),
     });
   }
-  const normalized = normalizeMarkdown(data.intro);
-  if (containsImage(normalized.nodes)) {
+  if (hasImage) {
     if (!sourceContext) throw new Error('Image content requires an explicit source context.');
     await renderNormalizedDocument(doc, cur, normalized, sourceContext, theme, text, warnings, imageState);
-    if (block) cur.flowFrom(Math.max(cur.y + gaps.introBottomGap, block.bottom));
+    if (block) cur.flowFrom(cur.y + gaps.introBottomGap);
     else cur.y += gaps.introBottomGap;
     return;
   }

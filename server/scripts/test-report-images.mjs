@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { zipSync } from 'fflate';
+import { parse } from 'yaml';
 import { childProcessFailure } from './lib/process.mjs';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
@@ -60,8 +61,11 @@ try {
   const introImage = introContent.drawings.find((drawing) => drawing.kind === 'image');
   const introCaption = introContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text === 'Intro caption');
   const introLead = introContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text.includes('lead remains selectable'));
+  const editorialTemplate = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
+  const expectedImageTop = editorialTemplate.page.height * editorialTemplate.page.reserved_bands.header.height;
   assert.equal(introContent.drawings.filter((drawing) => drawing.kind === 'image').length, 1);
   assert.ok(introImage && introImage.y < 110, JSON.stringify(introContent.drawings));
+  assert.ok(introImage && Math.abs(introImage.y - expectedImageTop) < 0.01, JSON.stringify({ introImage, expectedImageTop }));
   assert.ok(introCaption && introCaption.x > introImage.x, JSON.stringify(introContent.drawings));
   assert.ok(introCaption && introCaption.y > introImage.y + introImage.height, JSON.stringify(introContent.drawings));
   const controlOutput = join(temporary, 'intro-control-report.pdf');
