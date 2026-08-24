@@ -16,6 +16,7 @@ import { brandRenderSummary, reportRenderDiagnostics, slideNotesCarriage, slideR
 
 import {
   brandRenderFields,
+  brandSourceSchema,
   cardSchema,
   datumSchema,
   reportDataSchema,
@@ -219,8 +220,8 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
   server.tool(
     'list_templates',
     'List every template a render call can reference: built-in A4 report templates for the render_report* tools, built-in slide templates for the render_slides_* tools, and — when brand_ref is given — the brand-owned templates of that brandbook. Each entry says which tools accept it and whether it is builtin or brand-owned.',
-    { brand_ref: z.string().optional().describe('Optional brand reference, e.g. brand://acme/primary, to also list that brandbook\'s templates') },
-    async ({ brand_ref }) => {
+    { brand_ref: z.string().optional().describe('Optional brand reference, e.g. brand://acme/profiles/primary, to also list that brandbook\'s templates'), brand_source: brandSourceSchema.optional().describe('Optional source to inspect instead of the process-level brand directory') },
+    async ({ brand_ref, brand_source }) => {
       const reportTemplates = listTemplates().map((template) => ({
         template_ref: template.name,
         kind: 'report' as const,
@@ -236,9 +237,9 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
         archetype: builtinSlideArchetype(template.templateRef),
         path: template.path,
       }));
-      const brandTemplates = brand_ref ? (await listBrandTemplates(cfg.brandDir, brand_ref)).map((template) => brandTemplateEntry(brand_ref, template)) : [];
+      const brandTemplates = brand_ref ? (await listBrandTemplates(cfg.brandDir, brand_ref, brand_source)).map((template) => brandTemplateEntry(brand_ref, template)) : [];
       const templates = [...reportTemplates, ...builtinSlideTemplates, ...brandTemplates];
-      const payload = { brand_dir: cfg.brandDir, brand_ref, templates };
+      const payload = { brand_dir: cfg.brandDir, brand_ref, brand_source, templates };
       return { content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }] };
     },
   );

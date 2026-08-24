@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { unzipSync } from 'fflate';
+import { unzipSync, zipSync } from 'fflate';
 import { writePublicBrandFixture } from './lib/fixtures.mjs';
 import { runProcess } from './lib/process.mjs';
 
@@ -29,6 +29,25 @@ try {
   const inspected = await client.callTool({ name: 'inspect_brand', arguments: { brand_ref: 'brand://acme/primary' } });
   assert.notEqual(inspected.isError, true, JSON.stringify(inspected.content));
   assert.match(inspected.content?.[0]?.text ?? '', /#ff6600/i);
+  const inspectedPayload = JSON.parse(inspected.content?.[0]?.text ?? '{}');
+  assert.deepEqual(inspectedPayload.capabilities.output_formats, ['pdf', 'png', 'pptx']);
+  assert.ok(Array.isArray(inspectedPayload.capabilities.brand_templates));
+
+  const zipSourcePath = join(outputDir, 'inspection-source.zip');
+  const zipBrand = {
+    'brands/zip-brand/_brand.yml': Buffer.from('schema_version: 1\nmeta:\n  name: ZIP Brand\ncolor:\n  primary: "#123456"\n'),
+    'brands/zip-brand/profiles/primary.yml': Buffer.from('schema_version: 1\n'),
+  };
+  await writeFile(zipSourcePath, Buffer.from(zipSync(zipBrand)));
+  const zipBrandSource = { zip_path: zipSourcePath, brand_path: 'brands' };
+  const zipBrandbooks = await client.callTool({ name: 'list_brandbooks', arguments: { brand_source: zipBrandSource } });
+  assert.notEqual(zipBrandbooks.isError, true, JSON.stringify(zipBrandbooks.content));
+  assert.match(zipBrandbooks.content?.[0]?.text ?? '', /zip-brand/);
+  const inspectedZip = await client.callTool({ name: 'inspect_brand', arguments: { brand_ref: 'brand://zip-brand/profiles/primary', brand_source: zipBrandSource } });
+  assert.notEqual(inspectedZip.isError, true, JSON.stringify(inspectedZip.content));
+  const inspectedZipPayload = JSON.parse(inspectedZip.content?.[0]?.text ?? '{}');
+  assert.equal(inspectedZipPayload.capabilities.brand_name, 'ZIP Brand');
+  assert.match(inspectedZip.content?.[0]?.text ?? '', /#123456/i);
 
   const chartPath = join(outputDir, 'escaped-chart.png');
   const chart = await client.callTool({

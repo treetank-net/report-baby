@@ -57,6 +57,33 @@ export interface RenderBrandContext {
   sourceContext?: SourceContext;
 }
 
+export interface BrandCapabilities {
+  brand_name?: string;
+  output_formats: Array<'pdf' | 'png' | 'pptx'>;
+  surfaces: string[];
+  assets: {
+    logo: boolean;
+    logo_white: boolean;
+    logo_mark: boolean;
+    logo_white_mark: boolean;
+    background_image: boolean;
+    cover_image: boolean;
+    report_header_image: boolean;
+    font_regular: boolean;
+    font_bold: boolean;
+  };
+  typography: {
+    body_family: string;
+    heading_family: string;
+    embedded_fonts_for_pdf_png: boolean;
+  };
+  layout: {
+    report_header_style: string;
+    title_align: string;
+    logo_variant: string;
+  };
+}
+
 interface RecordValue {
   [key: string]: unknown;
 }
@@ -584,10 +611,11 @@ export async function readBrandTemplateSource(
   return undefined;
 }
 
-export async function listBrandTemplates(brandRoot: string, brandRef: string): Promise<Array<{ templateRef: string; path: string }>> {
+export async function listBrandTemplates(brandRoot: string, brandRef: string, brandSource?: BrandSourceDescriptor): Promise<Array<{ templateRef: string; path: string }>> {
+  const materialized = await materializeBrandSource(brandSource, brandRoot);
   const reference = parseReference(brandRef);
   if (!reference.brandId) throw new Error(`Template discovery requires a brand URI such as brand://acme/primary: ${brandRef}`);
-  const templateRoot = join(await resolveBrandDirectory(brandRoot, reference.brandId), 'templates');
+  const templateRoot = join(await resolveBrandDirectory(materialized.brandRoot, reference.brandId), 'templates');
   const { readdir } = await import('node:fs/promises');
   const result: Array<{ templateRef: string; path: string }> = [];
   async function walk(directory: string): Promise<void> {
@@ -604,8 +632,9 @@ export async function listBrandTemplates(brandRoot: string, brandRef: string): P
   return result.sort((a, b) => a.templateRef.localeCompare(b.templateRef));
 }
 
-export async function inspectBrandTemplate(brandRoot: string, brandRef: string, templateRef: string): Promise<{ templateRef: string; sourcePath: string; compiled: import('./template-contract.js').CompiledTemplate }> {
-  const source = await readBrandTemplateSource(brandRoot, brandRef, templateRef);
+export async function inspectBrandTemplate(brandRoot: string, brandRef: string, templateRef: string, brandSource?: BrandSourceDescriptor): Promise<{ templateRef: string; sourcePath: string; compiled: import('./template-contract.js').CompiledTemplate }> {
+  const materialized = await materializeBrandSource(brandSource, brandRoot);
+  const source = await readBrandTemplateSource(materialized.brandRoot, brandRef, templateRef);
   if (!source) throw new Error(`Brand template '${templateRef}' was not found for ${brandRef}.`);
   const { compileTemplateSource } = await import('./template-contract.js');
   return { templateRef, sourcePath: source.path, compiled: compileTemplateSource(source.source) };
@@ -701,7 +730,9 @@ export async function resolveBrandContext(
   return { theme, composition: extracted.composition, brandName: extracted.brandName, diagnostics, sourceContext };
 }
 
-export async function listBrandbooks(brandRoot: string): Promise<Array<{ id: string; name?: string; profiles: string[] }>> {
+export async function listBrandbooks(brandRoot: string, brandSource?: BrandSourceDescriptor): Promise<Array<{ id: string; name?: string; profiles: string[] }>> {
+  const materialized = await materializeBrandSource(brandSource, brandRoot);
+  const effectiveRoot = materialized.brandRoot;
   const { readdir } = await import('node:fs/promises');
   async function profileNames(directory: string, prefix = ''): Promise<string[]> {
     const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
@@ -714,11 +745,11 @@ export async function listBrandbooks(brandRoot: string): Promise<Array<{ id: str
     }
     return names;
   }
-  const entries = await readdir(brandRoot, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(effectiveRoot, { withFileTypes: true }).catch(() => []);
   const result: Array<{ id: string; name?: string; profiles: string[] }> = [];
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-    const brandDir = await resolveBrandDirectory(brandRoot, entry.name);
+    const brandDir = await resolveBrandDirectory(effectiveRoot, entry.name);
     const base = await readFirstDocument(documentCandidates(brandDir), false, true);
     if (!base) continue;
     result.push({
@@ -730,8 +761,38 @@ export async function listBrandbooks(brandRoot: string): Promise<Array<{ id: str
   return result.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export async function inspectBrand(brandRoot: string, brandRef: string, surface?: string, brandSourceRoots: string[] = []): Promise<RenderBrandContext> {
-  return resolveBrandContext(brandRoot, { brandRef, surface, brandSourceRoots });
+export async function inspectBrand(brandRoot: string, brandRef: string, surface?: string, brandSourceRoots: string[] = [], brandSource?: BrandSourceDescriptor): Promise<RenderBrandContext> {
+  return resolveBrandContext(brandRoot, { brandRef, surface, brandSourceRoots, brandSource });
+}
+
+export function brandCapabilities(context: RenderBrandContext): BrandCapabilities {
+  const theme = context.theme;
+  return {
+    ...(context.brandName ? { brand_name: context.brandName } : {}),
+    output_formats: ['pdf', 'png', 'pptx'],
+    surfaces: ['pdf-a4', 'png', 'pptx-16x9'],
+    assets: {
+      logo: Boolean(theme.logoPath),
+      logo_white: Boolean(theme.logoWhitePath),
+      logo_mark: Boolean(theme.logoMarkPath),
+      logo_white_mark: Boolean(theme.logoWhiteMarkPath),
+      background_image: Boolean(theme.backgroundImagePath),
+      cover_image: Boolean(theme.coverImagePath),
+      report_header_image: Boolean(theme.reportHeaderImagePath),
+      font_regular: Boolean(theme.fontRegularPath),
+      font_bold: Boolean(theme.fontBoldPath),
+    },
+    typography: {
+      body_family: theme.fontFamily,
+      heading_family: theme.headingFontFamily,
+      embedded_fonts_for_pdf_png: Boolean(theme.fontRegularPath),
+    },
+    layout: {
+      report_header_style: theme.reportHeaderStyle,
+      title_align: theme.titleAlign,
+      logo_variant: theme.logoVariant,
+    },
+  };
 }
 
 export async function readBrandShowcase(brandRoot: string, brandRef: string): Promise<RecordValue> {

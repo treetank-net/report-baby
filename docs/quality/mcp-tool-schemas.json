@@ -1,13 +1,82 @@
 [
   {
-    "description": "Resolve and inspect one brand profile without rendering an artifact. Use references such as brand://acme/primary.",
+    "description": "Resolve and inspect one brand profile without rendering an artifact. Use brand_source for a request-level directory/ZIP/Git source and a path-based reference such as brand://acme/profiles/primary.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand profile reference, e.g. brand://acme/primary",
+          "description": "Path-based brand/profile reference; the first segment selects a directory and the remainder selects a profile file, e.g. brand://acme/profiles/primary",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Optional source to inspect instead of the process-level brand directory"
         },
         "surface": {
           "description": "Optional output surface used to select light/dark values",
@@ -22,14 +91,83 @@
     "name": "inspect_brand"
   },
   {
-    "description": "Inspect and validate one brand-owned template without changing the brandbook.",
+    "description": "Inspect and validate one brand-owned template without changing the brandbook. Supports request-level directory/ZIP/Git sources.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand reference, e.g. brand://acme/primary",
+          "description": "Brand reference, e.g. brand://acme/profiles/primary",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Optional source to inspect instead of the process-level brand directory"
         },
         "template_ref": {
           "description": "Brand-local template reference, e.g. slides/title",
@@ -45,14 +183,83 @@
     "name": "inspect_brand_template"
   },
   {
-    "description": "List read-only brand-owned page and slide templates available in a brandbook.",
+    "description": "List read-only brand-owned page and slide templates available in a brandbook or request-level directory/ZIP/Git source.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Brand reference, e.g. brand://acme/primary",
+          "description": "Brand reference, e.g. brand://acme/profiles/primary",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Optional source to inspect instead of the process-level brand directory"
         }
       },
       "required": [
@@ -63,10 +270,81 @@
     "name": "list_brand_templates"
   },
   {
-    "description": "List locally configured brandbooks and their named profiles. Brandbooks are discovered below the configured report-baby brand directory.",
+    "description": "List brandbooks and their named profiles from the configured directory or a request-level directory/ZIP/Git source.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "properties": {},
+      "additionalProperties": false,
+      "properties": {
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Optional source to inspect instead of the process-level brand directory"
+        }
+      },
       "type": "object"
     },
     "name": "list_brandbooks"
@@ -78,8 +356,77 @@
       "additionalProperties": false,
       "properties": {
         "brand_ref": {
-          "description": "Optional brand reference, e.g. brand://acme/primary, to also list that brandbook's templates",
+          "description": "Optional brand reference, e.g. brand://acme/profiles/primary, to also list that brandbook's templates",
           "type": "string"
+        },
+        "brand_source": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "description": "Path to the selected brand directory within the complete source root",
+                  "type": "string"
+                },
+                "directory_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "directory_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_path"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "zip_url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "zip_url"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "brand_path": {
+                  "$ref": "#/properties/brand_source/anyOf/0/properties/brand_path"
+                },
+                "git_url": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "git_url"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Optional source to inspect instead of the process-level brand directory"
         }
       },
       "type": "object"

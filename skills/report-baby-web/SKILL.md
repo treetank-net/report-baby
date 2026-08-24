@@ -60,10 +60,45 @@ node /tmp/rb/server/cli-bundle.cjs list_templates
 node /tmp/rb/server/cli-bundle.cjs inspect_brand '{"brand_ref":"brand://flux/primary"}'
 ```
 
-Use the path-based `brand://<directory>/<profile>` explicitly, for example
-`brand://flux/primary`. `flux` is a directory and `primary` resolves to
-`primary.yml` inside it; it is not a host name or an implicit `profiles/`
-lookup.
+## Construct brand paths explicitly
+
+`brand_source.brand_path` and `brand_ref` are two different path segments:
+
+- `brand_path` is resolved from the complete materialized directory (the ZIP
+  root, Git checkout, or `directory_path`) and selects the root containing the
+  brand directories;
+- `brand_ref` is resolved inside that selected root. Its first segment is a
+  brand directory, and the remaining segments are the profile path ending in
+  `.yml`/`.yaml`/`.json`.
+
+For an archive shaped like `brands/transinfo/_brand.yml` and
+`brands/transinfo/profiles/primary.yml`, use the pair below. Do not treat
+`transinfo` as a hostname, and do not silently assume that `profiles/` exists
+unless it is present in the archive:
+
+```json
+{
+  "brand_source": {
+    "zip_path": "/path/to/brandbook.zip",
+    "brand_path": "brands"
+  },
+  "brand_ref": "brand://transinfo/profiles/primary"
+}
+```
+
+Inspect the same source before rendering:
+
+```bash
+node /tmp/rb/server/cli-bundle.cjs --brand-zip /path/to/brandbook.zip --brand-path brands list_brandbooks
+node /tmp/rb/server/cli-bundle.cjs --brand-zip /path/to/brandbook.zip --brand-path brands inspect_brand '{"brand_ref":"brand://transinfo/profiles/primary"}'
+node /tmp/rb/server/cli-bundle.cjs --brand-zip /path/to/brandbook.zip --brand-path brands list_brand_templates '{"brand_ref":"brand://transinfo/profiles/primary"}'
+```
+
+`inspect_brand` reports the resolved theme and diagnostics plus `capabilities`:
+available output formats/surfaces, declared logo/background/font assets,
+embedded-font availability, layout choices, and brand-owned templates. Use
+that result to choose a profile and an output before constructing the render
+request.
 
 ## Render from a JSON file
 
