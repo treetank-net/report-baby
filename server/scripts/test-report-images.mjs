@@ -44,6 +44,21 @@ try {
   assert.ok((await readFile(output)).length > 0);
   assert.equal(structured.drawings.filter((drawing) => drawing.kind === 'image').length, 1);
   assert.equal(structured.warnings, undefined);
+  const introOutput = join(temporary, 'intro-image-report.pdf');
+  const introResult = await runCli({
+    template: 'pages/editorial-two-column',
+    content_root: contentRoot,
+    output_path: introOutput,
+    diagnostics: 'full',
+    data: {
+      title: 'Intro image report',
+      intro: '![Intro image](root://assets/map.png "Intro caption")\n\nThe lead remains selectable text below the image.',
+      sections: [{ heading: 'Editorial body', body: 'The editorial body follows the Markdown-enabled intro block.' }],
+    },
+  });
+  const introContent = JSON.parse(introResult.stdout.trim().split('\n')[0]);
+  assert.equal(introContent.drawings.filter((drawing) => drawing.kind === 'image').length, 1);
+  assert.ok(introContent.drawings.find((drawing) => drawing.kind === 'image' && drawing.y < 110), JSON.stringify(introContent.drawings));
   const structuredOutput = join(temporary, 'structured-report.pdf');
   const structuredResult = await runCli({
     content_root: contentRoot,

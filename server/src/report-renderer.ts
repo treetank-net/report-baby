@@ -720,7 +720,7 @@ async function createReportHeader(data: ReportData, theme: RenderTheme): Promise
   };
 }
 
-function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext, gaps: PdfGaps): void {
+async function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext, gaps: PdfGaps, sourceContext: SourceContext | undefined, warnings: string[], imageState: ImageRenderState): Promise<void> {
   if (!data.intro) return;
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.bodySize);
@@ -736,6 +736,14 @@ function renderIntro(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderThe
       top: Math.max(block.top, cur.y),
       bottom: Math.max(block.bottom, narrative?.bottom ?? block.bottom),
     });
+  }
+  const normalized = normalizeMarkdown(data.intro);
+  if (containsImage(normalized.nodes)) {
+    if (!sourceContext) throw new Error('Image content requires an explicit source context.');
+    await renderNormalizedDocument(doc, cur, normalized, sourceContext, theme, text, warnings, imageState);
+    if (block) cur.flowFrom(Math.max(cur.y + gaps.introBottomGap, block.bottom));
+    else cur.y += gaps.introBottomGap;
+    return;
   }
   const lines = layoutStyledText(doc, data.intro, cur.width, text);
   cur.keepTogether(lines.length * PDF_CONFIG.introLineHeight + PDF_CONFIG.introKeepPadding, PDF_CONFIG.introLineHeight * PDF_CONFIG.introMinLeadLines);
@@ -827,11 +835,10 @@ async function renderCharts(doc: jsPDF, cur: Cursor, data: ReportData, theme: Re
   }
 }
 
-async function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext, gaps: PdfGaps, sourceContext: SourceContext, warnings: string[]): Promise<void> {
+async function renderSections(doc: jsPDF, cur: Cursor, data: ReportData, theme: RenderTheme, text: StyledTextContext, gaps: PdfGaps, sourceContext: SourceContext, warnings: string[], imageState: ImageRenderState): Promise<void> {
   const font = pdfFont(theme);
   const sections = data.sections ?? [];
   const narrativeFrame = cur.dynamicFlow ? cur.block('narrative') : undefined;
-  const imageState: ImageRenderState = { count: 0 };
   if (narrativeFrame) cur.activateBlock('narrative', cur.y);
   for (let index = 0; index < sections.length; index += 1) {
     const s = sections[index];
@@ -1371,7 +1378,8 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     header.drawFirstPage(doc, cur);
     cur.setFlowTop(cur.y);
   }
-  renderIntro(doc, cur, resolved, theme, text, gaps);
+  const imageState: ImageRenderState = { count: 0 };
+  await renderIntro(doc, cur, resolved, theme, text, gaps, sourceContext, warnings, imageState);
   const pageBlocksSupported = !geometry.dynamicFlow;
   if (pageBlocksSupported) {
     renderKpis(doc, cur, resolved, theme, text, gaps);
@@ -1381,7 +1389,7 @@ async function renderReportAttempt(name: string, data: ReportData, theme: Render
     if (resolved.charts?.length) addUnsupportedPageBlockWarning(name, 'chart', warnings);
   }
   if (resolved.sections?.some((section) => section.body?.includes('![')) && !sourceContext) throw new Error('Image content requires an explicit source context.');
-  await renderSections(doc, cur, resolved, theme, text, gaps, sourceContext as SourceContext, warnings);
+  await renderSections(doc, cur, resolved, theme, text, gaps, sourceContext as SourceContext, warnings, imageState);
   renderTable(doc, cur, resolved, theme, header, text, fontSet);
   renderHighlights(doc, cur, resolved, theme, text, gaps, header.followingPageHeight() + PDF_CONFIG.headerRepeatBottomGap);
   renderFooter(doc, resolved, theme, renderGeometry);
