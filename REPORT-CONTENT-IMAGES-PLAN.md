@@ -5,6 +5,19 @@
 This is a design and implementation plan. It does not change the renderer, the
 input contract, or any generated bundle by itself.
 
+## Decisions agreed jointly
+
+The following decisions were made jointly during planning:
+
+- External `http://` and `https://` image URLs are accepted by default in v1.
+  A separate opt-in is not required, and SSRF mitigation is not a v1
+  constraint.
+- Local paths, `brand://` references, and `source://` references remain valid
+  image sources. Fetching, decoding, or rendering failures still produce the
+  normal actionable diagnostics.
+- Images are block content in the first iteration. Float placement, captions,
+  figure numbering, and arbitrary text wrapping are separate later features.
+
 ## Goal
 
 Allow an article or report body supplied as Markdown to contain images without
@@ -17,8 +30,10 @@ content model should support:
 - consistent placement in PDF, PNG, and, where supported, PPTX;
 - a later, deliberately constrained form of manual `float` beside text.
 
-The first version should be deterministic and safe. It should not attempt to
-be a browser, a CSS engine, or a general HTML layout system.
+The first version should have deterministic placement and flow for the resolved
+image bytes. Remote content may change when the same URL is fetched again. It
+should not attempt to be a browser, a CSS engine, or a general HTML layout
+system.
 
 ## Current contract and gap
 
@@ -69,7 +84,8 @@ string API and define how Markdown and explicit nodes compose in one section.
 
 The normalized image node should be able to carry, at minimum:
 
-- `src`: a safe relative asset reference or an explicitly approved data URI;
+  - `src`: a safe local/brand/source reference, an HTTP(S) URL, or an
+    explicitly approved data URI;
 - `alt`: required for authored content, with a clear rule for decorative
   images;
 - `caption`: optional visible text;
@@ -92,9 +108,10 @@ Visual constants, limits, and warnings belong in
 - Choose and document the Markdown parser and the supported image syntax.
 - Parse image nodes, escaped URLs, titles, surrounding emphasis, and adjacent
   text without changing existing plain-text behavior.
-- Resolve image references relative to an explicitly supplied content root or
-  brand asset root. Reject traversal, arbitrary filesystem access, and remote
-  fetching unless a separate opt-in policy is later approved.
+- Resolve local image references relative to an explicitly supplied content
+  root or the selected brand/source root. Reject traversal and arbitrary
+  filesystem access. Treat authored HTTP(S) URLs as normal image sources in v1;
+  fetch them during rendering and validate the response as an image.
 - Add bounded asset validation: supported formats, byte size, pixel count,
   and decoded dimensions. Report a named, counted warning for an unusable or
   missing image instead of silently drawing a placeholder.
@@ -148,7 +165,9 @@ better” behavior in the first release.
 ## Safety and compatibility
 
 - Local asset paths must stay within an approved content/brand root.
-- Remote images and unrestricted `data:` URLs are out of scope initially;
+- Remote HTTP(S) images are in scope by default. SSRF protections are
+  explicitly deferred; ordinary fetch, response validation, and failure
+  diagnostics remain required. Unrestricted `data:` URLs remain out of scope;
   bounded, explicitly allowed data types may be considered later.
 - Enforce limits on bytes, decoded pixels, dimensions, and total images per
   document. Put the limits in render configuration.
@@ -167,8 +186,8 @@ Add tests before implementation, then keep them as the contract:
 2. Asset tests for SVG, JPEG, opaque PNG, indexed PNG with transparency, and
    truecolor PNG with alpha. Verify that alpha is preserved or rejected with a
    counted warning.
-3. Security tests for traversal, absolute paths, remote URLs, oversized files,
-   and oversized decoded images.
+3. Resolution tests for traversal, absolute paths, accepted remote URLs,
+   oversized files, invalid remote responses, and oversized decoded images.
 4. Plan/recorder tests for containment, disjointness, coverage, caption pairing,
    column/page breaks, and no overlap with headers or footers.
 5. Integration fixtures with zero, one, and many images; short and long
@@ -193,4 +212,3 @@ Add tests before implementation, then keep them as the contract:
 - Manual left/right float, if implemented, has deterministic rules and is
   covered by layout tests; it is not required for the first block-image
   release.
-
