@@ -12,11 +12,12 @@ The following decisions were made jointly during planning:
 - External `http://` and `https://` image URLs are accepted by default in v1.
   A separate opt-in is not required, and SSRF mitigation is not a v1
   constraint.
-- Local paths, `brand://` references, and `source://` references remain valid
-  image sources. Fetching, decoding, or rendering failures still produce the
-  normal actionable diagnostics.
-- Images are block content in the first iteration. Float placement, captions,
-  figure numbering, and arbitrary text wrapping are separate later features.
+- `root://`, `brand://`, and `source://` references remain valid image sources;
+  bare relative paths resolve through the explicit `content_root`. Fetching,
+  decoding, or rendering failures produce the normal actionable diagnostics.
+- Markdown images default to full-width normal flow. Structured content may
+  insert an explicitly sized image node into the flow. Float placement, figure
+  numbering, and arbitrary text wrapping are separate later features.
 
 ## Goal
 
@@ -39,14 +40,29 @@ system.
 
 The structured report contract currently carries fields such as `intro`,
 `sections[].body`, `table`, and `highlights`. Some body markup is interpreted
-(for example, `**bold**`), but this must not be described as full Markdown
-support until image nodes are parsed and tested. The implementation should
-therefore make the distinction explicit:
+(for example, `**bold**` and emphasis), while tables, charts, and lists are
+also available as structured report fields. The current inline parser is a
+small renderer-specific subset, not a general Markdown AST. The image work
+should introduce the normalization seam needed for a later CommonMark parser
+without making unrelated Markdown constructs part of this delivery by
+accident. The implementation should make the distinction explicit:
 
 1. Markdown is an accepted source syntax for article content.
-2. A normalized content model is the renderer's internal contract.
-3. Existing plain strings and structured report fields remain backward
+2. Every textual input (`body`, `content[].text`, headings, captions, titles,
+   and similar fields) uses the same Markdown parsing path and normalization
+   rules.
+3. A normalized content model is the renderer's internal contract; the
+   renderer must not receive raw Markdown strings as its only representation.
+4. Existing plain strings and structured report fields remain backward
    compatible.
+
+The migration seam should be parser-independent. Initially it may be fed by
+the existing limited inline parser, preserving the current supported behavior.
+A later step may replace that parser with a CommonMark implementation, mapping
+its AST into the same normalized nodes. Parser support and renderer support are
+separate: unsupported CommonMark nodes must produce an actionable diagnostic,
+not disappear silently. Raw HTML and CSS layout are not implied by adopting a
+CommonMark parser.
 
 Relevant seams to inspect during implementation are the report schema, the
 Markdown/text-run parser, `resolveReportPlan`, the report drawing recorder,
@@ -62,8 +78,9 @@ Support Markdown image syntax in fields documented as Markdown content:
 ```
 
 The parser should produce a normalized figure node rather than passing a path
-directly to a renderer. A structured escape hatch should also be available for
-callers that do not use Markdown, for example:
+directly to a renderer. A structured `content` form should also be available
+for callers that need explicit composition or exact image parameters, for
+example:
 
 ```json
 {
@@ -72,29 +89,45 @@ callers that do not use Markdown, for example:
   "alt": "Map of the fleet",
   "caption": "Fleet distribution, Q2 2026",
   "width": "full",
-  "fit": "contain",
-  "float": "block"
+  "fit": "contain"
 }
 ```
 
-The exact public field name may be `content`, `blocks`, or an extension of
-`sections[].body`, but there must be one documented normalization path. Do not
-silently interpret an arbitrary object in a string field. Preserve the current
-string API and define how Markdown and explicit nodes compose in one section.
+`sections[].body` remains the compatible Markdown string form. A section may
+use either `body` or structured `content`; they are mutually exclusive, so the
+renderer never has to guess how two content sources should be ordered. Text in
+structured `content` is also Markdown and goes through the same parser. Do not
+silently interpret an arbitrary object in a string field.
+
+Relative image paths are resolved against the request's explicit
+`content_root` (available as the CLI `--content-root` option and MCP
+`content_root` field) and normalize to the `root://` namespace. The source
+namespaces are path-based in their resource context:
+
+- `root://assets/map.png` resolves under `content_root`;
+- `brand://assets/map.png` resolves under the selected brand root;
+- `source://shared/chart.png` resolves under the complete materialized source.
+
+Absolute filesystem paths and paths that escape their approved root are
+rejected. Markdown image syntax defaults to a full-width image in the current
+flow. Explicit percentage sizing is available through a structured image
+node; float, anchored `x`/`y` placement, and arbitrary CSS remain future
+features.
 
 The normalized image node should be able to carry, at minimum:
 
-  - `src`: a safe local/brand/source reference, an HTTP(S) URL, or an
+  - `src`: a safe local/root/brand/source reference, an HTTP(S) URL, or an
     explicitly approved data URI;
-- `alt`: required for authored content, with a clear rule for decorative
-  images;
+- `alt`: optional alternative text retained as metadata; it is not required
+  until tagged/accessibility-aware output is implemented;
 - `caption`: optional visible text;
-- `width` and optional `height`: constrained by the assigned box;
-- `fit`: `contain` or `cover`;
-- `focal_point`: optional normalized coordinates for `cover`;
-- `opacity`: optional, bounded, and configured consistently across surfaces;
-- `float`: initially `block`; reserve `left` and `right` for the later phase;
-- `clear`: `none` or `both` when float support is enabled;
+- `width`: `full` by default or an explicit percentage in structured content;
+  height follows the intrinsic aspect ratio in v1;
+- `fit`: `contain` in v1; `cover` and `focal_point` are future capabilities;
+- `opacity`: future capability;
+- `float`: not a v1 placement mode; reserve `left` and `right` for the later
+  phase;
+- `clear`: future float capability;
 - `keep_with_caption`: a default-on layout preference.
 
 Names and defaults should be finalized against the existing render schema.
@@ -105,16 +138,27 @@ Visual constants, limits, and warnings belong in
 
 ### Phase 1 — parse and normalize
 
-- Choose and document the Markdown parser and the supported image syntax.
+- Define the normalized content AST before changing renderer code. It must
+  represent paragraphs, text, emphasis, strong text, lists, tables, charts,
+  links where supported, and images without putting layout calculations into
+  the parser.
+- Route all textual fields through one parser/normalizer. Preserve the current
+  limited parser behavior first; keep a replaceable seam for a later CommonMark
+  parser rather than expanding the renderer's Markdown scope opportunistically.
 - Parse image nodes, escaped URLs, titles, surrounding emphasis, and adjacent
-  text without changing existing plain-text behavior.
+  text without changing existing plain-text behavior. A Markdown image's title
+  is retained as metadata and becomes the visible caption when no explicit
+  caption is supplied; an explicit caption wins.
 - Resolve local image references relative to an explicitly supplied content
   root or the selected brand/source root. Reject traversal and arbitrary
   filesystem access. Treat authored HTTP(S) URLs as normal image sources in v1;
-  fetch them during rendering and validate the response as an image.
+  fetch them during rendering and validate the response as an image. The
+  default trusted/local mode does not block localhost or private addresses;
+  deployment isolation is responsible for the network trust boundary.
 - Add bounded asset validation: supported formats, byte size, pixel count,
-  and decoded dimensions. Report a named, counted warning for an unusable or
-  missing image instead of silently drawing a placeholder.
+  and decoded dimensions. A missing or unusable authored image fails the
+  render with a named, actionable diagnostic; an explicitly decorative image
+  may be skipped with a counted warning. Never draw a silent placeholder.
 - Normalize PNG alpha, SVG, JPEG, and any deliberately supported formats into
   the common image representation. Transparency must survive PDF and raster
   output, or the input must be rejected with an actionable warning.
@@ -129,6 +173,9 @@ Visual constants, limits, and warnings belong in
   the next available column/page when the configured minimum cannot fit.
 - Make page and column breaks deterministic. An image must never be placed by
   an independent absolute-positioning path after text flow has advanced.
+- Markdown images use full-width flow by default. Structured images may use a
+  percentage width, preserve their intrinsic aspect ratio, and still remain
+  in normal flow; they do not float or use `x`/`y` coordinates in v1.
 - Add the same normalized node to the PDF and PNG paths. Define explicitly
   whether PPTX receives a native image or a rasterized equivalent, and keep
   the geometry shared.
@@ -169,8 +216,11 @@ better” behavior in the first release.
   explicitly deferred; ordinary fetch, response validation, and failure
   diagnostics remain required. Unrestricted `data:` URLs remain out of scope;
   bounded, explicitly allowed data types may be considered later.
-- Enforce limits on bytes, decoded pixels, dimensions, and total images per
-  document. Put the limits in render configuration.
+- Enforce limits on bytes, decoded pixels, dimensions, redirects, fetch time,
+  and total images per document. The initial configured defaults are 20 MiB per
+  fetched/decoded asset, 40 megapixels, 10,000 pixels per dimension, 32 images
+  per document, a 15-second remote timeout, and at most 3 redirects. Put all
+  limits in render configuration.
 - Preserve current reports byte-for-byte where no image node is present, apart
   from intentional baseline updates for the new implementation.
 - Keep image handling independent from the brand ZIP source plan. A ZIP may

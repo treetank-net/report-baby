@@ -98,10 +98,10 @@ process-level default must be documented and tested.
   and symlink entries; after normalization every output must remain under the
   destination directory.
 - Defend against ZIP bombs with configurable limits for entry count, one-file
-  size, total extracted size, compression ratio, and nested archives. Proposed
-  safe defaults are 2,000 entries and 200 MB total, with the remaining limits
-  chosen from measured brandbooks. Store all thresholds in the render YAML
-  configuration, not in code literals.
+  size, total extracted size, compression ratio, and nested archives. The
+  initial configured defaults are 2,000 entries, 50 MiB per file, 200 MiB
+  total, 100:1 compression ratio, and zero nested archive extraction. Store
+  all thresholds in the render YAML configuration, not in code literals.
 - Do not extract an archive inside another archive.
 
 ### Phase 2 — explicit brand path and prepared releases
