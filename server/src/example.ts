@@ -4,11 +4,11 @@ import { readBrandShowcase, resolveBrandContext, type BrandOverrides } from './b
 import { getBrandDir, getBrandSourceRoots } from './config.js';
 import { renderReportPdf } from './report-renderer.js';
 import type { RenderTheme } from './core/model/render-theme.js';
-import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnostics, type SlideDeck } from './slides.js';
+import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnostics } from './slides.js';
 import { resolveSlideDeck } from './slide-context.js';
 import { slidePlanSummary } from './slide-plan.js';
 import { validateRenderManifest } from './manifest.js';
-import { reportDataSchema, slideDeckSchema } from './contract/schema.js';
+import { compositionInputSchema, slideDeckSchema } from './contract/schema.js';
 
 export { validateRenderManifest };
 
@@ -138,7 +138,7 @@ function themeSummary(theme: RenderTheme): Record<string, unknown> {
   };
 }
 
-async function renderReportData(args: CliArgs, input: any): Promise<Record<string, unknown>> {
+async function renderReportInput(args: CliArgs, input: any): Promise<Record<string, unknown>> {
   const inputData = input.data ?? input;
   const template = input.template ?? input.template_ref ?? 'default-report';
   const brandRef = input.brand_ref ?? args.brand;
@@ -149,13 +149,12 @@ async function renderReportData(args: CliArgs, input: any): Promise<Record<strin
     overrides: input.overrides as BrandOverrides | undefined,
     brandSourceRoots: getBrandSourceRoots(),
   });
-  const parsedData = reportDataSchema.parse(inputData);
-  const data = { ...parsedData, brand: parsedData.brand ?? context.brandName };
+  const data = compositionInputSchema.parse(inputData);
   const outputs: Record<string, string> = {};
   const renderWarnings: string[] = [];
   if (args.formats.includes('pdf')) {
     const path = join(args.out, 'report.pdf');
-    await writeFile(path, await renderReportPdf(template, data, context.theme, renderWarnings));
+    await writeFile(path, await renderReportPdf(template, data, context.theme, renderWarnings, context.sourceContext));
     outputs.pdf = manifestPath(args.out, path);
   }
   return {
@@ -166,11 +165,11 @@ async function renderReportData(args: CliArgs, input: any): Promise<Record<strin
 }
 
 async function renderReportExample(args: CliArgs, input: any): Promise<Record<string, unknown>> {
-  return renderReportData(args, input);
+  return renderReportInput(args, input);
 }
 
 async function renderDeckData(args: CliArgs, input: any): Promise<Record<string, unknown>> {
-  const data = slideDeckSchema.parse(input.data ?? input) as SlideDeck;
+  const data = slideDeckSchema.parse(input.data ?? input);
   const resolved = await resolveSlideDeck(data, {
     brandRoot: configuredBrandRoot(args),
     brandSourceRoots: getBrandSourceRoots(),
@@ -225,14 +224,9 @@ function showcaseEntries(value: any, singular: string): any[] {
 }
 
 function showcaseSlide(slide: any, baseBrand: string): any {
-  const content = slide.data && typeof slide.data === 'object' ? slide.data : slide;
   return {
-    ...content,
-    type: content.type ?? slide.type,
-    template_ref: content.template_ref ?? slide.template_ref,
-    brand_ref: brandRefForProfile(baseBrand, slide.profile),
-    surface: slide.surface,
-    overrides: slide.overrides ?? content.overrides,
+    ...slide,
+    brand_ref: slide.brand_ref ?? brandRefForProfile(baseBrand, slide.profile),
   };
 }
 
@@ -243,7 +237,7 @@ async function renderShowcaseExample(args: CliArgs): Promise<Record<string, unkn
     const directory = join(args.out, 'reports', report.id ?? 'report');
     const input = { ...report, brand_ref: brandRefForProfile(args.brand, report.profile), data: report.data ?? report };
     await mkdir(directory, { recursive: true });
-    const rendered = await renderReportData({ ...args, kind: 'report', out: directory }, input);
+    const rendered = await renderReportInput({ ...args, kind: 'report', out: directory }, input);
     reports.push({ id: report.id ?? 'report', profile: input.brand_ref, ...prefixManifestOutputs(rendered, `reports/${report.id ?? 'report'}`) });
   }
   const decks: unknown[] = [];
@@ -251,7 +245,14 @@ async function renderShowcaseExample(args: CliArgs): Promise<Record<string, unkn
     const directory = join(args.out, 'decks', deck.id ?? 'deck');
     const source = deck.data && typeof deck.data === 'object' ? deck.data : deck;
     const input = {
-      ...source,
+      ...(source.title === undefined ? {} : { title: source.title }),
+      ...(source.brand === undefined ? {} : { brand: source.brand }),
+      ...(source.brand_ref === undefined ? {} : { brand_ref: source.brand_ref }),
+      ...(source.template_ref === undefined ? {} : { template_ref: source.template_ref }),
+      ...(source.surface === undefined ? {} : { surface: source.surface }),
+      ...(source.direction === undefined ? {} : { direction: source.direction }),
+      ...(source.overrides === undefined ? {} : { overrides: source.overrides }),
+      ...(source.footer === undefined ? {} : { footer: source.footer }),
       brand_ref: brandRefForProfile(args.brand, deck.profile),
       slides: (source.slides ?? []).map((slide: any) => showcaseSlide(slide, args.brand)),
     };

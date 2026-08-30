@@ -3,19 +3,25 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runProcess } from './lib/process.mjs';
+import { fixtureDocument } from './lib/composition-fixture.mjs';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-plan-'));
 const bundle = join(temporary, 'report-plan.mjs');
+const compositionBundle = join(temporary, 'composition.mjs');
 const assertionsBundle = join(temporary, 'report-plan-assertions.mjs');
 const build = runProcess('npx', ['esbuild', 'src/report-plan.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${bundle}`], { cwd: root, timeout: 30_000 });
 if (build.status !== 0) throw new Error(`report plan test bundle failed: ${build.stderr || build.stdout}`);
 const assertionsBuild = runProcess('npx', ['esbuild', 'src/report-plan-assertions.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${assertionsBundle}`], { cwd: root, timeout: 30_000 });
 if (assertionsBuild.status !== 0) throw new Error(`report plan assertions test bundle failed: ${assertionsBuild.stderr || assertionsBuild.stdout}`);
+const compositionBuild = runProcess('npx', ['esbuild', 'src/composition/index.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${compositionBundle}`], { cwd: root, timeout: 30_000 });
+if (compositionBuild.status !== 0) throw new Error(`report plan composition test bundle failed: ${compositionBuild.stderr || compositionBuild.stdout}`);
 
 try {
   const { resolveReportPlan } = await import(bundle);
   const { assertReportPlan } = await import(assertionsBundle);
+  const { compositionDocumentFromInput: normalizeCompositionInput } = await import(compositionBundle);
+  const documentFromFixture = (fixture) => fixtureDocument(normalizeCompositionInput, fixture);
   const geometry = {
     width: 210,
     height: 297,
@@ -44,23 +50,32 @@ try {
     templateRef: 'pages/editorial-two-column',
     theme,
     geometry,
-    data: {
+    compositionDocument: documentFromFixture({
       title: 'Plan contract',
       intro: 'A lead paragraph.',
+      kpis: [{ label: 'Reach', value: 12 }],
+      charts: [{ type: 'bar', title: 'Reach', data: [{ label: 'Web', value: 12 }] }],
       sections: [{ heading: 'Body', body: 'Text.' }],
       table: { head: ['A'], body: [['1']] },
       highlights: ['One'],
-    },
+    }),
     pageCount: 2,
   });
   const noIntroPlan = resolveReportPlan({
     templateRef: 'pages/editorial-two-column',
     theme,
     geometry,
-    data: {
+    compositionDocument: documentFromFixture({
       title: 'Plan coverage contract',
       sections: [{ heading: 'Body', body: 'Text.' }],
-    },
+    }),
+    pageCount: 1,
+  });
+  const whitespaceIntroPlan = resolveReportPlan({
+    templateRef: 'pages/editorial-two-column',
+    theme,
+    geometry,
+    compositionDocument: documentFromFixture({ intro: '   ', sections: [{ heading: 'Body', body: 'Text.' }] }),
     pageCount: 1,
   });
 
@@ -73,9 +88,12 @@ try {
   assert.ok(first.blocks.some((item) => item.id === 'sections' && item.container), 'sections must be represented as a logical container');
   assert.ok(first.blocks.some((item) => item.id === 'table' && item.container), 'table must be represented as a logical container');
   assert.ok(first.blocks.some((item) => item.id === 'highlights' && item.container), 'highlights must be represented as a logical container');
+  assert.ok(first.blocks.some((item) => item.id === 'kpis' && item.container), 'kpis must be represented as a logical container');
+  assert.ok(first.blocks.some((item) => item.id === 'charts' && item.container), 'charts must be represented as a logical container');
   assert.ok(first.blocks.find((item) => item.id === 'footer'), 'footer must be a planned block');
   assertReportPlan(plan);
   assertReportPlan(noIntroPlan, { requireCoverage: true, maxCoverageGap: 18 });
+  assert.equal(whitespaceIntroPlan.pages[0].blocks.some((item) => item.id === 'intro'), false, 'blank intro must collapse from the plan');
   for (const page of plan.pages) {
     for (const item of page.blocks) {
       assert.ok(item.box.x >= 0 && item.box.y >= 0, `${item.id} starts outside the page`);

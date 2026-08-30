@@ -28,6 +28,17 @@ export interface RenderConfig {
   text: { headingGlyphWidth: number; bodyGlyphWidth: number; monoHeadingGlyphWidth: number; monoBodyGlyphWidth: number; monoEstimatedGlyphWidth: number; lineHeight: number; titleMaxLines: number; subtitleMaxLines: number; headerMaxLines: number };
   pptx: Record<string, number>;
   contrast: { bodyMinimum: number; largeMinimum: number; largeTextPx: number; largeBoldTextPx: number };
+  chrome: {
+    lockup: {
+      standard: { markWidthPx: number; markHeightPx: number; markYPx: number; nameSizePx: number; nameWidthPx: number; nameHeightPx: number; verticalAlign: 'top' | 'middle' | 'bottom'; gapCompactPx: number; gapNormalPx: number; gapOpenPx: number };
+      title: { markWidthPx: number; markHeightPx: number; markYPx: number; nameSizePx: number; nameWidthPx: number; nameHeightPx: number; verticalAlign: 'top' | 'middle' | 'bottom'; gapCompactPx: number; gapNormalPx: number; gapOpenPx: number };
+      compact: { markWidthPx: number; markHeightPx: number; markYPx: number; nameSizePx: number; nameWidthPx: number; nameHeightPx: number; verticalAlign: 'top' | 'middle' | 'bottom'; gapCompactPx: number; gapNormalPx: number; gapOpenPx: number };
+    };
+    reportLockup: {
+      standard: { markWidthMm: number; fullLogoWidthMm: number; maxHeightMm: number; gapMm: number; nameSizePt: number; verticalAlign: 'top' | 'middle' | 'bottom' };
+      continuation: { markWidthMm: number; fullLogoWidthMm: number; maxHeightMm: number; gapMm: number; nameSizePt: number; verticalAlign: 'top' | 'middle' | 'bottom' };
+    };
+  };
   fallbacks: Record<string, number>;
   legacy: Record<string, number>;
 }
@@ -106,11 +117,48 @@ export function readRenderConfig(): RenderConfig {
   const shapes = source.shapes as Record<string, unknown>;
   const metrics = source.metrics as Record<string, unknown>;
   const text = source.text as Record<string, unknown>;
+  const chrome = source.chrome as Record<string, unknown>;
+  const lockup = chrome.lockup as Record<string, unknown>;
+  const reportLockup = chrome.report_lockup as Record<string, unknown>;
   const legacySource = source.legacy as Record<string, unknown>;
   const get = (group: Record<string, unknown>, key: string): number => numberAt(group[key], `render-config.${key}`);
+  const verticalAlignAt = (value: unknown, label: string): 'top' | 'middle' | 'bottom' => {
+    if (value === 'top' || value === 'middle' || value === 'bottom') return value;
+    throw new Error(`Built-in template ${label} must be top, middle or bottom.`);
+  };
   const legacy = Object.fromEntries(Object.entries(legacySource).map(([key, value]) => [key, numberAt(value, `render-config.legacy.${key}`)]));
   const numberDictionary = (name: string): Record<string, number> => Object.fromEntries(Object.entries((source[name] ?? {}) as Record<string, unknown>).map(([key, value]) => [key, numberAt(value, `render-config.${name}.${key}`)]));
   const camelDictionary = (name: string): Record<string, number> => Object.fromEntries(Object.entries(numberDictionary(name)).map(([key, value]) => [key.replace(/_([a-z0-9])/g, (_match, character: string) => character.toUpperCase()), value]));
+  const lockupVariant = (name: string) => {
+    const variant = lockup[name] as Record<string, unknown>;
+    const getVariant = (key: string): number => numberAt(variant[key], `render-config.chrome.lockup.${name}.${key}`);
+    const verticalAlign = verticalAlignAt(variant.vertical_align, `render-config.chrome.lockup.${name}.vertical_align`);
+    return {
+      markWidthPx: getVariant('mark_width_px'),
+      markHeightPx: getVariant('mark_height_px'),
+      markYPx: getVariant('mark_y_px'),
+      nameSizePx: getVariant('name_size_px'),
+      nameWidthPx: getVariant('name_width_px'),
+      nameHeightPx: getVariant('name_height_px'),
+      verticalAlign,
+      gapCompactPx: getVariant('gap_compact_px'),
+      gapNormalPx: getVariant('gap_normal_px'),
+      gapOpenPx: getVariant('gap_open_px'),
+    };
+  };
+  const reportLockupVariant = (name: string) => {
+    const variant = reportLockup[name] as Record<string, unknown>;
+    const getVariant = (key: string): number => numberAt(variant[key], `render-config.chrome.report_lockup.${name}.${key}`);
+    const verticalAlign = verticalAlignAt(variant.vertical_align, `render-config.chrome.report_lockup.${name}.vertical_align`);
+    return {
+      markWidthMm: getVariant('mark_width_mm'),
+      fullLogoWidthMm: getVariant('full_logo_width_mm'),
+      maxHeightMm: getVariant('max_height_mm'),
+      gapMm: getVariant('gap_mm'),
+      nameSizePt: getVariant('name_size_pt'),
+      verticalAlign,
+    };
+  };
   return {
     canvas: { width: get(canvas, 'width'), height: get(canvas, 'height'), pptxWidth: get(canvas, 'pptx_width'), pptxHeight: get(canvas, 'pptx_height'), pdfWidthMm: get(canvas, 'pdf_width_mm'), pdfHeightMm: get(canvas, 'pdf_height_mm'), pointsPerInch: get(canvas, 'points_per_inch') },
     quality: { pptxTextRegionMaxChangedPixelRatio: get(quality, 'pptx_text_region_max_changed_pixel_ratio') },
@@ -126,6 +174,7 @@ export function readRenderConfig(): RenderConfig {
     text: { headingGlyphWidth: get(text, 'heading_glyph_width'), bodyGlyphWidth: get(text, 'body_glyph_width'), monoHeadingGlyphWidth: get(text, 'mono_heading_glyph_width'), monoBodyGlyphWidth: get(text, 'mono_body_glyph_width'), monoEstimatedGlyphWidth: get(text, 'mono_estimated_glyph_width'), lineHeight: get(text, 'line_height'), titleMaxLines: get(text, 'title_max_lines'), subtitleMaxLines: get(text, 'subtitle_max_lines'), headerMaxLines: get(text, 'header_max_lines') },
     pptx: numberDictionary('pptx'),
     contrast: camelDictionary('contrast') as RenderConfig['contrast'],
+    chrome: { lockup: { standard: lockupVariant('standard'), title: lockupVariant('title'), compact: lockupVariant('compact') }, reportLockup: { standard: reportLockupVariant('standard'), continuation: reportLockupVariant('continuation') } },
     fallbacks: numberDictionary('fallbacks'),
     legacy,
   };

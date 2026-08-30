@@ -81,6 +81,7 @@ const constraintsSchema = z.object({
 const slotRuleSchema = z.object({
   maxLines: z.number().optional(),
   overflow: z.enum(['reject', 'shrink-to-fit']).optional(),
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
 }).strict();
 
 const slidePlanSchema = z.object({
@@ -105,6 +106,7 @@ const slidePlanSchema = z.object({
   lockup: z.object({
     spacing: z.string(),
     physicalSide: z.enum(['left', 'right']),
+    verticalAlign: z.enum(['top', 'middle', 'bottom']),
   }).strict(),
 }).strict();
 

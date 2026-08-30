@@ -43,16 +43,31 @@ for (const file of ['reports/primary-report/report.pdf', 'decks/primary-deck/sli
 
 const titleReportInput = join(temp, 'title-report.json');
 await writeFile(titleReportInput, JSON.stringify({
-  title_page: {
-    eyebrow: 'NORTHSTAR · CAMPAIGN',
-    title: 'A report with a real cover',
-    subtitle: 'The report body starts on the following page.',
-    period: 'Q2 2026',
+  flows: {
+    title: {
+      blocks: [
+        { type: 'heading', role: 'eyebrow', text: 'NORTHSTAR · CAMPAIGN', keep_with_next_lines: 1 },
+        { type: 'heading', role: 'title', text: 'A report with a real cover', keep_with_next_lines: 1 },
+        { type: 'text', role: 'subtitle', text: 'The report body starts on the following page.' },
+        { type: 'text', role: 'subtitle', text: 'Q2 2026' },
+      ],
+    },
+    header: {
+      continuation: 'forbidden',
+      blocks: [{ type: 'heading', role: 'header', text: 'A report with a real cover' }],
+    },
+    main: {
+      continuation: 'allowed',
+      blocks: [
+        { type: 'text', role: 'intro', text: 'The title page is separate from the report content.' },
+        { type: 'metric', label: 'Reach', value: '184k', delta: '+23%', trend: 'up' },
+      ],
+    },
+    footer: {
+      continuation: 'forbidden',
+      blocks: [{ type: 'text', role: 'footer', text: 'Northstar showcase' }],
+    },
   },
-  title: 'A report with a real cover',
-  intro: 'The title page is separate from the report content.',
-  kpis: [{ label: 'Reach', value: '184k', delta: '+23%', trend: 'up' }],
-  footer: 'Northstar showcase',
 }, null, 2));
 const titleReport = run(['--kind', 'report', '--brand-root', starterRoot, '--brand', 'brand://northstar/primary', '--input', titleReportInput, '--out', join(temp, 'title-report'), '--formats', 'pdf']);
 if (titleReport.status !== 0) throw new Error(`title-page report render failed: ${titleReport.stderr || titleReport.stdout}`);
@@ -74,7 +89,10 @@ if (!manifest.outputs?.pptx || !manifest.outputs?.png?.length) throw new Error('
 
 const ownedTemplateInput = join(temp, 'owned-template.json');
 await writeFile(ownedTemplateInput, JSON.stringify({
-  slides: [{ type: 'title', title: 'Brand-owned title', subtitle: 'The layout comes from the brand directory.', template_ref: 'slides/title' }],
+  slides: [{ layout: 'title', template_ref: 'slides/title', flows: {
+    title: { blocks: [{ type: 'heading', text: 'Brand-owned title' }] },
+    subtitle: { blocks: [{ type: 'text', text: 'The layout comes from the brand directory.' }] },
+  } }],
 }, null, 2));
 const ownedTemplate = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://flux/primary', '--input', ownedTemplateInput, '--out', join(temp, 'owned-template'), '--formats', 'png,pptx']);
 if (ownedTemplate.status !== 0) throw new Error(`brand-owned template render failed: ${ownedTemplate.stderr || ownedTemplate.stdout}`);
@@ -83,13 +101,17 @@ const ownedPlan = ownedManifest.slidePlans?.[0];
 if (ownedPlan?.sourceTemplate?.id !== 'slides/title' || ownedPlan?.templateRef !== 'slides/title') throw new Error(`brand-owned template was not compiled: ${JSON.stringify(ownedPlan)}`);
 if (ownedPlan.titleLayout?.titleBaselineY === 390) throw new Error('brand-owned template did not change the extracted title geometry');
 for (const slot of ['lockup', 'lockup-name', 'eyebrow', 'image', 'title', 'subtitle']) if (!ownedPlan.slotBoxes?.[slot]) throw new Error(`brand-owned plan is missing rendered slot '${slot}'`);
+const derivedLockup = ownedPlan.slotBoxes.lockup;
+const derivedLockupName = ownedPlan.slotBoxes['lockup-name'];
+if (derivedLockupName.x <= derivedLockup.x + derivedLockup.width || derivedLockupName.y < derivedLockup.y || derivedLockupName.height <= 0) {
+  throw new Error(`brand-owned lockup name was not derived from the lockup defaults: ${JSON.stringify({ derivedLockup, derivedLockupName })}`);
+}
 
 const baseOwnedPng = await digest(join(temp, 'owned-template', 'png', 'slide-01.png'));
 const baseOwnedPptx = await digest(join(temp, 'owned-template', 'slides.pptx'));
 const slotMutations = {
   lockup: ['width: 0.03625', 'width: 0.045'],
-  'lockup-name': ['x: 0.115, y: 0.06, width: 0.18', 'x: 0.14, y: 0.06, width: 0.10'],
-  image: ['x: 0.64, y: 0.06, width: 0.30', 'x: 0.68, y: 0.06, width: 0.26'],
+  image: ['x: 0.00, y: 0.00, width: 1.00, height: 1.00', 'x: 0.02, y: 0.02, width: 0.96, height: 0.96'],
   eyebrow: ['x: 0.06, y: 0.23, width: 0.50', 'x: 0.06, y: 0.25, width: 0.45'],
   title: ['x: 0.06, y: 0.33, width: 0.50', 'x: 0.06, y: 0.35, width: 0.46'],
   subtitle: ['x: 0.06, y: 0.59, width: 0.50', 'x: 0.06, y: 0.61, width: 0.46'],
@@ -110,7 +132,17 @@ for (const [slot, [before, after]] of Object.entries(slotMutations)) {
 
 const metricsInput = join(temp, 'metrics-template.json');
 await writeFile(metricsInput, JSON.stringify({
-  slides: [{ type: 'metrics', template_ref: 'slides/metrics-3', title: 'Metrics template', subtitle: 'Three explicit cards', body: 'The body is also brand-owned.', callout: 'The callout has its own frame.', metrics: [{ label: 'Active', value: '18.4k', delta: '+12.8%', trend: 'up' }, { label: 'Activation', value: '64.2%', delta: '+6.4 pp', trend: 'up' }, { label: 'Expansion', value: '€2.8m', delta: '+18.1%', trend: 'up' }] }],
+  slides: [{ layout: 'metrics', template_ref: 'slides/metrics-3', flows: {
+    title: { blocks: [{ type: 'heading', text: 'Metrics template' }] },
+    subtitle: { blocks: [{ type: 'text', text: 'Three explicit cards' }] },
+    body: { blocks: [{ type: 'text', text: 'The body is also brand-owned.' }] },
+    callout: { blocks: [{ type: 'text', text: 'The callout has its own frame.' }] },
+    main: { blocks: [
+      { type: 'metric', label: 'Active', value: '18.4k', delta: '+12.8%', trend: 'up' },
+      { type: 'metric', label: 'Activation', value: '64.2%', delta: '+6.4 pp', trend: 'up' },
+      { type: 'metric', label: 'Expansion', value: '€2.8m', delta: '+18.1%', trend: 'up' },
+    ] },
+  } }],
 }, null, 2));
 const metricsBaseOutput = join(temp, 'metrics-template');
 const metricsBase = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://flux/primary', '--input', metricsInput, '--out', metricsBaseOutput, '--formats', 'png,pptx']);
@@ -175,7 +207,7 @@ for (const [region, [before, after]] of Object.entries({
 }
 for (const field of ['label', 'value', 'delta', 'note']) {
   const longMetrics = JSON.parse(await readFile(metricsInput, 'utf8'));
-  longMetrics.slides[0].metrics[0][field] = `${'very-long-metric-content-'.repeat(40)}${field}`;
+  longMetrics.slides[0].flows.main.blocks[0][field] = `${'very-long-metric-content-'.repeat(40)}${field}`;
   const longInput = join(temp, `metrics-long-${field}.json`);
   await writeFile(longInput, JSON.stringify(longMetrics, null, 2));
   const longOutput = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://flux/primary', '--input', longInput, '--out', join(temp, `metrics-long-${field}`), '--formats', 'png,pptx']);
@@ -183,7 +215,7 @@ for (const field of ['label', 'value', 'delta', 'note']) {
 }
 for (const field of ['body', 'callout']) {
   const longCopy = JSON.parse(await readFile(metricsInput, 'utf8'));
-  longCopy.slides[0][field] = 'long-unbroken-content-'.repeat(220);
+  longCopy.slides[0].flows[field].blocks[0].text = 'long-unbroken-content-'.repeat(220);
   const longInput = join(temp, `metrics-long-${field}.json`);
   await writeFile(longInput, JSON.stringify(longCopy, null, 2));
   const longOutput = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://flux/primary', '--input', longInput, '--out', join(temp, `metrics-long-${field}`), '--formats', 'png,pptx']);
@@ -209,11 +241,11 @@ await writeFile(rtlInput, JSON.stringify({
   template_ref: 'slides/centered-title',
   overrides: { layout: { lockup_position: 'top-end', lockup_spacing: 'compact' } },
   slides: [
-    { type: 'title', title: 'RTL title plan', subtitle: 'The logical start and end are resolved once.' },
-    { type: 'metrics', title: 'RTL metrics', metrics: [{ label: 'Signal', value: '64.2%', delta: '+6.4 pp', trend: 'up' }, { label: 'Teams', value: '18.4k' }], body: 'The body follows the same logical start.', callout: 'The callout follows the reading direction.' },
-    { type: 'table', title: 'RTL table', head: ['Signal', 'Owner'], body: [['+6.4 pp', 'Product'], ['+14%', 'Lifecycle']] },
-    { type: 'narrative', title: 'RTL narrative', body: 'Narrative content uses the logical end of the content box.', highlights: ['First highlight', 'Second highlight'] },
-    { type: 'conclusions', title: 'RTL conclusions', items: ['Keep the source data order.', 'Mirror the visual reading order.'] },
+    { layout: 'title', flows: { title: { blocks: [{ type: 'heading', text: 'RTL title plan' }] }, subtitle: { blocks: [{ type: 'text', text: 'The logical start and end are resolved once.' }] } } },
+    { layout: 'metrics', flows: { title: { blocks: [{ type: 'heading', text: 'RTL metrics' }] }, body: { blocks: [{ type: 'text', text: 'The body follows the same logical start.' }] }, callout: { blocks: [{ type: 'text', text: 'The callout follows the reading direction.' }] }, main: { blocks: [{ type: 'metric', label: 'Signal', value: '64.2%', delta: '+6.4 pp', trend: 'up' }, { type: 'metric', label: 'Teams', value: '18.4k' }] } } },
+    { layout: 'table', flows: { title: { blocks: [{ type: 'heading', text: 'RTL table' }] }, main: { blocks: [{ type: 'table', head: ['Signal', 'Owner'], body: [['+6.4 pp', 'Product'], ['+14%', 'Lifecycle']] }] } } },
+    { layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'RTL narrative' }] }, main: { blocks: [{ type: 'text', text: 'Narrative content uses the logical end of the content box.' }, { type: 'list-item', text: 'First highlight' }, { type: 'list-item', text: 'Second highlight' }] } } },
+    { layout: 'conclusions', flows: { title: { blocks: [{ type: 'heading', text: 'RTL conclusions' }] }, main: { blocks: [{ type: 'list-item', text: 'Keep the source data order.' }, { type: 'list-item', text: 'Mirror the visual reading order.' }] } } },
   ],
 }, null, 2));
 const rtl = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://orbit/primary', '--input', rtlInput, '--out', join(temp, 'rtl'), '--formats', 'png,pptx']);
@@ -225,7 +257,7 @@ if (rtlManifest.slidePlans?.some((plan) => plan?.direction !== 'rtl' || plan.loc
 if (rtlManifest.outputs?.png?.length !== 5 || !rtlManifest.outputs?.pptx) throw new Error('RTL contract did not render every content kind to PNG and PPTX');
 
 const unknownTemplateInput = join(temp, 'unknown-template.json');
-await writeFile(unknownTemplateInput, JSON.stringify({ template_ref: 'slides/not-real', slides: [{ type: 'title', title: 'Unknown template' }] }, null, 2));
+await writeFile(unknownTemplateInput, JSON.stringify({ template_ref: 'slides/not-real', slides: [{ layout: 'title', flows: { title: { blocks: [{ type: 'heading', text: 'Unknown template' }] } } }] }, null, 2));
 const unknownTemplate = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://orbit/primary', '--input', unknownTemplateInput, '--out', join(temp, 'unknown-template'), '--formats', 'png']);
 if (unknownTemplate.status === 0) throw new Error('an unknown slide template was silently accepted');
 
@@ -235,7 +267,7 @@ const unfit = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/br
 if (unfit.status === 0) throw new Error('an overflowing title without shrink-to-fit was silently accepted');
 
 const tableInput = join(temp, 'table-overflow.json');
-await writeFile(tableInput, JSON.stringify({ slides: [{ type: 'table', title: 'Too much table', head: ['A'], body: Array.from({ length: 11 }, (_, index) => [`Row ${index + 1}`]) }] }, null, 2));
+await writeFile(tableInput, JSON.stringify({ slides: [{ layout: 'table', flows: { title: { blocks: [{ type: 'heading', text: 'Too much table' }] }, main: { blocks: [{ type: 'table', head: ['A'], body: Array.from({ length: 11 }, (_, index) => [`Row ${index + 1}`]) }] } } }] }, null, 2));
 const tableOverflow = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://orbit/primary', '--input', tableInput, '--out', join(temp, 'table-overflow'), '--formats', 'png']);
 if (tableOverflow.status === 0) throw new Error('a table exceeding the pagination-free limit was silently accepted');
 
@@ -243,7 +275,7 @@ const invalidRoot = join(temp, 'invalid-brands', 'broken');
 await mkdir(invalidRoot, { recursive: true });
 await writeFile(join(invalidRoot, '_brand.yml'), 'schema_version: 1\nmeta:\n  name: Broken\nlayout:\n  image_text_safe_area: { x: 0.1, y: 0.1, width: 0, height: 0.5 }\n');
 const invalidInput = join(temp, 'invalid-safe-area.json');
-await writeFile(invalidInput, JSON.stringify({ slides: [{ type: 'title', title: 'Invalid safe area' }] }, null, 2));
+await writeFile(invalidInput, JSON.stringify({ slides: [{ layout: 'title', flows: { title: { blocks: [{ type: 'heading', text: 'Invalid safe area' }] } } }] }, null, 2));
 const invalidSafeArea = run(['--kind', 'deck', '--brand-root', join(temp, 'invalid-brands'), '--brand', 'brand://broken/primary', '--input', invalidInput, '--out', join(temp, 'invalid-safe-area'), '--formats', 'png']);
 if (invalidSafeArea.status === 0) throw new Error('a zero-sized image safe area was silently accepted');
 
@@ -263,7 +295,7 @@ const invalidTemplate = runProcess(process.execPath, ['scripts/brand-tool.js', '
 if (invalidTemplate.status === 0) throw new Error('an overlapping brand template was silently accepted');
 
 const boundaryInput = join(temp, 'boundary-report.json');
-await writeFile(boundaryInput, JSON.stringify({ title: 'Path boundary', intro: 'The renderer must stay inside its configured roots.' }, null, 2));
+await writeFile(boundaryInput, JSON.stringify({ flows: { main: { blocks: [{ type: 'heading', text: 'Path boundary' }, { type: 'text', text: 'The renderer must stay inside its configured roots.' }] } } }, null, 2));
 const embeddedFont = join(root, 'server', 'src', 'assets', 'font.ttf');
 
 async function boundaryBrandRoot(name, assets) {

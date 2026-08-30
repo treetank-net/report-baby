@@ -1,14 +1,14 @@
 import type { RenderTheme } from './core/model/render-theme.js';
 import type { ResolvedReportBlock, ResolvedReportPagePlan, ResolvedReportPlan, ReportPlanRole } from './core/model/resolved-report-plan.js';
-import type { ReportData } from './report-renderer.js';
 import type { PageGeometry, PageSegment } from './page-geometry.js';
+import type { CompositionDocument } from './composition/model.js';
 
 export interface ResolveReportPlanInput {
   templateRef: string;
-  data: ReportData;
   theme: RenderTheme;
   geometry: PageGeometry;
   pageCount?: number;
+  compositionDocument: CompositionDocument;
 }
 
 function box(segment: PageSegment): { x: number; y: number; width: number; height: number } {
@@ -21,28 +21,36 @@ function block(id: string, role: ReportPlanRole, segment: PageSegment, column?: 
 
 function flowBlocks(geometry: PageGeometry, parentId: string | undefined, top: number, bottom: number): ResolvedReportBlock[] {
   return geometry.segments
-    .map((segment) => ({ ...segment, top: Math.max(segment.top, top), bottom }))
+    .map((segment) => ({ ...segment, top: Math.max(segment.top, top), bottom: Math.min(segment.bottom, bottom) }))
     .filter((segment) => segment.bottom > segment.top)
     .map((segment, index) => block(`flow-${index + 1}`, 'flow', segment, index + 1, parentId));
 }
 
-function logicalBlocks(data: ReportData, frame: PageSegment): ResolvedReportBlock[] {
-  const blocks: ResolvedReportBlock[] = [];
-  if (data.kpis?.length) blocks.push(block('kpis', 'kpis', frame, undefined, 'flow', true));
-  if (data.charts?.length) blocks.push(block('charts', 'charts', frame, undefined, 'flow', true));
-  if (data.sections?.length) blocks.push(block('sections', 'section', frame, undefined, 'flow', true));
-  if (data.table) blocks.push(block('table', 'table', frame, undefined, 'flow', true));
-  if (data.highlights?.length) blocks.push(block('highlights', 'highlights', frame, undefined, 'flow', true));
-  return blocks;
+function logicalBlocks(document: CompositionDocument, frame: PageSegment): ResolvedReportBlock[] {
+  const contentBlocks = document.flows.main?.blocks ?? [];
+  const planBlocks: ResolvedReportBlock[] = [];
+  if (contentBlocks.some((item) => item.kind === 'metric')) planBlocks.push(block('kpis', 'kpis', frame, undefined, 'flow', true));
+  if (contentBlocks.some((item) => item.kind === 'chart')) planBlocks.push(block('charts', 'charts', frame, undefined, 'flow', true));
+  if (contentBlocks.some((item) => item.id.startsWith('section-'))) planBlocks.push(block('sections', 'section', frame, undefined, 'flow', true));
+  if (contentBlocks.some((item) => item.kind === 'table')) planBlocks.push(block('table', 'table', frame, undefined, 'flow', true));
+  if (contentBlocks.some((item) => item.id.startsWith('highlight-'))) planBlocks.push(block('highlights', 'highlights', frame, undefined, 'flow', true));
+  return planBlocks;
 }
 
-function firstPageFlowTop(geometry: PageGeometry, data: ReportData, narrative: PageSegment): number {
-  if (data.intro) return narrative.top;
+function firstPageFlowTop(geometry: PageGeometry, hasIntro: boolean, narrative: PageSegment): number {
+  if (hasIntro) return narrative.top;
   return geometry.bands.header?.bottom ?? geometry.content.top;
 }
 
-function pageBlocks(input: ResolveReportPlanInput, page: number): ResolvedReportBlock[] {
-  const { geometry, data } = input;
+function geometryForPage(geometry: PageGeometry, page: number): PageGeometry {
+  let current = geometry;
+  for (let index = 1; index < page; index += 1) current = current.continuation ?? current;
+  return current;
+}
+
+function pageBlocks(input: ResolveReportPlanInput, page: number, document: CompositionDocument): ResolvedReportBlock[] {
+  const geometry = geometryForPage(input.geometry, page);
+  const hasIntro = document.flows.main?.blocks.some((item) => item.role === 'intro') ?? false;
   const blocks: ResolvedReportBlock[] = [];
   if (geometry.bands.header) {
     const header = page === 1
@@ -51,17 +59,21 @@ function pageBlocks(input: ResolveReportPlanInput, page: number): ResolvedReport
     blocks.push(block('header', 'header', header));
   }
   if (geometry.bands.footer) blocks.push(block('footer', 'footer', geometry.bands.footer));
-  if (page === 1 && geometry.blockFrames.intro && data.intro) blocks.push(block('intro', 'intro', geometry.blockFrames.intro));
+  if (page === 1 && geometry.blockFrames.intro && hasIntro) blocks.push(block('intro', 'intro', geometry.blockFrames.intro));
+  for (const obstacle of geometry.flowObstacles ?? []) {
+    if (obstacle.id === 'intro' && hasIntro && page === 1) continue;
+    blocks.push(block(`obstacle-${obstacle.id}`, 'flow', obstacle.frame, undefined, undefined, true));
+  }
   const narrative = geometry.blockFrames.narrative;
   if (narrative && page === 1) {
     const firstPageFlow: PageSegment = {
       ...narrative,
-      top: firstPageFlowTop(geometry, data, narrative),
+      top: firstPageFlowTop(geometry, hasIntro, narrative),
       bottom: geometry.bands.footer?.top ?? geometry.continuationBottom ?? geometry.content.bottom,
     };
     blocks.push(block('flow', 'flow', firstPageFlow, undefined, undefined, true));
     blocks.push(...flowBlocks(geometry, 'flow', firstPageFlow.top, firstPageFlow.bottom));
-    blocks.push(...logicalBlocks(data, firstPageFlow));
+    blocks.push(...logicalBlocks(document, firstPageFlow));
   } else if (narrative) {
     const continuation: PageSegment = {
       x: narrative.x,
@@ -71,16 +83,17 @@ function pageBlocks(input: ResolveReportPlanInput, page: number): ResolvedReport
     };
     blocks.push(block('flow', 'flow', continuation, undefined, undefined, true));
     blocks.push(...flowBlocks(geometry, 'flow', continuation.top, continuation.bottom));
-    blocks.push(...logicalBlocks(data, continuation));
+    blocks.push(...logicalBlocks(document, continuation));
   } else {
-    const top = page === 1
+    const baseTop = page === 1
       ? geometry.bands.header?.bottom ?? geometry.content.top
       : Math.max(geometry.continuationTop ?? 0, geometry.bands.header?.bottom ?? geometry.content.top);
+    const top = Math.max(baseTop, geometry.segments[0]?.top ?? baseTop);
     const bottom = geometry.continuationBottom ?? geometry.bands.footer?.top ?? geometry.content.bottom;
     const flow: PageSegment = { x: geometry.content.x, top, width: geometry.content.width, bottom };
     blocks.push(block('flow', 'flow', flow, undefined, undefined, true));
     blocks.push(...flowBlocks(geometry, 'flow', top, bottom));
-    blocks.push(...logicalBlocks(data, flow));
+    blocks.push(...logicalBlocks(document, flow));
   }
   return blocks;
 }
@@ -94,15 +107,16 @@ function pageBlocks(input: ResolveReportPlanInput, page: number): ResolvedReport
  */
 export function resolveReportPlan(input: ResolveReportPlanInput): ResolvedReportPlan {
   const pageCount = Math.max(1, Math.floor(input.pageCount ?? 1));
+  const document = input.compositionDocument;
   return {
     schemaVersion: 1,
     templateRef: input.templateRef,
     pages: Array.from({ length: pageCount }, (_, index): ResolvedReportPagePlan => ({
       page: index + 1,
-      width: input.geometry.width,
-      height: input.geometry.height,
+      width: geometryForPage(input.geometry, index + 1).width,
+      height: geometryForPage(input.geometry, index + 1).height,
       continuation: index > 0,
-      blocks: pageBlocks(input, index + 1),
+      blocks: pageBlocks(input, index + 1, document),
     })),
   };
 }

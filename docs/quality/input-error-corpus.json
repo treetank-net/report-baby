@@ -67,37 +67,37 @@
       "expected_pattern": "string|number|Expected"
     },
     {
-      "id": "report-kpis-object",
+      "id": "report-blocks-object",
       "kind": "report",
-      "input": { "title": "KPI nie są tablicą", "kpis": {} },
-      "field": "kpis",
+      "input": { "flows": { "main": { "blocks": {} } } },
+      "field": "blocks",
       "expected_pattern": "array|Expected"
     },
     {
       "id": "report-chart-data-empty",
       "kind": "report",
-      "input": { "charts": [{ "type": "bar", "data": [] }] },
+      "input": { "flows": { "main": { "blocks": [{ "type": "chart", "chart_type": "bar", "data": [] }] } } },
       "field": "data",
       "expected_pattern": "at least 1|too_small|Array"
     },
     {
       "id": "report-chart-type-typo",
       "kind": "report",
-      "input": { "charts": [{ "type": "column", "data": [{ "label": "A", "value": 1 }] }] },
-      "field": "type",
+      "input": { "flows": { "main": { "blocks": [{ "type": "chart", "chart_type": "column", "data": [{ "label": "A", "value": 1 }] }] } } },
+      "field": "chart_type",
       "expected_pattern": "bar|line|pie|Invalid"
     },
     {
       "id": "report-table-head-missing",
       "kind": "report",
-      "input": { "table": { "body": [["SEO", 42]] } },
+      "input": { "flows": { "main": { "blocks": [{ "type": "table", "body": [["SEO", 42]] }] } } },
       "field": "head",
       "expected_pattern": "Required|array|Expected"
     },
     {
       "id": "report-section-level-invalid",
       "kind": "report",
-      "input": { "sections": [{ "heading": "Rozdział", "body": "Treść", "level": 3 }] },
+      "input": { "flows": { "main": { "blocks": [{ "type": "heading", "text": "Rozdział", "level": 3 }] } } },
       "field": "level",
       "expected_pattern": "1|2|Invalid"
     }

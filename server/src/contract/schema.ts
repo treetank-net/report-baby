@@ -50,6 +50,7 @@ const contentNodeSchema: z.ZodTypeAny = z.lazy(() => z.union([
     width: contentWidthSchema.optional().default('full'),
     fit: z.literal('contain').optional().default('contain'),
     keep_with_caption: z.boolean().optional().default(true),
+    wrap: z.enum(['none', 'left', 'right']).optional().default('none'),
   }),
   z.object({ type: z.literal('paragraph'), content: z.array(contentNodeSchema).min(1) }),
   z.object({ type: z.literal('list'), ordered: z.boolean().optional().default(false), items: z.array(z.object({ content: z.array(contentNodeSchema).min(1) })).min(1) }),
@@ -57,48 +58,141 @@ const contentNodeSchema: z.ZodTypeAny = z.lazy(() => z.union([
 
 export const reportContentNodeSchema = contentNodeSchema;
 
-const reportSectionSchema = z.object({
-  heading: z.string(),
-  body: z.string().optional(),
-  content: z.array(reportContentNodeSchema).optional(),
-  level: z.union([z.literal(1), z.literal(2)]).optional(),
-}).superRefine((section, context) => {
-  if ((section.body === undefined) === (section.content === undefined)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'A section must provide exactly one of body or content.' });
+const compositionRoleSchema = z.enum([
+  'intro', 'heading', 'body', 'table', 'chart', 'metric', 'header', 'sidebar',
+  'quote', 'footer', 'title', 'subtitle', 'eyebrow',
+]);
+
+const compositionBlockBase = {
+  id: z.string().optional(),
+  role: compositionRoleSchema.optional(),
+  atomic: z.boolean().optional(),
+  keep_with_next_lines: z.number().int().nonnegative().optional(),
+};
+
+export const compositionInputBlockSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('text'),
+    ...compositionBlockBase,
+    text: z.string().optional(),
+    content: z.array(reportContentNodeSchema).optional(),
+  }).strict(),
+  z.object({
+    type: z.literal('heading'),
+    ...compositionBlockBase,
+    text: z.string(),
+    level: z.union([z.literal(1), z.literal(2)]).optional(),
+  }).strict(),
+  z.object({
+    type: z.literal('list-item'),
+    ...compositionBlockBase,
+    text: z.string(),
+  }).strict(),
+  z.object({
+    type: z.literal('image'),
+    ...compositionBlockBase,
+    src: z.string().optional(),
+    asset_id: z.string().optional(),
+    alt: z.string().optional(),
+    caption: z.string().optional(),
+    width: contentWidthSchema.optional().default('full'),
+    fit: z.literal('contain').optional().default('contain'),
+    keep_with_caption: z.boolean().optional().default(true),
+    wrap: z.enum(['none', 'left', 'right']).optional().default('none'),
+  }).strict(),
+  z.object({
+    type: z.literal('table'),
+    ...compositionBlockBase,
+    head: z.array(z.string()).min(1),
+    body: z.array(z.array(z.union([z.string(), z.number()]))),
+    caption: z.string().optional(),
+  }).strict(),
+  z.object({
+    type: z.literal('chart'),
+    ...compositionBlockBase,
+    chart_type: z.enum(['bar', 'line', 'pie']),
+    title: z.string().optional(),
+    subtitle: z.string().optional(),
+    prefix: z.string().optional(),
+    suffix: z.string().optional(),
+    data: z.array(datumSchema).min(1),
+  }).strict(),
+  z.object({
+    type: z.literal('metric'),
+    ...compositionBlockBase,
+    label: z.string(),
+    value: z.union([z.string(), z.number()]),
+    delta: z.string().optional(),
+    trend: z.enum(['up', 'down', 'flat']).optional(),
+    note: z.string().optional(),
+  }).strict(),
+]);
+
+const compositionInputCoreSchema = z.object({
+  flows: z.record(z.object({
+    blocks: z.array(compositionInputBlockSchema),
+    continuation: z.enum(['allowed', 'forbidden']).optional().default('allowed'),
+  }).strict()).refine((flows) => Object.keys(flows).length > 0, 'At least one flow is required.'),
+  assets: z.array(z.object({
+    id: z.string(),
+    source: z.string(),
+    alt: z.string().optional(),
+    caption: z.string().optional(),
+    width: contentWidthSchema.optional().default('full'),
+    fit: z.literal('contain').optional().default('contain'),
+    keep_with_caption: z.boolean().optional().default(true),
+  }).strict()).optional(),
+}).strict().superRefine((input, context) => {
+  for (const [flowId, flow] of Object.entries(input.flows)) {
+    flow.blocks.forEach((block, index) => {
+      if (block.type === 'text' && block.text === undefined && block.content === undefined) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['flows', flowId, 'blocks', index], message: 'A text block must provide text or content.' });
+      }
+      if (block.type !== 'image') return;
+      if ((block.src === undefined) === (block.asset_id === undefined)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['flows', flowId, 'blocks', index], message: 'An image must provide exactly one of src or asset_id.' });
+      }
+    });
   }
 });
 
-export const reportDataSchema = z.object({
-  title: z.string().optional(),
-  subtitle: z.string().optional(),
-  brand: z.string().optional().describe('Client/company name shown in the top-left corner'),
-  period: z.string().optional().describe('Reporting period shown in the top-right corner; keep short'),
-  intro: z.string().optional().describe('Lead paragraph under the title'),
-  kpis: z.array(cardSchema).optional().describe('KPI cards; keep labels under ~28 chars to avoid clipping'),
-  charts: z.array(reportChartSchema).optional(),
-  sections: z
-    .array(reportSectionSchema)
-    .optional()
-    .describe('Narrative sections; heading stays on the same page as the body. level 2 renders a subheading under the preceding level 1 chapter. Body text accepts **bold** inline markup'),
-  table: z
-    .object({
-      head: z.array(z.string()).min(1),
-      body: z.array(z.array(z.union([z.string(), z.number()]))),
-      caption: z.string().optional(),
-    })
-    .optional(),
-  highlights: z.array(z.string()).optional().describe('Bullet list rendered under a "Highlights" heading'),
-  highlights_title: z.string().optional().describe('Heading above the bullet list; defaults to "Highlights"'),
-  footer: z.string().optional().describe('Shown on every page; keep under ~120 chars'),
-  title_page: z
-    .object({
-      eyebrow: z.string().optional().describe('Small uppercase kicker above the cover title'),
-      title: z.string().optional(),
-      subtitle: z.string().optional(),
-      period: z.string().optional().describe('Reporting period shown in the cover top-right corner'),
-    })
-    .optional()
-    .describe('Full-bleed cover page rendered as page 1 instead of the compact header; the body starts on page 2'),
+function semanticFlowAlias(value: unknown): unknown {
+  return Array.isArray(value) ? { blocks: value } : value;
+}
+
+function semanticContentAlias(value: unknown, role: 'header' | 'footer'): unknown {
+  if (typeof value === 'string') return { blocks: [{ type: 'text', role, text: value }] };
+  return semanticFlowAlias(value);
+}
+
+/**
+ * The canonical input is `flows`. These small shorthands are intentionally
+ * semantic aliases, not support for the removed report object: they only
+ * name a flow and still accept the same block vocabulary.
+ */
+export const compositionInputSchema = z.preprocess((value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const source = value as Record<string, unknown>;
+  const flows = source.flows && typeof source.flows === 'object' && !Array.isArray(source.flows)
+    ? { ...(source.flows as Record<string, unknown>) }
+    : {};
+  const aliases: Array<[string, string]> = [['main', 'main'], ['header', 'header'], ['footer', 'footer'], ['title', 'title']];
+  for (const [key, flowId] of aliases) if (source[key] !== undefined && flows[flowId] === undefined) flows[flowId] = key === 'header' || key === 'footer' ? semanticContentAlias(source[key], key) : semanticFlowAlias(source[key]);
+  if (source.headerContent !== undefined && flows.header === undefined) flows.header = semanticContentAlias(source.headerContent, 'header');
+  if (source.footerContent !== undefined && flows.footer === undefined) flows.footer = semanticContentAlias(source.footerContent, 'footer');
+  if (source.header_content !== undefined && flows.header === undefined) flows.header = semanticContentAlias(source.header_content, 'header');
+  if (source.footer_content !== undefined && flows.footer === undefined) flows.footer = semanticContentAlias(source.footer_content, 'footer');
+  const { main: _main, header: _header, footer: _footer, title: _title, headerContent: _headerContent, footerContent: _footerContent, header_content: _header_content, footer_content: _footer_content, ...canonical } = source;
+  return { ...canonical, flows };
+}, compositionInputCoreSchema).superRefine((input, context) => {
+  for (const [flowId, flow] of Object.entries(input.flows)) {
+    flow.blocks.forEach((block, index) => {
+      if (block.type !== 'image') return;
+      if ((block.src === undefined) === (block.asset_id === undefined)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['flows', flowId, 'blocks', index], message: 'An image must provide exactly one of src or asset_id.' });
+      }
+    });
+  }
 });
 
 const slideCommonSchema = {
@@ -125,7 +219,7 @@ const slideCommonSchema = {
   }).optional(),
 };
 
-export const slideSchema = z.discriminatedUnion('type', [
+const slideRenderSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('title'), ...slideCommonSchema, eyebrow: z.string().optional() }),
   z.object({ type: z.literal('metrics'), ...slideCommonSchema, metrics: z.array(cardSchema).min(1).max(6), body: z.string().optional(), callout: z.string().optional() }),
   z.object({
@@ -145,6 +239,27 @@ export const slideSchema = z.discriminatedUnion('type', [
       .describe('Exactly two side-by-side columns; pair it with template_ref "slides/two-column" for the matching layout'),
   }),
 ]);
+
+const slideFlowSchema = z.object({
+  blocks: z.array(compositionInputBlockSchema),
+  continuation: z.enum(['allowed', 'forbidden']).optional().default('forbidden'),
+}).strict();
+
+/**
+ * A slide is a discrete composition surface. Its content is always expressed
+ * through named flows; the renderer's former archetype object is an internal
+ * representation and is not part of the public input contract.
+ */
+export const slideSchema = z.object({
+  layout: z.enum(['title', 'metrics', 'chart', 'table', 'narrative', 'conclusions', 'columns']),
+  notes: z.string().max(SLIDE_NOTES_MAX_CHARS).optional(),
+  brand_ref: z.string().optional(),
+  template_ref: z.string().optional(),
+  surface: z.string().optional(),
+  direction: z.enum(['ltr', 'rtl']).optional(),
+  overrides: slideCommonSchema.overrides,
+  flows: z.record(slideFlowSchema).refine((flows) => Object.keys(flows).length > 0, 'A slide must provide at least one named flow.'),
+}).strict();
 
 export const brandOverrideSchema = z.object({
   fit: z.object({ strategy: z.enum(['none', 'shrink-to-fit']).optional(), min_body_pt: z.number().optional(), min_heading_pt: z.number().optional() }).optional(),
@@ -199,7 +314,7 @@ export const reportDiagnosticsField = {
     .describe('Response detail. "summary" (default) returns the written path, resolved brand profile, page count and warnings. "full" adds the resolved report layout plan for every page.'),
 };
 
-export type ReportInput = z.infer<typeof reportDataSchema>;
-export type Slide = z.infer<typeof slideSchema>;
+export type CompositionInput = z.infer<typeof compositionInputSchema>;
+export type Slide = z.infer<typeof slideRenderSchema>;
 export type SlideInput = z.infer<typeof slideSchema>;
 export type SlideDeckInput = z.infer<typeof slideDeckSchema>;

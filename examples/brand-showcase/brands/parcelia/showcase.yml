@@ -6,44 +6,343 @@ showcase:
   reports:
     - id: light-report
       profile: surfaces/light
+      template_ref: pages/showcase-report
       data:
-        title: From signal to momentum
-        subtitle: A light commerce report surface
-        period: Q2 2026
-        intro: The same business story can use a warm paper canvas, navy type and orange actions.
-        kpis:
-          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
-          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
-          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
-        charts:
-          - { type: bar, title: Where momentum comes from, subtitle: Share of qualified pipeline, data: [{ label: Core, value: 42 }, { label: Automation, value: 28 }, { label: Collaboration, value: 19 }, { label: Regions, value: 11 }] }
-        sections:
-          - { heading: The product is becoming a habit, body: Teams return more often when the path from first result to shared workflow is clear. }
-        highlights: [Keep the first result visible., Turn successful workflows into team habits.]
-        footer: Parcelia showcase · light report
+        flows:
+          title:
+            continuation: forbidden
+            blocks:
+              - type: heading
+                text: From signal to momentum
+                role: title
+                level: 1
+              - type: text
+                text: A light commerce report surface
+                role: subtitle
+              - type: text
+                text: Q2 2026
+                role: eyebrow
+          main:
+            blocks:
+              - type: text
+                text: The same business story can use a warm paper canvas, navy type and orange actions.
+                role: intro
+                keep_with_next_lines: 2
+              - type: metric
+                label: Active teams
+                value: 18.4k
+                delta: +12.8%
+                trend: up
+                role: metric
+              - type: metric
+                label: Activation
+                value: 64.2%
+                delta: +6.4 pp
+                trend: up
+                role: metric
+              - type: metric
+                label: Expansion
+                value: €2.8m
+                delta: +18.1%
+                trend: up
+                role: metric
+              - type: chart
+                chart_type: bar
+                title: Where momentum comes from
+                subtitle: Share of qualified pipeline
+                data:
+                  - label: Core
+                    value: 42
+                  - label: Automation
+                    value: 28
+                  - label: Collaboration
+                    value: 19
+                  - label: Regions
+                    value: 11
+                role: chart
+              - type: heading
+                text: The product is becoming a habit
+                role: heading
+                level: 2
+              - type: text
+                text: Teams return more often when the path from first result to shared workflow is clear.
+                role: body
+              - type: heading
+                id: highlights-heading
+                text: Highlights
+                role: heading
+                level: 2
+              - type: list-item
+                text: Keep the first result visible.
+                role: body
+              - type: list-item
+                text: Turn successful workflows into team habits.
+                role: body
+          footer:
+            blocks:
+              - type: text
+                text: Parcelia showcase · light report
+                role: footer
     - id: dark-report
       profile: surfaces/dark
+      template_ref: pages/showcase-report-band
       data:
-        title: From signal to momentum
-        subtitle: A dark commerce report surface
-        period: Q2 2026
-        intro: Dark navy is a deliberate mode for high-energy commerce moments, not a requirement for every page.
-        kpis:
-          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
-          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
-          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
-        charts:
-          - { type: line, title: Weekly active teams, subtitle: A steady climb, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] }
-        sections:
-          - { heading: Make the next action obvious, body: A dark canvas can carry a bold visual while orange and cream preserve the product’s warmth. }
-        highlights: [Use contrast to focus attention., Keep data accents purposeful.]
-        footer: Parcelia showcase · dark report
+        flows:
+          title:
+            continuation: forbidden
+            blocks:
+              - type: heading
+                text: From signal to momentum
+                role: title
+                level: 1
+              - type: text
+                text: A dark commerce report surface
+                role: subtitle
+              - type: text
+                text: Q2 2026
+                role: eyebrow
+          main:
+            blocks:
+              - type: text
+                text: Dark navy is a deliberate mode for high-energy commerce moments, not a requirement for every page.
+                role: intro
+                keep_with_next_lines: 2
+              - type: metric
+                label: Active teams
+                value: 18.4k
+                delta: +12.8%
+                trend: up
+                role: metric
+              - type: metric
+                label: Activation
+                value: 64.2%
+                delta: +6.4 pp
+                trend: up
+                role: metric
+              - type: metric
+                label: Expansion
+                value: €2.8m
+                delta: +18.1%
+                trend: up
+                role: metric
+              - type: chart
+                chart_type: line
+                title: Weekly active teams
+                subtitle: A steady climb
+                data:
+                  - label: W1
+                    value: 11200
+                  - label: W2
+                    value: 12400
+                  - label: W3
+                    value: 13900
+                  - label: W4
+                    value: 15400
+                  - label: W5
+                    value: 18400
+                role: chart
+              - type: heading
+                text: Make the next action obvious
+                role: heading
+                level: 2
+              - type: text
+                text: A dark canvas can carry a bold visual while orange and cream preserve the product’s warmth.
+                role: body
+              - type: heading
+                id: highlights-heading
+                text: Highlights
+                role: heading
+                level: 2
+              - type: list-item
+                text: Use contrast to focus attention.
+                role: body
+              - type: list-item
+                text: Keep data accents purposeful.
+                role: body
+          footer:
+            blocks:
+              - type: text
+                text: Parcelia showcase · dark report
+                role: footer
   decks:
     - id: mixed-surfaces
       slides:
-        - { type: title, profile: surfaces/graphic, data: { eyebrow: Q2 2026 / PRODUCT SIGNALS, title: From signal to momentum, subtitle: Graphic cover with a commerce ribbon and parcel geometry } }
-        - { type: metrics, profile: surfaces/light, data: { title: The light signal board, subtitle: Warm paper, navy type and orange action colour, body: The warm surface keeps the business story open while orange marks the next action., callout: "Segmented brand contract · light surface before the dark decision mode", metrics: [{ label: Active teams, value: 18.4k, delta: +12.8%, trend: up }, { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up }, { label: Expansion, value: €2.8m, delta: +18.1%, trend: up }] } }
-        - { type: chart, profile: surfaces/dark, data: { title: The dark signal board, subtitle: High-energy navy surface, chart: { type: line, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] } } }
-        - { type: narrative, profile: surfaces/gray, data: { title: A gray editorial surface, body: Gray can act as a neutral staging area between a dark cover and an orange decision moment., highlights: [Use quiet contrast for explanation., Keep the signal hierarchy explicit.] } }
-        - { type: table, profile: surfaces/accent, data: { title: An accent surface for decisions, subtitle: Orange carries the call to action, head: [Bet, Signal, Owner], body: [[First-result guidance, +6.4 pp, Product], [Team ritual prompts, +14%, Lifecycle], [Regional proof points, €2.8m, Growth], [Carrier confidence, +9.2 pp, Operations], [Faster exceptions, -18%, Support], [Shared planning, +11%, Partnerships]] } }
-        - { type: conclusions, profile: surfaces/light, data: { title: Make momentum repeatable, subtitle: Return to the warm light surface for the close, items: [Shorten the path to first value., Make collaboration natural., Let evidence lead the expansion story.] } }
+        - layout: title
+          brand_ref: brand://parcelia/surfaces/graphic
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: From signal to momentum
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: Graphic cover with a commerce ribbon and parcel geometry
+                  role: subtitle
+            eyebrow:
+              blocks:
+                - type: text
+                  text: Q2 2026 / PRODUCT SIGNALS
+                  role: eyebrow
+        - layout: metrics
+          brand_ref: brand://parcelia/surfaces/light
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: The light signal board
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: Warm paper
+                  role: subtitle
+            main:
+              blocks:
+                - type: metric
+                  label: Active teams
+                  value: 18.4k
+                  delta: +12.8%
+                  trend: up
+                  role: metric
+                - type: metric
+                  label: Activation
+                  value: 64.2%
+                  delta: +6.4 pp
+                  trend: up
+                  role: metric
+                - type: metric
+                  label: Expansion
+                  value: €2.8m
+                  delta: +18.1%
+                  trend: up
+                  role: metric
+            body:
+              blocks:
+                - type: text
+                  text: The warm surface keeps the business story open while orange marks the next action.
+                  role: body
+            callout:
+              blocks:
+                - type: text
+                  text: Segmented brand contract · light surface before the dark decision mode
+                  role: quote
+        - layout: chart
+          brand_ref: brand://parcelia/surfaces/dark
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: The dark signal board
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: High-energy navy surface
+                  role: subtitle
+            main:
+              blocks:
+                - type: chart
+                  chart_type: line
+                  data:
+                    - label: W1
+                      value: 11200
+                    - label: W2
+                      value: 12400
+                    - label: W3
+                      value: 13900
+                    - label: W4
+                      value: 15400
+                    - label: W5
+                      value: 18400
+                  role: chart
+        - layout: narrative
+          brand_ref: brand://parcelia/surfaces/gray
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: A gray editorial surface
+                  role: title
+                  level: 1
+            main:
+              blocks:
+                - type: text
+                  text: Gray can act as a neutral staging area between a dark cover and an orange decision moment.
+                  role: body
+                - type: list-item
+                  text: Use quiet contrast for explanation.
+                  role: body
+                - type: list-item
+                  text: Keep the signal hierarchy explicit.
+                  role: body
+        - layout: table
+          brand_ref: brand://parcelia/surfaces/accent
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: An accent surface for decisions
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: Orange carries the call to action
+                  role: subtitle
+            main:
+              blocks:
+                - type: table
+                  head:
+                    - Bet
+                    - Signal
+                    - Owner
+                  body:
+                    - - First-result guidance
+                      - +6.4 pp
+                      - Product
+                    - - Team ritual prompts
+                      - +14%
+                      - Lifecycle
+                    - - Regional proof points
+                      - €2.8m
+                      - Growth
+                    - - Carrier confidence
+                      - +9.2 pp
+                      - Operations
+                    - - Faster exceptions
+                      - -18%
+                      - Support
+                    - - Shared planning
+                      - +11%
+                      - Partnerships
+                  role: table
+        - layout: conclusions
+          brand_ref: brand://parcelia/surfaces/light
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: Make momentum repeatable
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: Return to the warm light surface for the close
+                  role: subtitle
+            main:
+              blocks:
+                - type: list-item
+                  text: Shorten the path to first value.
+                  role: body
+                - type: list-item
+                  text: Make collaboration natural.
+                  role: body
+                - type: list-item
+                  text: Let evidence lead the expansion story.
+                  role: body

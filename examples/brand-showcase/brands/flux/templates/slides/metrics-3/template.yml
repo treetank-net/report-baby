@@ -17,10 +17,6 @@ slots:
   lockup:
     type: lockup
     frame: { x: 0.06, y: 0.05, width: 0.03625, height: 0.0533333333 }
-  lockup-name:
-    type: text
-    frame: { x: 0.115, y: 0.05, width: 0.18, height: 0.0533333333 }
-    role: lockup-name
   title:
     type: text
     region: header
@@ -47,11 +43,13 @@ slots:
     frame: { x: 0.05, y: 0.60, width: 0.90, height: 0.10 }
     max_lines: 3
     overflow: shrink-to-fit
+    vertical_align: middle
   callout:
     type: text
     frame: { x: 0.05, y: 0.76, width: 0.90, height: 0.10 }
     max_lines: 2
     overflow: shrink-to-fit
+    vertical_align: middle
 
 constraints:
   inside_canvas: true

@@ -13,14 +13,14 @@ try {
     brand: 'Two-column fixture',
     footer: 'External fallback fixture',
     slides: [{
-      type: 'columns',
+      layout: 'columns',
       template_ref: 'slides/two-column',
-      title: 'One decision, two perspectives',
-      subtitle: 'A slide-only layout owned by an external template file.',
-      columns: [
-        { heading: 'Signal', body: 'The first column carries the evidence and its short explanation.', highlights: ['One source of truth'] },
-        { heading: 'Action', body: 'The second column carries the response, owner and next step.', highlights: ['One clear decision'] },
-      ],
+      flows: {
+        title: { blocks: [{ type: 'heading', text: 'One decision, two perspectives' }] },
+        subtitle: { blocks: [{ type: 'text', text: 'A slide-only layout owned by an external template file.' }] },
+        left: { blocks: [{ type: 'heading', text: 'Signal' }, { type: 'text', text: 'The first column carries the evidence and its short explanation.' }, { type: 'list-item', text: 'One source of truth' }] },
+        right: { blocks: [{ type: 'heading', text: 'Action' }, { type: 'text', text: 'The second column carries the response, owner and next step.' }, { type: 'list-item', text: 'One clear decision' }] },
+      },
     }],
   }, null, 2));
   const result = runProcess(process.execPath, ['example-bundle.cjs', '--kind', 'deck', '--brand-root', '../examples/brand-showcase/brands', '--brand', 'brand://orbit/primary', '--input', input, '--out', output, '--formats', 'pdf,png,pptx'], { cwd: root });

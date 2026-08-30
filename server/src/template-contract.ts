@@ -4,8 +4,16 @@ import { extname } from 'node:path';
 import { parse } from 'yaml';
 
 export type TemplateKind = 'slide' | 'page';
-export type TemplateSlotKind = 'text' | 'image' | 'lockup' | 'metric-card';
+export type TemplateSlotKind = 'text' | 'image' | 'lockup' | 'metric-card' | 'chart' | 'table';
 export type TemplateOverflow = 'reject' | 'shrink-to-fit';
+export type TemplateFlowContinuation = 'allowed' | 'forbidden';
+export type TemplateVerticalAlign = 'top' | 'middle' | 'bottom';
+export type TemplateLengthUnit = 'percent' | 'px' | 'mm';
+
+export interface TemplateLength {
+  value: number;
+  unit: TemplateLengthUnit;
+}
 
 export interface NormalizedFrame {
   x: number;
@@ -18,10 +26,26 @@ export interface CompiledTemplateSlot {
   id: string;
   kind: TemplateSlotKind;
   frame: NormalizedFrame;
+  continuationFrame?: NormalizedFrame;
   region?: string;
   role?: string;
+  allowedBlockIds?: string[];
+  allowedBlockKinds?: string[];
+  textAlign?: 'left' | 'center' | 'right';
+  verticalAlign?: TemplateVerticalAlign;
+  gap?: TemplateLength;
   maxLines?: number;
   overflow?: TemplateOverflow;
+  grow?: PageBlockGrowth;
+}
+
+export interface CompiledTemplateFlow {
+  id: string;
+  slots: string[];
+  continuationSlots?: string[];
+  continuation: TemplateFlowContinuation;
+  repeat?: 'each-page';
+  startPage?: number;
 }
 
 export interface PageMargins {
@@ -34,6 +58,19 @@ export interface PageMargins {
 export interface PageFlow {
   align: 'justify' | 'left';
   hyphenate: boolean;
+  lead?: string;
+}
+
+export interface PageBlockGrowth {
+  axis: 'y';
+  maxHeight: number;
+  auto?: boolean;
+  pushes?: string[];
+}
+
+export interface PageFlowObstacle {
+  id: string;
+  frame: NormalizedFrame;
 }
 
 export interface PageGeometry {
@@ -46,8 +83,11 @@ export interface PageGeometry {
     widths: number[];
   };
   reservedBands: Record<string, NormalizedFrame>;
+  flowObstacles: PageFlowObstacle[];
   blockFrames: Record<string, NormalizedFrame>;
+  blockGrowth: Record<string, PageBlockGrowth>;
   flow: PageFlow;
+  continuation?: PageGeometry;
 }
 
 export type TemplateArchetype = 'title' | 'metrics' | 'chart' | 'table' | 'narrative' | 'conclusions' | 'columns';
@@ -61,11 +101,13 @@ export interface CompiledTemplate {
   canvas: { width: 1; height: 1; direction: 'ltr' | 'rtl' };
   regions: Record<string, NormalizedFrame>;
   slots: Record<string, CompiledTemplateSlot>;
+  flows: Record<string, CompiledTemplateFlow>;
   constraints: {
     insideCanvas: boolean;
     noOverlap: boolean;
   };
   page?: PageGeometry;
+  pageTitle?: boolean;
 }
 
 export interface ResolvedTemplatePlan {
@@ -73,7 +115,8 @@ export interface ResolvedTemplatePlan {
   direction: 'ltr' | 'rtl';
   regions: Record<string, NormalizedFrame>;
   slots: Record<string, NormalizedFrame>;
-  slotRules: Record<string, { maxLines?: number; overflow?: TemplateOverflow }>;
+  slotRules: Record<string, { maxLines?: number; overflow?: TemplateOverflow; verticalAlign?: TemplateVerticalAlign }>;
+  flows: Record<string, CompiledTemplateFlow>;
   constraints: CompiledTemplate['constraints'];
 }
 
@@ -142,6 +185,59 @@ function nonNegativeNumberAt(value: unknown, path: string): number {
   return result;
 }
 
+function lengthAt(value: unknown, path: string): TemplateLength | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) fail(path, 'must be a non-negative number or a length with %, px or mm.');
+    return { value, unit: 'percent' };
+  }
+  if (typeof value !== 'string') fail(path, 'must be a number or a length with %, px or mm.');
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)(%|px|mm)$/);
+  if (!match) fail(path, 'must use a number with %, px or mm.');
+  return { value: Number(match[1]), unit: match[2] === '%' ? 'percent' : match[2] as 'px' | 'mm' };
+}
+
+function blockGrowthAt(value: unknown, path: string, frame: NormalizedFrame): PageBlockGrowth | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) fail(path, 'must be an object.');
+  if (value.axis !== undefined && value.axis !== 'y') fail(`${path}.axis`, "must be 'y'.");
+  const auto = value.max_height === undefined;
+  const maxHeight = auto ? 1 - frame.y : positiveNumberAt(value.max_height, `${path}.max_height`);
+  if (maxHeight < frame.height) fail(`${path}.max_height`, 'must not be smaller than the block height.');
+  if (frame.y + maxHeight > 1) fail(`${path}.max_height`, 'must keep the growing block inside the normalized canvas.');
+  const pushes = value.pushes === undefined ? undefined : value.pushes;
+  if (pushes !== undefined && (!Array.isArray(pushes) || pushes.some((item) => typeof item !== 'string' || item.length === 0))) {
+    fail(`${path}.pushes`, 'must contain non-empty block names.');
+  }
+  return { axis: 'y', maxHeight, ...(auto ? { auto: true } : {}), ...(pushes === undefined ? {} : { pushes: [...pushes] }) };
+}
+
+function templateFlowsAt(value: unknown, path: string, slots: Record<string, CompiledTemplateSlot>): Record<string, CompiledTemplateFlow> {
+  if (value === undefined) return {};
+  if (!isRecord(value)) fail(path, 'must be an object.');
+  return Object.fromEntries(Object.entries(value).map(([id, raw]) => {
+    if (!isRecord(raw)) fail(`${path}.${id}`, 'must be an object.');
+    const rawSlots = raw.slots;
+    if (!Array.isArray(rawSlots) || rawSlots.length === 0 || rawSlots.some((slot) => typeof slot !== 'string' || slot.length === 0)) {
+      fail(`${path}.${id}.slots`, 'must contain one or more named slots.');
+    }
+    for (const slot of rawSlots) {
+      if (!slots[slot]) fail(`${path}.${id}.slots`, `references unknown slot '${slot}'.`);
+    }
+    const rawContinuationSlots = raw.continuation_slots;
+    if (rawContinuationSlots !== undefined && (!Array.isArray(rawContinuationSlots) || rawContinuationSlots.length === 0 || rawContinuationSlots.some((slot) => typeof slot !== 'string' || slot.length === 0))) {
+      fail(`${path}.${id}.continuation_slots`, 'must contain one or more named slots when provided.');
+    }
+    for (const slot of rawContinuationSlots ?? []) {
+      if (!slots[slot]) fail(`${path}.${id}.continuation_slots`, `references unknown slot '${slot}'.`);
+    }
+    const continuation = raw.continuation === undefined || raw.continuation === 'allowed' ? 'allowed' : raw.continuation === 'forbidden' ? 'forbidden' : fail(`${path}.${id}.continuation`, "must be 'allowed' or 'forbidden'.");
+    const repeat = raw.repeat === undefined ? undefined : raw.repeat === 'each-page' ? raw.repeat : fail(`${path}.${id}.repeat`, "must be 'each-page'.");
+    const startPage = optionalPositiveInteger(raw.start_page, `${path}.${id}.start_page`);
+    return [id, { id, slots: [...rawSlots], ...(rawContinuationSlots === undefined ? {} : { continuationSlots: [...rawContinuationSlots] }), continuation, ...(repeat === undefined ? {} : { repeat }), ...(startPage === undefined ? {} : { startPage }) }];
+  }));
+}
+
 function pageMarginsAt(value: unknown, path: string): PageMargins {
   if (!isRecord(value)) fail(path, 'must contain top, right, bottom and left margins.');
   return {
@@ -180,17 +276,46 @@ function pageGeometryAt(value: unknown, path: string): PageGeometry {
     for (const [id, item] of entriesAt(raw, `${path}.${field}`)) result[id] = frameAt(item, `${path}.${field}.${id}`);
     return result;
   };
+  const flowObstacles = value.flow_obstacles === undefined
+    ? []
+    : !Array.isArray(value.flow_obstacles)
+      ? fail(`${path}.flow_obstacles`, 'must be an array.')
+      : value.flow_obstacles.map((item, index) => {
+        if (!isRecord(item)) fail(`${path}.flow_obstacles.${index}`, 'must be an object.');
+        const id = stringAt(item.id, `${path}.flow_obstacles.${index}.id`);
+        return { id, frame: frameAt(item.frame ?? item, `${path}.flow_obstacles.${index}`) };
+      });
+  const blockFrames = frameDictionary(value.blocks, 'blocks');
+  const blockGrowth: Record<string, PageBlockGrowth> = {};
+  for (const [id, item] of entriesAt(value.blocks, `${path}.blocks`)) {
+    const frame = blockFrames[id];
+    const growth = blockGrowthAt(item.grow, `${path}.blocks.${id}.grow`, frame);
+    if (growth) blockGrowth[id] = growth;
+  }
   const flow = isRecord(value.flow) ? value.flow : {};
   const align = flow.align === undefined || flow.align === 'left' ? 'left' : flow.align === 'justify' ? 'justify' : fail(`${path}.flow.align`, "must be 'justify' or 'left'.");
   if (flow.hyphenate !== undefined && typeof flow.hyphenate !== 'boolean') fail(`${path}.flow.hyphenate`, 'must be boolean.');
+  const lead = flow.lead === undefined ? undefined : stringAt(flow.lead, `${path}.flow.lead`);
+  if (lead !== undefined && !blockFrames[lead]) fail(`${path}.flow.lead`, `references unknown block '${lead}'.`);
+  for (const [id, growth] of Object.entries(blockGrowth)) {
+    for (const target of growth.pushes ?? []) {
+      if (!blockFrames[target]) fail(`${path}.blocks.${id}.grow.pushes`, `references unknown block '${target}'.`);
+    }
+  }
+  const continuation = value.continuation === undefined
+    ? undefined
+    : pageGeometryAt(value.continuation, `${path}.continuation`);
   return {
     width,
     height,
     margins,
     columns: { count, gutter, widths },
     reservedBands: frameDictionary(value.reserved_bands, 'reserved_bands'),
-    blockFrames: frameDictionary(value.blocks, 'blocks'),
-    flow: { align, hyphenate: flow.hyphenate === true },
+    flowObstacles,
+    blockFrames,
+    blockGrowth,
+    flow: { align, hyphenate: flow.hyphenate === true, ...(lead === undefined ? {} : { lead }) },
+    ...(continuation === undefined ? {} : { continuation }),
   };
 }
 
@@ -211,28 +336,59 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
 
   const slots: Record<string, CompiledTemplateSlot> = {};
   for (const [slotId, slot] of entriesAt(source.slots, 'slots')) {
-    const slotKind = slot.type === 'text' || slot.type === 'image' || slot.type === 'lockup' || slot.type === 'metric-card' ? slot.type : fail(`slots.${slotId}.type`, "must be 'text', 'image', 'lockup' or 'metric-card'.");
+    const slotKind = slot.type === 'text' || slot.type === 'image' || slot.type === 'lockup' || slot.type === 'metric-card' || slot.type === 'chart' || slot.type === 'table' ? slot.type : fail(`slots.${slotId}.type`, "must be 'text', 'image', 'lockup', 'metric-card', 'chart' or 'table'.");
     const region = slot.region === undefined ? undefined : stringAt(slot.region, `slots.${slotId}.region`);
     if (region && !regions[region]) fail(`slots.${slotId}.region`, `references unknown region '${region}'.`);
+    const allowedBlockIds = slot.allowed_block_ids === undefined ? undefined : slot.allowed_block_ids;
+    if (allowedBlockIds !== undefined && (!Array.isArray(allowedBlockIds) || allowedBlockIds.some((item) => typeof item !== 'string' || item.length === 0))) {
+      fail(`slots.${slotId}.allowed_block_ids`, 'must contain non-empty block ids.');
+    }
+    const allowedBlockKinds = slot.allowed_block_kinds === undefined ? undefined : slot.allowed_block_kinds;
+    if (allowedBlockKinds !== undefined && (!Array.isArray(allowedBlockKinds) || allowedBlockKinds.some((item) => typeof item !== 'string' || item.length === 0))) {
+      fail(`slots.${slotId}.allowed_block_kinds`, 'must contain non-empty block kinds.');
+    }
     const frame = slot.frame !== undefined
       ? frameAt(slot.frame, `slots.${slotId}.frame`)
       : region
         ? regions[region]
         : fail(`slots.${slotId}`, 'needs a frame or a region.');
+    const continuationFrame = slot.continuation_frame === undefined
+      ? undefined
+      : frameAt(slot.continuation_frame, `slots.${slotId}.continuation_frame`);
     const overflow = slot.overflow === undefined || slot.overflow === 'reject' || slot.overflow === 'shrink-to-fit'
       ? slot.overflow
       : fail(`slots.${slotId}.overflow`, "must be 'reject' or 'shrink-to-fit'.");
+    const verticalAlign = slot.vertical_align === undefined || slot.vertical_align === 'top' || slot.vertical_align === 'middle' || slot.vertical_align === 'bottom'
+      ? slot.vertical_align
+      : fail(`slots.${slotId}.vertical_align`, "must be 'top', 'middle' or 'bottom'.");
+    const gap = slotKind === 'lockup' ? lengthAt(slot.gap, `slots.${slotId}.gap`) : undefined;
+    const grow = blockGrowthAt(slot.grow, `slots.${slotId}.grow`, frame);
     slots[slotId] = {
       id: slotId,
       kind: slotKind,
       frame,
+      ...(continuationFrame === undefined ? {} : { continuationFrame }),
       region,
       role: slot.role === undefined ? undefined : stringAt(slot.role, `slots.${slotId}.role`),
+      ...(allowedBlockIds === undefined ? {} : { allowedBlockIds: [...allowedBlockIds] }),
+      ...(allowedBlockKinds === undefined ? {} : { allowedBlockKinds: [...allowedBlockKinds] }),
+      textAlign: slot.align === undefined || slot.align === 'left' || slot.align === 'center' || slot.align === 'right'
+        ? slot.align
+        : fail(`slots.${slotId}.align`, "must be 'left', 'center' or 'right'."),
+      ...(verticalAlign === undefined ? {} : { verticalAlign }),
+      ...(gap === undefined ? {} : { gap }),
       maxLines: optionalPositiveInteger(slot.max_lines, `slots.${slotId}.max_lines`),
       overflow,
+      ...(grow === undefined ? {} : { grow }),
     };
   }
   if (Object.keys(slots).length === 0) fail('slots', 'must contain at least one named slot.');
+  for (const [slotId, slot] of Object.entries(slots)) {
+    for (const pushedId of slot.grow?.pushes ?? []) {
+      if (!slots[pushedId] || pushedId === slotId) fail(`slots.${slotId}.grow.pushes`, `references unknown or self slot '${pushedId}'.`);
+    }
+  }
+  const flows = templateFlowsAt(source.flows, 'flows', slots);
   const archetype = source.archetype === undefined ? undefined : source.archetype === 'title' || source.archetype === 'metrics' || source.archetype === 'chart' || source.archetype === 'table' || source.archetype === 'narrative' || source.archetype === 'conclusions' || source.archetype === 'columns'
     ? source.archetype
     : fail('archetype', "must be one of 'title', 'metrics', 'chart', 'table', 'narrative', 'conclusions' or 'columns'.");
@@ -244,6 +400,7 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
   const page = source.page === undefined ? undefined : pageGeometryAt(source.page, 'page');
   if (kind === 'page' && !page) fail('page', 'is required for kind page templates.');
   if (kind === 'slide' && page) fail('page', 'is only allowed for kind page templates.');
+  if (source.title_page !== undefined && typeof source.title_page !== 'boolean') fail('title_page', 'must be boolean.');
 
   const constraints = isRecord(source.constraints) ? source.constraints : {};
   if (constraints.inside_canvas !== undefined && typeof constraints.inside_canvas !== 'boolean') fail('constraints.inside_canvas', 'must be boolean.');
@@ -268,11 +425,13 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
     canvas: { width: 1, height: 1, direction },
     regions,
     slots,
+    flows,
     constraints: {
       insideCanvas: true,
       noOverlap: constraints.no_overlap === true,
     },
     page,
+    ...(source.title_page === true ? { pageTitle: true } : {}),
   };
 }
 
@@ -291,7 +450,8 @@ export function resolvePlan(
     direction,
     regions: Object.fromEntries(Object.entries(compiledTemplate.regions).map(([id, frame]) => [id, mirror(frame, direction)])),
     slots: Object.fromEntries(Object.entries(compiledTemplate.slots).map(([id, slot]) => [id, mirror(slot.frame, direction)])),
-    slotRules: Object.fromEntries(Object.entries(compiledTemplate.slots).map(([id, slot]) => [id, { maxLines: slot.maxLines, overflow: slot.overflow }])),
+    slotRules: Object.fromEntries(Object.entries(compiledTemplate.slots).map(([id, slot]) => [id, { maxLines: slot.maxLines, overflow: slot.overflow, verticalAlign: slot.verticalAlign }])),
+    flows: compiledTemplate.flows,
     constraints: compiledTemplate.constraints,
   };
 }

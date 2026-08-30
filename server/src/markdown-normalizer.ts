@@ -32,6 +32,7 @@ function image(node: MarkdownNode): NormalizedImageNode {
     width: 'full',
     fit: 'contain',
     keepWithCaption: true,
+    wrap: 'none',
   };
 }
 
@@ -98,6 +99,7 @@ function structuredNode(node: any, diagnostics: string[]): NormalizedContentNode
     width: node.width === 'full' || typeof node.width !== 'string' ? 'full' : node.width,
     fit: 'contain',
     keepWithCaption: node.keep_with_caption !== false,
+    wrap: node.wrap === 'left' || node.wrap === 'right' ? node.wrap : 'none',
   };
   if (node.type === 'strong' || node.type === 'emphasis' || node.type === 'link') {
     const children = Array.isArray(node.content) ? node.content.map((child: unknown) => structuredNode(child, diagnostics)).filter(Boolean) as NormalizedContentNode[] : [];

@@ -7,6 +7,7 @@ export interface ResolvedLockupPlan {
   placement: LockupPlacement;
   physicalSide: 'left' | 'right';
   spacing: LockupSpacing;
+  verticalAlign: 'top' | 'middle' | 'bottom';
   mark: ResolvedBox;
   name: ResolvedBox;
 }
@@ -26,7 +27,7 @@ export interface ResolvedSlidePlan {
   eyebrowConstraints: { maxLines: number; overflow?: 'reject' | 'shrink-to-fit' };
   lockup: ResolvedLockupPlan;
   safeArea: ResolvedBox;
-  slotRules: Record<string, { maxLines?: number; overflow?: 'reject' | 'shrink-to-fit' }>;
+  slotRules: Record<string, { maxLines?: number; overflow?: 'reject' | 'shrink-to-fit'; verticalAlign?: 'top' | 'middle' | 'bottom' }>;
   slots: { title: ResolvedBox; subtitle: ResolvedBox; eyebrow?: ResolvedBox; image?: ResolvedBox; header: ResolvedBox; content: ResolvedBox; footer: ResolvedBox; [key: string]: ResolvedBox | undefined };
   sourceTemplate?: { id: string; surface: string; archetype?: string };
 }

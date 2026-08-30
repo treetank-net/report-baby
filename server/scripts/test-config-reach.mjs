@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { pdfContentHash } from './lib/artifact-inspect.mjs';
 import { runProcess } from './lib/process.mjs';
 import { fail } from './lib/fail.mjs';
+import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
 
 const repoRoot = resolve(new URL('../..', import.meta.url).pathname);
 const serverRoot = join(repoRoot, 'server');
@@ -34,13 +35,16 @@ const variants = {
   reservedHeader: (source) => source.replace('height: 0.18', 'height: 0.30'),
   reservedFooter: (source) => source.replace('y: 0.93, width: 1, height: 0.07', 'y: 0.88, width: 1, height: 0.12'),
   introFrame: (source) => source.replace('x: 0.081, y: 0.24', 'x: 0.081, y: 0.28'),
-  narrativeFrame: (source) => source.replace('height: 0.53', 'height: 0.46'),
+  contentFrame: (source) => source.replace(
+    'frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.75 }',
+    'frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.63 }',
+  ),
 };
 
 async function render(templateRoot, outputRoot) {
   await mkdir(outputRoot, { recursive: true });
   const inputPath = join(outputRoot, 'input.json');
-  await writeFile(inputPath, `${JSON.stringify(input)}\n`);
+  await writeFile(inputPath, `${JSON.stringify({ ...input, data: legacyFixtureToCompositionInput(input.data) })}\n`);
   const result = runProcess(process.execPath, [bundle, '--kind', 'report', '--brand-root', join(repoRoot, 'examples/brand-showcase/brands'), '--brand', 'brand://flux/primary', '--input', inputPath, '--out', outputRoot, '--formats', 'pdf'], {
     cwd: serverRoot,
     env: { ...process.env, REPORT_BABY_TEMPLATE_DIR: templateRoot },

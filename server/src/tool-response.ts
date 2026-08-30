@@ -1,6 +1,7 @@
 import type { BrandDiagnostics } from './brand-context.js';
 import type { ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
 import type { ResolvedReportPlan } from './core/model/resolved-report-plan.js';
+import type { CompositionEvaluation, CompositionPlan } from './composition/engine.js';
 import type { ReportDrawing } from './report-drawing-recorder.js';
 import type { SlideDeck } from './slides.js';
 
@@ -80,6 +81,7 @@ export interface ReportRenderDiagnosticsInput {
   diagnostics: BrandDiagnostics;
   plan: ResolvedReportPlan;
   drawings: ReportDrawing[];
+  composition?: { plan: CompositionPlan; evaluation: CompositionEvaluation };
 }
 
 export function reportRenderDiagnostics(input: ReportRenderDiagnosticsInput, detail: DiagnosticsDetail): Record<string, unknown> {
@@ -90,7 +92,13 @@ export function reportRenderDiagnostics(input: ReportRenderDiagnosticsInput, det
     templateRef: input.plan.templateRef,
     surface: input.diagnostics.surface,
     appliedOverrides: input.diagnostics.appliedOverrides,
+    layoutEngine: 'composition-planner',
   });
   if (detail !== 'full') return summary;
-  return { ...summary, reportPlan: input.plan, drawings: input.drawings };
+  return {
+    ...summary,
+    reportPlan: input.plan,
+    drawings: input.drawings,
+    ...(input.composition ? { compositionPlan: input.composition.plan, compositionEvaluation: input.composition.evaluation } : {}),
+  };
 }

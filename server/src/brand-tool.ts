@@ -151,8 +151,7 @@ regions:
   hero: { frame: { x: 0.06, y: 0.06, width: 0.88, height: 0.70 } }
   content: { frame: { x: 0.06, y: 0.18, width: 0.82, height: 0.56 } }
 slots:
-  lockup: { type: lockup, frame: { x: 0.06, y: 0.06, width: 0.03625, height: 0.0533333333 } }
-  lockup-name: { type: text, frame: { x: 0.115, y: 0.06, width: 0.22, height: 0.0533333333 }, role: lockup-name, max_lines: 1, overflow: shrink-to-fit }
+  lockup: { type: lockup, frame: { x: 0.06, y: 0.06, width: 0.03625, height: 0.0644444444 } }
   eyebrow: { type: text, region: content, frame: { x: 0.06, y: 0.22, width: 0.70, height: 0.06 }, max_lines: 1, overflow: reject }
   title: { type: text, region: content, frame: { x: 0.06, y: 0.31, width: 0.70, height: 0.20 }, role: heading-display, max_lines: 2, overflow: shrink-to-fit }
   subtitle: { type: text, region: content, frame: { x: 0.06, y: 0.56, width: 0.70, height: 0.12 }, role: body, max_lines: 2, overflow: shrink-to-fit }
@@ -185,27 +184,67 @@ showcase:
     - id: primary-report
       profile: primary
       data:
-        title: ${JSON.stringify(`${name} signal review`)}
-        subtitle: A starter report generated from the brandbook
-        period: Q2 2026
-        intro: This report is intentionally ordinary. Change the profile, assets and template, then render it again to see which decisions belong to the brand.
-        kpis:
-          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
-          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
-          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
-        charts:
-          - { type: line, title: Weekly active teams, subtitle: A steady climb, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] }
-        sections:
-          - { heading: The first useful signal, body: Keep the content simple while the visual system is being authored. The point of this fixture is to make the effect of each brand decision easy to see. }
-        highlights: [Replace the sample logo., Add a real profile only for a real use case., Inspect PDF, PNG and PPTX before publishing.]
-        footer: ${name} starter · report-baby
+        flows:
+          header:
+            blocks:
+              - { type: text, role: header, text: ${JSON.stringify(`${name} signal review`)} }
+              - { type: text, role: subtitle, text: A starter report generated from the brandbook }
+              - { type: text, role: subtitle, text: Q2 2026 }
+          main:
+            continuation: allowed
+            blocks:
+              - { type: text, role: intro, text: ${JSON.stringify('This report is intentionally ordinary. Change the profile, assets and template, then render it again to see which decisions belong to the brand.')} }
+              - { type: heading, text: ${JSON.stringify('The first useful signal')} }
+              - { type: text, text: ${JSON.stringify('Keep the content simple while the visual system is being authored. The point of this fixture is to make the effect of each brand decision easy to see.')} }
+              - { type: heading, text: ${JSON.stringify('Highlights')} }
+              - { type: list-item, text: ${JSON.stringify('Replace the sample logo.')} }
+              - { type: list-item, text: ${JSON.stringify('Add a real profile only for a real use case.')} }
+              - { type: list-item, text: ${JSON.stringify('Inspect PDF, PNG and PPTX before publishing.')} }
+          footer:
+            continuation: forbidden
+            blocks:
+              - { type: text, role: footer, text: ${name} starter · report-baby }
   decks:
     - id: primary-deck
       footer: ${name} starter · Q2 2026
       slides:
-        - { type: title, template_ref: slides/primary, profile: primary, data: { eyebrow: Q2 2026 / STARTER BRAND, title: ${JSON.stringify(`${name} signal review`)}, subtitle: Edit this title template in your brandbook } }
-        - { type: metrics, profile: primary, data: { title: The primary signal board, subtitle: Start here, then add only the surfaces the brand really needs, body: The renderer consumes the brandbook; it does not decide the identity for you., callout: Change one value, render again and compare the result., metrics: [{ label: Active teams, value: 18.4k, delta: +12.8%, trend: up }, { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up }, { label: Expansion, value: €2.8m, delta: +18.1%, trend: up }] } }
-        - { type: narrative, profile: primary, data: { title: A useful first iteration, body: Once this output looks intentional, add a second profile or a brand-owned template for a real communication mode., highlights: [Keep tokens semantic., Keep geometry in templates., Use showcase data to prove the brand.] } }
+        - layout: title
+          brand_ref: brand://${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/primary
+          template_ref: slides/primary
+          flows:
+            eyebrow:
+              blocks: [{ type: text, role: eyebrow, text: Q2 2026 / STARTER BRAND }]
+            title:
+              blocks: [{ type: heading, role: title, level: 1, text: ${JSON.stringify(`${name} signal review`)} }]
+            subtitle:
+              blocks: [{ type: text, role: subtitle, text: Edit this title template in your brandbook }]
+        - layout: metrics
+          brand_ref: brand://${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/primary
+          flows:
+            title:
+              blocks: [{ type: heading, role: title, level: 1, text: The primary signal board }]
+            subtitle:
+              blocks: [{ type: text, role: subtitle, text: ${JSON.stringify('Start here, then add only the surfaces the brand really needs')} }]
+            main:
+              blocks:
+                - { type: metric, label: Active teams, value: 18.4k, delta: +12.8%, trend: up }
+                - { type: metric, label: Activation, value: 64.2%, delta: +6.4 pp, trend: up }
+                - { type: metric, label: Expansion, value: €2.8m, delta: +18.1%, trend: up }
+            body:
+              blocks: [{ type: text, role: body, text: ${JSON.stringify('The renderer consumes the brandbook; it does not decide the identity for you.')} }]
+            callout:
+              blocks: [{ type: text, role: quote, text: ${JSON.stringify('Change one value, render again and compare the result.')} }]
+        - layout: narrative
+          brand_ref: brand://${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/primary
+          flows:
+            title:
+              blocks: [{ type: heading, role: title, level: 1, text: A useful first iteration }]
+            main:
+              blocks:
+                - { type: text, role: body, text: ${JSON.stringify('Once this output looks intentional, add a second profile or a brand-owned template for a real communication mode.')} }
+                - { type: list-item, role: body, text: ${JSON.stringify('Keep tokens semantic.')} }
+                - { type: list-item, role: body, text: ${JSON.stringify('Keep geometry in templates.')} }
+                - { type: list-item, role: body, text: ${JSON.stringify('Use showcase data to prove the brand.')} }
 `;
 }
 

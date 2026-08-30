@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict';
+import { execFile, spawn } from 'node:child_process';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { zipSync } from 'fflate';
 import { parse } from 'yaml';
 import { childProcessFailure } from './lib/process.mjs';
+import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-report-images-'));
 const contentRoot = join(temporary, 'content');
 const output = join(temporary, 'report.pdf');
+const execFileAsync = promisify(execFile);
+const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
+const reportImageQa = renderConfig.quality;
 
 function runCli(input) {
   return new Promise((resolvePromise, reject) => {
@@ -25,12 +30,14 @@ function runCli(input) {
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
     child.on('close', (code, signal) => code === 0 ? resolvePromise({ stdout, stderr }) : reject(new Error(childProcessFailure('report-image CLI', { status: code, signal, stdout, stderr }))));
-    child.stdin.end(JSON.stringify([{ tool: 'render_report', args: input }]));
+    const request = { ...input, data: legacyFixtureToCompositionInput(input.data) };
+    child.stdin.end(JSON.stringify([{ tool: 'render_report', args: request }]));
   });
 }
 
 try {
   await cp(join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png'), join(contentRoot, 'assets/map.png'), { recursive: true });
+  await writeFile(join(contentRoot, 'assets/float.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240"><rect width="400" height="240" fill="#d76b4c"/></svg>');
   const result = await runCli({
     content_root: contentRoot,
     output_path: output,
@@ -61,11 +68,10 @@ try {
   const introImage = introContent.drawings.find((drawing) => drawing.kind === 'image');
   const introCaption = introContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text === 'Intro caption');
   const introLead = introContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text.includes('lead remains selectable'));
-  const editorialTemplate = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
-  const expectedImageTop = editorialTemplate.page.height * editorialTemplate.page.reserved_bands.header.height;
+  const introImagePlacement = introContent.compositionPlan?.blockPlacements?.find((placement) => placement.kind === 'image');
   assert.equal(introContent.drawings.filter((drawing) => drawing.kind === 'image').length, 1);
   assert.ok(introImage && introImage.y < 110, JSON.stringify(introContent.drawings));
-  assert.ok(introImage && Math.abs(introImage.y - expectedImageTop) < 0.01, JSON.stringify({ introImage, expectedImageTop }));
+  assert.ok(introImage && introImagePlacement?.imageBox && Math.abs(introImage.y - introImagePlacement.imageBox.y) < 0.01, JSON.stringify({ introImage, introImagePlacement }));
   assert.ok(introCaption && introCaption.x > introImage.x, JSON.stringify(introContent.drawings));
   assert.ok(introCaption && introCaption.y > introImage.y + introImage.height, JSON.stringify(introContent.drawings));
   const controlOutput = join(temporary, 'intro-control-report.pdf');
@@ -82,7 +88,8 @@ try {
   });
   const controlContent = JSON.parse(controlResult.stdout.trim().split('\n')[0]);
   const controlLead = controlContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text.includes('lead remains selectable'));
-  assert.ok(introLead && controlLead && Math.abs(introLead.width - controlLead.width) < 0.01, JSON.stringify({ introLead, controlLead }));
+  assert.ok(introLead && controlLead, JSON.stringify({ introLead, controlLead }));
+  assert.ok(introImage && introLead && introLead.y >= introImage.y + introImage.height - reportImageQa.report_image_geometry_tolerance, JSON.stringify({ introImage, introLead }));
   const structuredOutput = join(temporary, 'structured-report.pdf');
   const structuredResult = await runCli({
     content_root: contentRoot,
@@ -95,6 +102,75 @@ try {
   });
   const structuredContent = JSON.parse(structuredResult.stdout.trim().split('\n')[0]);
   assert.equal(structuredContent.drawings.filter((drawing) => drawing.kind === 'image').length, 1, JSON.stringify(structuredContent));
+  const floatOutput = join(temporary, 'float-image-report.pdf');
+  const floatResult = await runCli({
+    template: 'pages/editorial-two-column',
+    content_root: contentRoot,
+    output_path: floatOutput,
+    diagnostics: 'full',
+    data: {
+      title: 'Float image report',
+      sections: [{
+        heading: 'Text around an image',
+        content: [{
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Before the image, the paragraph establishes the current text flow. ' },
+            { type: 'image', src: 'assets/float.svg', alt: 'Floating map', width: '60%', wrap: 'right', caption: 'Floating map' },
+            { type: 'text', text: ' After the image, the paragraph must use the remaining horizontal interval and continue below the rectangular asset without entering its boundary. '.repeat(8) },
+          ],
+        }],
+      }],
+    },
+  });
+  const floatContent = JSON.parse(floatResult.stdout.trim().split('\n')[0]);
+  const floatImage = floatContent.drawings.find((drawing) => drawing.kind === 'image');
+  const floatText = floatContent.drawings.filter((drawing) => drawing.kind === 'text' && drawing.text.includes('After the image'));
+  const floatBoundary = floatContent.compositionPlan?.graphicPlacements?.find((graphic) => graphic.graphicId.endsWith(':boundary'));
+  const floatPlanLines = floatContent.compositionPlan?.lines?.filter((line) => line.blockId.endsWith(':part-2') && line.page === floatBoundary?.page && line.slotId === floatBoundary?.slotId) ?? [];
+  assert.ok(floatImage && floatText.length > 0, JSON.stringify(floatContent.drawings));
+  assert.ok(floatBoundary && floatPlanLines.length > 0, JSON.stringify({ floatBoundary, floatPlanLines }));
+  assert.ok(floatPlanLines.some((line) => line.box.x + line.box.width <= floatBoundary.box.x), JSON.stringify({ floatBoundary, floatPlanLines }));
+  assert.ok(floatPlanLines.every((line) => line.box.x + line.box.width <= floatBoundary.box.x + reportImageQa.report_image_geometry_tolerance || line.box.y >= floatBoundary.box.y + floatBoundary.box.height - reportImageQa.report_image_geometry_tolerance), JSON.stringify({ floatBoundary, floatPlanLines }));
+  const floatPngPrefix = join(temporary, 'float-image-page');
+  await execFileAsync('pdftoppm', ['-png', '-f', '1', '-singlefile', floatOutput, floatPngPrefix]);
+  const floatPng = `${floatPngPrefix}.png`;
+  const dimensions = (await execFileAsync('identify', ['-format', '%w %h', floatPng])).stdout.trim().split(/\s+/u).map(Number);
+  const scaleX = dimensions[0] / renderConfig.pdf.page_width;
+  const scaleY = dimensions[1] / renderConfig.pdf.page_height;
+  const cropWidth = Math.max(1, Math.floor(floatImage.width * scaleX));
+  const cropHeight = Math.max(1, Math.floor(floatImage.height * scaleY));
+  const cropX = Math.max(0, Math.floor(floatImage.x * scaleX));
+  const cropY = Math.max(0, Math.floor(floatImage.y * scaleY));
+  const crop = ['-crop', `${cropWidth}x${cropHeight}+${cropX}+${cropY}`, '+repage'];
+  const redRatio = Number((await execFileAsync('convert', [floatPng, ...crop, '-fx', `((r>${reportImageQa.report_image_red_channel_min})&&(g<${reportImageQa.report_image_green_channel_max})&&(b<${reportImageQa.report_image_blue_channel_max}))`, '-format', '%[fx:mean]', 'info:'])).stdout.trim());
+  const darkRatio = Number((await execFileAsync('convert', [floatPng, ...crop, '-fx', `((r<${reportImageQa.report_image_dark_channel_max})&&(g<${reportImageQa.report_image_dark_channel_max})&&(b<${reportImageQa.report_image_dark_channel_max}))`, '-format', '%[fx:mean]', 'info:'])).stdout.trim());
+  assert.ok(Number.isFinite(redRatio) && redRatio > reportImageQa.report_image_min_red_pixel_ratio, JSON.stringify({ redRatio, floatImage, dimensions }));
+  assert.ok(Number.isFinite(darkRatio) && darkRatio < reportImageQa.report_image_max_dark_pixel_ratio, JSON.stringify({ darkRatio, floatImage, dimensions }));
+  const fallbackResult = await runCli({
+    template: 'pages/editorial-two-column',
+    content_root: contentRoot,
+    output_path: join(temporary, 'float-fallback-report.pdf'),
+    diagnostics: 'full',
+    data: {
+      title: 'Float fallback report',
+      sections: [{
+        heading: 'Promote an oversized float',
+        content: [{
+          type: 'paragraph',
+          content: [
+            { type: 'image', src: 'assets/float.svg', alt: 'Oversized floating map', width: '90%', wrap: 'left' },
+            { type: 'text', text: 'This text must start below the image when the requested float leaves less than the configured minimum line width. '.repeat(4) },
+          ],
+        }],
+      }],
+    },
+  });
+  const fallbackContent = JSON.parse(fallbackResult.stdout.trim().split('\n')[0]);
+  const fallbackImage = fallbackContent.drawings.find((drawing) => drawing.kind === 'image');
+  const fallbackText = fallbackContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text.startsWith('This text must start below the image'));
+  assert.ok(fallbackImage && fallbackText, JSON.stringify(fallbackContent.drawings));
+  assert.ok(fallbackText.y >= fallbackImage.y + fallbackImage.height - reportImageQa.report_image_geometry_tolerance, JSON.stringify({ fallbackImage, fallbackText }));
   const archivePath = join(temporary, 'brand-source.zip');
   const hero = await readFile(join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png'));
   await writeFile(archivePath, Buffer.from(zipSync({

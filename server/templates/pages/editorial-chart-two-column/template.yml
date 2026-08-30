@@ -1,0 +1,74 @@
+schema_version: 1
+id: pages/editorial-chart-two-column
+kind: page
+surface: pdf-a4
+archetype: columns
+canvas:
+  direction: ltr
+page:
+  width: 210
+  height: 297
+  margins: { top: 18, right: 17, bottom: 18, left: 17 }
+  columns:
+    count: 2
+    gutter: 6
+    widths: [85, 85]
+  reserved_bands:
+    header: { x: 0, y: 0, width: 1, height: 0.18 }
+    footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
+  flow_obstacles:
+    - id: intro
+      frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.10 }
+    - id: chart
+      frame: { x: 0.081, y: 0.28, width: 0.838, height: 0.36 }
+  blocks:
+    intro:
+      frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.10 }
+  flow:
+    align: justify
+    hyphenate: true
+    lead: intro
+  continuation:
+    width: 210
+    height: 297
+    margins: { top: 18, right: 17, bottom: 18, left: 17 }
+    columns:
+      count: 2
+      gutter: 6
+      widths: [85, 85]
+    reserved_bands:
+      header: { x: 0, y: 0, width: 1, height: 0.18 }
+      footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
+    flow_obstacles:
+      - id: continuation-chart
+        frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.46 }
+    flow:
+      align: justify
+      hyphenate: true
+slots:
+  chart:
+    type: chart
+    frame: { x: 0.081, y: 0.28, width: 0.838, height: 0.36 }
+    role: chart
+  content:
+    type: text
+    frame: { x: 0.081, y: 0.64, width: 0.838, height: 0.26 }
+  title-page-content:
+    type: text
+    frame: { x: 0.081, y: 0.25, width: 0.838, height: 0.45 }
+    role: title
+  title-page-footer:
+    type: text
+    frame: { x: 0.081, y: 0.93, width: 0.838, height: 0.04 }
+    role: footer
+  footer:
+    type: text
+    frame: { x: 0.081, y: 0.93, width: 0.838, height: 0.04 }
+flows:
+  main:
+    slots: [chart, content]
+    continuation: allowed
+  footer:
+    slots: [footer]
+    continuation: forbidden
+    repeat: each-page

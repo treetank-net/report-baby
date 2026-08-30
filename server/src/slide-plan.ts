@@ -1,8 +1,9 @@
 import type { RenderTheme } from './core/model/render-theme.js';
 import type { ResolvedBox, ResolvedLockupPlan, ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
 import type { Slide } from './contract/schema.js';
+import { readRenderConfig, type RenderConfig } from './builtin-template-source.js';
 import { logicalDirection, logicalPlacement, logicalSpacing, physicalAlign, physicalSide, resolveSlideTemplate, templateTitleAlign, type LockupPlacement, type LockupSpacing, type SlideTemplateRef, type TextDirection } from './slide-template-engine.js';
-import { resolvePlan, type CompiledTemplate, type NormalizedFrame } from './template-contract.js';
+import { resolvePlan, type CompiledTemplate, type NormalizedFrame, type TemplateLength } from './template-contract.js';
 
 export type { ResolvedBox, ResolvedLockupPlan, ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
 
@@ -16,8 +17,9 @@ export interface ResolveSlidePlanInput {
   templateSource?: CompiledTemplate;
 }
 
-const WIDTH = 1600;
-const HEIGHT = 900;
+const RENDER_CONFIG = readRenderConfig();
+const WIDTH = RENDER_CONFIG.canvas.width;
+const HEIGHT = RENDER_CONFIG.canvas.height;
 
 function toPixels(frame: NormalizedFrame): ResolvedBox {
   return { x: frame.x * WIDTH, y: frame.y * HEIGHT, width: frame.width * WIDTH, height: frame.height * HEIGHT };
@@ -25,6 +27,20 @@ function toPixels(frame: NormalizedFrame): ResolvedBox {
 
 function baseline(frame: ResolvedBox): number {
   return frame.y + frame.height * 0.55;
+}
+
+function lockupVariant(slide: Slide): RenderConfig['chrome']['lockup']['standard' | 'title' | 'compact'] {
+  return slide.type === 'title' ? RENDER_CONFIG.chrome.lockup.title : RENDER_CONFIG.chrome.lockup.standard;
+}
+
+function lockupGap(variant: ReturnType<typeof lockupVariant>, spacing: LockupSpacing): number {
+  return spacing === 'compact' ? variant.gapCompactPx : spacing === 'open' ? variant.gapOpenPx : variant.gapNormalPx;
+}
+
+function lengthToSlidePixels(length: TemplateLength, axis: 'x' | 'y'): number {
+  if (length.unit === 'px') return length.value;
+  if (length.unit === 'percent') return length.value / 100 * (axis === 'x' ? WIDTH : HEIGHT);
+  return length.value * (axis === 'x' ? WIDTH / RENDER_CONFIG.canvas.pdfWidthMm : HEIGHT / RENDER_CONFIG.canvas.pdfHeightMm);
 }
 
 export function resolveSlidePlan(input: ResolveSlidePlanInput): ResolvedSlidePlan {
@@ -69,13 +85,17 @@ export function resolveSlidePlan(input: ResolveSlidePlanInput): ResolvedSlidePla
   const contentTop = sourceContent?.y ?? headerLineY + 30;
   const content = sourceContent ?? { x: 80, y: contentTop, width: 1440, height: template.contentBottom - contentTop };
   const physical = physicalSide(direction, placement);
-  const gap = spacing === 'compact' ? 12 : spacing === 'open' ? 28 : 18;
+  const variant = lockupVariant(input.slide);
+  const lockupSource = input.templateSource?.slots.lockup;
+  const gap = lockupSource?.gap ? lengthToSlidePixels(lockupSource.gap, 'x') : lockupGap(variant, spacing);
+  const verticalAlign = lockupSource?.verticalAlign ?? variant.verticalAlign;
   const sourceLockup = sourcePlan?.slots.lockup ? toPixels(sourcePlan.slots.lockup) : undefined;
   const sourceLockupName = sourcePlan?.slots['lockup-name'] ? toPixels(sourcePlan.slots['lockup-name']) : undefined;
-  const markW = sourceLockup?.width ?? (input.slide.type === 'title' ? 58 : 48);
+  const markW = sourceLockup?.width ?? variant.markWidthPx;
   const markX = sourceLockup?.x ?? (physical === 'right' ? WIDTH - 80 - markW : 80);
-  const markY = sourceLockup?.y ?? (input.slide.type === 'title' ? 56 : 34);
-  const nameX = sourceLockupName?.x ?? (physical === 'right' ? markX - gap - 260 : markX + markW + gap);
+  const markY = sourceLockup?.y ?? variant.markYPx;
+  const nameWidth = sourceLockupName?.width ?? variant.nameWidthPx;
+  const nameX = sourceLockupName?.x ?? (physical === 'right' ? markX - gap - nameWidth : markX + markW + gap);
   const titleLayout = {
     eyebrowY: sourceEyebrow ? baseline(sourceEyebrow) : 250,
     titleBaselineY: sourceTitle ? baseline(sourceTitle) : 390,
@@ -100,11 +120,15 @@ export function resolveSlidePlan(input: ResolveSlidePlanInput): ResolvedSlidePla
       placement,
       physicalSide: physical,
       spacing,
-      mark: { x: markX, y: markY, width: markW, height: sourceLockup?.height ?? 48 },
-      name: sourceLockupName ?? { x: nameX, y: markY + 4, width: 260, height: 40 },
+      verticalAlign,
+      mark: { x: markX, y: markY, width: markW, height: sourceLockup?.height ?? variant.markHeightPx },
+      name: sourceLockupName ?? { x: nameX, y: markY, width: nameWidth, height: variant.nameHeightPx },
     },
     safeArea: sourceSafeArea ?? { x: imageArea.x * WIDTH, y: imageArea.y * HEIGHT, width: imageArea.width * WIDTH, height: imageArea.height * HEIGHT },
-    slotRules: sourcePlan?.slotRules ?? {},
+    slotRules: {
+      'lockup-name': { maxLines: 1, overflow: 'shrink-to-fit' },
+      ...(sourcePlan?.slotRules ?? {}),
+    },
     slots: {
       title,
       subtitle,
@@ -137,6 +161,6 @@ export function slidePlanSummary(plan: ResolvedSlidePlan): Record<string, unknow
       'lockup-name': plan.lockup.name,
     },
     slots: { lockup: plan.lockup.placement, title: 'title', subtitle: 'subtitle', content: 'content', footer: 'footer' },
-    lockup: { spacing: plan.lockup.spacing, physicalSide: plan.lockup.physicalSide },
+    lockup: { spacing: plan.lockup.spacing, physicalSide: plan.lockup.physicalSide, verticalAlign: plan.lockup.verticalAlign },
   };
 }

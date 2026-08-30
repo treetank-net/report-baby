@@ -16,7 +16,11 @@
 ## Phase 2 — richer charts and templates
 
 - [ ] Grouped/stacked bar chart (multiple series).
-- [ ] Multi-series line chart with legend.
+- [ ] Multi-series line chart.
+- [ ] Renderer-neutral chart legend contract: MCP accepts semantic `legend.show`
+  and `legend.position` (`top|right|bottom|left`), entries default from the
+  chart data, the planner reserves and fits the legend inside the chart box,
+  and the brand/template owns its typography, swatches, gaps, and defaults.
 - [ ] Horizontal bar chart for long category labels.
 - [ ] More report templates (one-pager, comparison, dashboard-grid).
 - [x] Template/chart data validation with zod instead of an untyped `record`

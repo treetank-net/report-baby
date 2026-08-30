@@ -38,8 +38,8 @@ const deck = {
   title: 'Selectable slide deck',
   brand: 'TreeTank',
   slides: [
-    { type: 'title', title: 'Selectable title', subtitle: 'Text survives PDF rendering' },
-    { type: 'narrative', title: 'Narrative slide', body: 'This body remains selectable in the PDF.', highlights: ['LLM visual check'] },
+    { layout: 'title', flows: { title: { blocks: [{ type: 'heading', text: 'Selectable title' }] }, subtitle: { blocks: [{ type: 'text', text: 'Text survives PDF rendering' }] } } },
+    { layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Narrative slide' }] }, main: { blocks: [{ type: 'text', text: 'This body remains selectable in the PDF.' }, { type: 'list-item', text: 'LLM visual check' }] } } },
   ],
 };
 

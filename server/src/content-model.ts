@@ -24,6 +24,7 @@ export interface NormalizedImageNode {
   width: 'full' | `${number}%`;
   fit: 'contain';
   keepWithCaption: boolean;
+  wrap: 'none' | 'left' | 'right';
 }
 
 export interface NormalizedParagraphNode {

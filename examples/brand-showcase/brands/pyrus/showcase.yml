@@ -6,44 +6,343 @@ showcase:
   reports:
     - id: light-report
       profile: surfaces/light
+      template_ref: pages/showcase-report
       data:
-        title: From signal to momentum
-        subtitle: A quiet editorial report surface
-        period: Q2 2026
-        intro: The premium system uses white space and a restrained serif voice when the content should feel considered.
-        kpis:
-          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
-          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
-          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
-        charts:
-          - { type: line, title: Weekly active teams, subtitle: A steady climb, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] }
-        sections:
-          - { heading: The product is becoming a habit, body: A quiet surface gives the narrative room to breathe and lets the pear mark do the identity work. }
-        highlights: [Keep the first result visible., Turn successful workflows into team habits.]
-        footer: Pyrus showcase · light report
+        flows:
+          title:
+            continuation: forbidden
+            blocks:
+              - type: heading
+                text: From signal to momentum
+                role: title
+                level: 1
+              - type: text
+                text: A quiet editorial report surface
+                role: subtitle
+              - type: text
+                text: Q2 2026
+                role: eyebrow
+          main:
+            blocks:
+              - type: text
+                text: The premium system uses white space and a restrained serif voice when the content should feel considered.
+                role: intro
+                keep_with_next_lines: 2
+              - type: metric
+                label: Active teams
+                value: 18.4k
+                delta: +12.8%
+                trend: up
+                role: metric
+              - type: metric
+                label: Activation
+                value: 64.2%
+                delta: +6.4 pp
+                trend: up
+                role: metric
+              - type: metric
+                label: Expansion
+                value: €2.8m
+                delta: +18.1%
+                trend: up
+                role: metric
+              - type: chart
+                chart_type: line
+                title: Weekly active teams
+                subtitle: A steady climb
+                data:
+                  - label: W1
+                    value: 11200
+                  - label: W2
+                    value: 12400
+                  - label: W3
+                    value: 13900
+                  - label: W4
+                    value: 15400
+                  - label: W5
+                    value: 18400
+                role: chart
+              - type: heading
+                text: The product is becoming a habit
+                role: heading
+                level: 2
+              - type: text
+                text: A quiet surface gives the narrative room to breathe and lets the pear mark do the identity work.
+                role: body
+              - type: heading
+                id: highlights-heading
+                text: Highlights
+                role: heading
+                level: 2
+              - type: list-item
+                text: Keep the first result visible.
+                role: body
+              - type: list-item
+                text: Turn successful workflows into team habits.
+                role: body
+          footer:
+            blocks:
+              - type: text
+                text: Pyrus showcase · light report
+                role: footer
     - id: dark-report
       profile: surfaces/dark
+      template_ref: pages/showcase-report-band
       data:
-        title: From signal to momentum
-        subtitle: A dark studio report surface
-        period: Q2 2026
-        intro: The same premium identity can move to a dark studio mode for launches, reviews and focused moments.
-        kpis:
-          - { label: Active teams, value: 18.4k, delta: +12.8%, trend: up, note: vs. previous quarter }
-          - { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up, note: first-week cohort }
-          - { label: Expansion, value: €2.8m, delta: +18.1%, trend: up, note: qualified pipeline }
-        charts:
-          - { type: bar, title: Where momentum comes from, subtitle: Share of qualified pipeline, data: [{ label: Core, value: 42 }, { label: Automation, value: 28 }, { label: Collaboration, value: 19 }, { label: Regions, value: 11 }] }
-        sections:
-          - { heading: Contrast can create focus, body: A dark mode is one of the brand’s instruments, not a replacement for its quieter editorial surface. }
-        highlights: [Use dark mode for focus., Keep the typography calm.]
-        footer: Pyrus showcase · dark report
+        flows:
+          title:
+            continuation: forbidden
+            blocks:
+              - type: heading
+                text: From signal to momentum
+                role: title
+                level: 1
+              - type: text
+                text: A dark studio report surface
+                role: subtitle
+              - type: text
+                text: Q2 2026
+                role: eyebrow
+          main:
+            blocks:
+              - type: text
+                text: The same premium identity can move to a dark studio mode for launches, reviews and focused moments.
+                role: intro
+                keep_with_next_lines: 2
+              - type: metric
+                label: Active teams
+                value: 18.4k
+                delta: +12.8%
+                trend: up
+                role: metric
+              - type: metric
+                label: Activation
+                value: 64.2%
+                delta: +6.4 pp
+                trend: up
+                role: metric
+              - type: metric
+                label: Expansion
+                value: €2.8m
+                delta: +18.1%
+                trend: up
+                role: metric
+              - type: chart
+                chart_type: bar
+                title: Where momentum comes from
+                subtitle: Share of qualified pipeline
+                data:
+                  - label: Core
+                    value: 42
+                  - label: Automation
+                    value: 28
+                  - label: Collaboration
+                    value: 19
+                  - label: Regions
+                    value: 11
+                role: chart
+              - type: heading
+                text: Contrast can create focus
+                role: heading
+                level: 2
+              - type: text
+                text: A dark mode is one of the brand’s instruments
+                role: body
+              - type: heading
+                id: highlights-heading
+                text: Highlights
+                role: heading
+                level: 2
+              - type: list-item
+                text: Use dark mode for focus.
+                role: body
+              - type: list-item
+                text: Keep the typography calm.
+                role: body
+          footer:
+            blocks:
+              - type: text
+                text: Pyrus showcase · dark report
+                role: footer
   decks:
     - id: mixed-surfaces
       slides:
-        - { type: title, profile: surfaces/graphic, data: { eyebrow: Q2 2026 / PRODUCT SIGNALS, title: From signal to momentum, subtitle: Sculptural cover with a quiet premium silhouette } }
-        - { type: metrics, profile: surfaces/light, data: { title: The light signal board, subtitle: Serif headings and generous ivory space, body: The editorial surface deliberately spends space on calm hierarchy instead of visual noise., callout: "Segmented brand contract · restraint is a composition choice, not missing data", metrics: [{ label: Active teams, value: 18.4k, delta: +12.8%, trend: up }, { label: Activation, value: 64.2%, delta: +6.4 pp, trend: up }, { label: Expansion, value: €2.8m, delta: +18.1%, trend: up }] } }
-        - { type: chart, profile: surfaces/dark, data: { title: The dark signal board, subtitle: A focused studio mode, chart: { type: line, data: [{ label: W1, value: 11200 }, { label: W2, value: 12400 }, { label: W3, value: 13900 }, { label: W4, value: 15400 }, { label: W5, value: 18400 }] } } }
-        - { type: narrative, profile: surfaces/gray, data: { title: A gray editorial surface, body: Gray creates a soft transition between the ivory system and the dark studio mode., highlights: [Use quiet contrast for explanation., Keep the signal hierarchy explicit.] } }
-        - { type: table, profile: surfaces/accent, data: { title: An accent surface for decisions, subtitle: Green carries the considered action, head: [Bet, Signal, Owner], body: [[First-result guidance, +6.4 pp, Product], [Team ritual prompts, +14%, Lifecycle], [Regional proof points, €2.8m, Growth], [Focused craft, +9.2 pp, Design], [Fewer handoffs, -18%, Operations], [Shared standards, +11%, Leadership]] } }
-        - { type: conclusions, profile: surfaces/light, data: { title: Make momentum repeatable, subtitle: Return to the quiet light surface for the close, items: [Shorten the path to first value., Make collaboration natural., Let evidence lead the expansion story.] } }
+        - layout: title
+          brand_ref: brand://pyrus/surfaces/graphic
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: From signal to momentum
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: Sculptural cover with a quiet premium silhouette
+                  role: subtitle
+            eyebrow:
+              blocks:
+                - type: text
+                  text: Q2 2026 / PRODUCT SIGNALS
+                  role: eyebrow
+        - layout: metrics
+          brand_ref: brand://pyrus/surfaces/light
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: The light signal board
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: Serif headings and generous ivory space
+                  role: subtitle
+            main:
+              blocks:
+                - type: metric
+                  label: Active teams
+                  value: 18.4k
+                  delta: +12.8%
+                  trend: up
+                  role: metric
+                - type: metric
+                  label: Activation
+                  value: 64.2%
+                  delta: +6.4 pp
+                  trend: up
+                  role: metric
+                - type: metric
+                  label: Expansion
+                  value: €2.8m
+                  delta: +18.1%
+                  trend: up
+                  role: metric
+            body:
+              blocks:
+                - type: text
+                  text: The editorial surface deliberately spends space on calm hierarchy instead of visual noise.
+                  role: body
+            callout:
+              blocks:
+                - type: text
+                  text: Segmented brand contract · restraint is a composition choice, not missing data
+                  role: quote
+        - layout: chart
+          brand_ref: brand://pyrus/surfaces/dark
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: The dark signal board
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: A focused studio mode
+                  role: subtitle
+            main:
+              blocks:
+                - type: chart
+                  chart_type: line
+                  data:
+                    - label: W1
+                      value: 11200
+                    - label: W2
+                      value: 12400
+                    - label: W3
+                      value: 13900
+                    - label: W4
+                      value: 15400
+                    - label: W5
+                      value: 18400
+                  role: chart
+        - layout: narrative
+          brand_ref: brand://pyrus/surfaces/gray
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: A gray editorial surface
+                  role: title
+                  level: 1
+            main:
+              blocks:
+                - type: text
+                  text: Gray creates a soft transition between the ivory system and the dark studio mode.
+                  role: body
+                - type: list-item
+                  text: Use quiet contrast for explanation.
+                  role: body
+                - type: list-item
+                  text: Keep the signal hierarchy explicit.
+                  role: body
+        - layout: table
+          brand_ref: brand://pyrus/surfaces/accent
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: An accent surface for decisions
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: Green carries the considered action
+                  role: subtitle
+            main:
+              blocks:
+                - type: table
+                  head:
+                    - Bet
+                    - Signal
+                    - Owner
+                  body:
+                    - - First-result guidance
+                      - +6.4 pp
+                      - Product
+                    - - Team ritual prompts
+                      - +14%
+                      - Lifecycle
+                    - - Regional proof points
+                      - €2.8m
+                      - Growth
+                    - - Focused craft
+                      - +9.2 pp
+                      - Design
+                    - - Fewer handoffs
+                      - -18%
+                      - Operations
+                    - - Shared standards
+                      - +11%
+                      - Leadership
+                  role: table
+        - layout: conclusions
+          brand_ref: brand://pyrus/surfaces/light
+          flows:
+            title:
+              blocks:
+                - type: heading
+                  text: Make momentum repeatable
+                  role: title
+                  level: 1
+            subtitle:
+              blocks:
+                - type: text
+                  text: Return to the quiet light surface for the close
+                  role: subtitle
+            main:
+              blocks:
+                - type: list-item
+                  text: Shorten the path to first value.
+                  role: body
+                - type: list-item
+                  text: Make collaboration natural.
+                  role: body
+                - type: list-item
+                  text: Let evidence lead the expansion story.
+                  role: body

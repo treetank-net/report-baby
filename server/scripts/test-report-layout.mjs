@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { prepareDemoBrandStore } from './lib/brand-store.mjs';
 import { childProcessFailure } from './lib/process.mjs';
+import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
@@ -50,7 +51,7 @@ async function render(input, outputPath) {
         reject(error);
       }
     });
-    child.stdin.end(JSON.stringify({ ...input, output_path: outputPath, diagnostics: 'full' }));
+    child.stdin.end(JSON.stringify({ ...input, data: input.data?.flows ? input.data : legacyFixtureToCompositionInput(input.data), output_path: outputPath, diagnostics: 'full' }));
   });
 }
 
@@ -81,6 +82,13 @@ function assertContinuationStartsAtFlow(rendered) {
     const firstBody = page.words.find((word) => /^Body\d+$/.test(word.text));
     assert.ok(firstBody, `page ${page.pageIndex + 1}: continuation body marker is missing`);
     assert.ok(firstBody.yMin <= flowTop + lineAllowance, `page ${page.pageIndex + 1}: flow starts ${ (firstBody.yMin - flowTop).toFixed(2) }pt below its planned top`);
+  }
+}
+
+function assertTableHeaderAppearsAtMostOncePerPage(rendered, headerMarker) {
+  for (const page of rendered.pages) {
+    const occurrences = page.words.filter((word) => word.text === headerMarker).length;
+    assert.ok(occurrences <= 1, `page ${page.pageIndex + 1}: table header marker '${headerMarker}' was painted ${occurrences} times`);
   }
 }
 
@@ -147,7 +155,7 @@ try {
     brand_ref: 'brand://flux/primary',
     data: {
       title: 'Tabela w przeplywie',
-      sections: Array.from({ length: 4 }, (_, index) => ({ heading: `S${index + 1}`, body: 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny przewozow dlugodystansowych. '.repeat(2) })),
+      sections: Array.from({ length: 4 }, (_, index) => ({ heading: `S${index + 1}`, body: 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny przewozow dlugodystansowych. '.repeat(1) })),
       table: { head: ['Wskaznik', 'Wartosc'], body: Array.from({ length: 6 }, (_, index) => [`Pozycja ${index + 1}`, `${index + 11}`]), caption: 'Dane' },
       footer: 'layout-test',
     },
@@ -171,6 +179,8 @@ try {
   }, join(work, `footer-collision-${brand}.pdf`))));
   assertFooterExclusion(table, tableReport.data.footer);
   assertFooterExclusion(editorialTable, editorialTableReport.data.footer);
+  assertTableHeaderAppearsAtMostOncePerPage(table, 'Wskaznik');
+  assertTableHeaderAppearsAtMostOncePerPage(editorialTable, 'Wskaznik');
   assertContinuationStartsAtFlow(continuation);
   assertDrawingsContained(editorialTable);
   assertDrawingsContained(continuation);

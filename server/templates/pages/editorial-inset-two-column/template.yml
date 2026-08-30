@@ -1,0 +1,81 @@
+schema_version: 1
+id: pages/editorial-inset-two-column
+kind: page
+surface: pdf-a4
+archetype: columns
+canvas:
+  direction: ltr
+page:
+  width: 210
+  height: 297
+  margins: { top: 18, right: 17, bottom: 18, left: 17 }
+  columns:
+    count: 2
+    gutter: 6
+    widths: [85, 85]
+  reserved_bands:
+    header: { x: 0, y: 0, width: 1, height: 0.18 }
+    footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
+  flow_obstacles:
+    - id: intro
+      frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.52 }
+    - id: chart
+      frame: { x: 0.081, y: 0.53, width: 0.838, height: 0.18 }
+  flow:
+    align: left
+    hyphenate: true
+  continuation:
+    width: 210
+    height: 297
+    margins: { top: 18, right: 17, bottom: 18, left: 17 }
+    columns:
+      count: 2
+      gutter: 6
+      widths: [85, 85]
+    reserved_bands:
+      header: { x: 0, y: 0, width: 1, height: 0.18 }
+      footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
+    flow:
+      align: left
+      hyphenate: true
+slots:
+  intro:
+    type: text
+    frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.52 }
+    role: intro
+    grow: { axis: y }
+  quote-a:
+    type: text
+    frame: { x: 0.081, y: 0.36, width: 0.838, height: 0.09 }
+    continuation_frame: { x: 0.081, y: 0.36, width: 0.838, height: 0.09 }
+    role: quote
+    grow: { axis: y }
+  quote-b:
+    type: text
+    frame: { x: 0.081, y: 0.63, width: 0.838, height: 0.09 }
+    continuation_frame: { x: 0.081, y: 0.63, width: 0.838, height: 0.09 }
+    role: quote
+    grow: { axis: y }
+  chart:
+    type: chart
+    frame: { x: 0.081, y: 0.53, width: 0.838, height: 0.18 }
+    role: chart
+  content:
+    type: text
+    frame: { x: 0.081, y: 0.20, width: 0.838, height: 0.72 }
+    continuation_frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.75 }
+  footer:
+    type: text
+    frame: { x: 0.081, y: 0.93, width: 0.838, height: 0.04 }
+flows:
+  main:
+    slots: [intro, chart, content]
+    continuation_slots: [content, quote-a, content, quote-b, content]
+    continuation: allowed
+  footer:
+    slots: [footer]
+    continuation: forbidden
+    repeat: each-page
+constraints:
+  inside_canvas: true
+  no_overlap: false

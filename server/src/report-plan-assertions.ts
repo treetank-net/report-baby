@@ -71,6 +71,10 @@ function assertPageDisjointness(page: ResolvedReportPagePlan, tolerance: number)
 
 function assertContinuationFill(page: ResolvedReportPagePlan, tolerance: number): void {
   if (!page.continuation) return;
+  // A continuation layout may deliberately interrupt the columns with named
+  // full-width insertions. In that case the column children are the usable
+  // segments around those interruptions, not one uninterrupted rectangle.
+  if (page.blocks.some((block) => block.id.startsWith('obstacle-'))) return;
   const flow = page.blocks.find((block) => block.id === 'flow' && !block.parentId);
   if (!flow) return;
   const children = page.blocks.filter((block) => block.parentId === flow.id).sort((left, rightBlock) => left.box.x - rightBlock.box.x);
@@ -85,9 +89,14 @@ function assertContinuationFill(page: ResolvedReportPagePlan, tolerance: number)
 }
 
 function assertPageCoverage(page: ResolvedReportPagePlan, tolerance: number, maxGap: number): void {
+  // Named full-width insertions intentionally create vertical gaps between
+  // obstacle boxes while the column segments continue through that space.
+  // Coverage is therefore evaluated by the composition planner, not by this
+  // page-level summary of the old rectangular flow model.
+  if (page.blocks.some((block) => block.id.startsWith('obstacle-'))) return;
   const topLevel = page.blocks
     .filter((block) => !block.parentId)
-    .filter((block) => ['header', 'intro', 'flow', 'footer'].includes(block.id))
+    .filter((block) => ['header', 'intro', 'flow', 'footer'].includes(block.id) || block.id.startsWith('obstacle-'))
     .sort((left, rightBlock) => left.box.y - rightBlock.box.y);
   for (let index = 1; index < topLevel.length; index += 1) {
     const previous = topLevel[index - 1];

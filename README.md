@@ -44,6 +44,33 @@ data and receive a path to a finished PDF or PNG.
 | `inspect_brand_template` | read-only validation and inspection of a brand template |
 | `update_plugin` | update the plugin |
 
+### Slide input
+
+Each slide is a discrete surface. It is selected with `layout` and provides
+named `flows`; content never spills to the next slide unless a future template
+explicitly opts into that policy. The renderer uses the same semantic block
+vocabulary as reports, while the slide layout remains the template's concern:
+
+```json
+{
+  "slides": [
+    {
+      "layout": "narrative",
+      "flows": {
+        "title": { "blocks": [{ "type": "heading", "text": "A title", "role": "title" }] },
+        "main": { "blocks": [{ "type": "text", "text": "The story.", "role": "body" }] },
+        "footer": { "blocks": [{ "type": "text", "text": "Internal", "role": "footer" }] }
+      }
+    }
+  ]
+}
+```
+
+`title`, `metrics`, `chart`, `table`, `narrative`, `conclusions` and `columns`
+are layout choices, not separate legacy data formats. For `columns`, use the
+named `left` and `right` flows. The internal renderer model is an adapter for
+the existing PDF/PNG/PPTX drawing capabilities and is not accepted as input.
+
 ## Charts
 
 report-baby includes an SVG engine for bar, line, and pie charts and KPI cards.
@@ -228,6 +255,10 @@ root, `brand://` for the selected brand directory, `source://` for the complete
 materialized source, or an explicit HTTP(S) URL. Markdown images default to
 full-width flow; structured image nodes may set a percentage `width`,
 `caption`, `alt`, `title`, and `fit: "contain"`.
+Structured images may also set `wrap: "left"` or `wrap: "right"` in a
+dynamically planned page flow; if the remaining line measure is too small, the
+planner safely falls back to ordinary block placement. The default is
+`wrap: "none"`.
 
 ## License
 

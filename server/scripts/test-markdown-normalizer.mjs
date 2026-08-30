@@ -20,8 +20,11 @@ try {
   assert.equal(document.nodes[1].type, 'paragraph');
   assert.equal(document.nodes[1].children[0].type, 'image');
   assert.equal(document.nodes[1].children[0].caption, 'Map caption');
+  assert.equal(document.nodes[1].children[0].wrap, 'none');
   assert.equal(document.nodes[2].type, 'list');
   assert.match(normalizedText(document), /Intro strong and emphasis/);
+  const structured = bundled.normalizeStructuredContent([{ type: 'image', src: 'assets/map.png', wrap: 'left' }]);
+  assert.equal(structured.nodes[0].wrap, 'left');
   const unsupported = normalizeMarkdown('<div>unsafe</div>\n\n---');
   assert.equal(unsupported.nodes.length, 0);
   assert.equal(unsupported.diagnostics.length, 2);

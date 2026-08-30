@@ -1,0 +1,87 @@
+schema_version: 1
+id: pages/editorial-metrics-two-column
+kind: page
+surface: pdf-a4
+archetype: columns
+canvas:
+  direction: ltr
+page:
+  width: 210
+  height: 297
+  margins: { top: 18, right: 17, bottom: 18, left: 17 }
+  columns:
+    count: 2
+    gutter: 6
+    widths: [85, 85]
+  reserved_bands:
+    header: { x: 0, y: 0, width: 1, height: 0.18 }
+    footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
+  flow_obstacles:
+    - id: intro
+      frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.10 }
+    - id: metric-1
+      frame: { x: 0.081, y: 0.28, width: 0.267, height: 0.11 }
+    - id: metric-2
+      frame: { x: 0.366, y: 0.28, width: 0.267, height: 0.11 }
+    - id: metric-3
+      frame: { x: 0.651, y: 0.28, width: 0.267, height: 0.11 }
+  blocks:
+    intro:
+      frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.10 }
+  flow:
+    align: justify
+    hyphenate: true
+    lead: intro
+  continuation:
+    width: 210
+    height: 297
+    margins: { top: 18, right: 17, bottom: 18, left: 17 }
+    columns:
+      count: 2
+      gutter: 6
+      widths: [85, 85]
+    reserved_bands:
+      header: { x: 0, y: 0, width: 1, height: 0.18 }
+      footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
+    flow_obstacles:
+      - id: continuation-metric-1
+        frame: { x: 0.081, y: 0.18, width: 0.267, height: 0.21 }
+      - id: continuation-metric-2
+        frame: { x: 0.366, y: 0.18, width: 0.267, height: 0.21 }
+      - id: continuation-metric-3
+        frame: { x: 0.651, y: 0.18, width: 0.267, height: 0.21 }
+    flow:
+      align: justify
+      hyphenate: true
+slots:
+  metric-1:
+    type: metric-card
+    frame: { x: 0.081, y: 0.28, width: 0.267, height: 0.11 }
+  metric-2:
+    type: metric-card
+    frame: { x: 0.366, y: 0.28, width: 0.267, height: 0.11 }
+  metric-3:
+    type: metric-card
+    frame: { x: 0.651, y: 0.28, width: 0.267, height: 0.11 }
+  content:
+    type: text
+    frame: { x: 0.081, y: 0.43, width: 0.838, height: 0.47 }
+  title-page-content:
+    type: text
+    frame: { x: 0.081, y: 0.25, width: 0.838, height: 0.45 }
+    role: title
+  title-page-footer:
+    type: text
+    frame: { x: 0.081, y: 0.93, width: 0.838, height: 0.04 }
+    role: footer
+  footer:
+    type: text
+    frame: { x: 0.081, y: 0.93, width: 0.838, height: 0.04 }
+flows:
+  main:
+    slots: [metric-1, metric-2, metric-3, content]
+    continuation: allowed
+  footer:
+    slots: [footer]
+    continuation: forbidden
+    repeat: each-page

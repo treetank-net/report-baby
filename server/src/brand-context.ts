@@ -473,6 +473,7 @@ function extractTheme(brandDir: string, document: RecordValue, surface: string |
     composition,
     theme: {
       ...DEFAULT_THEME,
+      brandName: brandNameFrom(document),
       background: role('background', DEFAULT_THEME.background),
       foreground: role('foreground', DEFAULT_THEME.foreground),
       primary: role('primary', paletteValues[0] ?? DEFAULT_THEME.primary),
@@ -582,6 +583,93 @@ function parseReference(value: string): { brandId?: string; profile?: string; fi
   return { filePath: value };
 }
 
+function sourceGrowthFromCompiled(value: unknown): RecordValue | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    axis: value.axis,
+    max_height: value.maxHeight,
+    ...(value.pushes === undefined ? {} : { pushes: value.pushes }),
+  };
+}
+
+function sourcePageFromCompiled(value: unknown): RecordValue | undefined {
+  if (!isRecord(value)) return undefined;
+  const margins = isRecord(value.margins) ? value.margins : {};
+  const columns = isRecord(value.columns) ? value.columns : {};
+  const reservedBands = isRecord(value.reservedBands) ? value.reservedBands : {};
+  const flowObstacles = Array.isArray(value.flowObstacles)
+    ? value.flowObstacles.map((obstacle) => isRecord(obstacle) ? { id: obstacle.id, frame: obstacle.frame } : obstacle)
+    : value.flowObstacles;
+  const blockFrames = isRecord(value.blockFrames) ? value.blockFrames : {};
+  const blockGrowth = isRecord(value.blockGrowth) ? value.blockGrowth : {};
+  const blocks = Object.fromEntries(Object.entries(blockFrames).map(([id, frame]) => {
+    const growth = sourceGrowthFromCompiled(blockGrowth[id]);
+    return [id, { frame, ...(growth === undefined ? {} : { grow: growth }) }];
+  }));
+  const flow = isRecord(value.flow) ? value.flow : {};
+  const continuation = sourcePageFromCompiled(value.continuation);
+  return {
+    width: value.width,
+    height: value.height,
+    margins: { top: margins.top, right: margins.right, bottom: margins.bottom, left: margins.left },
+    columns: { count: columns.count, gutter: columns.gutter, widths: columns.widths },
+    reserved_bands: reservedBands,
+    flow_obstacles: flowObstacles,
+    blocks,
+    flow: { align: flow.align, hyphenate: flow.hyphenate, ...(flow.lead === undefined ? {} : { lead: flow.lead }) },
+    ...(continuation === undefined ? {} : { continuation }),
+  };
+}
+
+function sourceSlotFromCompiled(value: unknown): RecordValue {
+  const item = isRecord(value) ? value : {};
+  const growth = sourceGrowthFromCompiled(item.grow);
+  return {
+    type: item.kind,
+    frame: item.frame,
+    ...(item.continuationFrame === undefined ? {} : { continuation_frame: item.continuationFrame }),
+    ...(item.region === undefined ? {} : { region: item.region }),
+    ...(item.role === undefined ? {} : { role: item.role }),
+    ...(item.allowedBlockIds === undefined ? {} : { allowed_block_ids: item.allowedBlockIds }),
+    ...(item.allowedBlockKinds === undefined ? {} : { allowed_block_kinds: item.allowedBlockKinds }),
+    ...(item.textAlign === undefined ? {} : { align: item.textAlign }),
+    ...(item.maxLines === undefined ? {} : { max_lines: item.maxLines }),
+    ...(item.overflow === undefined ? {} : { overflow: item.overflow }),
+    ...(growth === undefined ? {} : { grow: growth }),
+  };
+}
+
+function sourceFromCompiledTemplate(compiled: RecordValue): RecordValue {
+  const slots = isRecord(compiled.slots) ? compiled.slots : {};
+  const flows = isRecord(compiled.flows) ? compiled.flows : {};
+  const sourceFlows = Object.fromEntries(Object.entries(flows).map(([id, value]) => {
+    const flow = isRecord(value) ? value : {};
+    return [id, {
+      slots: flow.slots,
+      ...(flow.continuationSlots === undefined ? {} : { continuation_slots: flow.continuationSlots }),
+      continuation: flow.continuation,
+      ...(flow.repeat === undefined ? {} : { repeat: flow.repeat }),
+      ...(flow.startPage === undefined ? {} : { start_page: flow.startPage }),
+    }];
+  }));
+  const page = sourcePageFromCompiled(compiled.page);
+  const constraints = isRecord(compiled.constraints) ? compiled.constraints : {};
+  return {
+    schema_version: 1,
+    id: compiled.id,
+    kind: compiled.kind,
+    surface: compiled.surface,
+    ...(compiled.archetype === undefined ? {} : { archetype: compiled.archetype }),
+    canvas: compiled.canvas,
+    regions: compiled.regions,
+    slots: Object.fromEntries(Object.entries(slots).map(([id, value]) => [id, sourceSlotFromCompiled(value)])),
+    flows: sourceFlows,
+    ...(page === undefined ? {} : { page }),
+    ...(compiled.pageTitle === true ? { title_page: true } : {}),
+    constraints: { inside_canvas: constraints.insideCanvas ?? true, no_overlap: constraints.noOverlap ?? false },
+  };
+}
+
 export async function readBrandTemplateSource(
   brandRoot: string,
   brandRef: string | undefined,
@@ -601,21 +689,7 @@ export async function readBrandTemplateSource(
     if (existsSync(compiledPath)) {
       const compiled = await readTemplateSource(compiledPath) as RecordValue;
       if (isRecord(compiled) && compiled.schemaVersion === 1 && isRecord(compiled.slots)) {
-        const source = {
-          schema_version: 1,
-          id: compiled.id,
-          kind: compiled.kind,
-          surface: compiled.surface,
-          archetype: compiled.archetype,
-          canvas: compiled.canvas,
-          regions: compiled.regions,
-          slots: Object.fromEntries(Object.entries(compiled.slots).map(([id, slot]) => {
-            const item = slot as RecordValue;
-            return [id, { type: item.kind, frame: item.frame, region: item.region, role: item.role, max_lines: item.maxLines, overflow: item.overflow }];
-          })),
-          constraints: { inside_canvas: isRecord(compiled.constraints) ? compiled.constraints.insideCanvas : true, no_overlap: isRecord(compiled.constraints) ? compiled.constraints.noOverlap : false },
-        };
-        return { source, path: compiledPath };
+        return { source: sourceFromCompiledTemplate(compiled), path: compiledPath };
       }
     }
   }
@@ -829,7 +903,7 @@ export async function readBrandShowcase(brandRoot: string, brandRef: string): Pr
   for (const deck of [...(Array.isArray(showcase.decks) ? showcase.decks : [])]) {
     if (!isRecord(deck) || !Array.isArray(deck.slides)) throw new Error(`Every showcase deck must contain a slides array for ${reference.brandId}`);
     for (const slide of deck.slides) {
-      if (!isRecord(slide) || typeof slide.type !== 'string' || (slide.profile !== undefined && typeof slide.profile !== 'string')) throw new Error(`Every showcase slide needs a type and optional profile for ${reference.brandId}`);
+      if (!isRecord(slide) || typeof slide.layout !== 'string' || (slide.brand_ref !== undefined && typeof slide.brand_ref !== 'string')) throw new Error(`Every showcase slide needs a layout and optional brand_ref for ${reference.brandId}`);
     }
   }
   return showcase;

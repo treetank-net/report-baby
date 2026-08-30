@@ -5,12 +5,15 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { unzipSync, zipSync } from 'fflate';
+import { parse } from 'yaml';
 import { writePublicBrandFixture } from './lib/fixtures.mjs';
 import { runProcess } from './lib/process.mjs';
+import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
 
 const outputDir = await mkdtemp(join(tmpdir(), 'report-baby-test-'));
 const brandDir = join(outputDir, 'brands');
 await writePublicBrandFixture(brandDir);
+const renderConfig = parse(await readFile(join(process.cwd(), 'templates', 'render-config.yml'), 'utf8'));
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [process.env.REPORT_BABY_TEST_BUNDLE ?? 'bundle.cjs'],
@@ -19,6 +22,10 @@ const transport = new StdioClientTransport({
   stderr: 'pipe',
 });
 const client = new Client({ name: 'report-baby-public-test', version: '1.0.0' });
+const rawCallTool = client.callTool.bind(client);
+client.callTool = (request) => request.name === 'render_report' && request.arguments?.data && !request.arguments.data.flows
+  ? rawCallTool({ ...request, arguments: { ...request.arguments, data: legacyFixtureToCompositionInput(request.arguments.data) } })
+  : rawCallTool(request);
 
 try {
   await client.connect(transport);
@@ -86,7 +93,7 @@ try {
       },
     },
   });
-  assert.notEqual(report.isError, true);
+  assert.notEqual(report.isError, true, JSON.stringify(report.content));
   const pdf = await readFile(pdfPath);
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
   assert.ok(pdf.length > 20_000);
@@ -98,6 +105,7 @@ try {
     arguments: {
       template: 'pages/editorial-two-column',
       output_path: editorialPdfPath,
+      diagnostics: 'full',
       brand_ref: 'brand://acme/primary',
       data: {
         title: 'Editorial page template',
@@ -111,12 +119,153 @@ try {
     },
   });
   assert.notEqual(editorialReport.isError, true, JSON.stringify(editorialReport.content));
-  const editorialWarnings = new Set((editorialReport.structuredContent?.warnings ?? []).map((warning) => warning.message));
-  assert.ok(editorialWarnings.has("Report template 'pages/editorial-two-column' does not render KPI blocks; use default-report or move the content to sections/highlights."));
-  assert.ok(editorialWarnings.has("Report template 'pages/editorial-two-column' does not render chart blocks; use default-report or move the content to sections/highlights."));
+  assert.equal(editorialReport.structuredContent?.layoutEngine, 'composition-planner', 'editorial reports must use the composition planner for every supported report block');
+  assert.equal(editorialReport.structuredContent?.layoutEngineFallback, undefined, 'editorial reports must not fall back to the legacy renderer');
+  assert.equal(editorialReport.structuredContent?.compositionEvaluation?.status, 'accepted');
   const editorialPdf = await readFile(editorialPdfPath);
   assert.equal(editorialPdf.subarray(0, 5).toString(), '%PDF-');
   assert.ok(editorialPdf.length > 10_000);
+
+  const plannerPdfPath = join(outputDir, 'editorial-planner-route.pdf');
+  const plannerReport = await client.callTool({
+    name: 'render_report',
+    arguments: {
+      template: 'pages/editorial-two-column',
+      output_path: plannerPdfPath,
+      diagnostics: 'full',
+      brand_ref: 'brand://acme/primary',
+      data: {
+        title: 'Editorial planner route',
+        intro: 'The public editorial route is executed from a renderer-neutral composition plan.',
+        sections: [{ heading: 'Planner-owned continuation', body: 'This text is long enough to exercise the two configured columns and the following page. '.repeat(80) }],
+        footer: 'Editorial planner test',
+      },
+    },
+  });
+  assert.equal(plannerReport.structuredContent?.layoutEngine, 'composition-planner', 'simple editorial reports must use the composition planner route');
+  assert.equal(plannerReport.structuredContent?.compositionEvaluation?.status, 'accepted');
+  assert.ok((plannerReport.structuredContent?.compositionPlan?.lines?.length ?? 0) > 0, 'planner route did not expose concrete line placements');
+
+  const metricPdfPath = join(outputDir, 'editorial-metrics-planner-route.pdf');
+  const metricReport = await client.callTool({
+    name: 'render_report',
+    arguments: {
+      template: 'pages/editorial-metrics-two-column',
+      output_path: metricPdfPath,
+      diagnostics: 'full',
+      brand_ref: 'brand://acme/primary',
+      data: {
+        title: 'Editorial KPI planner route',
+        intro: 'The metric template reserves three atomic card slots before the continuing narrative flow.',
+        kpis: [
+          { label: 'Revenue', value: '$128k', delta: '+12%', trend: 'up', note: 'Compared with prior period' },
+          { label: 'Returns', value: '3.4%', delta: '-0.8 pp', trend: 'down', note: 'Lower is better' },
+          { label: 'Reach', value: 48200, delta: '0%', trend: 'flat', note: 'Stable audience' },
+        ],
+        sections: [{ heading: 'Narrative after metrics', body: 'The narrative begins below the cards and continues through the configured columns. '.repeat(90) }],
+        footer: 'Editorial KPI planner test',
+      },
+    },
+  });
+  assert.notEqual(metricReport.isError, true, JSON.stringify(metricReport.content));
+  assert.equal(metricReport.structuredContent?.layoutEngine, 'composition-planner');
+  assert.equal(metricReport.structuredContent?.compositionEvaluation?.status, 'accepted');
+  const metricPlacements = metricReport.structuredContent?.compositionPlan?.blockPlacements ?? [];
+  assert.deepEqual(metricPlacements.filter((placement) => placement.kind === 'metric').map((placement) => placement.slotId), ['1:metric-1', '1:metric-2', '1:metric-3']);
+  const metricPdf = await readFile(metricPdfPath);
+  assert.equal(metricPdf.subarray(0, 5).toString(), '%PDF-');
+  const metricText = runProcess('pdftotext', ['-layout', metricPdfPath, '-'], { timeout: 10_000 });
+  if (metricText.status === 0) {
+    for (const token of ['REVENUE', '$128k', '+12%', 'Compared with prior period', 'RETURNS', '-0.8 pp', 'Lower is better', 'REACH', 'Stable audience']) {
+      assert.match(metricText.stdout, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'), `metric PDF is missing selectable token ${token}`);
+    }
+  }
+  const metricPngRoot = join(outputDir, 'editorial-metrics-page-1');
+  const metricPng = runProcess('pdftoppm', ['-png', '-r', '96', '-f', '1', '-singlefile', metricPdfPath, metricPngRoot], { timeout: 10_000 });
+  if (metricPng.status === 0) {
+    const metricPngBytes = await readFile(`${metricPngRoot}.png`);
+    assert.equal(metricPngBytes.subarray(1, 4).toString(), 'PNG');
+    assert.ok(metricPngBytes.length > 10_000, 'metric planner page raster is unexpectedly small');
+    const firstMetric = metricPlacements.find((placement) => placement.kind === 'metric');
+    assert.ok(firstMetric?.box, 'metric planner did not expose a box for PNG verification');
+    const pdfToPng = 96 / 25.4;
+    const crop = [
+      Math.max(0, Math.floor(firstMetric.box.x * pdfToPng)),
+      Math.max(0, Math.floor(firstMetric.box.y * pdfToPng)),
+      Math.max(1, Math.ceil(firstMetric.box.width * pdfToPng)),
+      Math.max(1, Math.ceil(firstMetric.box.height * pdfToPng)),
+    ];
+    const pixelGate = runProcess('convert', [
+      `${metricPngRoot}.png`,
+      '-crop', `${crop[2]}x${crop[3]}+${crop[0]}+${crop[1]}`,
+      '-fx', '(r<0.99)||(g<0.99)||(b<0.99)',
+      '-format', '%[fx:mean]',
+      'info:',
+    ], { timeout: 10_000 });
+    if (pixelGate.status === 0) {
+      const nonWhiteRatio = Number(pixelGate.stdout.trim());
+      assert.ok(nonWhiteRatio >= renderConfig.quality.composition_nonwhite_min_ratio, JSON.stringify({ nonWhiteRatio, crop }));
+    }
+  }
+
+  const overflowingMetricPath = join(outputDir, 'editorial-metrics-overflow.pdf');
+  const overflowingMetricReport = await client.callTool({
+    name: 'render_report',
+    arguments: {
+      template: 'pages/editorial-metrics-two-column',
+      output_path: overflowingMetricPath,
+      diagnostics: 'full',
+      brand_ref: 'brand://acme/primary',
+      data: {
+        title: 'Editorial KPI overflow route',
+        kpis: [
+          { label: 'One', value: 1 },
+          { label: 'Two', value: 2 },
+          { label: 'Three', value: 3 },
+          { label: 'Four', value: 4, delta: '+1', trend: 'up', note: 'Continued on page two' },
+        ],
+        sections: [{ heading: 'After the overflow', body: 'Text after an overflowed atomic card must begin below the reserved card row. '.repeat(30) }],
+      },
+    },
+  });
+  assert.notEqual(overflowingMetricReport.isError, true, JSON.stringify(overflowingMetricReport.content));
+  assert.equal(overflowingMetricReport.structuredContent?.compositionEvaluation?.status, 'accepted');
+  const overflowingMetricPlacements = overflowingMetricReport.structuredContent?.compositionPlan?.blockPlacements ?? [];
+  assert.equal(overflowingMetricPlacements.filter((placement) => placement.kind === 'metric').length, 4);
+  assert.ok(overflowingMetricPlacements.some((placement) => placement.kind === 'metric' && placement.page === 2), 'the fourth KPI was not pushed to the continuation page');
+
+  const chartPdfPath = join(outputDir, 'editorial-chart-planner-route.pdf');
+  const chartReport = await client.callTool({
+    name: 'render_report',
+    arguments: {
+      template: 'pages/editorial-chart-two-column',
+      output_path: chartPdfPath,
+      diagnostics: 'full',
+      brand_ref: 'brand://acme/primary',
+      data: {
+        title: 'Editorial chart planner route',
+        charts: [
+          { type: 'bar', title: 'First chart', subtitle: 'Current period', data: [{ label: 'North', value: 42 }, { label: 'South', value: 27 }] },
+          { type: 'line', title: 'Second chart', data: [{ label: 'Jan', value: 12 }, { label: 'Feb', value: 18 }] },
+        ],
+        sections: [{ heading: 'Narrative after charts', body: 'The text starts below the chart slot and continues after the second chart. '.repeat(25) }],
+      },
+    },
+  });
+  assert.notEqual(chartReport.isError, true, JSON.stringify(chartReport.content));
+  assert.equal(chartReport.structuredContent?.layoutEngine, 'composition-planner');
+  assert.equal(chartReport.structuredContent?.compositionEvaluation?.status, 'accepted');
+  const chartPlacements = chartReport.structuredContent?.compositionPlan?.blockPlacements ?? [];
+  assert.deepEqual(chartPlacements.filter((placement) => placement.kind === 'chart' && placement.blockId.startsWith('chart-')).map((placement) => placement.page), [1, 2]);
+  assert.equal((chartReport.structuredContent?.drawings ?? []).filter((drawing) => drawing.kind === 'image').length, 0, 'charts are planned as vector blocks rather than pre-rendered images');
+  const chartPdf = await readFile(chartPdfPath);
+  assert.equal(chartPdf.subarray(0, 5).toString(), '%PDF-');
+  const chartText = runProcess('pdftotext', ['-layout', chartPdfPath, '-'], { timeout: 10_000 });
+  if (chartText.status === 0) {
+    for (const token of ['First chart', 'Current period', 'Second chart', 'Narrative after charts']) {
+      assert.match(chartText.stdout, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'), `chart PDF is missing selectable token ${token}`);
+    }
+  }
 
   const splitPdfPath = join(outputDir, 'section-split.pdf');
   const splitMarker = 'SECTION_SPLIT_MARKER';
@@ -177,12 +326,12 @@ try {
     brand: 'TreeTank',
     footer: 'Poufne',
     slides: [
-      { type: 'title', title: 'Wyniki kwartalne — zażółć gęślą jaźń', subtitle: 'Prezentacja zarządcza' },
-      { type: 'metrics', title: 'Najważniejsze KPI', metrics: [{ label: 'Przychód', value: '1,2 mln zł', delta: '+12%', trend: 'up' }, { label: 'Leady', value: 314, note: 'wartościowe kontakty' }] },
-      { type: 'chart', title: 'Trend sprzedaży', chart: { type: 'bar', data: [{ label: 'Maj', value: 30 }, { label: 'Czerwiec', value: 42 }] } },
-      { type: 'table', title: 'Kanały', head: ['Kanał', 'Wynik'], body: [['SEO', 42], ['Ads', 37]] },
-      { type: 'narrative', title: 'Komentarz', body: 'Wyniki rosną dzięki jakości ruchu i lepszej konwersji.', highlights: ['Utrzymać inwestycję w SEO'] },
-      { type: 'conclusions', title: 'Wnioski', items: ['Skalować zwycięskie kanały', 'Obserwować koszt pozyskania'] },
+      { layout: 'title', flows: { title: { blocks: [{ type: 'heading', text: 'Wyniki kwartalne — zażółć gęślą jaźń' }] }, subtitle: { blocks: [{ type: 'text', text: 'Prezentacja zarządcza' }] } } },
+      { layout: 'metrics', flows: { title: { blocks: [{ type: 'heading', text: 'Najważniejsze KPI' }] }, main: { blocks: [{ type: 'metric', label: 'Przychód', value: '1,2 mln zł', delta: '+12%', trend: 'up' }, { type: 'metric', label: 'Leady', value: 314, note: 'wartościowe kontakty' }] } } },
+      { layout: 'chart', flows: { title: { blocks: [{ type: 'heading', text: 'Trend sprzedaży' }] }, main: { blocks: [{ type: 'chart', chart_type: 'bar', data: [{ label: 'Maj', value: 30 }, { label: 'Czerwiec', value: 42 }] }] } } },
+      { layout: 'table', flows: { title: { blocks: [{ type: 'heading', text: 'Kanały' }] }, main: { blocks: [{ type: 'table', head: ['Kanał', 'Wynik'], body: [['SEO', 42], ['Ads', 37]] }] } } },
+      { layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Komentarz' }] }, main: { blocks: [{ type: 'text', text: 'Wyniki rosną dzięki jakości ruchu i lepszej konwersji.' }, { type: 'list-item', text: 'Utrzymać inwestycję w SEO' }] } } },
+      { layout: 'conclusions', flows: { title: { blocks: [{ type: 'heading', text: 'Wnioski' }] }, main: { blocks: [{ type: 'list-item', text: 'Skalować zwycięskie kanały' }, { type: 'list-item', text: 'Obserwować koszt pozyskania' }] } } },
     ],
   };
   deck.slides[4].overrides = { typography: { body: { scale: 0.9 } }, layout: { density: 'compact' } };
@@ -218,6 +367,10 @@ try {
     assert.equal(listedRefs.get('default-report')?.owner, 'builtin', 'list_templates lost the built-in report templates');
     assert.ok(listedRefs.get('default-report')?.use_with?.includes('render_report'));
     assert.deepEqual(listedRefs.get('default-report')?.use_with, ['render_report']);
+    assert.equal(listedRefs.get('pages/editorial-metrics-two-column')?.owner, 'builtin');
+    assert.ok(listedRefs.get('pages/editorial-metrics-two-column')?.use_with?.includes('render_report'));
+    assert.equal(listedRefs.get('pages/editorial-chart-two-column')?.owner, 'builtin');
+    assert.ok(listedRefs.get('pages/editorial-chart-two-column')?.use_with?.includes('render_report'));
   for (const slideTemplate of ['slides/standard', 'slides/compact', 'slides/centered-title', 'slides/two-column']) {
     const entry = listedRefs.get(slideTemplate);
     assert.ok(entry, `list_templates does not expose the built-in slide template ${slideTemplate}`);
@@ -231,25 +384,25 @@ try {
   const columnsDeck = {
     title: 'Dwie kolumny',
     brand: 'TreeTank',
-    footer: 'Poufne',
-    slides: [
+      footer: 'Poufne',
+      slides: [
       {
-        type: 'columns',
-        title: 'Co zadziałało, a co nie',
-        subtitle: 'Porównanie kwartałów',
+        layout: 'columns',
         template_ref: 'slides/two-column',
-        columns: [
-          { heading: 'Zadziałało', body: 'Ruch z SEO rośnie trzeci kwartał z rzędu.', highlights: ['Więcej treści', 'Lepsze linki'] },
-          { heading: 'Do poprawy', body: 'Koszt pozyskania w kampaniach display pozostaje wysoki.', highlights: ['Zawężyć grupy odbiorców'] },
-        ],
+        flows: {
+          title: { blocks: [{ type: 'heading', text: 'Co zadziałało, a co nie' }] },
+          subtitle: { blocks: [{ type: 'text', text: 'Porównanie kwartałów' }] },
+          left: { blocks: [{ type: 'heading', text: 'Zadziałało' }, { type: 'text', text: 'Ruch z SEO rośnie trzeci kwartał z rzędu.' }, { type: 'list-item', text: 'Więcej treści' }, { type: 'list-item', text: 'Lepsze linki' }] },
+          right: { blocks: [{ type: 'heading', text: 'Do poprawy' }, { type: 'text', text: 'Koszt pozyskania w kampaniach display pozostaje wysoki.' }, { type: 'list-item', text: 'Zawęzić grupy odbiorców' }] },
+        },
       },
       {
-        type: 'columns',
-        title: 'Bez wskazania szablonu',
-        columns: [
-          { body: 'Lewa kolumna bez nagłówka.' },
-          { body: 'Prawa kolumna bez nagłówka.' },
-        ],
+        layout: 'columns',
+        flows: {
+          title: { blocks: [{ type: 'heading', text: 'Bez wskazania szablonu' }] },
+          left: { blocks: [{ type: 'text', text: 'Lewa kolumna bez nagłówka.' }] },
+          right: { blocks: [{ type: 'text', text: 'Prawa kolumna bez nagłówka.' }] },
+        },
       },
     ],
   };
@@ -360,9 +513,9 @@ try {
     brand: 'TreeTank',
     footer: 'Poufne',
     slides: [
-      { type: 'title', title: 'Notatki prelegenta', subtitle: 'Wersja zarządcza', notes: firstNote },
-      { type: 'conclusions', title: 'Wnioski', items: ['Skalować SEO'], notes: secondNote },
-      { type: 'narrative', title: 'Bez notatki', body: 'Ten slajd nie ma narracji.' },
+      { layout: 'title', notes: firstNote, flows: { title: { blocks: [{ type: 'heading', text: 'Notatki prelegenta' }] }, subtitle: { blocks: [{ type: 'text', text: 'Wersja zarządcza' }] } } },
+      { layout: 'conclusions', notes: secondNote, flows: { title: { blocks: [{ type: 'heading', text: 'Wnioski' }] }, main: { blocks: [{ type: 'list-item', text: 'Skalować SEO' }] } } },
+      { layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Bez notatki' }] }, main: { blocks: [{ type: 'text', text: 'Ten slajd nie ma narracji.' }] } } },
     ],
   };
 
@@ -410,7 +563,7 @@ try {
     arguments: {
       brand_ref: 'brand://acme/primary',
       output_path: join(outputDir, 'overlong-notes.pptx'),
-      data: { title: 'Za długie notatki', slides: [{ type: 'narrative', title: 'Slajd', body: 'Treść.', notes: 'x'.repeat(4001) }] },
+      data: { title: 'Za długie notatki', slides: [{ layout: 'narrative', notes: 'x'.repeat(4001), flows: { title: { blocks: [{ type: 'heading', text: 'Slajd' }] }, main: { blocks: [{ type: 'text', text: 'Treść.' }] } } }] },
     },
   });
   assert.equal(overlongNotes.isError, true, 'the slide model accepted notes beyond its documented bound');

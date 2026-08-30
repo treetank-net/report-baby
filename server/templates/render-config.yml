@@ -9,6 +9,32 @@ canvas:
   points_per_inch: 72
 quality:
   pptx_text_region_max_changed_pixel_ratio: 0.20
+  layout_diff:
+    movement_warn_mm: 3
+    movement_error_mm: 8
+    lane_origin_tolerance_mm: 4
+    line_gap_warn_mm: 10
+    line_gap_severe_mm: 18
+    page_edge_ratio: 0.15
+    max_spacing_findings: 12
+    anchor_token_count: 2
+    column_count: 2
+    column_span_exclusion_factor: 1.3
+    column_fill_warn_ratio: 0.60
+    column_ink_balance_warn_ratio: 0.65
+  report_image_min_red_pixel_ratio: 0.90
+  report_image_max_dark_pixel_ratio: 0.01
+  report_image_red_channel_min: 0.50
+  report_image_green_channel_max: 0.60
+  report_image_blue_channel_max: 0.50
+  report_image_dark_channel_max: 0.20
+  report_image_geometry_tolerance: 0.01
+  composition_nonwhite_min_ratio: 0.01
+  pdf_pixel_qa:
+    raster_dpi: 110
+    background_delta_min: 12
+    minimum_ink_pixels: 4
+    rectangle_inset_px: 2
 assets:
   report_header_band_width_px: 640
   report_header_band_height_px: 154
@@ -39,11 +65,14 @@ images:
 pdf:
   page_width: 210
   page_height: 297
+  page_size_tolerance: 0.01
+  planner_max_iterations: 4
+  planner_minimum_fragment_lines: 3
   margin: 18
   footer_y: 285
   footer_line_width: 0.3
   header_band_height: 54
-  image_caption_gap: 3.5
+  image_caption_gap: 2.5
   image_caption_bottom_gap: 2
   image_caption_line_height: 4.2
   image_caption_size: 8.5
@@ -57,13 +86,20 @@ pdf:
   section_heading_size: 13
   body_size: 10.5
   body_line_height: 5
+  body_baseline_offset: 3.8
+  heading_baseline_offset: 4.7
+  intro_baseline_offset: 3.8
+  sidebar_baseline_offset: 3.8
+  footer_baseline_offset: 2.8
   kpi_gap: 5
   kpi_height: 26
   kpi_padding: 5
   table_caption_height: 20
   table_font_size: 9
+  table_line_height_ratio: 1.2
   table_cell_padding: 2.5
   table_line_width: 0.2
+  composition_max_pages: 12
   title_y: 88
   title_eyebrow_size: 10
   title_size: 30
@@ -71,11 +107,6 @@ pdf:
   title_logo_y: 10
   title_period_y: 24
   asset_raster_density: 30
-  header_logo_width: 27
-  header_logo_mark_width: 7
-  header_brand_gap: 3
-  header_brand_size: 9
-  header_brand_compact_size: 7.5
   header_period_size: 10
   header_period_compact_size: 8
   header_lockup_baseline_ratio: 0.72
@@ -85,17 +116,25 @@ pdf:
   header_text_baseline_offset: 2
   header_rule_gap: 4
   header_rule_width: 0.8
-  header_bottom_gap: 10
+  header_bottom_gap: 6
   header_repeat_height: 30
   header_repeat_band_height: 34
   header_repeat_logo_y: 5
-  header_repeat_logo_height: 6
   header_repeat_top_line_y: 11
   header_repeat_title_y: 24
   header_repeat_rule_width: 0.5
   header_repeat_bottom_gap: 9
   intro_line_height: 5.2
   intro_keep_padding: 6
+  quote_size: 10.5
+  quote_line_height: 5.6
+  quote_baseline_offset: 4
+  quote_text_indent: 8
+  quote_mark_size: 16
+  quote_mark_gap: 1.5
+  quote_mark_baseline_offset: 4.6
+  quote_margin_before: 0
+  quote_margin_after: 4.2
   intro_min_lead_lines: 3
   intro_bottom_gap: 8
   kpi_columns: 3
@@ -108,12 +147,16 @@ pdf:
   kpi_delta_size: 9
   kpi_delta_y: 22
   kpi_note_size: 8
+  composition_metric_height: 26
+  composition_metric_note_y: 28.5
   kpi_bottom_gap: 12
   chart_keep_padding: 8
   chart_bottom_gap: 10
   section_heading_line_height: 6
   heading_caption_width_factor: 0.78
   dynamic_text_width_factor: 0.98
+  float_gap: 3
+  float_min_width: 18
   section_heading_gap: 2
   section_min_lead_lines: 3
   keep_together_waste_ratio: 0.15
@@ -125,6 +168,7 @@ pdf:
   widow_min_lines: 2
   orphan_min_lines: 2
   widow_min_bullets: 2
+  list_item_keep_together: 1
   table_widow_min_rows: 3
   table_flow_max_rows: 6
   flow_solitary_hyphen_max_slack: 25
@@ -152,6 +196,15 @@ pdf:
   footer_number_gap: 6
   footer_text_line_height: 3.5
   plan_coverage_max_gap: 18
+  body_margin_before: 0
+  body_margin_after: 2.8
+  heading_margin_before: 4.2
+  heading_margin_after: 1.4
+  heading_keep_with_next_lines: 1
+  list_item_margin_before: 0
+  list_item_margin_after: 1.4
+  header_margin_before: 0
+  header_margin_after: 0
   footer_font_size: 8
   title_logo_width: 28
   title_logo_height: 7
@@ -164,8 +217,8 @@ chart:
   height: 480
   render_width: 1400
   header_title_y: 38
-  header_title_size: 21
-  header_subtitle_size: 13
+  header_title_size: 28
+  header_subtitle_size: 17
   header_title_gap: 24
   pad_left: 60
   pad_right: 28
@@ -175,28 +228,29 @@ chart:
   value_offset: 8
   line_width: 2.5
   point_radius: 3.5
-  text_size: 13
+  text_size: 16
   glyph_width: 0.55
   header_x: 32
   header_empty_top: 24
   header_bottom_gap: 28
   tick_label_offset: 10
   tick_label_baseline: 4
-  tick_label_size: 11
+  tick_label_size: 14
   grid_line_width: 1
   bar_slot_ratio: 0.62
   bar_max_width: 96
-  bar_value_size: 12
-  bar_label_size: 12
+  bar_value_size: 15
+  bar_label_size: 15
   bar_label_gap: 20
   bar_label_reserve: 6
   line_area_opacity: 0.12
   line_point_stroke_width: 2
   line_label_gap: 20
   line_label_reserve: 4
-  line_label_size: 12
+  line_label_size: 16
   line_value_offset: 10
-  line_value_size: 11
+  line_value_size: 15
+  minimum_font_size: 7
   line_value_max_points: 12
   pie_height: 460
   pie_ring_gap: 48
@@ -296,18 +350,6 @@ text:
   subtitle_max_lines: 2
   header_max_lines: 1
 legacy:
-  lockup_gap_compact: 12
-  lockup_gap_normal: 18
-  lockup_gap_open: 28
-  title_mark_width: 58
-  regular_mark_width: 48
-  title_name_size: 26
-  regular_name_size: 18
-  title_mark_y: 56
-  regular_mark_y: 34
-  title_name_y: 91
-  regular_name_y: 64
-  name_width: 260
   regular_logo_width: 210
   regular_logo_height: 48
   title_eyebrow_max_chars: 80
@@ -402,6 +444,56 @@ contrast:
   large_minimum: 3
   large_text_px: 24
   large_bold_text_px: 19
+chrome:
+  lockup:
+    standard:
+      mark_width_px: 48
+      mark_height_px: 48
+      mark_y_px: 34
+      name_size_px: 18
+      name_width_px: 260
+      name_height_px: 40
+      vertical_align: middle
+      gap_compact_px: 12
+      gap_normal_px: 18
+      gap_open_px: 28
+    title:
+      mark_width_px: 58
+      mark_height_px: 58
+      mark_y_px: 56
+      name_size_px: 26
+      name_width_px: 260
+      name_height_px: 40
+      vertical_align: middle
+      gap_compact_px: 16
+      gap_normal_px: 28
+      gap_open_px: 36
+    compact:
+      mark_width_px: 36
+      mark_height_px: 36
+      mark_y_px: 34
+      name_size_px: 14
+      name_width_px: 210
+      name_height_px: 32
+      vertical_align: middle
+      gap_compact_px: 8
+      gap_normal_px: 12
+      gap_open_px: 16
+  report_lockup:
+    standard:
+      mark_width_mm: 7
+      full_logo_width_mm: 27
+      max_height_mm: 7
+      gap_mm: 3
+      name_size_pt: 9
+      vertical_align: middle
+    continuation:
+      mark_width_mm: 6
+      full_logo_width_mm: 27
+      max_height_mm: 6
+      gap_mm: 3
+      name_size_pt: 7.5
+      vertical_align: middle
 fallbacks:
   text_box_baseline_ratio: 0.55
   text_box_descender_ratio: 0.15

@@ -1,0 +1,110 @@
+schema_version: 1
+id: pages/showcase-report-band
+kind: page
+surface: pdf-a4
+archetype: narrative
+title_page: false
+canvas:
+  direction: ltr
+page:
+  width: 210
+  height: 297
+  margins: { top: 18, right: 18, bottom: 18, left: 18 }
+  columns:
+    count: 1
+    gutter: 0
+  reserved_bands:
+    footer: { x: 0, y: 0.94, width: 1, height: 0.06 }
+  flow:
+    align: left
+    hyphenate: false
+  continuation:
+    width: 210
+    height: 297
+    margins: { top: 18, right: 18, bottom: 18, left: 18 }
+    columns:
+      count: 1
+      gutter: 0
+    reserved_bands:
+      header: { x: 0, y: 0, width: 1, height: 0.111 }
+      footer: { x: 0, y: 0.94, width: 1, height: 0.06 }
+    flow:
+      align: left
+      hyphenate: false
+slots:
+  title:
+    type: text
+    frame: { x: 0.086, y: 0.1045, width: 0.828, height: 0.08 }
+    role: title
+  title-subtitle:
+    type: text
+    frame: { x: 0.086, y: 0.1347, width: 0.828, height: 0.06 }
+    role: subtitle
+  title-period:
+    type: text
+    frame: { x: 0.086, y: 0.0338, width: 0.828, height: 0.06 }
+    role: eyebrow
+    align: right
+  intro:
+    type: text
+    frame: { x: 0.086, y: 0.2027, width: 0.828, height: 0.035 }
+    grow: { axis: y, max_height: 0.06, pushes: [metric-1, metric-2, metric-3, chart] }
+    allowed_block_kinds: [paragraph]
+    role: intro
+  header:
+    type: text
+    frame: { x: 0.086, y: 0.068, width: 0.828, height: 0.04 }
+    role: header
+  header-lockup:
+    type: lockup
+    frame: { x: 0.086, y: 0.024, width: 0.16, height: 0.04 }
+    continuation_frame: { x: 0.086, y: 0.0168, width: 0.16, height: 0.04 }
+  header-period:
+    type: text
+    frame: { x: 0.70, y: 0.0338, width: 0.214, height: 0.04 }
+    role: eyebrow
+    align: right
+  metric-1:
+    type: metric-card
+    frame: { x: 0.086, y: 0.2777, width: 0.255, height: 0.098 }
+    role: metric
+  metric-2:
+    type: metric-card
+    frame: { x: 0.3725, y: 0.2777, width: 0.255, height: 0.098 }
+    role: metric
+  metric-3:
+    type: metric-card
+    frame: { x: 0.659, y: 0.2777, width: 0.255, height: 0.098 }
+    role: metric
+  chart:
+    type: chart
+    frame: { x: 0.086, y: 0.4057, width: 0.828, height: 0.343 }
+    role: chart
+  content:
+    type: text
+    frame: { x: 0.086, y: 0.7667, width: 0.828, height: 0.1733 }
+    continuation_frame: { x: 0.086, y: 0.116, width: 0.828, height: 0.824 }
+    allowed_block_kinds: [heading, paragraph, list-item, image, table, chart, metric]
+  footer:
+    type: text
+    frame: { x: 0.086, y: 0.94, width: 0.828, height: 0.04 }
+flows:
+  header:
+    slots: [header-lockup, header-period, header]
+    start_page: 2
+    continuation: forbidden
+    repeat: each-page
+  title:
+    slots: [title, title-subtitle, title-period]
+    continuation: forbidden
+  main:
+    slots: [intro, metric-1, metric-2, metric-3, chart, content]
+    continuation_slots: [content]
+    continuation: allowed
+  footer:
+    slots: [footer]
+    continuation: forbidden
+    repeat: each-page
+constraints:
+  inside_canvas: true
+  no_overlap: false

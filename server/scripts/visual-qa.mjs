@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { inflateRawSync, inflateSync } from 'node:zlib';
 import { parse as parseYaml } from 'yaml';
 import { pdfContentHash, pptxContentHash, sha256, zipEntries } from './lib/artifact-inspect.mjs';
-import { buildDeck as deck, editorialRegressionReport, gapTighteningReport, inlineMarkupReport, longWords, multipageReport, pageFillReport, standardDeck, standardReport } from './lib/fixtures.mjs';
+import { buildDeck as deck, compositionEditorialRegressionReport, compositionGapTighteningReport, compositionInlineMarkupReport, compositionMultipageReport, compositionPageFillReport, compositionStandardReport, longWords, standardDeck } from './lib/fixtures.mjs';
 import { findOfficeConverter } from './lib/office.mjs';
 import { runProcess as run } from './lib/process.mjs';
 
@@ -308,7 +308,7 @@ function buildCases() {
       kind: 'report',
       formats: ['pdf'],
       expect: 'render',
-      input: standardReport(),
+      input: compositionStandardReport(),
       determinism: index === 0,
     });
     cases.push({
@@ -319,7 +319,7 @@ function buildCases() {
       kind: 'report',
       formats: ['pdf'],
       expect: 'render',
-      input: { ...standardReport(), template: 'campaign-summary' },
+      input: { ...compositionStandardReport(), template: 'campaign-summary' },
     });
     for (const variant of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']) {
       cases.push({
@@ -330,7 +330,7 @@ function buildCases() {
         kind: 'report',
         formats: ['pdf'],
         expect: 'render',
-        input: editorialRegressionReport(variant),
+        input: compositionEditorialRegressionReport(variant),
       });
     }
   }
@@ -343,14 +343,18 @@ function buildCases() {
     formats: ['pdf'],
     expect: 'render',
     input: {
-      template: 'pages/editorial-two-column',
-      data: {
-        title: 'Configured page layout',
-        intro: 'The introduction occupies its declared frame before the narrative flow begins.',
-        sections: [{ heading: 'Two-column flow', body: 'This paragraph is deliberately long enough to cross the first column and continue in the second. '.repeat(80) }],
-        highlights: ['Both configured columns carry content.', 'The gutter remains clear.'],
-        footer: 'Page layout QA',
-      },
+      template_ref: 'pages/editorial-two-column',
+      data: { flows: {
+        header: { continuation: 'forbidden', blocks: [{ type: 'heading', role: 'header', text: 'Configured page layout' }] },
+        main: { continuation: 'allowed', blocks: [
+          { type: 'text', role: 'intro', text: 'The introduction occupies its declared frame before the narrative flow begins.', keep_with_next_lines: 2 },
+          { type: 'heading', role: 'heading', text: 'Two-column flow', level: 2, keep_with_next_lines: 1 },
+          { type: 'text', role: 'body', text: 'This paragraph is deliberately long enough to cross the first column and continue in the second. '.repeat(80) },
+          { type: 'list-item', role: 'body', text: 'Both configured columns carry content.' },
+          { type: 'list-item', role: 'body', text: 'The gutter remains clear.' },
+        ] },
+        footer: { continuation: 'forbidden', blocks: [{ type: 'text', role: 'footer', text: 'Page layout QA' }] },
+      } },
     },
   });
   if (settings.brands.includes('pyrus')) {
@@ -362,7 +366,7 @@ function buildCases() {
       kind: 'report',
       formats: ['pdf'],
       expect: 'render',
-      input: multipageReport(),
+      input: compositionMultipageReport(),
     });
     cases.push({
       id: 'inline-markup-report',
@@ -372,7 +376,7 @@ function buildCases() {
       kind: 'report',
       formats: ['pdf'],
       expect: 'render',
-      input: inlineMarkupReport(),
+      input: compositionInlineMarkupReport(),
       expectFontsUsed: 3,
       expectMixedFontLines: 7,
       expectWarnings: [
@@ -391,7 +395,7 @@ function buildCases() {
         kind: 'report',
         formats: ['pdf'],
         expect: 'render',
-        input: pageFillReport(variant),
+        input: compositionPageFillReport(variant),
         expectPages: variant === 'table' ? 2 : 1,
       });
     }
@@ -403,7 +407,7 @@ function buildCases() {
       kind: 'report',
       formats: ['pdf'],
       expect: 'render',
-      input: gapTighteningReport(),
+      input: compositionGapTighteningReport(),
       expectPages: 1,
       expectWarnings: [/A4 report gaps tightened by factor/],
     });
@@ -421,33 +425,33 @@ function buildCases() {
   }
 
   const hostile = [
-    { id: 'overflow-title-too-long', expect: 'reject', message: /title does not fit/i, input: deck([{ type: 'title', title: longWords(40, 'Momentum'), subtitle: 'A short subtitle' }]) },
-    { id: 'overflow-title-subtitle-too-long', expect: 'reject', message: /subtitle does not fit/i, input: deck([{ type: 'title', title: 'A short title', subtitle: longWords(60, 'Context') }]) },
-    { id: 'overflow-header-too-long', expect: 'reject', message: /heading does not fit/i, input: deck([{ type: 'chart', title: longWords(40, 'Heading'), chart: { type: 'bar', data: [{ label: 'One', value: 2 }] } }]) },
-    { id: 'overflow-metric-value-too-long', expect: 'reject', message: /metric card .* value/i, input: deck([{ type: 'metrics', title: 'Board', metrics: [{ label: 'Value', value: '123456789012345678901234567890' }] }]) },
-    { id: 'overflow-metric-note-too-long', expect: 'reject', message: /metric card .* note/i, input: deck([{ type: 'metrics', title: 'Board', metrics: [{ label: 'Note', value: '1', note: longWords(12, 'Note') }] }]) },
-    { id: 'overflow-metrics-six-crowded', expect: 'reject', message: /metric card/i, input: deck([{ type: 'metrics', title: 'Board', metrics: Array.from({ length: 6 }, (_, index) => ({ label: `Very long metric label number ${index + 1}`, value: '1 234 567 890 units', delta: '+12.4 pp against the prior period', note: 'A fairly long explanatory note for the card' })) }]) },
-    { id: 'capacity-metrics-six-short', expect: 'render', input: deck([{ type: 'metrics', title: 'Full grid', metrics: Array.from({ length: 6 }, (_, index) => ({ label: `KPI ${index + 1}`, value: `${index + 1}0%`, delta: '+1.2 pp', trend: 'up', note: 'vs prior' })) }]), inkGate: true },
-    { id: 'overflow-table-cell-too-wide', expect: 'reject', message: /46-character/i, input: deck([{ type: 'table', title: 'Rows', head: ['Channel', 'Result'], body: [[longWords(8, 'Cell'), 1]] }]) },
-    { id: 'overflow-table-too-many-rows', expect: 'reject', message: /at most 10/i, input: deck([{ type: 'table', title: 'Rows', head: ['Channel', 'Result'], body: Array.from({ length: 11 }, (_, index) => [`Row ${index + 1}`, index]) }]) },
-    { id: 'overflow-conclusions-too-many', expect: 'reject', message: /conclusions|items|at most 7/i, input: deck([{ type: 'conclusions', title: 'Wrap up', items: Array.from({ length: 8 }, (_, index) => `Item ${index + 1}`) }]) },
-    { id: 'overflow-narrative-too-many-highlights', expect: 'reject', message: /narrative|highlights|at most 4/i, input: deck([{ type: 'narrative', title: 'Story', body: 'One line.', highlights: Array.from({ length: 5 }, (_, index) => `Highlight ${index + 1}`) }]) },
-    { id: 'overflow-narrative-body-too-long', expect: 'reject', message: /narrative body does not fit/i, input: deck([{ type: 'narrative', title: 'Story', body: longWords(240, 'Sentence') }]) },
-    { id: 'overflow-narrative-highlight-too-long', expect: 'reject', message: /narrative highlight/i, input: deck([{ type: 'narrative', title: 'Story', body: 'One line.', highlights: [longWords(40, 'Highlight')] }]) },
-    { id: 'overflow-columns-too-many-highlights', expect: 'reject', message: /column|highlights|at most 3/i, input: deck([{ type: 'columns', template_ref: 'slides/two-column', title: 'Two views', columns: [{ heading: 'Left', body: 'One line.', highlights: ['a', 'b', 'c', 'd'] }, { heading: 'Right', body: 'One line.' }] }]) },
-    { id: 'overflow-columns-body-too-long', expect: 'reject', message: /column \d body does not fit/i, input: deck([{ type: 'columns', template_ref: 'slides/two-column', title: 'Two views', columns: [{ heading: 'Left', body: longWords(200, 'Word') }, { heading: 'Right', body: 'One line.' }] }]) },
-    { id: 'overflow-brand-name-too-long', expect: 'reject', message: /brand name exceeds/i, input: deck([{ type: 'narrative', title: 'Heading', body: 'One line.' }], { brand: 'A Deliberately Very Long Brand Name For The Lockup Slot' }) },
-    { id: 'missing-optional-slots', expect: 'render', input: { slides: [{ type: 'title', title: 'Only a title' }, { type: 'narrative', title: 'Heading only', body: 'One line.' }] }, inkGate: true },
-    { id: 'silent-overflow-footer', expect: 'render', input: deck([{ type: 'narrative', title: 'Heading', body: 'One line.' }], { footer: longWords(60, 'Footer') }), inkGate: true },
-    { id: 'silent-overflow-conclusion-item', expect: 'render', input: deck([{ type: 'conclusions', title: 'Wrap up', items: [longWords(30, 'Conclusion'), 'A short item'] }]), inkGate: true },
-    { id: 'silent-overflow-wide-table', expect: 'render', input: deck([{ type: 'table', title: 'Wide table', head: Array.from({ length: 8 }, (_, index) => `Column ${index + 1}`), body: [Array.from({ length: 8 }, (_, index) => `Cell value ${index + 1} with length`)] }]), inkGate: true },
+    { id: 'overflow-title-too-long', expect: 'reject', message: /title does not fit/i, input: deck([{ layout: 'title', flows: { title: { blocks: [{ type: 'heading', text: longWords(40, 'Momentum') }] }, subtitle: { blocks: [{ type: 'text', text: 'A short subtitle' }] } } }]) },
+    { id: 'overflow-title-subtitle-too-long', expect: 'reject', message: /subtitle does not fit/i, input: deck([{ layout: 'title', flows: { title: { blocks: [{ type: 'heading', text: 'A short title' }] }, subtitle: { blocks: [{ type: 'text', text: longWords(60, 'Context') }] } } }]) },
+    { id: 'overflow-header-too-long', expect: 'reject', message: /heading does not fit/i, input: deck([{ layout: 'chart', flows: { title: { blocks: [{ type: 'heading', text: longWords(40, 'Heading') }] }, main: { blocks: [{ type: 'chart', chart_type: 'bar', data: [{ label: 'One', value: 2 }] }] } } }]) },
+    { id: 'overflow-metric-value-too-long', expect: 'reject', message: /metric card .* value/i, input: deck([{ layout: 'metrics', flows: { title: { blocks: [{ type: 'heading', text: 'Board' }] }, main: { blocks: [{ type: 'metric', label: 'Value', value: '123456789012345678901234567890' }] } } }]) },
+    { id: 'overflow-metric-note-too-long', expect: 'reject', message: /metric card .* note/i, input: deck([{ layout: 'metrics', flows: { title: { blocks: [{ type: 'heading', text: 'Board' }] }, main: { blocks: [{ type: 'metric', label: 'Note', value: '1', note: longWords(12, 'Note') }] } } }]) },
+    { id: 'overflow-metrics-six-crowded', expect: 'reject', message: /metric card/i, input: deck([{ layout: 'metrics', flows: { title: { blocks: [{ type: 'heading', text: 'Board' }] }, main: { blocks: Array.from({ length: 6 }, (_, index) => ({ type: 'metric', label: `Very long metric label number ${index + 1}`, value: '1 234 567 890 units', delta: '+12.4 pp against the prior period', note: 'A fairly long explanatory note for the card' })) } } }]) },
+    { id: 'capacity-metrics-six-short', expect: 'render', input: deck([{ layout: 'metrics', flows: { title: { blocks: [{ type: 'heading', text: 'Full grid' }] }, main: { blocks: Array.from({ length: 6 }, (_, index) => ({ type: 'metric', label: `KPI ${index + 1}`, value: `${index + 1}0%`, delta: '+1.2 pp', trend: 'up', note: 'vs prior' })) } } }]), inkGate: true },
+    { id: 'overflow-table-cell-too-wide', expect: 'reject', message: /46-character/i, input: deck([{ layout: 'table', flows: { title: { blocks: [{ type: 'heading', text: 'Rows' }] }, main: { blocks: [{ type: 'table', head: ['Channel', 'Result'], body: [[longWords(8, 'Cell'), 1]] }] } } }]) },
+    { id: 'overflow-table-too-many-rows', expect: 'reject', message: /at most 10/i, input: deck([{ layout: 'table', flows: { title: { blocks: [{ type: 'heading', text: 'Rows' }] }, main: { blocks: [{ type: 'table', head: ['Channel', 'Result'], body: Array.from({ length: 11 }, (_, index) => [`Row ${index + 1}`, index]) }] } } }]) },
+    { id: 'overflow-conclusions-too-many', expect: 'reject', message: /conclusions|items|at most 7/i, input: deck([{ layout: 'conclusions', flows: { title: { blocks: [{ type: 'heading', text: 'Wrap up' }] }, main: { blocks: Array.from({ length: 8 }, (_, index) => ({ type: 'list-item', text: `Item ${index + 1}` })) } } }]) },
+    { id: 'overflow-narrative-too-many-highlights', expect: 'reject', message: /narrative|highlights|at most 4/i, input: deck([{ layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Story' }] }, main: { blocks: [{ type: 'text', text: 'One line.' }, ...Array.from({ length: 5 }, (_, index) => ({ type: 'list-item', text: `Highlight ${index + 1}` }))] } } }]) },
+    { id: 'overflow-narrative-body-too-long', expect: 'reject', message: /narrative body does not fit/i, input: deck([{ layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Story' }] }, main: { blocks: [{ type: 'text', text: longWords(240, 'Sentence') }] } } }]) },
+    { id: 'overflow-narrative-highlight-too-long', expect: 'reject', message: /narrative highlight/i, input: deck([{ layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Story' }] }, main: { blocks: [{ type: 'text', text: 'One line.' }, { type: 'list-item', text: longWords(40, 'Highlight') }] } } }]) },
+    { id: 'overflow-columns-too-many-highlights', expect: 'reject', message: /column|highlights|at most 3/i, input: deck([{ layout: 'columns', template_ref: 'slides/two-column', flows: { title: { blocks: [{ type: 'heading', text: 'Two views' }] }, left: { blocks: [{ type: 'heading', text: 'Left' }, { type: 'text', text: 'One line.' }, ...['a', 'b', 'c', 'd'].map((text) => ({ type: 'list-item', text }))] }, right: { blocks: [{ type: 'text', text: 'One line.' }] } } }]) },
+    { id: 'overflow-columns-body-too-long', expect: 'reject', message: /column \d body does not fit/i, input: deck([{ layout: 'columns', template_ref: 'slides/two-column', flows: { title: { blocks: [{ type: 'heading', text: 'Two views' }] }, left: { blocks: [{ type: 'heading', text: 'Left' }, { type: 'text', text: longWords(200, 'Word') }] }, right: { blocks: [{ type: 'heading', text: 'Right' }, { type: 'text', text: 'One line.' }] } } }]) },
+    { id: 'overflow-brand-name-too-long', expect: 'reject', message: /brand name exceeds/i, input: deck([{ layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Heading' }] }, main: { blocks: [{ type: 'text', text: 'One line.' }] } } }], { brand: 'A Deliberately Very Long Brand Name For The Lockup Slot' }) },
+    { id: 'missing-optional-slots', expect: 'render', input: { slides: [{ layout: 'title', flows: { title: { blocks: [{ type: 'heading', text: 'Only a title' }] } } }, { layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Heading only' }] }, main: { blocks: [{ type: 'text', text: 'One line.' }] } } }] }, inkGate: true },
+    { id: 'silent-overflow-footer', expect: 'render', input: deck([{ layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Heading' }] }, main: { blocks: [{ type: 'text', text: 'One line.' }] } } }], { footer: longWords(60, 'Footer') }), inkGate: true },
+    { id: 'silent-overflow-conclusion-item', expect: 'render', input: deck([{ layout: 'conclusions', flows: { title: { blocks: [{ type: 'heading', text: 'Wrap up' }] }, main: { blocks: [{ type: 'list-item', text: longWords(30, 'Conclusion') }, { type: 'list-item', text: 'A short item' }] } } }]), inkGate: true },
+    { id: 'silent-overflow-wide-table', expect: 'render', input: deck([{ layout: 'table', flows: { title: { blocks: [{ type: 'heading', text: 'Wide table' }] }, main: { blocks: [{ type: 'table', head: Array.from({ length: 8 }, (_, index) => `Column ${index + 1}`), body: [Array.from({ length: 8 }, (_, index) => `Cell value ${index + 1} with length`)] }] } } }]), inkGate: true },
   ];
   for (const item of hostile) {
     cases.push({ group: 'overflow', brand: 'orbit', profile: 'primary', kind: 'deck', formats: ['pdf', 'png', 'pptx'], ...item });
   }
   if (settings.brands.includes('flux')) {
-    cases.push({ id: 'overflow-brand-template-two-metrics', group: 'overflow', brand: 'flux', profile: 'primary', kind: 'deck', formats: ['png'], expect: 'reject', message: /exactly three metrics/i, input: deck([{ type: 'metrics', template_ref: 'slides/metrics-3', title: 'Board', metrics: [{ label: 'A', value: '1' }, { label: 'B', value: '2' }] }]) });
-    cases.push({ id: 'capacity-brand-template-three-metrics', group: 'overflow', brand: 'flux', profile: 'primary', kind: 'deck', formats: ['pdf', 'png', 'pptx'], expect: 'render', input: deck([{ type: 'metrics', template_ref: 'slides/metrics-3', title: 'Board', subtitle: 'Brand template', metrics: [{ label: 'A', value: '1' }, { label: 'B', value: '2' }, { label: 'C', value: '3' }] }]) });
+    cases.push({ id: 'overflow-brand-template-two-metrics', group: 'overflow', brand: 'flux', profile: 'primary', kind: 'deck', formats: ['png'], expect: 'reject', message: /exactly three metrics/i, input: deck([{ layout: 'metrics', template_ref: 'slides/metrics-3', flows: { title: { blocks: [{ type: 'heading', text: 'Board' }] }, main: { blocks: [{ type: 'metric', label: 'A', value: '1' }, { type: 'metric', label: 'B', value: '2' }] } } }]) });
+    cases.push({ id: 'capacity-brand-template-three-metrics', group: 'overflow', brand: 'flux', profile: 'primary', kind: 'deck', formats: ['pdf', 'png', 'pptx'], expect: 'render', input: deck([{ layout: 'metrics', template_ref: 'slides/metrics-3', flows: { title: { blocks: [{ type: 'heading', text: 'Board' }] }, subtitle: { blocks: [{ type: 'text', text: 'Brand template' }] }, main: { blocks: [{ type: 'metric', label: 'A', value: '1' }, { type: 'metric', label: 'B', value: '2' }, { type: 'metric', label: 'C', value: '3' }] } } }]) });
   }
   return settings.only ? cases.filter((item) => item.id.includes(settings.only)) : cases;
 }
@@ -1279,7 +1283,7 @@ async function preflight() {
     kind: 'deck',
     formats: ['png'],
     expect: 'render',
-    input: deck([{ type: 'narrative', title: 'Preflight', body: 'One line.' }]),
+    input: deck([{ layout: 'narrative', flows: { title: { blocks: [{ type: 'heading', text: 'Preflight' }] }, main: { blocks: [{ type: 'text', text: 'One line.' }] } } }]),
   };
   const rendered = await renderCase(probe, join(settings.out, 'cases', 'preflight'));
   return { ok: rendered.result.status === 0, message: rendered.message, stderr: rendered.stderr.slice(0, 2000) };

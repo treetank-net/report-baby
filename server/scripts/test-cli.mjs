@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
 
 const root = process.cwd();
 const outputDir = await mkdtemp(join(tmpdir(), 'report-baby-cli-'));
@@ -17,7 +18,11 @@ function run(args, input = '') {
     child.stderr.on('data', (chunk) => (stderr += chunk));
     child.on('error', reject);
     child.on('close', (code) => resolve({ code, stdout, stderr }));
-    if (input) child.stdin.end(input);
+    if (input && args.includes('render_report')) {
+      const request = JSON.parse(input);
+      if (request.data && !request.data.flows) request.data = legacyFixtureToCompositionInput(request.data);
+      child.stdin.end(JSON.stringify(request));
+    } else if (input) child.stdin.end(input);
     else child.stdin.end();
   });
 }
@@ -77,8 +82,7 @@ try {
   }));
   assert.equal(warned.code, 0, warned.stderr);
   assert.equal(warned.stdout.trim(), warningPath);
-  assert.match(warned.stderr, /does not render KPI blocks/);
-  assert.match(warned.stderr, /does not render chart blocks/);
+  assert.equal(warned.stderr, '');
 
   const jsonWarned = await run(['--json', 'render_report'], JSON.stringify({
     template: 'pages/editorial-two-column',
@@ -87,7 +91,7 @@ try {
   }));
   assert.equal(jsonWarned.code, 0, jsonWarned.stderr);
   assert.equal(jsonWarned.stderr, '');
-  assert.match(jsonWarned.stdout, /does not render KPI blocks/);
+  assert.match(jsonWarned.stdout, /composition-planner/);
 } finally {
   await rm(outputDir, { recursive: true, force: true });
 }

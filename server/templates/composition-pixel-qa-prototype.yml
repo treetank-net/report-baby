@@ -1,0 +1,122 @@
+# PROTOTYPE — PNG composition QA calibration.
+# These values intentionally live in YAML so a later renderer can share the
+# same seam instead of hiding visual tolerances in a test script.
+page:
+  width_mm: 210
+  height_mm: 297
+  expected_dpi: 96
+
+mask:
+  color_tolerance: 24
+  inset_px: 3
+  dark_ink_max_channel: 55
+  minimum_shape_coverage: 0.25
+  shape_boundary_tolerance_px: 1
+  maximum_outside_shape_ratio: 0.02
+  clean_overlap_floor: 0.0015
+  fail_overlap_ratio: 0.01
+  fail_suspicious_overlap: true
+  wrap_coordinate_tolerance_mm: 0.01
+  mutation_patch_width_px: 32
+  mutation_patch_height_px: 32
+
+wrap:
+  gap_mm: 0.5
+  minimum_text_width_mm: 8
+  raster_safety_gap_px: 6
+
+intro:
+  text_inset_mm: 3
+  first_baseline_offset_mm: 8
+  minimum_height_mm: 14
+
+flow_boxes:
+  default_padding_mm: 3
+  default_gap_mm: 5
+  first_baseline_offset_mm: 8
+
+# Scenarios for boxes that are deliberately treated as layout obstacles.
+# They are prototype inputs, not production defaults.
+flow_box_cases:
+  partial_start_fraction: 0.5
+  partial_end_fraction: 0.5
+  quote_width_mm: 42
+  secondary_quote_width_mm: 28
+  secondary_quote_x_offset_mm: 20
+  quote_height_mm: 42
+  quote_x_offset_mm: 62
+
+pdf_parity:
+  points_tolerance: 1.5
+
+z_order:
+  minimum_overlap_pixels: 12
+  mutation_minimum_overlap_pixels: 1
+  minimum_top_color_ratio: 0.3
+
+# Deterministic continuous-flow contract used by the PDF pixel harness.
+# The planner receives only the two column slots and the obstacle graphics;
+# the harness knows these rectangles so it can reject an empty rendered zone.
+numbered_flow:
+  max_pages: 3
+  page:
+    width: 100
+    height: 100
+  columns:
+    divider_x: 50
+    left: { x: 5, y: 2, width: 40, height: 98 }
+    right: { x: 55, y: 2, width: 40, height: 98 }
+  obstacles:
+    - { id: quote-a, x: 5, y: 28, width: 90, height: 10 }
+    - { id: quote-b, x: 5, y: 63, width: 90, height: 10 }
+  expected_words: 1000
+  expected_pages_with_obstacles: [1, 2]
+  expected_zones:
+    - { id: left-before-a, x: 5, y: 2, width: 40, height: 26 }
+    - { id: left-between-obstacles, x: 5, y: 38, width: 40, height: 25 }
+    - { id: left-after-b, x: 5, y: 73, width: 40, height: 27 }
+    - { id: right-before-a, x: 55, y: 2, width: 40, height: 26 }
+    - { id: right-between-obstacles, x: 55, y: 38, width: 40, height: 25 }
+    - { id: right-after-b, x: 55, y: 73, width: 40, height: 27 }
+  expected_final_columns:
+    - { id: final-left, x: 5, y: 2, width: 40, height: 98 }
+    - { id: final-right, x: 55, y: 2, width: 40, height: 98 }
+  text_style: { font_size: 5, line_height: 1.4, baseline_offset: 1 }
+  obstacle_boundary_tolerance: 0.5
+  obstacle_style: { fill_color: [245, 232, 223], draw_color: [220, 92, 48], line_width: 0.3 }
+
+# PROTOTYPE — policy profiles for machine-checkable editorial breaks.
+# A template may select one profile or override individual values per block.
+breaking_profiles:
+  editorial:
+    target_fill_ratio: 0.90
+    minimum_next_fragment_ratio: 0.10
+    widows: 2
+    orphans: 2
+    minimum_lines_after_heading: 2
+    avoid_single_line_fragment: true
+    underfill_policy: diagnostic
+  balanced:
+    target_fill_ratio: 0.90
+    minimum_next_fragment_ratio: 0.10
+    widows: 2
+    orphans: 2
+    minimum_lines_after_heading: 2
+    avoid_single_line_fragment: true
+    underfill_policy: backtrack
+  freeform:
+    target_fill_ratio: 0
+    minimum_next_fragment_ratio: 0
+    widows: 1
+    orphans: 1
+    minimum_lines_after_heading: 0
+    avoid_single_line_fragment: false
+    underfill_policy: allow
+  strict:
+    target_fill_ratio: 0.90
+    minimum_next_fragment_ratio: 0.10
+    widows: 2
+    orphans: 2
+    minimum_lines_after_heading: 2
+    avoid_single_line_fragment: true
+    underfill_policy: reject

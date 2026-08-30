@@ -1,0 +1,18 @@
+# PROTOTYPE — pure planner geometry and font-profile inputs.
+page:
+  width: 1000
+  height: 1400
+  margin: 60
+  column_gap: 24
+  column_width: 416
+  sidebar_gap: 24
+  sidebar_width: 180
+  frame_height: 1160
+font:
+  family: Liberation Sans
+  size: 18
+  line_height: 25
+  bold_factor: 1.08
+quality:
+  float_gap: 12
+  max_unbreakable_word_ratio: 1

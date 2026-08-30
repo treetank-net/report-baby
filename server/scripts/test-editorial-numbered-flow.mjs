@@ -1,0 +1,324 @@
+#!/usr/bin/env node
+
+import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parse } from 'yaml';
+import { runProcess } from './lib/process.mjs';
+import { createEditorialNumberedFixture } from './lib/editorial-numbered-fixture.mjs';
+import { inspectColumnBalance, readPdfLayout } from './lib/pdf-layout-diff.mjs';
+
+const root = process.cwd();
+const temporary = await mkdtemp(join(tmpdir(), 'report-baby-editorial-numbered-'));
+const shadowBundle = join(temporary, 'shadow.cjs');
+const backendBundle = join(temporary, 'composition.cjs');
+const primitivesBundle = join(temporary, 'primitives.cjs');
+const templateBundle = join(temporary, 'template.cjs');
+const geometryBundle = join(temporary, 'geometry.cjs');
+
+function build(entry, output, extra = []) {
+  const result = runProcess('npx', [
+    'esbuild', entry, '--bundle', '--platform=node', '--target=node18', '--format=cjs', ...extra, `--outfile=${output}`,
+  ], { cwd: root, timeout: 30_000 });
+  if (result.status !== 0) throw new Error(`numbered-flow bundle '${entry}' failed: ${result.stderr || result.stdout}`);
+}
+
+build('src/composition/report-shadow.ts', shadowBundle);
+build('src/composition/index.ts', backendBundle);
+build('src/render-primitives.ts', primitivesBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
+build('src/template-contract.ts', templateBundle);
+build('src/page-geometry.ts', geometryBundle);
+
+function numberedTokens(text, prefixes) {
+  const pattern = prefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|');
+  return [...text.matchAll(new RegExp(`\\b(?:${pattern})\\d{4}\\b`, 'gu'))].map((match) => match[0]);
+}
+
+function numbers(tokens) {
+  return tokens.map((token) => Number(token.match(/\d{4}$/u)?.[0]));
+}
+
+function pdfWords(path) {
+  const result = runProcess('pdftotext', ['-bbox-layout', path, '-']);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const words = [];
+  let page = 0;
+  for (const pageMatch of result.stdout.matchAll(/<page\b[^>]*>([\s\S]*?)<\/page>/gu)) {
+    for (const wordMatch of pageMatch[1].matchAll(/<word\s+xMin="([\d.-]+)"\s+yMin="([\d.-]+)"\s+xMax="([\d.-]+)"\s+yMax="([\d.-]+)"[^>]*>([\s\S]*?)<\/word>/gu)) {
+      words.push({ page, xMin: Number(wordMatch[1]), yMin: Number(wordMatch[2]), xMax: Number(wordMatch[3]), yMax: Number(wordMatch[4]), text: wordMatch[5].replace(/<[^>]+>/gu, '') });
+    }
+    page += 1;
+  }
+  return words;
+}
+
+function decodePpm(buffer) {
+  assert.equal(buffer.subarray(0, 2).toString('ascii'), 'P6', 'raster output must be an RGB PPM');
+  let offset = 2;
+  const token = () => {
+    while (offset < buffer.length && /\s/u.test(String.fromCharCode(buffer[offset]))) offset += 1;
+    if (buffer[offset] === 35) {
+      while (offset < buffer.length && buffer[offset] !== 10) offset += 1;
+      return token();
+    }
+    const start = offset;
+    while (offset < buffer.length && !/\s/u.test(String.fromCharCode(buffer[offset]))) offset += 1;
+    return buffer.subarray(start, offset).toString('ascii');
+  };
+  const width = Number(token());
+  const height = Number(token());
+  const maxValue = Number(token());
+  while (offset < buffer.length && /\s/u.test(String.fromCharCode(buffer[offset]))) offset += 1;
+  assert.equal(maxValue, 255, 'raster output must use 8-bit RGB channels');
+  const pixels = buffer.subarray(offset);
+  assert.ok(pixels.length >= width * height * 3, `raster output is truncated: ${pixels.length} < ${width * height * 3}`);
+  return { width, height, pixels };
+}
+
+function pixelAt(image, x, y) {
+  const offset = (y * image.width + x) * 3;
+  return [image.pixels[offset], image.pixels[offset + 1], image.pixels[offset + 2]];
+}
+
+function inkPixelsInBox(image, box, pageSize, qa) {
+  const scaleX = image.width / pageSize.width;
+  const scaleY = image.height / pageSize.height;
+  const inset = qa.rectangle_inset_px;
+  const x0 = Math.max(0, Math.floor(box.x * scaleX) + inset);
+  const y0 = Math.max(0, Math.floor(box.y * scaleY) + inset);
+  const x1 = Math.min(image.width - 1, Math.ceil((box.x + box.width) * scaleX) - inset);
+  const y1 = Math.min(image.height - 1, Math.ceil((box.y + box.height) * scaleY) - inset);
+  const background = pixelAt(image, 0, 0);
+  let count = 0;
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      const pixel = pixelAt(image, x, y);
+      if (Math.max(
+        Math.abs(pixel[0] - background[0]),
+        Math.abs(pixel[1] - background[1]),
+        Math.abs(pixel[2] - background[2]),
+      ) >= qa.background_delta_min) count += 1;
+    }
+  }
+  return count;
+}
+
+async function assertRenderedInk(artifactPath, result, geometry, renderConfig, directory) {
+  const qa = renderConfig.quality.pdf_pixel_qa;
+  assert.ok(qa && Number.isFinite(qa.raster_dpi), 'render config must define quality.pdf_pixel_qa');
+  const rasterDirectory = await mkdtemp(join(temporary, 'ink-raster-'));
+  const prefix = join(rasterDirectory, 'page');
+  const raster = runProcess('pdftoppm', [
+    '-f', '1',
+    '-l', String(result.plan.pages.length),
+    '-r', String(qa.raster_dpi),
+    artifactPath,
+    prefix,
+  ], { cwd: root, timeout: 30_000 });
+  assert.equal(raster.status, 0, raster.stderr || raster.stdout);
+
+  const images = result.plan.pages.map((page) => {
+    const path = `${prefix}-${page.page}.ppm`;
+    return { page: page.page, image: decodePpm(readFileSync(path)) };
+  });
+  const checks = [];
+  const mainLines = result.plan.lines.filter((line) => line.flowId === 'main' && !line.blockId.startsWith('header') && !line.blockId.startsWith('footer'));
+  for (const line of mainLines) {
+    const image = images.find((candidate) => candidate.page === line.page)?.image;
+    assert.ok(image, `missing raster page ${line.page}`);
+    const ink = inkPixelsInBox(image, line.box, geometry, qa);
+    const check = { page: line.page, blockId: line.blockId, slotId: line.slotId, startWord: line.startWord, endWord: line.endWord, inkPixels: ink };
+    checks.push(check);
+    assert.ok(ink >= qa.minimum_ink_pixels, `planned line has no rendered ink: ${JSON.stringify(check)}`);
+  }
+
+  const slotChecks = result.plan.slots
+    .filter((slot) => slot.id.includes(':segment-') || slot.id.endsWith(':intro'))
+    .map((slot) => {
+      const lines = mainLines.filter((line) => line.slotId === slot.id);
+      const image = images.find((candidate) => candidate.page === slot.page)?.image;
+      assert.ok(image, `missing raster page ${slot.page}`);
+      return {
+        page: slot.page,
+        slotId: slot.id,
+        state: slot.state,
+        lineCount: lines.length,
+        inkPixels: inkPixelsInBox(image, slot.box, geometry, qa),
+      };
+    });
+  for (const check of slotChecks.filter((item) => item.lineCount > 0)) {
+    assert.ok(check.inkPixels >= qa.minimum_ink_pixels, `planned text slot is visually empty: ${JSON.stringify(check)}`);
+  }
+  const report = { rasterDpi: qa.raster_dpi, backgroundDeltaMin: qa.background_delta_min, minimumInkPixels: qa.minimum_ink_pixels, lineChecks: checks, slotChecks };
+  if (directory) await writeFile(join(directory, 'ink-occupancy.json'), JSON.stringify(report, null, 2));
+  return report;
+}
+
+function assertExactNumberSet(actual, expected, message) {
+  const sortedActual = [...actual].sort((a, b) => a - b);
+  assert.deepEqual(sortedActual, expected, message);
+}
+
+function routeForPage(template, page) {
+  const layout = template.layouts.find((candidate) => candidate.id === page.layoutId);
+  const route = template.routes.main;
+  const slots = route.slotsByLayout?.[layout?.id ?? ''] ?? route.slots;
+  return { layout, slots };
+}
+
+function assertNoInternalRouteGaps(result) {
+  const collapsed = new Set(result.plan.decisions
+    .filter((decision) => decision.code === 'OPTIONAL_INSERTION_COLLAPSED' && typeof decision.page === 'number' && typeof decision.routeIndex === 'number')
+    .map((decision) => `${decision.page}:${decision.routeIndex}`));
+  const blocked = new Set(result.plan.decisions
+    .filter((decision) => decision.code === 'FLOW_SEGMENT_BLOCKED_BY_INSERTION' && typeof decision.page === 'number' && typeof decision.routeIndex === 'number')
+    .map((decision) => `${decision.page}:${decision.routeIndex}`));
+  for (const page of result.plan.pages) {
+    const { layout, slots } = routeForPage(result.template, page);
+    const occupied = new Set(result.plan.lines
+      .filter((line) => line.flowId === 'main' && line.page === page.page && line.routeIndex !== undefined)
+      .map((line) => line.routeIndex));
+    const ordered = [...occupied].sort((a, b) => a - b);
+    if (ordered.length < 2) continue;
+    for (let index = ordered[0]; index <= ordered.at(-1); index += 1) {
+      if (occupied.has(index) || collapsed.has(`${page.page}:${index}`) || blocked.has(`${page.page}:${index}`)) continue;
+      const slotId = slots[index];
+      const definition = layout?.slots.find((slot) => slot.id === slotId);
+      if (definition?.kind === 'block') continue;
+      assert.equal(definition?.allowedRoles?.includes('quote'), true, `page ${page.page} has an unfilled non-quote route segment ${index} before later content`);
+    }
+  }
+}
+
+function assertNoEmptyContinuationColumn(result) {
+  const mainLines = result.plan.lines.filter((line) => line.flowId === 'main' && !line.blockId.startsWith('header') && !line.blockId.startsWith('footer'));
+  for (const page of result.plan.pages.slice(0, -1)) {
+    const pageLines = mainLines.filter((line) => line.page === page.page);
+    if (pageLines.length === 0) continue;
+    const segmentLines = result.plan.slots
+      .filter((slot) => slot.page === page.page && slot.id.includes(':segment-'))
+      .map((slot) => ({ slotId: slot.id, slot, lines: pageLines.filter((line) => line.slotId === slot.id) }))
+      .sort((left, right) => left.slot.box.x - right.slot.box.x);
+    if (segmentLines.length < 2) continue;
+    assert.ok(segmentLines[0].lines.length > 0, `page ${page.page} entered a later column without using the first column`);
+    assert.ok(segmentLines[1].lines.length > 0, `page ${page.page} left the second column empty before continuing the flow to the next page`);
+  }
+}
+
+function escapeXml(value) {
+  return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+}
+
+async function writeDebugArtifacts(directory, result, fixture, artifact) {
+  await mkdir(directory, { recursive: true });
+  await writeFile(join(directory, 'numbered-editorial.pdf'), artifact);
+  await writeFile(join(directory, 'plan.json'), JSON.stringify(result.plan, null, 2));
+  await writeFile(join(directory, 'fixture-summary.json'), JSON.stringify({
+    totalMainWords: fixture.totalMainWords,
+    tokenPrefixes: fixture.tokenPrefixes,
+    sourceShape: fixture.sourceShape,
+    quoteIds: fixture.sourceShape.filter((block) => block.role === 'quote').map((block) => block.id),
+  }, null, 2));
+  for (const page of result.plan.pages) {
+    const slots = result.plan.slots.filter((slot) => slot.page === page.page);
+    const lines = result.plan.lines.filter((line) => line.flowId === 'main' && line.page === page.page);
+    const layout = result.template.layouts.find((candidate) => candidate.id === page.layoutId);
+    const slotInfo = slots.map((slot) => {
+      const rawId = slot.id.replace(/^\d+:/u, '');
+      const definition = layout?.slots.find((candidate) => candidate.id === rawId);
+      const slotLines = lines.filter((line) => line.slotId === slot.id);
+      const bottom = slotLines.reduce((value, line) => Math.max(value, line.box.y + line.box.height), slot.box.y);
+      return {
+        id: slot.id,
+        state: slot.state,
+        kind: definition?.kind,
+        role: definition?.allowedRoles?.[0],
+        lineCount: slotLines.length,
+        inkProxy: slotLines.reduce((value, line) => value + line.box.width * line.box.height, 0),
+        usedHeight: Math.max(0, bottom - slot.box.y),
+      };
+    });
+    await writeFile(join(directory, `debug-page-${page.page}.json`), JSON.stringify({ page: page.page, layoutId: page.layoutId, slots: slotInfo }, null, 2));
+    const slotSvg = slots.map((slot) => {
+      const rawId = slot.id.replace(/^\d+:/u, '');
+      const definition = layout?.slots.find((candidate) => candidate.id === rawId);
+      const quote = definition?.allowedRoles?.includes('quote');
+      const slotLines = lines.filter((line) => line.slotId === slot.id);
+      const fill = quote ? '#fff0e8' : '#eaf3ff';
+      const stroke = quote ? '#e8753d' : '#4e86b8';
+      const activeObstacle = result.plan.graphicPlacements.some((graphic) => graphic.page === page.page && graphic.slotId === slot.id && graphic.wrap === 'around');
+      const opacity = activeObstacle ? 0.24 : 0.08;
+      const dash = activeObstacle ? '0' : '2 1';
+      const labelY = Math.max(14, slot.box.y - 0.8);
+      return `<rect x="${slot.box.x}" y="${slot.box.y}" width="${slot.box.width}" height="${slot.box.height}" fill="${fill}" fill-opacity="${opacity}" stroke="${stroke}" stroke-dasharray="${dash}"/><text x="${slot.box.x + 1}" y="${labelY}" font-size="2.4" fill="${stroke}">${escapeXml(`${rawId} · ${slot.state} · ${slotLines.length} lines`)}</text>`;
+    }).join('');
+    const lineSvg = lines.map((line) => {
+      const color = line.blockId.startsWith('quote-') ? '#e8753d' : line.blockId.startsWith('intro-') ? '#2a6ea6' : '#19334f';
+      return `<rect x="${line.box.x}" y="${line.box.y}" width="${line.box.width}" height="${line.box.height}" fill="${color}" fill-opacity="0.24"/><text x="${line.box.x}" y="${line.box.y + 3.4}" font-size="2.2" fill="#122a43">${escapeXml(`${line.blockId} · r${line.routeIndex ?? '-'} · ${line.startWord}-${line.endWord}`)}</text>`;
+    }).join('');
+    const obstacleSvg = result.plan.graphicPlacements
+      .filter((graphic) => graphic.page === page.page && graphic.wrap === 'around')
+      .map((graphic) => `<rect x="${graphic.box.x}" y="${graphic.box.y}" width="${graphic.box.width}" height="${graphic.box.height}" fill="#f07b42" fill-opacity="0.18" stroke="#e8753d" stroke-width="0.7"/><text x="${graphic.box.x + 1}" y="${graphic.box.y + 5}" font-size="2.4" fill="#c45728">obstacle · ${escapeXml(graphic.graphicId)}</text>`)
+      .join('');
+    const segmentSummary = slots
+      .filter((slot) => slot.id.includes(':segment-'))
+      .map((slot) => `${slot.id.replace(/^\d+:/u, '')}: ${lines.filter((line) => line.slotId === slot.id).length}`)
+      .join(' · ');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297"><rect width="210" height="297" fill="white"/><text x="17" y="7" font-size="4" font-family="sans-serif" font-weight="bold">DEBUG PAGE ${page.page} · continuous flow + obstacles</text><text x="17" y="12" font-size="2.6" font-family="sans-serif" fill="#19334f">actual main-flow lines: ${escapeXml(segmentSummary || 'none')} · pale boxes = capacity, filled strips = planned lines</text>${slotSvg}${obstacleSvg}${lineSvg}</svg>`;
+    await writeFile(join(directory, `debug-page-${page.page}.svg`), svg);
+  }
+}
+
+try {
+  const { planReportCompositionShadow, compositionStylesFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig } = await import(shadowBundle);
+  const { createJsPdfTextBackend, renderComposition } = await import(backendBundle);
+  const { newPdf } = await import(primitivesBundle);
+  const { compileTemplateSource } = await import(templateBundle);
+  const { pageGeometryFromTemplate } = await import(geometryBundle);
+  const source = parse(await readFile(join(root, 'templates/pages/editorial-inset-two-column/template.yml'), 'utf8'));
+  const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
+  const template = compileTemplateSource(source);
+  const geometry = pageGeometryFromTemplate(template);
+  const fixture = createEditorialNumberedFixture();
+  assert.ok(fixture.totalMainWords >= 1000, `fixture must contain at least 1000 main-flow words, got ${fixture.totalMainWords}`);
+  assert.equal(fixture.sourceShape.filter((block) => block.role === 'quote').length, 4, 'fixture must retain all four authored quote insertions');
+
+  const pdf = newPdf('portrait', [geometry.width, geometry.height]);
+  const result = planReportCompositionShadow(pdf, template, geometry, fixture.input, { family: 'DejaVu', maxPages: 12 });
+  const continuationLayout = result.template.layouts.find((layout) => layout.id.endsWith(':continuation'));
+  const continuationRoute = result.template.routes.main.slotsByLayout?.[continuationLayout?.id ?? ''] ?? [];
+  assert.equal(continuationRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'continuous quote flow must retain one segment per column');
+  assert.deepEqual(result.template.routes.main.insertionSlots, ['quote-a', 'quote-b'], 'quotes must be declared as flow obstacles, not route segments');
+  assert.notEqual(result.evaluation.status, 'rejected', JSON.stringify(result.evaluation));
+  assert.equal(result.plan.residualContent.length, 0, JSON.stringify(result.plan.residualContent));
+  assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
+  assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
+  assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_STABILIZED'), 'editorial fixture must finish with a stabilized insertion plan');
+  const introBlockIds = new Set(fixture.sourceShape.filter((block) => block.role === 'intro').map((block) => block.id));
+  const introLines = result.plan.lines.filter((line) => introBlockIds.has(line.blockId));
+  assert.ok(introLines.length > 0, 'numbered fixture must place its intro content');
+  assert.equal(introLines.every((line) => line.slotId.endsWith(':intro')), true, 'intro content must use the semantic intro slot instead of ordinary column flow');
+  assertExactNumberSet(numbers(numberedTokens(result.plan.lines.filter((line) => line.flowId === 'main').map((line) => line.text).join(' '), fixture.tokenPrefixes)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner must retain every numbered word exactly once');
+  assertNoInternalRouteGaps(result);
+  assertNoEmptyContinuationColumn(result);
+
+  const artifact = renderComposition(result.document, result, createJsPdfTextBackend(pdf, 'DejaVu', compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
+  const artifactPath = join(temporary, 'numbered-editorial.pdf');
+  await writeFile(artifactPath, artifact);
+  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeDebugArtifacts(process.env.REPORT_BABY_ARTIFACT_DIR, result, fixture, artifact);
+  const inkOccupancy = await assertRenderedInk(artifactPath, result, geometry, renderConfig, process.env.REPORT_BABY_ARTIFACT_DIR);
+  const tokenPattern = new RegExp(`^(?:${fixture.tokenPrefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|')})\\d{4}$`, 'u');
+  const words = pdfWords(artifactPath).filter((word) => tokenPattern.test(word.text));
+  assertExactNumberSet(numbers(words.map((word) => word.text)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'final PDF must contain every numbered word exactly once');
+
+  const columnBalance = inspectColumnBalance(readPdfLayout(artifactPath), renderConfig.quality.layout_diff);
+  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));
+
+  const planNumbers = numbers(numberedTokens(result.plan.lines.filter((line) => line.flowId === 'main').map((line) => line.text).join(' '), fixture.tokenPrefixes));
+  assert.deepEqual(planNumbers, Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner reading order must be monotonically increasing');
+  console.log(JSON.stringify({ status: 'passed', pages: result.plan.pages.length, mainWords: fixture.totalMainWords, quotes: fixture.sourceShape.filter((block) => block.role === 'quote').length, lines: result.plan.lines.filter((line) => line.flowId === 'main').length, columnBalance, inkChecks: inkOccupancy.lineChecks.length, artifactPath }));
+} finally {
+  await rm(temporary, { recursive: true, force: true });
+}

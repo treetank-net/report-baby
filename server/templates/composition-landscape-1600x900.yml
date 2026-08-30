@@ -1,0 +1,23 @@
+# PROTOTYPE — landscape 1600x900 composition preset.
+page:
+  width_px: 1600
+  height_px: 900
+  dpi: 96
+  width_mm: 423.33
+  height_mm: 238.1
+  margin_mm: 10
+layout:
+  header_mm: 12
+  footer_mm: 8
+  body_gap_mm: 4
+  article_sidebar_gap_mm: 6
+  article_width_mm: 300
+  sidebar_width_mm: 82
+  track_gap_mm: 4
+  article_tracks:
+    - id: lead
+      width: 96
+    - id: middle
+      width: 96
+    - id: secondary
+      width: 96

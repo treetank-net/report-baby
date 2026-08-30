@@ -5,8 +5,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import { prepareDemoBrandStore } from './lib/brand-store.mjs';
 import { childProcessFailure } from './lib/process.mjs';
+import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = process.cwd();
@@ -51,6 +53,19 @@ function section(heading, body = baseBody, level) {
 }
 
 const reproducers = [
+  {
+    name: 'reproducer-three-unequal-columns',
+    input: {
+      template: 'pages/editorial-three-column',
+      brand_ref: 'brand://flux/primary',
+      data: {
+        title: 'Trzy nierowne kolumny',
+        intro: 'Lead occupies the shared intro box and pushes the three-column narrative below it.',
+        sections: Array.from({ length: 8 }, (_, index) => section(`Kolumna testowa ${index + 1}`, `${baseBody} ${baseBody}`)),
+        footer: 'three-column fixture',
+      },
+    },
+  },
   {
     name: 'reproducer-A-intro',
     input: {
@@ -254,17 +269,42 @@ function median(values) {
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
-function parseBbox(xml) {
+function templateColumnFrames(input, pageWidth) {
+  const templatePath = join(root, 'templates', input.template, 'template.yml');
+  const source = parseYaml(readFileSync(templatePath, 'utf8'));
+  const page = source.page;
+  const scale = pageWidth / page.width;
+  let x = page.margins.left * scale;
+  return page.columns.widths.map((columnWidth) => {
+    const frame = { left: x, right: x + columnWidth * scale };
+    x += (columnWidth + page.columns.gutter) * scale;
+    return frame;
+  });
+}
+
+function columnForX(x, frames) {
+  const containing = frames.findIndex((frame) => x >= frame.left - 0.5 && x <= frame.right + 0.5);
+  if (containing >= 0) return containing;
+  return frames.reduce((closest, frame, index) => {
+    const distance = x < frame.left ? frame.left - x : x > frame.right ? x - frame.right : 0;
+    const closestFrame = frames[closest];
+    const closestDistance = x < closestFrame.left ? closestFrame.left - x : x > closestFrame.right ? x - closestFrame.right : 0;
+    return distance < closestDistance ? index : closest;
+  }, 0);
+}
+
+function parseBbox(xml, input) {
   return [...xml.matchAll(/<page width="([0-9.]+)" height="([0-9.]+)">([\s\S]*?)<\/page>/g)].map((pageMatch, pageIndex) => {
     const width = Number(pageMatch[1]);
     const height = Number(pageMatch[2]);
+    const frames = templateColumnFrames(input, width);
     const words = [...pageMatch[3].matchAll(/<word xMin="([0-9.]+)" yMin="([0-9.]+)" xMax="([0-9.]+)" yMax="([0-9.]+)">([^<]*)<\/word>/g)]
       .map((match) => ({ pageIndex, xMin: Number(match[1]), yMin: Number(match[2]), xMax: Number(match[3]), yMax: Number(match[4]), text: match[5], token: normalize(match[5]) }));
     const footer = words.filter((word) => word.text === '/').sort((a, b) => b.yMin - a.yMin)[0];
     assert.ok(footer, `page ${pageIndex + 1}: footer page number not found; cannot measure usable column bottom`);
     const lines = [];
     for (const word of words.sort((left, right) => left.xMin - right.xMin || left.yMin - right.yMin)) {
-      const column = word.xMin < width / 2 ? 0 : 1;
+      const column = columnForX(word.xMin, frames);
       const line = lines.find((candidate) => candidate.column === column && Math.abs(candidate.yMin - word.yMin) <= 0.2);
       if (line) line.words.push(word);
       else lines.push({ pageIndex, column, yMin: word.yMin, words: [word] });
@@ -301,6 +341,7 @@ function assertNoWordOverlaps(pages) {
 }
 
 function assertNoColumnOverflow(pages, input) {
+  const framesFor = (page) => templateColumnFrames(input, page.width);
   const leftWords = pages.flatMap((page) => contentLines(page, input).filter((line) => line.column === 0).flatMap((line) => line.contentWords));
   const leftEdge = Math.min(...leftWords.map((word) => word.xMin));
   assert.ok(Number.isFinite(leftEdge), 'content words were not found while checking column edges');
@@ -308,10 +349,10 @@ function assertNoColumnOverflow(pages, input) {
   for (const page of pages) {
     const firstSectionY = Math.min(...page.lines.filter((line) => line.tokens.some((token) => sectionStarts.has(token))).map((line) => line.yMin));
     for (const line of contentLines(page, input)) {
-      // The editorial intro is a full-width block above the two-column flow.
-      // Its words must not be judged against the left column's half-page edge.
+      // The editorial intro is a full-width block above the column flow. Its
+      // words must not be judged against a column edge.
       if (Number.isFinite(firstSectionY) && line.yMin < firstSectionY) continue;
-      const rightEdge = line.column === 0 ? page.width / 2 : page.width - leftEdge;
+      const rightEdge = framesFor(page)[line.column]?.right ?? page.width;
       for (const word of line.contentWords) {
         assert.ok(word.xMax <= rightEdge + 0.5, `page ${page.pageIndex + 1}, column ${line.column + 1}: word '${word.text}' crosses column edge by ${(word.xMax - rightEdge).toFixed(2)}pt`);
       }
@@ -319,15 +360,13 @@ function assertNoColumnOverflow(pages, input) {
   }
 }
 
-function assertNoWideSolitaryHyphenLines(pages) {
+function assertNoWideSolitaryHyphenLines(pages, input) {
   for (const page of pages) {
     const bodyLines = page.lines.filter((line) => line.yMin > page.height * 0.25 && line.yMin < page.footerY);
-    const leftWords = page.words.filter((word) => word.xMin < page.width / 2 && word.yMin < page.footerY);
-    const leftEdge = Math.min(...leftWords.map((word) => word.xMin));
-    const rightEdge = page.width - (page.width / 2 - leftEdge);
+    const frames = templateColumnFrames(input, page.width);
     for (const line of bodyLines) {
       if (line.words.length !== 1 || !line.words[0].text.endsWith('-')) continue;
-      const available = (line.column === 0 ? page.width / 2 : rightEdge) - line.xMax;
+      const available = (frames[line.column]?.right ?? page.width) - line.xMax;
       assert.ok(available <= 25, `page ${page.pageIndex + 1}, column ${line.column + 1}: solitary hyphenated fragment '${line.words[0].text}' leaves ${available.toFixed(2)}pt unused`);
     }
   }
@@ -388,13 +427,14 @@ function assertNoOrphanedFirstLines(pages, input) {
     const first = normalize(sectionData.body.split(/\s+/)[0]);
     const second = normalize(sectionData.body.split(/\s+/)[1]);
     const lineOrder = line.pageIndex * 1000000 + line.column * 100000 + line.yMin;
+    const frames = templateColumnFrames(input, pages[line.pageIndex].width);
     const secondWord = pages.flatMap((page) => page.words)
-      .filter((word) => word.pageIndex === line.pageIndex && (word.xMin < pages[line.pageIndex].width / 2) === (line.column === 0))
+      .filter((word) => word.pageIndex === line.pageIndex && columnForX(word.xMin, frames) === line.column)
       .filter((word) => word.pageIndex * 1000000 + line.column * 100000 + word.yMin >= lineOrder)
       .find((word) => word.token === second);
     assert.ok(secondWord, `second body word '${second}' for '${sectionData.heading}' was not found`);
     const page = pages[line.pageIndex];
-    const columnRight = line.column === 0 ? page.width / 2 : page.width - Math.min(...page.words.filter((word) => word.xMin < page.width / 2).map((word) => word.xMin));
+    const columnRight = frames[line.column]?.right ?? page.width;
     const fits = line.xMax + wordGap + (secondWord.xMax - secondWord.xMin) <= columnRight;
     assert.ok(!fits, `orphaned first line in '${sectionData.heading}': '${first}' is alone although the next word fits`);
   }
@@ -412,32 +452,38 @@ function assertColumnBreaksFillTheColumn(pages, input) {
   const headingTokens = new Set((input.data.sections ?? []).flatMap((sectionData) => String(sectionData.heading).split(/\s+/).map(normalize)));
   for (const page of pages) {
     const bodyLines = contentLines(page, input).map((line) => ({ ...line, bodyWords: line.contentWords }));
-    const left = bodyLines.filter((line) => line.column === 0);
-    const right = bodyLines.filter((line) => line.column === 1);
-    if (left.length === 0 || right.length === 0) continue;
-    if (right[0].tokens.some((token) => headingTokens.has(token))) continue;
-    if (right.some((line) => line.tokens.some((token) => blockTokens.has(token)))) continue;
-    const leftY = left.flatMap((line) => line.bodyWords.map((word) => word.yMax));
     const lineDeltas = [...new Set(bodyLines.map((line) => line.column))].flatMap((column) => {
       const columnLines = bodyLines.filter((line) => line.column === column).sort((leftLine, rightLine) => leftLine.yMin - rightLine.yMin);
       return columnLines.slice(1).map((line, index) => line.yMin - columnLines[index].yMin);
     });
     const lineHeight = median(lineDeltas);
     if (!lineHeight) continue;
-    // Leave one derived line of clearance for the footer glyphs; the
-    // remaining gap is the actual unused column space being tested.
-    const usableBottom = page.footerY - lineHeight;
-    const gap = usableBottom - Math.max(...leftY);
-    assert.ok(gap <= lineHeight * 2.5, `page ${page.pageIndex + 1}: left column broke ${gap.toFixed(2)}pt before footer, more than 2.5 lines (${lineHeight.toFixed(2)}pt); last left '${left.at(-1)?.text ?? ''}' at y=${left.at(-1)?.yMin.toFixed(2)}, first right '${right.at(0)?.text ?? ''}' at y=${right.at(0)?.yMin.toFixed(2)}`);
+    const lastColumn = Math.max(...bodyLines.map((line) => line.column));
+    for (let column = 0; column < lastColumn; column += 1) {
+      const left = bodyLines.filter((line) => line.column === column);
+      const right = bodyLines.filter((line) => line.column === column + 1);
+      if (left.length === 0 || right.length === 0) continue;
+      if (right[0].tokens.some((token) => headingTokens.has(token))) continue;
+      if (right.some((line) => line.tokens.some((token) => blockTokens.has(token)))) continue;
+      const leftY = left.flatMap((line) => line.bodyWords.map((word) => word.yMax));
+      // Leave one derived line of clearance for the footer glyphs; the
+      // remaining gap is the actual unused column space being tested.
+      const usableBottom = page.footerY - lineHeight;
+      const gap = usableBottom - Math.max(...leftY);
+      assert.ok(gap <= lineHeight * 2.5, `page ${page.pageIndex + 1}: column ${column + 1} broke ${gap.toFixed(2)}pt before column ${column + 2}, more than 2.5 lines (${lineHeight.toFixed(2)}pt); last '${left.at(-1)?.text ?? ''}', first next '${right.at(0)?.text ?? ''}`);
+    }
   }
 }
 
 function assertNoEmptyContentColumns(pages, input) {
   for (const page of pages.slice(0, -1)) {
     const lines = contentLines(page, input);
-    const left = lines.filter((line) => line.column === 0);
-    const right = lines.filter((line) => line.column === 1);
-    assert.ok(left.length > 0 && right.length > 0, `page ${page.pageIndex + 1}: content columns are unbalanced (${left.length} left lines, ${right.length} right lines)`);
+    const occupied = lines.map((line) => line.column);
+    if (occupied.length === 0) continue;
+    const highest = Math.max(...occupied);
+    for (let column = 0; column <= highest; column += 1) {
+      assert.ok(occupied.includes(column), `page ${page.pageIndex + 1}: content column ${column + 1} is empty before a later column is used`);
+    }
   }
 }
 
@@ -453,9 +499,9 @@ function assertTablesDoNotStartInAnEmptyColumn(pages, input) {
     const lines = contentLines(page, input);
     const tableLines = lines.filter((line) => line.tokens.some((token) => tableTokens.has(token)));
     if (tableLines.length === 0) continue;
-    const hasLeftContent = lines.some((line) => line.column === 0);
-    const hasRightTable = tableLines.some((line) => line.column === 1);
-    assert.ok(hasLeftContent || !hasRightTable, `page ${page.pageIndex + 1}: table content starts in the right column while the left column is empty`);
+    const firstTableColumn = Math.min(...tableLines.map((line) => line.column));
+    const hasPriorContent = lines.some((line) => line.column < firstTableColumn);
+    assert.ok(hasPriorContent || firstTableColumn === 0, `page ${page.pageIndex + 1}: table content starts in column ${firstTableColumn + 1} while all prior columns are empty`);
   }
   for (const value of table.body.map((row) => row[0])) {
     const token = normalize(String(value).split(/\s+/)[0]);
@@ -464,7 +510,7 @@ function assertTablesDoNotStartInAnEmptyColumn(pages, input) {
 }
 
 function assertNoInternalColumnHoles(pages, input) {
-  const headingTokens = new Set((input.data.sections ?? []).map((sectionData) => normalize(sectionData.heading)));
+  const headingTokens = new Set((input.data.sections ?? []).flatMap((sectionData) => String(sectionData.heading).split(/\s+/).map(normalize)));
   const introTokens = new Set(String(input.data.intro ?? '').split(/\s+/).map(normalize));
   const tableBoundaryTokens = new Set([
     input.data.table?.caption,
@@ -484,7 +530,8 @@ function assertNoInternalColumnHoles(pages, input) {
     });
     const lineHeight = median(deltas);
     if (!lineHeight) continue;
-    for (const column of [0, 1]) {
+    const lastColumn = Math.max(-1, ...lines.map((line) => line.column));
+    for (let column = 0; column <= lastColumn; column += 1) {
       const columnLines = lines.filter((line) => line.column === column).sort((left, right) => left.yMin - right.yMin);
       for (let index = 1; index < columnLines.length; index += 1) {
         const gap = columnLines[index].yMin - columnLines[index - 1].yMin;
@@ -522,7 +569,9 @@ function renderBatch(fixtures, workDir, concurrency, brandStore, planOnly = fals
     });
     const payload = JSON.stringify(batch.map((fixture) => ({
       tool: 'render_report',
-      args: planOnly ? { ...fixture.input, dry_run: true } : { ...fixture.input, output_path: join(workDir, `${fixture.name}.pdf`) },
+      args: planOnly
+        ? { ...fixture.input, data: legacyFixtureToCompositionInput(fixture.input.data), dry_run: true }
+        : { ...fixture.input, data: legacyFixtureToCompositionInput(fixture.input.data), output_path: join(workDir, `${fixture.name}.pdf`) },
     })));
     child.stdin.end(payload);
   })));
@@ -531,7 +580,7 @@ function renderBatch(fixtures, workDir, concurrency, brandStore, planOnly = fals
 async function measureRendered(name, input, workDir) {
   const outputPath = join(workDir, `${name}.pdf`);
   const { stdout: bbox } = await execFileAsync('pdftotext', ['-bbox-layout', outputPath, '-']);
-  return { pages: parseBbox(bbox) };
+  return { pages: parseBbox(bbox, input) };
 }
 
 try {
@@ -573,7 +622,7 @@ try {
         for (const check of [
           () => assertNoWordOverlaps(result.pages),
           () => assertNoColumnOverflow(result.pages, fixture.input),
-          () => assertNoWideSolitaryHyphenLines(result.pages),
+          () => assertNoWideSolitaryHyphenLines(result.pages, fixture.input),
           () => assertNoOrphanedFirstLines(result.pages, fixture.input),
           () => assertColumnBreaksFillTheColumn(result.pages, fixture.input),
           () => assertNoEmptyContentColumns(result.pages, fixture.input),

@@ -29,6 +29,7 @@ export interface SlideDeck {
   slideThemes?: Array<RenderTheme | undefined>;
   slidePlans?: Array<ResolvedSlidePlan | undefined>;
   slideTemplateSources?: Array<CompiledTemplate | undefined>;
+  slideFooters?: Array<string | undefined>;
 }
 
 const RENDER_CONFIG: RenderConfig = readRenderConfig();
@@ -51,7 +52,19 @@ const ACCENT = '#2563eb';
 const SOFT = '#f8fafc';
 const LINE = '#e2e8f0';
 
-function textBoxBaseline(box: { y: number; height: number }, size: number): number {
+function textBoxBaseline(
+  box: { y: number; height: number },
+  size: number,
+  verticalAlign?: 'top' | 'middle' | 'bottom',
+  lineHeight = size * RENDER_CONFIG.text.lineHeight,
+  lineCount = 1,
+): number {
+  if (verticalAlign) {
+    const contentHeight = size + Math.max(0, lineCount - 1) * lineHeight;
+    const freeSpace = Math.max(0, box.height - contentHeight);
+    const offset = verticalAlign === 'middle' ? freeSpace / 2 : verticalAlign === 'bottom' ? freeSpace : 0;
+    return box.y + offset + size;
+  }
   const preferred = box.y + box.height * RENDER_CONFIG.fallbacks.text_box_baseline_ratio;
   const minimum = box.y + size;
   const maximum = box.y + box.height - size * RENDER_CONFIG.fallbacks.text_box_descender_ratio;
@@ -136,22 +149,45 @@ function lockupNameSize(brand: string | undefined, baseSize: number, theme: Rend
   return largestFittingSize;
 }
 
+function lockupVariant(slide: Slide): RenderConfig['chrome']['lockup']['standard' | 'title' | 'compact'] {
+  return slide.type === 'title' ? RENDER_CONFIG.chrome.lockup.title : RENDER_CONFIG.chrome.lockup.standard;
+}
+
+function lockupGap(variant: ReturnType<typeof lockupVariant>, spacing: ResolvedSlidePlan['lockup']['spacing']): number {
+  return spacing === 'compact' ? variant.gapCompactPx : spacing === 'open' ? variant.gapOpenPx : variant.gapNormalPx;
+}
+
 function lockupGeometry(slide: Slide, theme: RenderTheme, brand?: string, plan?: ResolvedSlidePlan): { markX: number; markY: number; markW: number; markH: number; nameX: number; nameY: number; nameSize: number; nameAnchor: 'start' | 'end' } {
   const legacy = RENDER_CONFIG.legacy;
+  const variant = lockupVariant(slide);
   if (plan) {
-    const title = slide.type === 'title';
     const mark = plan.lockup.mark;
     const name = plan.lockup.name;
-    const gap = plan.lockup.spacing === 'compact' ? legacy.lockup_gap_compact : plan.lockup.spacing === 'open' ? legacy.lockup_gap_open : legacy.lockup_gap_normal;
-    return { markX: mark.x, markY: mark.y, markW: mark.width, markH: mark.height, nameX: plan.sourceTemplate ? (plan.lockup.physicalSide === 'right' ? name.x + name.width : name.x) : plan.lockup.physicalSide === 'right' ? mark.x - gap : mark.x + mark.width + gap, nameY: plan.sourceTemplate ? name.y + name.height * RENDER_CONFIG.fallbacks.lockup_name_baseline_ratio : title ? legacy.title_name_y : legacy.regular_name_y, nameSize: lockupNameSize(brand, title ? legacy.title_name_size : legacy.regular_name_size, theme, plan), nameAnchor: plan.lockup.physicalSide === 'right' ? 'end' : 'start' };
+    const gap = lockupGap(variant, plan.lockup.spacing);
+    const nameSize = lockupNameSize(brand, variant.nameSizePx, theme, plan);
+    // The visible text and mark must share a visual centre on every slide.
+    // Using the same measured box calculation for template and fallback plans
+    // avoids the old title/regular y constants drifting apart.
+    const nameY = textBoxBaseline(
+      { y: mark.y, height: mark.height },
+      nameSize,
+      plan.lockup.verticalAlign,
+      nameSize,
+      1,
+    );
+    return { markX: mark.x, markY: mark.y, markW: mark.width, markH: mark.height, nameX: plan.sourceTemplate ? (plan.lockup.physicalSide === 'right' ? name.x + name.width : name.x) : plan.lockup.physicalSide === 'right' ? mark.x - gap : mark.x + mark.width + gap, nameY, nameSize, nameAnchor: plan.lockup.physicalSide === 'right' ? 'end' : 'start' };
   }
   const title = slide.type === 'title';
   const centered = title && theme.titleAlign === 'center';
-  const markW = centered ? legacy.title_mark_width : legacy.regular_mark_width;
-  const nameSize = title ? legacy.title_name_size : legacy.regular_name_size;
-  const groupWidth = markW + legacy.lockup_gap_normal + String(brand ?? '').length * (nameSize * RENDER_CONFIG.text.headingGlyphWidth);
+  const gap = lockupGap(variant, 'normal');
+  const markW = variant.markWidthPx;
+  const nameSize = variant.nameSizePx;
+  const groupWidth = markW + gap + String(brand ?? '').length * (nameSize * RENDER_CONFIG.text.headingGlyphWidth);
   const markX = centered ? (WIDTH - groupWidth) / 2 : RENDER_CONFIG.spacing.margin;
-  return { markX, markY: title ? legacy.title_mark_y : legacy.regular_mark_y, markW, markH: legacy.regular_mark_width, nameX: markX + markW + legacy.lockup_gap_normal, nameY: title ? legacy.title_name_y : legacy.regular_name_y, nameSize, nameAnchor: 'start' };
+  const markY = variant.markYPx;
+  const markH = variant.markHeightPx;
+  const nameY = textBoxBaseline({ y: markY, height: markH }, nameSize, variant.verticalAlign, nameSize, 1);
+  return { markX, markY, markW, markH, nameX: markX + markW + gap, nameY, nameSize, nameAnchor: 'start' };
 }
 
 function escapeXml(value: unknown): string {
@@ -238,12 +274,12 @@ function fitMetricCard(metric: MetricCard, box: { x: number; y: number; width: n
   return { label, value, delta, note };
 }
 
-function fitTemplateText(label: string, value: string, box: { x: number; y: number; width: number; height: number }, baseSize: number, maxLines: number, overflow: 'reject' | 'shrink-to-fit' | undefined, theme: RenderTheme, family: string): { fit: ReturnType<typeof fitText>; baseline: number } {
+function fitTemplateText(label: string, value: string, box: { x: number; y: number; width: number; height: number }, baseSize: number, maxLines: number, overflow: 'reject' | 'shrink-to-fit' | undefined, verticalAlign: 'top' | 'middle' | 'bottom' | undefined, theme: RenderTheme, family: string): { fit: ReturnType<typeof fitText>; baseline: number } {
   const glyphWidth = family.toLowerCase().includes('mono') ? RENDER_CONFIG.text.monoEstimatedGlyphWidth : RENDER_CONFIG.text.bodyGlyphWidth;
   const maxChars = Math.max(4, Math.floor(box.width / (baseSize * glyphWidth)));
   const fit = fitText(value, baseSize, maxChars, maxLines, templateFitTheme(theme, overflow), theme.minBodyPt);
   if (fit.overflow) throw new Error(`${label} does not fit its template slot.`);
-  const baseline = textBoxBaseline(box, fit.size);
+  const baseline = textBoxBaseline(box, fit.size, verticalAlign, fit.lineHeight, fit.lines.length);
   assertTextFitsBox(label, fit, box, baseline, family);
   return { fit, baseline };
 }
@@ -303,9 +339,13 @@ function assertTitleWithinSafeArea(theme: RenderTheme, titleFit: ReturnType<type
 function frame(deck: SlideDeck, slide: Slide, index: number, theme: RenderTheme, assets: { logo?: string; logoMark?: string; background?: string; cover?: string }, plan?: ResolvedSlidePlan): string[] {
   const legacy = RENDER_CONFIG.legacy;
   const parts = [`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`, `<rect width="${WIDTH}" height="${HEIGHT}" fill="${theme.background}"/>`];
+  const imageArea = plan?.slots.image;
+  const imageClipId = `slide-image-slot-${index}`;
+  const imageClip = imageArea ? ` clip-path="url(#${imageClipId})"` : '';
   const titleGraphic = slide.type === 'title' && Boolean(assets.cover);
   if (titleGraphic) {
-    parts.push(`<image href="${assets.cover}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="xMidYMid slice"/>`);
+    if (imageArea) parts.push(`<defs><clipPath id="${imageClipId}"><rect x="${imageArea.x}" y="${imageArea.y}" width="${imageArea.width}" height="${imageArea.height}"/></clipPath></defs>`);
+    parts.push(`<image href="${assets.cover}" x="${imageArea?.x ?? 0}" y="${imageArea?.y ?? 0}" width="${imageArea?.width ?? WIDTH}" height="${imageArea?.height ?? HEIGHT}" preserveAspectRatio="xMidYMid slice"${imageClip}/>`);
     if (theme.imageScrim) {
       const area = theme.imageTextSafeArea;
       parts.push(`<rect x="${area.x * WIDTH}" y="${area.y * HEIGHT}" width="${area.width * WIDTH}" height="${area.height * HEIGHT}" fill="${theme.imageScrim.color}" opacity="${theme.imageScrim.opacity}" rx="${theme.radius}"/>`);
@@ -367,7 +407,8 @@ function frame(deck: SlideDeck, slide: Slide, index: number, theme: RenderTheme,
   const footerLineColor = footerOnGraphic ? theme.imageTextColor : theme.line;
   const footerTextColor = footerOnGraphic ? theme.titleSubtitleColor : theme.muted;
   parts.push(`<line x1="${footerBox.x}" y1="${footerY}" x2="${footerBox.x + footerBox.width}" y2="${footerY}" stroke="${footerLineColor}" stroke-width="2" opacity="${footerOnGraphic ? 0.65 : 1}"/>`);
-  if (deck.footer) parts.push(text(logicalTextX(footerBox.x, footerBox.width, plan, 0), footerTextY, fitSingleLine(deck.footer, footerBox.width, RENDER_CONFIG.typography.footer, theme.fontFamily), RENDER_CONFIG.typography.footer, { color: footerTextColor, anchor: logicalTextAnchor(plan), family: theme.fontFamily }));
+  const footer = deck.slideFooters?.[index] ?? deck.footer;
+  if (footer) parts.push(text(logicalTextX(footerBox.x, footerBox.width, plan, 0), footerTextY, fitSingleLine(footer, footerBox.width, RENDER_CONFIG.typography.footer, theme.fontFamily), RENDER_CONFIG.typography.footer, { color: footerTextColor, anchor: logicalTextAnchor(plan), family: theme.fontFamily }));
   parts.push(text(footerBox.x + footerBox.width, footerTextY, `${index + 1} / ${deck.slides.length}`, RENDER_CONFIG.typography.footer, { color: footerTextColor, anchor: 'end', family: theme.fontFamily }));
   return parts;
 }
@@ -395,7 +436,7 @@ export async function renderSlideSvg(deck: SlideDeck, slide: Slide, index: numbe
   const parts = frame(deck, slide, index, theme, { logo, logoMark, background, cover }, plan);
   const layout = slideLayout(theme, plan);
   const titleOnGraphic = theme.headerStyle === 'dark-band' || Boolean(cover) || (theme.headerStyle === 'image-band' && Boolean(background));
-  const titleColor = titleOnGraphic ? theme.titleColor : theme.foreground;
+  const titleColor = titleOnGraphic ? theme.imageTextColor : theme.foreground;
   const graphicContentColor = titleOnGraphic ? theme.imageTextColor : theme.foreground;
   const titleAnchor = titleAlign === 'center' ? 'middle' : titleAlign === 'right' ? 'end' : 'start';
   const safeArea = getTitleSafeArea(theme, plan);
@@ -415,7 +456,7 @@ export async function renderSlideSvg(deck: SlideDeck, slide: Slide, index: numbe
       const eyebrowFit = fitText(slide.eyebrow ?? deck.brand?.toUpperCase() ?? '', RENDER_CONFIG.typography.eyebrow, RENDER_CONFIG.legacy.title_eyebrow_max_chars, plan?.eyebrowConstraints.maxLines ?? 1, templateFitTheme(theme, plan?.eyebrowConstraints.overflow), theme.minBodyPt);
       if (eyebrowFit.overflow) throw new Error(`Slide eyebrow does not fit within the template slot: ${slide.eyebrow ?? deck.brand}`);
       assertTextFitsBox('Slide eyebrow', eyebrowFit, { x: eyebrowBox.x * WIDTH, y: eyebrowBox.y * HEIGHT, width: eyebrowBox.width * WIDTH, height: eyebrowBox.height * HEIGHT }, eyebrowY, theme.fontFamily);
-      parts.push(eyebrowFit.lines.map((line, lineIndex) => text(eyebrowX, eyebrowY + lineIndex * eyebrowFit.lineHeight, line, eyebrowFit.size, { color: titleOnGraphic ? theme.titleAccentColor : theme.primary, weight: 700, anchor: titleAnchor, family: theme.fontFamily })).join(''));
+      parts.push(eyebrowFit.lines.map((line, lineIndex) => text(eyebrowX, eyebrowY + lineIndex * eyebrowFit.lineHeight, line, eyebrowFit.size, { color: titleOnGraphic ? theme.imageTextColor : theme.primary, weight: 700, anchor: titleAnchor, family: theme.fontFamily })).join(''));
     }
     const titleFit = fitText(theme.titleCase === 'upper' ? slide.title.toUpperCase() : slide.title, RENDER_CONFIG.typography.title, titleMaxChars, plan?.titleConstraints.maxLines ?? RENDER_CONFIG.text.titleMaxLines, templateFitTheme(theme, plan?.titleConstraints.overflow));
     if (titleFit.overflow) throw new Error(`Slide title does not fit within the safe title area: ${slide.title}`);
@@ -429,7 +470,7 @@ export async function renderSlideSvg(deck: SlideDeck, slide: Slide, index: numbe
       if (subtitleFit.overflow) throw new Error(`Slide subtitle does not fit within the safe title area: ${slide.subtitle}`);
       assertTextFitsBox('Slide subtitle', subtitleFit, { x: subtitleBox.x * WIDTH, y: subtitleBox.y * HEIGHT, width: subtitleBox.width * WIDTH, height: subtitleBox.height * HEIGHT }, subtitleY, theme.fontFamily);
       assertTitleWithinSafeArea(theme, titleFit, subtitleFit, plan);
-      parts.push(subtitleFit.lines.map((line, lineIndex) => text(subtitleX, subtitleY + lineIndex * subtitleFit.lineHeight, line, subtitleFit.size, { color: titleOnGraphic ? theme.titleSubtitleColor : theme.muted, family: theme.fontFamily, anchor: titleAnchor })).join(''));
+      parts.push(subtitleFit.lines.map((line, lineIndex) => text(subtitleX, subtitleY + lineIndex * subtitleFit.lineHeight, line, subtitleFit.size, { color: titleOnGraphic ? theme.imageTextColor : theme.muted, family: theme.fontFamily, anchor: titleAnchor })).join(''));
     } else assertTitleWithinSafeArea(theme, titleFit, undefined, plan);
   } else if (slide.type === 'metrics') {
     const brandMetrics = Boolean(plan?.slots['metric-1']);
@@ -463,7 +504,7 @@ export async function renderSlideSvg(deck: SlideDeck, slide: Slide, index: numbe
     const bodyBox = brandMetrics ? plan?.slots.body : undefined;
     if (slide.body) {
       const box = bodyBox ?? { x: RENDER_CONFIG.spacing.margin, y: layout.contentTop + RENDER_CONFIG.fallbacks.metrics_body_y_offset, width: RENDER_CONFIG.spacing.contentWidth, height: RENDER_CONFIG.fallbacks.metrics_body_height };
-      const body = fitTemplateText('Metrics body', slide.body, box, Math.round(RENDER_CONFIG.typography.body * theme.bodyScale), plan?.slotRules.body?.maxLines ?? 3, plan?.slotRules.body?.overflow, theme, theme.fontFamily);
+      const body = fitTemplateText('Metrics body', slide.body, box, Math.round(RENDER_CONFIG.typography.body * theme.bodyScale), plan?.slotRules.body?.maxLines ?? 3, plan?.slotRules.body?.overflow, plan?.slotRules.body?.verticalAlign, theme, theme.fontFamily);
       const bodyX = logicalTextX(box.x, box.width, plan, 0);
       parts.push(body.fit.lines.map((line, lineIndex) => text(bodyX, body.baseline + lineIndex * body.fit.lineHeight, line, body.fit.size, { color: theme.foreground, family: theme.fontFamily, anchor: logicalTextAnchor(plan) })).join(''));
     }
@@ -475,7 +516,7 @@ export async function renderSlideSvg(deck: SlideDeck, slide: Slide, index: numbe
       const calloutHeight = calloutBox?.height ?? RENDER_CONFIG.metrics.calloutHeight;
       parts.push(`<rect x="${calloutX}" y="${calloutY}" width="${calloutWidth}" height="${calloutHeight}" rx="${theme.radius}" fill="${theme.soft}" stroke="${theme.primary}" stroke-width="2"/>`);
       const box = { x: calloutX + RENDER_CONFIG.metrics.calloutPaddingX, y: calloutY + RENDER_CONFIG.metrics.calloutPaddingY, width: calloutWidth - RENDER_CONFIG.metrics.calloutPaddingX * 2, height: calloutHeight - RENDER_CONFIG.metrics.calloutPaddingY * 2 };
-      const callout = fitTemplateText('Metrics callout', slide.callout, box, Math.round(RENDER_CONFIG.typography.highlight * theme.bodyScale), plan?.slotRules.callout?.maxLines ?? 2, plan?.slotRules.callout?.overflow, theme, theme.fontFamily);
+      const callout = fitTemplateText('Metrics callout', slide.callout, box, Math.round(RENDER_CONFIG.typography.highlight * theme.bodyScale), plan?.slotRules.callout?.maxLines ?? 2, plan?.slotRules.callout?.overflow, plan?.slotRules.callout?.verticalAlign, theme, theme.fontFamily);
       const calloutXText = logicalTextX(calloutX, calloutWidth, plan, RENDER_CONFIG.metrics.calloutPaddingX);
       parts.push(callout.fit.lines.map((line, lineIndex) => text(calloutXText, callout.baseline + lineIndex * callout.fit.lineHeight, line, callout.fit.size, { color: theme.foreground, weight: 700, family: theme.fontFamily, anchor: logicalTextAnchor(plan) })).join(''));
     }
@@ -490,12 +531,12 @@ export async function renderSlideSvg(deck: SlideDeck, slide: Slide, index: numbe
       const inner = { x: box.x + RENDER_CONFIG.spacing.columnPadding, y: box.y + RENDER_CONFIG.fallbacks.columns_inner_padding_y, width: box.width - RENDER_CONFIG.spacing.columnPadding * 2, height: box.height - RENDER_CONFIG.fallbacks.columns_inner_padding_y * 2 };
       const anchor = logicalTextAnchor(plan);
       const heading = column.heading ?? `Column ${columnIndex + 1}`;
-      const headingFit = fitTemplateText(`Column ${columnIndex + 1} heading`, heading, { ...inner, height: legacy.columns_heading_height }, Math.round(RENDER_CONFIG.fallbacks.columns_heading_size * theme.headingScale), 2, plan?.slotRules[columnIndex === 0 ? 'left' : 'right']?.overflow, theme, theme.headingFontFamily);
+      const headingFit = fitTemplateText(`Column ${columnIndex + 1} heading`, heading, { ...inner, height: legacy.columns_heading_height }, Math.round(RENDER_CONFIG.fallbacks.columns_heading_size * theme.headingScale), 2, plan?.slotRules[columnIndex === 0 ? 'left' : 'right']?.overflow, plan?.slotRules[columnIndex === 0 ? 'left' : 'right']?.verticalAlign, theme, theme.headingFontFamily);
       const headingX = logicalTextX(box.x, box.width, plan, RENDER_CONFIG.spacing.columnPadding);
       parts.push(headingFit.fit.lines.map((line, lineIndex) => text(headingX, headingFit.baseline + lineIndex * headingFit.fit.lineHeight, line, headingFit.fit.size, { color: theme.foreground, weight: theme.headingWeight, family: theme.headingFontFamily, anchor })).join(''));
       const bodyValue = [column.body, ...(column.highlights ?? []).map((item) => `• ${item}`)].join('\n');
       const bodyBox = { x: inner.x, y: box.y + legacy.columns_body_top, width: inner.width, height: box.height - legacy.columns_body_bottom_padding };
-      const bodyFit = fitTemplateText(`Column ${columnIndex + 1} body`, bodyValue, bodyBox, Math.round(RENDER_CONFIG.typography.highlight * theme.bodyScale), plan?.slotRules[columnIndex === 0 ? 'left' : 'right']?.maxLines ?? 12, plan?.slotRules[columnIndex === 0 ? 'left' : 'right']?.overflow, theme, theme.fontFamily);
+      const bodyFit = fitTemplateText(`Column ${columnIndex + 1} body`, bodyValue, bodyBox, Math.round(RENDER_CONFIG.typography.highlight * theme.bodyScale), plan?.slotRules[columnIndex === 0 ? 'left' : 'right']?.maxLines ?? 12, plan?.slotRules[columnIndex === 0 ? 'left' : 'right']?.overflow, plan?.slotRules[columnIndex === 0 ? 'left' : 'right']?.verticalAlign, theme, theme.fontFamily);
       parts.push(bodyFit.fit.lines.map((line, lineIndex) => text(logicalTextX(bodyBox.x, bodyBox.width, plan, 0), bodyFit.baseline + lineIndex * bodyFit.fit.lineHeight, line, bodyFit.fit.size, { color: theme.foreground, family: theme.fontFamily, anchor })).join(''));
     });
   } else if (slide.type === 'chart') {
@@ -519,11 +560,11 @@ export async function renderSlideSvg(deck: SlideDeck, slide: Slide, index: numbe
     }));
   } else if (slide.type === 'narrative') {
     const narrativeBox = plan?.slots.narrative ?? { x: RENDER_CONFIG.spacing.margin, y: layout.narrativeY - RENDER_CONFIG.fallbacks.narrative_y_adjustment, width: RENDER_CONFIG.spacing.contentWidth, height: legacy.narrative_fallback_height };
-    const narrativeFit = fitTemplateText('Narrative body', slide.body, narrativeBox, Math.round(RENDER_CONFIG.typography.narrative * theme.bodyScale), plan?.slotRules.narrative?.maxLines ?? 5, plan?.slotRules.narrative?.overflow, theme, theme.fontFamily);
+    const narrativeFit = fitTemplateText('Narrative body', slide.body, narrativeBox, Math.round(RENDER_CONFIG.typography.narrative * theme.bodyScale), plan?.slotRules.narrative?.maxLines ?? 5, plan?.slotRules.narrative?.overflow, plan?.slotRules.narrative?.verticalAlign, theme, theme.fontFamily);
     parts.push(narrativeFit.fit.lines.map((line, lineIndex) => text(logicalTextX(narrativeBox.x, narrativeBox.width, plan, 0), narrativeFit.baseline + lineIndex * narrativeFit.fit.lineHeight, line, narrativeFit.fit.size, { color: graphicContentColor, family: theme.fontFamily, anchor: logicalTextAnchor(plan) })).join(''));
     (slide.highlights ?? []).slice(0, 4).forEach((item, itemIndex) => {
       const highlightBox = plan?.slots[`narrative-highlight-${itemIndex + 1}`] ?? { x: legacy.narrative_highlight_x, y: legacy.narrative_highlight_y + itemIndex * legacy.narrative_highlight_step, width: legacy.narrative_highlight_width, height: legacy.narrative_highlight_height };
-      const fit = fitTemplateText(`Narrative highlight ${itemIndex + 1}`, item, highlightBox, Math.round(RENDER_CONFIG.typography.highlight * theme.bodyScale), plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.maxLines ?? 1, plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.overflow, theme, theme.fontFamily);
+      const fit = fitTemplateText(`Narrative highlight ${itemIndex + 1}`, item, highlightBox, Math.round(RENDER_CONFIG.typography.highlight * theme.bodyScale), plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.maxLines ?? 1, plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.overflow, plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.verticalAlign, theme, theme.fontFamily);
       const bulletX = isRtl(plan) ? highlightBox.x + highlightBox.width + RENDER_CONFIG.spacing.columnPadding - RENDER_CONFIG.fallbacks.bullet_x_nudge : highlightBox.x - RENDER_CONFIG.spacing.columnPadding + RENDER_CONFIG.fallbacks.bullet_x_nudge;
       parts.push(`<circle cx="${bulletX}" cy="${fit.baseline - RENDER_CONFIG.spacing.cardPaddingY / RENDER_CONFIG.fallbacks.bullet_baseline_divisor}" r="${RENDER_CONFIG.shapes.bulletRadius}" fill="${titleOnGraphic ? theme.imageTextColor : theme.primary}"/>`);
       parts.push(fit.fit.lines.map((line, lineIndex) => text(logicalTextX(highlightBox.x, highlightBox.width, plan, 0), fit.baseline + lineIndex * fit.fit.lineHeight, line, fit.fit.size, { color: graphicContentColor, weight: 700, anchor: logicalTextAnchor(plan) })).join(''));
@@ -679,7 +720,8 @@ function addPptxFooter(pptxSlide: PptxGenJS.Slide, shapeType: PptxGenJS['ShapeTy
   const footerLineColor = footerOnGraphic ? theme.imageTextColor.slice(1) : theme.line.slice(1);
   const footerTextColor = footerOnGraphic ? theme.titleSubtitleColor.slice(1) : theme.muted.slice(1);
   pptxSlide.addShape(shapeType.line, { x: footerBox.x / PX_PER_INCH, y: footerBox.y / PX_PER_INCH, w: footerBox.width / PX_PER_INCH, h: 0, line: { color: footerLineColor, width: 1, transparency: footerOnGraphic ? 35 : 0 } });
-  if (deck.footer) pptxSlide.addText(fitSingleLine(deck.footer, footerBox.width - RENDER_CONFIG.legacy.footer_text_padding * 2, RENDER_CONFIG.typography.footer, theme.fontFamily), { x: footerBox.x / PX_PER_INCH, y: (footerBox.y + RENDER_CONFIG.legacy.footer_text_padding) / PX_PER_INCH, w: (footerBox.width - RENDER_CONFIG.legacy.footer_text_width) / PX_PER_INCH, h: RENDER_CONFIG.typography.footer * RENDER_CONFIG.text.lineHeight / PX_PER_INCH, fontFace: theme.fontFamily, fontSize: RENDER_CONFIG.typography.footer * PX_TO_PT, color: footerTextColor, margin: 0, valign: 'top', align: plan?.direction === 'rtl' ? 'right' : 'left' });
+  const footer = deck.slideFooters?.[index] ?? deck.footer;
+  if (footer) pptxSlide.addText(fitSingleLine(footer, footerBox.width - RENDER_CONFIG.legacy.footer_text_padding * 2, RENDER_CONFIG.typography.footer, theme.fontFamily), { x: footerBox.x / PX_PER_INCH, y: (footerBox.y + RENDER_CONFIG.legacy.footer_text_padding) / PX_PER_INCH, w: (footerBox.width - RENDER_CONFIG.legacy.footer_text_width) / PX_PER_INCH, h: RENDER_CONFIG.typography.footer * RENDER_CONFIG.text.lineHeight / PX_PER_INCH, fontFace: theme.fontFamily, fontSize: RENDER_CONFIG.typography.footer * PX_TO_PT, color: footerTextColor, margin: 0, valign: 'top', align: plan?.direction === 'rtl' ? 'right' : 'left' });
   pptxSlide.addText(`${index + 1} / ${deck.slides.length}`, { x: (footerBox.x + footerBox.width - RENDER_CONFIG.legacy.footer_number_width) / PX_PER_INCH, y: (footerBox.y + RENDER_CONFIG.legacy.footer_text_padding) / PX_PER_INCH, w: RENDER_CONFIG.legacy.footer_number_width / PX_PER_INCH, h: RENDER_CONFIG.typography.footer * RENDER_CONFIG.text.lineHeight / PX_PER_INCH, fontFace: theme.fontFamily, fontSize: RENDER_CONFIG.typography.footer * PX_TO_PT, color: footerTextColor, align: 'right', margin: 0, valign: 'top' });
 }
 
@@ -718,7 +760,7 @@ async function addPptxHeader(pptxSlide: PptxGenJS.Slide, shapeType: PptxGenJS['S
   }
   const headerColor = band ? readableTextColor(band, theme, RENDER_CONFIG.typography.headerTitle, true).slice(1) : theme.headerStyle === 'image-band' ? theme.imageTextColor.slice(1) : theme.foreground.slice(1);
   if (logoMark && deck.brand) {
-    const nameBox = plan?.sourceTemplate ? plan.lockup.name : { x: lockup.nameAnchor === 'end' ? lockup.nameX - RENDER_CONFIG.legacy.name_width : lockup.nameX, y: lockup.nameY - RENDER_CONFIG.pptx.brand_name_box_y_adjustment, width: RENDER_CONFIG.legacy.name_width, height: RENDER_CONFIG.pptx.brand_name_box_height };
+    const nameBox = plan?.sourceTemplate ? plan.lockup.name : { x: lockup.nameAnchor === 'end' ? lockup.nameX - RENDER_CONFIG.chrome.lockup.standard.nameWidthPx : lockup.nameX, y: lockup.nameY - RENDER_CONFIG.pptx.brand_name_box_y_adjustment, width: RENDER_CONFIG.chrome.lockup.standard.nameWidthPx, height: RENDER_CONFIG.chrome.lockup.standard.nameHeightPx };
     if (plan?.sourceTemplate) assertTextFitsBox('Brand name', { lines: [deck.brand.toUpperCase()], size: lockup.nameSize, lineHeight: lockup.nameSize, overflow: false }, plan.lockup.name, lockup.nameY, theme.fontFamily);
     pptxSlide.addText(deck.brand.toUpperCase(), { x: nameBox.x / PX_PER_INCH, y: (lockup.nameY - lockup.nameSize) / PX_PER_INCH, w: nameBox.width / PX_PER_INCH, h: (lockup.nameSize * RENDER_CONFIG.text.lineHeight) / PX_PER_INCH, fontFace: theme.fontFamily, fontSize: pptxHeadingSize(lockup.nameSize, theme), bold: true, color: headerColor, align: lockup.nameAnchor === 'end' ? 'right' : 'left', margin: 0, valign: 'top' });
   }
@@ -793,15 +835,13 @@ export async function renderSlidesPptx(deck: SlideDeck, theme = defaultRenderThe
         const logoY = RENDER_CONFIG.legacy.title_logo_y / PX_PER_INCH;
         slide.addImage({ data: logo, x: logoX, y: logoY, w: logoW, h: logoH, sizing: { type: 'contain', x: logoX, y: logoY, w: logoW, h: logoH }, transparency: 0 });
       }
-      const titleColor = slideTheme.headerStyle === 'plain'
-        ? slideTheme.foreground.slice(1)
-        : slideTheme.titleColor.slice(1);
+      const graphicTitle = Boolean(cover) || (slideTheme.headerStyle === 'image-band' && Boolean(background));
+      const titleColor = graphicTitle ? slideTheme.imageTextColor.slice(1) : slideTheme.foreground.slice(1);
       const safeArea = getTitleSafeArea(slideTheme, plan);
       const typedSource = Boolean(plan?.sourceTemplate && plan.sourceTemplate.id !== 'slides/standard');
       const titleBox = typedSource && plan?.slots.title ? { x: plan.slots.title.x / WIDTH, y: plan.slots.title.y / HEIGHT, width: plan.slots.title.width / WIDTH, height: plan.slots.title.height / HEIGHT } : safeArea;
       const titleBoxX = titleBox.x * PPTX_WIDTH;
       const titleBoxWidth = titleBox.width * PPTX_WIDTH;
-      const graphicTitle = Boolean(cover) || (slideTheme.headerStyle === 'image-band' && Boolean(background));
       const titleMaxChars = titleTextLimit(slideTheme, titleBox, RENDER_CONFIG.typography.title, RENDER_CONFIG.legacy.title_max_chars, graphicTitle);
       const titleFit = fitText(slideTheme.titleCase === 'upper' ? content.title.toUpperCase() : content.title, RENDER_CONFIG.typography.title, titleMaxChars, plan?.titleConstraints.maxLines ?? RENDER_CONFIG.text.titleMaxLines, templateFitTheme(slideTheme, plan?.titleConstraints.overflow));
       if (titleFit.overflow) throw new Error(`Slide title does not fit within the safe title area: ${content.title}`);
@@ -813,7 +853,7 @@ export async function renderSlidesPptx(deck: SlideDeck, theme = defaultRenderThe
       assertTitleWithinSafeArea(slideTheme, titleFit, subtitleFit, plan);
       const titleSubtitleY = plan?.titleLayout.subtitleBaselineY ?? Math.max(RENDER_CONFIG.legacy.subtitle_baseline_floor, titleY + titleFit.lines.length * titleFit.lineHeight + RENDER_CONFIG.legacy.title_subtitle_gap);
       if (logoMark && deck.brand) {
-        const nameBox = plan?.sourceTemplate ? plan.lockup.name : { x: lockup.nameAnchor === 'end' ? lockup.nameX - RENDER_CONFIG.legacy.name_width : lockup.nameX, y: lockup.nameY - RENDER_CONFIG.pptx.brand_name_box_y_adjustment, width: RENDER_CONFIG.legacy.name_width, height: RENDER_CONFIG.pptx.brand_name_box_height };
+        const nameBox = plan?.sourceTemplate ? plan.lockup.name : { x: lockup.nameAnchor === 'end' ? lockup.nameX - RENDER_CONFIG.chrome.lockup.title.nameWidthPx : lockup.nameX, y: lockup.nameY - RENDER_CONFIG.pptx.brand_name_box_y_adjustment, width: RENDER_CONFIG.chrome.lockup.title.nameWidthPx, height: RENDER_CONFIG.chrome.lockup.title.nameHeightPx };
         if (plan?.sourceTemplate) assertTextFitsBox('Brand name', { lines: [deck.brand], size: lockup.nameSize, lineHeight: lockup.nameSize, overflow: false }, plan.lockup.name, lockup.nameY, slideTheme.headingFontFamily);
         slide.addText(deck.brand, { x: nameBox.x / PX_PER_INCH, y: (lockup.nameY - lockup.nameSize) / PX_PER_INCH, w: nameBox.width / PX_PER_INCH, h: (lockup.nameSize * RENDER_CONFIG.text.lineHeight) / PX_PER_INCH, fontFace: slideTheme.headingFontFamily, fontSize: pptxHeadingSize(lockup.nameSize, slideTheme), bold: true, color: titleColor, align: lockup.nameAnchor === 'end' ? 'right' : 'left', margin: 0, valign: 'top' });
       }
@@ -821,10 +861,10 @@ export async function renderSlidesPptx(deck: SlideDeck, theme = defaultRenderThe
       if (eyebrowFit.overflow) throw new Error(`Slide eyebrow does not fit within the template slot: ${content.eyebrow ?? deck.brand}`);
       const eyebrowBox = typedSource && plan?.slots.eyebrow ? { x: plan.slots.eyebrow.x / WIDTH, y: plan.slots.eyebrow.y / HEIGHT, width: plan.slots.eyebrow.width / WIDTH, height: plan.slots.eyebrow.height / HEIGHT } : titleBox;
       assertTextFitsBox('Slide eyebrow', eyebrowFit, { x: eyebrowBox.x * WIDTH, y: eyebrowBox.y * HEIGHT, width: eyebrowBox.width * WIDTH, height: eyebrowBox.height * HEIGHT }, titleEyebrowY, slideTheme.fontFamily);
-      slide.addText(eyebrowFit.lines.join('\n'), { x: eyebrowBox.x * PPTX_WIDTH, y: (titleEyebrowY - eyebrowFit.size) / PX_PER_INCH, w: eyebrowBox.width * PPTX_WIDTH, h: (eyebrowFit.lines.length * eyebrowFit.lineHeight + RENDER_CONFIG.legacy.pptx_text_box_extra_height) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: eyebrowFit.size * PX_TO_PT, bold: true, color: slideTheme.headerStyle === 'plain' ? slideTheme.primary.slice(1) : slideTheme.titleAccentColor.slice(1), align: titleAlign, margin: 0, valign: 'top' });
+      slide.addText(eyebrowFit.lines.join('\n'), { x: eyebrowBox.x * PPTX_WIDTH, y: (titleEyebrowY - eyebrowFit.size) / PX_PER_INCH, w: eyebrowBox.width * PPTX_WIDTH, h: (eyebrowFit.lines.length * eyebrowFit.lineHeight + RENDER_CONFIG.legacy.pptx_text_box_extra_height) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: eyebrowFit.size * PX_TO_PT, bold: true, color: graphicTitle ? slideTheme.imageTextColor.slice(1) : slideTheme.primary.slice(1), align: titleAlign, margin: 0, valign: 'top' });
       slide.addText(titleFit.lines.join('\n'), { x: titleBoxX, y: (titleY - titleFit.size) / PX_PER_INCH, w: titleBoxWidth, h: (titleFit.lines.length * titleFit.lineHeight + RENDER_CONFIG.legacy.pptx_text_box_extra_height) / PX_PER_INCH, fontFace: slideTheme.headingFontFamily, fontSize: pptxHeadingSize(titleFit.size, slideTheme), bold: true, color: titleColor, align: titleAlign, valign: 'top', margin: 0, breakLine: false });
       if (subtitleFit) {
-        slide.addText(subtitleFit.lines.join('\n'), { x: subtitleBox.x * PPTX_WIDTH, y: (titleSubtitleY - subtitleFit.size) / PX_PER_INCH, w: subtitleBox.width * PPTX_WIDTH, h: (subtitleFit.lines.length * subtitleFit.lineHeight + RENDER_CONFIG.legacy.pptx_text_box_extra_height) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: subtitleFit.size * PX_TO_PT, color: slideTheme.headerStyle === 'plain' ? slideTheme.muted.slice(1) : slideTheme.titleSubtitleColor.slice(1), align: titleAlign, valign: 'top', margin: 0 });
+        slide.addText(subtitleFit.lines.join('\n'), { x: subtitleBox.x * PPTX_WIDTH, y: (titleSubtitleY - subtitleFit.size) / PX_PER_INCH, w: subtitleBox.width * PPTX_WIDTH, h: (subtitleFit.lines.length * subtitleFit.lineHeight + RENDER_CONFIG.legacy.pptx_text_box_extra_height) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: subtitleFit.size * PX_TO_PT, color: graphicTitle ? slideTheme.imageTextColor.slice(1) : slideTheme.muted.slice(1), align: titleAlign, valign: 'top', margin: 0 });
       }
     } else {
       await addPptxHeader(slide, pptx.ShapeType, deck, content, index, slideTheme, plan);
@@ -862,7 +902,7 @@ export async function renderSlidesPptx(deck: SlideDeck, theme = defaultRenderThe
         const bodyBox = brandMetrics ? plan?.slots.body : undefined;
         if (content.body) {
           const box = bodyBox ?? { x: RENDER_CONFIG.spacing.margin, y: metricsLayout.contentTop + RENDER_CONFIG.fallbacks.metrics_body_y_offset, width: RENDER_CONFIG.spacing.contentWidth, height: RENDER_CONFIG.fallbacks.metrics_body_height };
-          const body = fitTemplateText('Metrics body', content.body, box, Math.round(RENDER_CONFIG.typography.body * slideTheme.bodyScale), plan?.slotRules.body?.maxLines ?? 3, plan?.slotRules.body?.overflow, slideTheme, slideTheme.fontFamily);
+          const body = fitTemplateText('Metrics body', content.body, box, Math.round(RENDER_CONFIG.typography.body * slideTheme.bodyScale), plan?.slotRules.body?.maxLines ?? 3, plan?.slotRules.body?.overflow, plan?.slotRules.body?.verticalAlign, slideTheme, slideTheme.fontFamily);
           slide.addText(body.fit.lines.join('\n'), { x: box.x / PX_PER_INCH, y: (body.baseline - body.fit.size) / PX_PER_INCH, w: box.width / PX_PER_INCH, h: (body.fit.lines.length * body.fit.lineHeight + body.fit.size) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: body.fit.size * PX_TO_PT, color: slideTheme.foreground.slice(1), align: isRtl(plan) ? 'right' : 'left', margin: 0, breakLine: false, valign: 'top' });
         }
         if (content.callout) {
@@ -872,7 +912,7 @@ export async function renderSlidesPptx(deck: SlideDeck, theme = defaultRenderThe
           const calloutW = calloutBox?.width ?? RENDER_CONFIG.spacing.contentWidth;
           const calloutH = calloutBox?.height ?? RENDER_CONFIG.metrics.calloutHeight;
           slide.addShape(pptx.ShapeType.roundRect, { x: calloutX / PX_PER_INCH, y: calloutY / PX_PER_INCH, w: calloutW / PX_PER_INCH, h: calloutH / PX_PER_INCH, rectRadius: RENDER_CONFIG.pptx.round_rect_radius_inches, fill: { color: slideTheme.soft.slice(1) }, line: { color: slideTheme.primary.slice(1), width: 1 } });
-          const callout = fitTemplateText('Metrics callout', content.callout, { x: calloutX + RENDER_CONFIG.metrics.calloutPaddingX, y: calloutY + RENDER_CONFIG.metrics.calloutPaddingY, width: calloutW - RENDER_CONFIG.metrics.calloutPaddingX * 2, height: calloutH - RENDER_CONFIG.metrics.calloutPaddingY * 2 }, Math.round(RENDER_CONFIG.typography.highlight * slideTheme.bodyScale), plan?.slotRules.callout?.maxLines ?? 2, plan?.slotRules.callout?.overflow, slideTheme, slideTheme.fontFamily);
+          const callout = fitTemplateText('Metrics callout', content.callout, { x: calloutX + RENDER_CONFIG.metrics.calloutPaddingX, y: calloutY + RENDER_CONFIG.metrics.calloutPaddingY, width: calloutW - RENDER_CONFIG.metrics.calloutPaddingX * 2, height: calloutH - RENDER_CONFIG.metrics.calloutPaddingY * 2 }, Math.round(RENDER_CONFIG.typography.highlight * slideTheme.bodyScale), plan?.slotRules.callout?.maxLines ?? 2, plan?.slotRules.callout?.overflow, plan?.slotRules.callout?.verticalAlign, slideTheme, slideTheme.fontFamily);
           slide.addText(callout.fit.lines.join('\n'), { x: (calloutX + RENDER_CONFIG.metrics.calloutPaddingX) / PX_PER_INCH, y: (callout.baseline - callout.fit.size) / PX_PER_INCH, w: (calloutW - RENDER_CONFIG.metrics.calloutPaddingX * 2) / PX_PER_INCH, h: (callout.fit.lines.length * callout.fit.lineHeight + callout.fit.size) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: callout.fit.size * PX_TO_PT, bold: true, color: slideTheme.foreground.slice(1), align: isRtl(plan) ? 'right' : 'left', margin: 0, valign: 'top' });
         }
       } else if (content.type === 'columns') {
@@ -891,11 +931,11 @@ export async function renderSlidesPptx(deck: SlideDeck, theme = defaultRenderThe
           const inner = { x: box.x + RENDER_CONFIG.spacing.columnPadding, y: box.y + RENDER_CONFIG.fallbacks.columns_inner_padding_y, width: box.width - RENDER_CONFIG.spacing.columnPadding * 2, height: box.height - RENDER_CONFIG.fallbacks.columns_inner_padding_y * 2 };
           const heading = column.heading ?? `Column ${columnIndex + 1}`;
           const slotId = columnIndex === 0 ? 'left' : 'right';
-          const headingFit = fitTemplateText(`Column ${columnIndex + 1} heading`, heading, { ...inner, height: legacy.columns_heading_height }, Math.round(RENDER_CONFIG.fallbacks.columns_heading_size * slideTheme.headingScale), 2, plan?.slotRules[slotId]?.overflow, slideTheme, slideTheme.headingFontFamily);
+          const headingFit = fitTemplateText(`Column ${columnIndex + 1} heading`, heading, { ...inner, height: legacy.columns_heading_height }, Math.round(RENDER_CONFIG.fallbacks.columns_heading_size * slideTheme.headingScale), 2, plan?.slotRules[slotId]?.overflow, plan?.slotRules[slotId]?.verticalAlign, slideTheme, slideTheme.headingFontFamily);
           slide.addText(headingFit.fit.lines.join('\n'), { x: inner.x / PX_PER_INCH, y: (headingFit.baseline - headingFit.fit.size) / PX_PER_INCH, w: inner.width / PX_PER_INCH, h: (headingFit.fit.lines.length * headingFit.fit.lineHeight + headingFit.fit.size) / PX_PER_INCH, fontFace: slideTheme.headingFontFamily, fontSize: headingFit.fit.size * PX_TO_PT, bold: true, color: slideTheme.foreground.slice(1), align: isRtl(plan) ? 'right' : 'left', margin: 0, valign: 'top' });
           const bodyBox = { x: inner.x, y: box.y + legacy.columns_body_top, width: inner.width, height: box.height - legacy.columns_body_bottom_padding };
           const bodyValue = [column.body, ...(column.highlights ?? []).map((item) => `• ${item}`)].join('\n');
-          const bodyFit = fitTemplateText(`Column ${columnIndex + 1} body`, bodyValue, bodyBox, Math.round(RENDER_CONFIG.typography.highlight * slideTheme.bodyScale), plan?.slotRules[slotId]?.maxLines ?? 12, plan?.slotRules[slotId]?.overflow, slideTheme, slideTheme.fontFamily);
+          const bodyFit = fitTemplateText(`Column ${columnIndex + 1} body`, bodyValue, bodyBox, Math.round(RENDER_CONFIG.typography.highlight * slideTheme.bodyScale), plan?.slotRules[slotId]?.maxLines ?? 12, plan?.slotRules[slotId]?.overflow, plan?.slotRules[slotId]?.verticalAlign, slideTheme, slideTheme.fontFamily);
           slide.addText(bodyFit.fit.lines.join('\n'), { x: bodyBox.x / PX_PER_INCH, y: (bodyFit.baseline - bodyFit.fit.size) / PX_PER_INCH, w: bodyBox.width / PX_PER_INCH, h: (bodyFit.fit.lines.length * bodyFit.fit.lineHeight + bodyFit.fit.size) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: bodyFit.fit.size * PX_TO_PT, color: slideTheme.foreground.slice(1), align: isRtl(plan) ? 'right' : 'left', margin: 0, valign: 'top' });
         });
       } else if (content.type === 'chart') {
@@ -914,11 +954,11 @@ export async function renderSlidesPptx(deck: SlideDeck, theme = defaultRenderThe
       } else if (content.type === 'narrative') {
         const narrativeLayout = slideLayout(slideTheme, plan);
         const narrativeBox = plan?.slots.narrative ?? { x: RENDER_CONFIG.spacing.margin, y: narrativeLayout.narrativeY - RENDER_CONFIG.fallbacks.narrative_y_adjustment, width: RENDER_CONFIG.spacing.contentWidth, height: RENDER_CONFIG.legacy.narrative_fallback_height };
-        const narrativeFit = fitTemplateText('Narrative body', content.body, narrativeBox, Math.round(RENDER_CONFIG.typography.narrative * slideTheme.bodyScale), plan?.slotRules.narrative?.maxLines ?? 5, plan?.slotRules.narrative?.overflow, slideTheme, slideTheme.fontFamily);
+        const narrativeFit = fitTemplateText('Narrative body', content.body, narrativeBox, Math.round(RENDER_CONFIG.typography.narrative * slideTheme.bodyScale), plan?.slotRules.narrative?.maxLines ?? 5, plan?.slotRules.narrative?.overflow, plan?.slotRules.narrative?.verticalAlign, slideTheme, slideTheme.fontFamily);
         slide.addText(narrativeFit.fit.lines.join('\n'), { x: narrativeBox.x / PX_PER_INCH, y: (narrativeFit.baseline - narrativeFit.fit.size) / PX_PER_INCH, w: narrativeBox.width / PX_PER_INCH, h: (narrativeFit.fit.lines.length * narrativeFit.fit.lineHeight + narrativeFit.fit.size) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: narrativeFit.fit.size * PX_TO_PT, color: graphicContentColor, align: isRtl(plan) ? 'right' : 'left', breakLine: false, valign: 'top', margin: 0 });
         (content.highlights ?? []).slice(0, 4).forEach((item, itemIndex) => {
           const highlightBox = plan?.slots[`narrative-highlight-${itemIndex + 1}`] ?? { x: RENDER_CONFIG.legacy.narrative_highlight_x, y: RENDER_CONFIG.legacy.narrative_highlight_y + itemIndex * RENDER_CONFIG.legacy.narrative_highlight_step, width: RENDER_CONFIG.legacy.narrative_highlight_width, height: RENDER_CONFIG.legacy.narrative_highlight_height };
-          const fit = fitTemplateText(`Narrative highlight ${itemIndex + 1}`, item, highlightBox, Math.round(RENDER_CONFIG.typography.highlight * slideTheme.bodyScale), plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.maxLines ?? 1, plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.overflow, slideTheme, slideTheme.fontFamily);
+          const fit = fitTemplateText(`Narrative highlight ${itemIndex + 1}`, item, highlightBox, Math.round(RENDER_CONFIG.typography.highlight * slideTheme.bodyScale), plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.maxLines ?? 1, plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.overflow, plan?.slotRules[`narrative-highlight-${itemIndex + 1}`]?.verticalAlign, slideTheme, slideTheme.fontFamily);
           slide.addText([{ text: item, options: { bullet: { indent: RENDER_CONFIG.pptx.bullet_indent }, bold: true } }], { x: highlightBox.x / PX_PER_INCH, y: (fit.baseline - fit.fit.size) / PX_PER_INCH, w: highlightBox.width / PX_PER_INCH, h: (fit.fit.lines.length * fit.fit.lineHeight + fit.fit.size) / PX_PER_INCH, fontFace: slideTheme.fontFamily, fontSize: fit.fit.size * PX_TO_PT, color: graphicContentColor, align: isRtl(plan) ? 'right' : 'left', rtlMode: isRtl(plan), margin: 0, valign: 'top' });
         });
       } else if (content.type === 'conclusions') {

@@ -1,4 +1,5 @@
 export interface RenderTheme {
+  brandName?: string;
   background: string;
   foreground: string;
   primary: string;

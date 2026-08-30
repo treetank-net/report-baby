@@ -1,0 +1,27 @@
+# PROTOTYPE — geometry for the reserved-slot experiment only.
+page:
+  width_mm: 210
+  height_mm: 297
+  margin_mm: 15
+  content_top_mm: 32
+  content_bottom_mm: 15
+  content_left_mm: 15
+  lead_width_mm: 112
+  side_gap_mm: 6
+  side_width_mm: 62
+  media_height_mm: 78
+  sidebar_min_height_mm: 78
+  too_tall_media_height_mm: 240
+type:
+  body_pt: 10
+  body_line_height: 1.35
+  heading_pt: 18
+  section_heading_pt: 13
+  label_pt: 7
+  intro_padding_mm: 4
+  block_gap_mm: 3
+  column_gap_mm: 5
+  sidebar_padding_mm: 3
+quality:
+  max_blank_ratio: 0.35
+  min_keep_lines: 3

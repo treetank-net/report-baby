@@ -13,15 +13,13 @@ regions:
 slots:
   lockup:
     type: lockup
-    frame: { x: 0.06, y: 0.06, width: 0.03625, height: 0.0533333333 }
-  lockup-name:
-    type: text
-    frame: { x: 0.115, y: 0.06, width: 0.18, height: 0.0533333333 }
-    role: lockup-name
+    frame: { x: 0.06, y: 0.06, width: 0.03625, height: 0.0644444444 }
   image:
     type: image
     region: hero
-    frame: { x: 0.64, y: 0.06, width: 0.30, height: 0.70 }
+    # This is the surface background, not a right-hand editorial figure.
+    # It intentionally covers the canvas while hero remains the text safe area.
+    frame: { x: 0.00, y: 0.00, width: 1.00, height: 1.00 }
   eyebrow:
     type: text
     region: hero
@@ -45,4 +43,4 @@ slots:
 
 constraints:
   inside_canvas: true
-  no_overlap: true
+  no_overlap: false

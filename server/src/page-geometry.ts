@@ -12,14 +12,18 @@ export interface PageGeometry {
   height: number;
   margin: number;
   margins: { top: number; right: number; bottom: number; left: number };
+  columns: { count: number; gutter: number; widths: number[] };
   content: PageSegment;
   segments: PageSegment[];
   bands: Record<string, PageSegment>;
+  flowObstacles: Array<{ id: string; frame: PageSegment }>;
   continuationTop?: number;
   continuationBottom?: number;
   blockFrames: Record<string, PageSegment>;
-  flow: { align: 'justify' | 'left'; hyphenate: boolean };
+  blockGrowth?: Record<string, { axis: 'y'; maxHeight: number; pushes?: string[] }>;
+  flow: { align: 'justify' | 'left'; hyphenate: boolean; lead?: string };
   dynamicFlow: boolean;
+  continuation?: PageGeometry;
 }
 
 function physicalFrame(frame: NormalizedFrame, width: number, height: number): PageSegment {
@@ -54,19 +58,22 @@ function columnSegments(
   return result.filter((segment) => segment.bottom > segment.top);
 }
 
-export function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeometry {
-  const page = compiled.page;
-  if (!page) throw new Error(`Page template '${compiled.id}' is missing compiled geometry.`);
+function pageGeometryFromPage(page: NonNullable<CompiledTemplate['page']>): PageGeometry {
   const top = page.margins.top;
   const bottom = page.height - page.margins.bottom;
   const bands = Object.values(page.reservedBands).map((frame) => physicalFrame(frame, page.width, page.height));
+  const flowObstacles = page.flowObstacles.map((obstacle) => ({
+    ...obstacle,
+    frame: physicalFrame(obstacle.frame, page.width, page.height),
+  }));
+  const flowBands = [...bands, ...flowObstacles.map((obstacle) => obstacle.frame)];
   const segments: PageSegment[] = [];
   let x = page.margins.left;
   for (const width of page.columns.widths) {
-    segments.push(...columnSegments(x, width, top, bottom, bands));
+    segments.push(...columnSegments(x, width, top, bottom, flowBands));
     x += width + page.columns.gutter;
   }
-  if (segments.length === 0) throw new Error(`Page template '${compiled.id}' leaves no usable flow area between margins and reserved bands.`);
+  if (segments.length === 0) throw new Error('Page template leaves no usable flow area between margins and reserved bands.');
   const content: PageSegment = {
     x: page.margins.left,
     top,
@@ -95,18 +102,33 @@ export function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeomet
     return [name, segment];
   });
   const blockFrames: Record<string, PageSegment> = Object.fromEntries(adjustedFrames);
+  const blockGrowth = Object.fromEntries(Object.entries(page.blockGrowth).map(([name, growth]) => [name, {
+    axis: growth.axis,
+    maxHeight: growth.maxHeight * page.height,
+    ...(growth.pushes === undefined ? {} : { pushes: growth.pushes }),
+  }]));
+  const continuation = page.continuation ? pageGeometryFromPage(page.continuation) : undefined;
   return {
     width: page.width,
     height: page.height,
     margin: page.margins.left,
     margins: page.margins,
+    columns: page.columns,
     content,
     segments,
     bands: Object.fromEntries(Object.entries(page.reservedBands).map(([name, frame]) => [name, physicalFrame(frame, page.width, page.height)])),
+    flowObstacles,
     continuationTop: bands.find((band) => band.top === 0)?.bottom,
     continuationBottom: bands.find((band) => band.bottom === page.height)?.top,
     blockFrames,
+    blockGrowth,
     flow: page.flow,
     dynamicFlow: true,
+    ...(continuation === undefined ? {} : { continuation }),
   };
+}
+
+export function pageGeometryFromTemplate(compiled: CompiledTemplate): PageGeometry {
+  if (!compiled.page) throw new Error(`Page template '${compiled.id}' is missing compiled geometry.`);
+  return pageGeometryFromPage(compiled.page);
 }
