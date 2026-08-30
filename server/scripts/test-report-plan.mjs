@@ -8,13 +8,13 @@ import { fixtureDocument } from './lib/composition-fixture.mjs';
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-plan-'));
 const bundle = join(temporary, 'report-plan.mjs');
-const compositionBundle = join(temporary, 'composition.mjs');
+const compositionBundle = join(temporary, 'composition.cjs');
 const assertionsBundle = join(temporary, 'report-plan-assertions.mjs');
 const build = runProcess('npx', ['esbuild', 'src/report-plan.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${bundle}`], { cwd: root, timeout: 30_000 });
 if (build.status !== 0) throw new Error(`report plan test bundle failed: ${build.stderr || build.stdout}`);
 const assertionsBuild = runProcess('npx', ['esbuild', 'src/report-plan-assertions.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${assertionsBundle}`], { cwd: root, timeout: 30_000 });
 if (assertionsBuild.status !== 0) throw new Error(`report plan assertions test bundle failed: ${assertionsBuild.stderr || assertionsBuild.stdout}`);
-const compositionBuild = runProcess('npx', ['esbuild', 'src/composition/index.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${compositionBundle}`], { cwd: root, timeout: 30_000 });
+const compositionBuild = runProcess('npx', ['esbuild', 'src/composition/index.ts', '--bundle', '--platform=node', '--format=cjs', `--outfile=${compositionBundle}`], { cwd: root, timeout: 30_000 });
 if (compositionBuild.status !== 0) throw new Error(`report plan composition test bundle failed: ${compositionBuild.stderr || compositionBuild.stdout}`);
 
 try {

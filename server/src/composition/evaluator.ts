@@ -110,6 +110,115 @@ function checkEarlyRouteTransitions(document: CompositionDocument, plan: Composi
   }
 }
 
+function blockMatchesSlot(block: CompositionDocument['flows'][string]['blocks'][number], slot: CompositionSlot): boolean {
+  if (slot.allowedRoles && !slot.allowedRoles.includes(block.role)) return false;
+  if (slot.allowedBlockKinds && !slot.allowedBlockKinds.includes(block.kind)) return false;
+  if (slot.allowedBlockIds && !slot.allowedBlockIds.some((id) => block.id === id || block.id.startsWith(`${id}:`))) return false;
+  if (slot.kind === 'block' && !block.atomic && block.kind !== 'table') return false;
+  if (block.kind === 'table' && slot.kind !== 'block') return false;
+  if ((block.kind === 'metric' || block.kind === 'chart') && slot.kind !== 'block') return false;
+  if (slot.kind === 'graphic') return false;
+  return true;
+}
+
+function checkEmptyAndUnderfilledSlots(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
+  const minimum = plan.minimumFragmentLines ?? 1;
+  if (!Number.isInteger(minimum) || minimum <= 0) return;
+  const blockFlowIds = new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block) => [block.id, flowId] as const)));
+  const items = [
+    ...plan.lines.map((line) => ({ ...line, flowId: line.flowId })),
+    ...plan.blockPlacements.map((placement) => ({ ...placement, flowId: blockFlowIds.get(placement.blockId) })),
+    ...plan.tablePlacements.map((placement) => ({ ...placement, flowId: blockFlowIds.get(placement.blockId) })),
+  ];
+  for (const [flowId, flow] of Object.entries(document.flows)) {
+    if (plan.repeatFlowIds?.includes(flowId)) continue;
+    const blockIndexes = new Map(flow.blocks.map((block, index) => [block.id, index]));
+    const flowItems = items.filter((item) => item.flowId === flowId);
+    for (const page of plan.pages) {
+      const pageSlots = plan.slots.filter((slot) => slot.page === page.page && slot.flowId === flowId && slot.routeIndex !== undefined && slot.kind === 'text');
+      for (const slot of pageSlots) {
+        if (slot.allowedRoles?.includes('quote')) continue;
+        const slotItems = flowItems.filter((item) => item.slotId === slot.id);
+        const laterItems = flowItems.filter((item) => item.page > page.page || (item.page === page.page && (item.routeIndex ?? Number.NEGATIVE_INFINITY) > slot.routeIndex!));
+        if (laterItems.length === 0) continue;
+        const hasEligibleLaterBlock = laterItems.some((item) => {
+          const block = flow.blocks.find((candidate) => candidate.id === item.blockId);
+          return block !== undefined && blockMatchesSlot(block, slot);
+        });
+        if (!hasEligibleLaterBlock) continue;
+        const firstLaterIndex = laterItems
+          .map((item) => blockIndexes.get(item.blockId))
+          .filter((index): index is number => index !== undefined)
+          .sort((left, right) => left - right)[0];
+        const hasEarlierFlowMaterial = firstLaterIndex !== undefined && flowItems.some((item) => {
+          const index = blockIndexes.get(item.blockId);
+          return index !== undefined && index < firstLaterIndex;
+        });
+        if (!hasEarlierFlowMaterial) continue;
+        const lastAuthoredIndex = (slotItems.length > 0
+          ? slotItems
+            .map((item) => blockIndexes.get(item.blockId))
+            .filter((index): index is number => index !== undefined)
+            .sort((left, right) => right - left)[0]
+          : flowItems
+            .filter((item) => item.page < slot.page || (item.page === slot.page && (item.routeIndex ?? Number.NEGATIVE_INFINITY) < slot.routeIndex!))
+            .map((item) => blockIndexes.get(item.blockId))
+            .filter((index): index is number => index !== undefined)
+            .sort((left, right) => right - left)[0]) ?? -1;
+        const nextAuthoredBlock = flow.blocks.find((_, index) => index > lastAuthoredIndex);
+        if (!nextAuthoredBlock || !blockMatchesSlot(nextAuthoredBlock, slot) || nextAuthoredBlock.role === 'quote') continue;
+        const fullyCoveredByObstacle = plan.graphicPlacements.some((graphic) => graphic.page === slot.page
+          && graphic.wrap === 'around'
+          && fitsInside(slot.box, graphic.box));
+        if (fullyCoveredByObstacle) continue;
+        if (slotItems.length === 0) {
+          const nextLine = laterItems.find((item) => 'box' in item && item.box.height > 0);
+          const lineHeight = nextLine?.box.height ?? slot.box.height;
+          const availableLines = Math.floor(slot.box.height / lineHeight);
+          if (availableLines < minimum) continue;
+          diagnostics.push(error(
+            'EMPTY_FLOW_SLOT',
+            `Flow '${flowId}' skips empty slot '${slot.id}' while later content is placed (next authored block: ${nextAuthoredBlock?.id ?? 'unknown'}).`,
+            {
+              flowId,
+              page: page.page,
+              slotId: slot.id,
+              details: {
+                routeIndex: slot.routeIndex,
+                availableLines,
+                minimumFragmentLines: minimum,
+                nextSlotId: laterItems[0].slotId,
+                nextPage: laterItems[0].page,
+              },
+            },
+          ));
+          continue;
+        }
+        const last = [...slotItems].sort((left, right) => left.box.y - right.box.y).at(-1)!;
+        if (!('flowId' in last) || !('box' in last) || !('startWord' in last)) continue;
+        const usable = usableLinesAfter(last as CompositionPlan['lines'][number], slot, plan.graphicPlacements);
+        if (usable < minimum) continue;
+        diagnostics.push(error(
+          'FLOW_SLOT_UNDERFILLED',
+          `Flow '${flowId}' leaves ${usable} usable line(s) in '${slot.id}' before later content.`,
+          {
+            flowId,
+            page: page.page,
+            slotId: slot.id,
+            details: {
+              routeIndex: slot.routeIndex,
+              usableLines: usable,
+              minimumFragmentLines: minimum,
+              nextSlotId: laterItems[0].slotId,
+              nextPage: laterItems[0].page,
+            },
+          },
+        ));
+      }
+    }
+  }
+}
+
 function checkInsertionSourceOrder(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
   const placedItems = [
     ...plan.lines,
@@ -161,6 +270,7 @@ function checkInsertionSourceOrder(document: CompositionDocument, plan: Composit
  */
 export function evaluateCompositionPlan(document: CompositionDocument, plan: CompositionPlan): CompositionEvaluation {
   const diagnostics = [...plan.diagnostics];
+  checkEmptyAndUnderfilledSlots(document, plan, diagnostics);
   checkEarlyRouteTransitions(document, plan, diagnostics);
   checkInsertionSourceOrder(document, plan, diagnostics);
   const repeatedFlows = new Set(plan.repeatFlowIds ?? []);
@@ -370,7 +480,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
       for (let index = ordered[0] + 1; index < ordered.at(-1)!; index += 1) {
         if (indexes.has(index) || collapsed.has(index) || blocked.has(index)) continue;
         diagnostics.push({
-          severity: 'warning',
+          severity: 'error',
           code: 'ROUTE_SEGMENT_GAP',
           message: `Flow '${flow.id}' leaves route segment ${index} empty before later content on page ${page}.`,
           flowId: flow.id,
@@ -521,6 +631,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     }
   }
   const hasErrors = diagnostics.some((item) => item.severity === 'error');
+  plan.trace?.phases.push({ name: 'evaluation', status: hasErrors ? 'failed' : 'completed', details: { diagnosticCount: diagnostics.length, errorCount: diagnostics.filter((item) => item.severity === 'error').length } });
   return {
     status: hasErrors ? 'rejected' : diagnostics.length > 0 ? 'accepted-with-warnings' : 'accepted',
     diagnostics,

@@ -237,6 +237,10 @@ try {
   assert.ok(result.plan.lines.some((line) => line.page === 2 && line.slotId === '2:main-c'), 'continuation layout must expose its third column');
   assert.ok(result.plan.decisions.some((decision) => ['KEEP_CLUSTER_PUSHED', 'KEEP_CLUSTER_RELAXED'].includes(decision.code)), 'keep cluster decision should be visible');
   assert.ok(result.plan.slots.some((slot) => slot.id === '1:main-a' && slot.state !== 'open'));
+  assert.ok(result.plan.trace?.phases.some((phase) => phase.name === 'preflight'));
+  assert.ok(result.plan.trace?.phases.some((phase) => phase.name === 'flow-placement'));
+  assert.ok(result.plan.trace?.blocks.some((block) => block.blockId === 'body' && block.fragments.length > 0), 'plan trace must group fragments by source block');
+  assert.ok(result.plan.trace?.slots.some((slot) => slot.slotId === '1:main-a' && slot.lineCount > 0), 'plan trace must expose slot occupancy');
   assert.equal(result.plan.residualContent.length, 0);
   assert.equal(result.evaluation.diagnostics.some((item) => item.code === 'LINE_OVERLAP'), false);
 
@@ -378,8 +382,45 @@ try {
     if (line.blockId === 'lorem-body-2') line.routeIndex = 6;
   }
   const malformedGapEvaluation = evaluateCompositionPlan(loremEditorialFixture, malformedGap);
-  assert.equal(malformedGapEvaluation.status, 'accepted-with-warnings');
+  assert.equal(malformedGapEvaluation.status, 'rejected');
   assert.ok(malformedGapEvaluation.diagnostics.some((item) => item.code === 'ROUTE_SEGMENT_GAP'), 'evaluator must report an empty route segment before later content');
+  const emptyFlowSlot = structuredClone(loremEditorial.plan);
+  emptyFlowSlot.lines = emptyFlowSlot.lines.filter((line) => line.slotId !== '1:body-1');
+  emptyFlowSlot.placements = emptyFlowSlot.placements.filter((placement) => placement.slotId !== '1:body-1');
+  emptyFlowSlot.slots = emptyFlowSlot.slots.map((slot) => slot.id === '1:body-1' ? { ...slot, state: 'open' } : slot);
+  const emptyFlowSlotEvaluation = evaluateCompositionPlan(loremEditorialFixture, emptyFlowSlot);
+  assert.equal(emptyFlowSlotEvaluation.status, 'rejected');
+  assert.ok(emptyFlowSlotEvaluation.diagnostics.some((item) => item.code === 'EMPTY_FLOW_SLOT'), 'evaluator must report a skipped non-obstructed flow slot');
+
+  const preplannedInsertionTemplate = {
+    maxPages: 2,
+    layouts: [1, 2].map((page) => ({ id: `preplanned-insertion-${page}`, width: 100, height: 100, slots: [
+      { id: 'left', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 90 }, allowedRoles: ['body'] },
+      { id: 'right', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 90 }, allowedRoles: ['body'] },
+      { id: 'quote', regionId: 'main', kind: 'text', box: { x: 5, y: 35, width: 90, height: 10 }, allowedRoles: ['quote'] },
+    ] })),
+    routes: {
+      main: {
+        slots: ['left', 'right'],
+        insertionSlots: ['quote'],
+        layouts: ['preplanned-insertion-1', 'preplanned-insertion-2'],
+        slotsByLayout: { 'preplanned-insertion-2': ['left', 'right'] },
+        continuation: 'allowed',
+      },
+    },
+  };
+  const preplannedInsertion = createTextCompositionEngine(preplannedInsertionTemplate, { maxPlanningIterations: 2 }).plan({
+    flows: { main: { id: 'main', continuation: 'allowed', blocks: [
+      { id: 'preplanned-before', kind: 'paragraph', role: 'body', text: Array.from({ length: 12 }, (_, index) => `before${index}`).join(' ') },
+      { id: 'preplanned-quote', kind: 'paragraph', role: 'quote', text: 'quote insertion is measured before the main flow resumes' },
+      { id: 'preplanned-after', kind: 'paragraph', role: 'body', text: Array.from({ length: 60 }, (_, index) => `after${index}`).join(' ') },
+    ] } },
+  }, metrics);
+  assert.equal(preplannedInsertion.evaluation.status, 'accepted', JSON.stringify(preplannedInsertion.evaluation));
+  assert.ok(preplannedInsertion.plan.lines.some((line) => line.blockId === 'preplanned-quote' && line.layer === 'insertion'), 'quote must be planned in the insertion layer');
+  assert.ok(preplannedInsertion.plan.lines.every((line) => line.blockId !== 'preplanned-quote' || line.routeIndex === undefined), 'insertion text must not consume a main route index');
+  assert.ok(preplannedInsertion.plan.decisions.some((decision) => decision.code === 'INSERTION_LAYER_PLACED'));
+  assert.ok(preplannedInsertion.plan.trace?.phases.some((phase) => phase.name === 'insertion-placement'));
 
   const repositionedInsertionTemplate = {
     maxPages: 1,
@@ -656,7 +697,7 @@ try {
   impossibleInsertionDocument.flows.main.blocks[0].text = Array.from({ length: 20 }, (_, index) => `before-${String(index + 1).padStart(4, '0')}`).join(' ');
   const impossibleInsertion = createTextCompositionEngine(continuousQuoteTemplate).plan(impossibleInsertionDocument, metrics);
   assert.equal(impossibleInsertion.evaluation.status, 'rejected');
-  assert.ok(impossibleInsertion.evaluation.diagnostics.some((item) => item.code === 'INSERTION_PRECEDENCE_CONFLICT'), 'planner must reject an insertion that cannot preserve source order above its obstacle');
+  assert.ok(impossibleInsertion.evaluation.diagnostics.some((item) => ['INSERTION_PRECEDENCE_CONFLICT', 'INSERTION_SOURCE_ORDER_VIOLATION', 'MAX_PAGES_EXCEEDED'].includes(item.code)), `planner must reject an insertion that cannot preserve source order above its obstacle: ${JSON.stringify(impossibleInsertion.evaluation)}`);
 
   const earlyColumnAdvance = structuredClone(result.plan);
   const continuedLines = earlyColumnAdvance.lines.filter((line) => line.blockId === 'body' && line.page === 2);

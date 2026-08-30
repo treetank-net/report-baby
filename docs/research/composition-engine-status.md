@@ -158,6 +158,25 @@ These are executable layout rules, not visual preferences:
   discrete lines before permitting a column transition; only the final natural
   tail may remain empty.
 
+### Plan observability
+
+The executable plan remains a flat structure because renderers consume flat
+placements, but it must expose a grouped explanation beside that structure:
+
+- `plan.trace.phases` records preflight, obstacle reservation, insertion
+  placement, ordinary flow placement, each reflow pass and final evaluation.
+- `plan.trace.blocks` groups every source block into its fragments, source word
+  count, final status and the decisions that affected it, including page,
+  slot, route position and reason details.
+- `plan.trace.slots` reports each page slot's geometry, state, line count,
+  occupied height and remaining line capacity. This makes an empty or
+  under-filled non-final slot visible without reconstructing it from line
+  records.
+- The numbered editorial harness writes `plan.json`, `plan-trace.json`,
+  per-page JSON/SVG debug boards and ink-occupancy data when
+  `REPORT_BABY_ARTIFACT_DIR` is set. A rejected plan is therefore inspectable
+  at the phase, block and slot level before a backend can render it.
+
 The page-template flow contract now supports `repeat: each-page`. The built-in
 editorial footer uses that route, so footer content is planned and rendered as
 an ordinary flow on every materialized page. The legacy footer pass still owns

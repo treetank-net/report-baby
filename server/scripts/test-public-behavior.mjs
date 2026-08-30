@@ -169,6 +169,7 @@ try {
   });
   assert.notEqual(metricReport.isError, true, JSON.stringify(metricReport.content));
   assert.equal(metricReport.structuredContent?.layoutEngine, 'composition-planner');
+  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'public-metrics-plan.json'), JSON.stringify(metricReport.structuredContent?.compositionPlan ?? {}, null, 2));
   assert.equal(metricReport.structuredContent?.compositionEvaluation?.status, 'accepted');
   const metricPlacements = metricReport.structuredContent?.compositionPlan?.blockPlacements ?? [];
   assert.deepEqual(metricPlacements.filter((placement) => placement.kind === 'metric').map((placement) => placement.slotId), ['1:metric-1', '1:metric-2', '1:metric-3']);
@@ -228,6 +229,7 @@ try {
       },
     },
   });
+  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'public-metrics-overflow-plan.json'), JSON.stringify(overflowingMetricReport.structuredContent?.compositionPlan ?? {}, null, 2));
   assert.notEqual(overflowingMetricReport.isError, true, JSON.stringify(overflowingMetricReport.content));
   assert.equal(overflowingMetricReport.structuredContent?.compositionEvaluation?.status, 'accepted');
   const overflowingMetricPlacements = overflowingMetricReport.structuredContent?.compositionPlan?.blockPlacements ?? [];

@@ -1,4 +1,4 @@
-import type { CompositionBlock, CompositionDocument, CompositionGraphicShape } from './model.js';
+import type { CompositionBlock, CompositionBlockKind, CompositionBlockRole, CompositionDocument, CompositionGraphicShape, CompositionSlotKind } from './model.js';
 
 export interface CompositionTextMetrics {
   units: string;
@@ -56,6 +56,11 @@ export interface CompositionSlot {
   page: number;
   regionId: string;
   flowId?: string;
+  kind?: CompositionSlotKind;
+  routeIndex?: number;
+  allowedRoles?: CompositionBlockRole[];
+  allowedBlockIds?: string[];
+  allowedBlockKinds?: CompositionBlockKind[];
   box: CompositionBox;
   state: 'open' | 'partial' | 'exhausted';
 }
@@ -70,6 +75,7 @@ export interface CompositionPlacement {
   routeIndex?: number;
   startWord?: number;
   endWord?: number;
+  layer?: 'flow' | 'insertion';
 }
 
 export interface CompositionBlockPlacement {
@@ -128,6 +134,7 @@ export interface CompositionLine {
   naturalWidth: number;
   startWord: number;
   endWord: number;
+  layer?: 'flow' | 'insertion';
 }
 
 export interface CompositionDecision {
@@ -161,6 +168,67 @@ export interface CompositionResidualContent {
   lastLegalSlotId?: string;
 }
 
+export type CompositionPlanningPhaseName =
+  | 'preflight'
+  | 'obstacle-reservation'
+  | 'insertion-placement'
+  | 'flow-placement'
+  | 'reflow'
+  | 'evaluation';
+
+export interface CompositionPlanningPhase {
+  name: CompositionPlanningPhaseName;
+  iteration?: number;
+  status: 'completed' | 'failed';
+  details?: Record<string, unknown>;
+}
+
+export interface CompositionBlockTraceFragment {
+  page: number;
+  slotId: string;
+  routeIndex?: number;
+  startWord?: number;
+  endWord?: number;
+  box: CompositionBox;
+}
+
+export interface CompositionTraceDecision {
+  code: string;
+  details: Record<string, unknown>;
+}
+
+export interface CompositionBlockTrace {
+  flowId: string;
+  blockId: string;
+  kind: CompositionBlock['kind'];
+  role: CompositionBlock['role'];
+  sourceWordCount: number;
+  status: 'placed' | 'partial' | 'residual' | 'empty';
+  fragments: CompositionBlockTraceFragment[];
+  decisions: CompositionTraceDecision[];
+}
+
+export interface CompositionSlotTrace {
+  page: number;
+  slotId: string;
+  regionId: string;
+  flowId?: string;
+  state: CompositionSlot['state'];
+  box: CompositionBox;
+  lineCount: number;
+  occupiedHeight: number;
+  remainingHeight: number;
+  lineHeight?: number;
+  remainingLines?: number;
+}
+
+/** A compact, human-oriented projection of the otherwise flat plan. */
+export interface CompositionPlanTrace {
+  phases: CompositionPlanningPhase[];
+  blocks: CompositionBlockTrace[];
+  slots: CompositionSlotTrace[];
+}
+
 export interface CompositionPlan {
   pages: CompositionPagePlan[];
   slots: CompositionSlot[];
@@ -175,6 +243,8 @@ export interface CompositionPlan {
   repeatFlowIds?: string[];
   /** Policy carried into evaluation so underfilled route transitions fail closed. */
   minimumFragmentLines?: number;
+  /** Grouped explanation of the plan, kept alongside the executable records. */
+  trace?: CompositionPlanTrace;
 }
 
 export interface CompositionEvaluation {

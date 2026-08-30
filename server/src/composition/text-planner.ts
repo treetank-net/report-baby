@@ -9,14 +9,18 @@ import type {
 } from './model.js';
 import type {
   CompositionBlockMeasurement,
+  CompositionBlockTrace,
   CompositionBlockPlacement,
   CompositionDiagnostic,
   CompositionGraphicPlacement,
   CompositionLine,
   CompositionPlan,
+  CompositionPlanTrace,
+  CompositionPlanningPhaseName,
   CompositionPlacement,
   CompositionPlanner,
   CompositionSlot,
+  CompositionTraceDecision,
   CompositionTextMetrics,
   CompositionTableMeasurement,
   CompositionWordRange,
@@ -344,6 +348,10 @@ function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
       page,
       regionId: definition.regionId,
       ...(definition.flowId === undefined ? {} : { flowId: definition.flowId }),
+      kind: definition.kind,
+      ...(definition.allowedRoles === undefined ? {} : { allowedRoles: [...definition.allowedRoles] }),
+      ...(definition.allowedBlockIds === undefined ? {} : { allowedBlockIds: [...definition.allowedBlockIds] }),
+      ...(definition.allowedBlockKinds === undefined ? {} : { allowedBlockKinds: [...definition.allowedBlockKinds] }),
       box: { ...definition.box },
       state: 'open',
     });
@@ -366,21 +374,46 @@ function insertionProposalsFromPlan(document: CompositionDocument, template: Com
   for (const [flowId, flow] of Object.entries(document.flows)) {
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
+    const candidates: Array<{ page: number; slotId: string; box: CompositionRect }> = [];
+    const firstPage = route.startPage ?? 1;
+    for (let page = firstPage; page <= template.maxPages; page += 1) {
+      const layout = routeLayout(route, template, page);
+      if (!layout) continue;
+      for (const slotId of route.insertionSlots) {
+        const slot = layout.slots.find((candidate) => candidate.id === slotId && candidate.allowedRoles?.includes('quote'));
+        if (slot) candidates.push({ page, slotId, box: { ...slot.box } });
+      }
+    }
+    candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
+    const blockIndexes = new Map(flow.blocks.map((block, index) => [block.id, index]));
+    const placedItems = [
+      ...plan.lines.filter((line) => line.flowId === flowId && line.layer !== 'insertion'),
+      ...plan.blockPlacements.filter((placement) => blockIndexes.has(placement.blockId)),
+      ...plan.tablePlacements.filter((placement) => blockIndexes.has(placement.blockId)),
+    ];
+    let previousCandidateIndex = -1;
     for (const block of flow.blocks.filter((candidate) => candidate.role === 'quote')) {
+      const quoteIndex = blockIndexes.get(block.id) ?? Number.POSITIVE_INFINITY;
       const line = plan.lines
         .filter((candidate) => candidate.flowId === flowId && candidate.blockId === block.id)
         .sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x)[0];
-      if (!line) continue;
-      const slot = plan.slots.find((candidate) => candidate.id === line.slotId);
-      if (!slot) continue;
-      const obstacle = plan.graphicPlacements.find((candidate) => candidate.graphicId === `insertion:${block.id}` && candidate.page === line.page);
-      proposals.set(insertionKey(flowId, block.id), {
-        flowId,
-        blockId: block.id,
-        page: line.page,
-        slotId: slot.id.replace(/^\d+:/u, ''),
-        box: { ...(obstacle?.box ?? slot.box) },
-      });
+      const predecessorBottom = placedItems
+        .filter((item) => (blockIndexes.get(item.blockId) ?? Number.POSITIVE_INFINITY) < quoteIndex)
+        .reduce<{ page: number; bottom: number } | undefined>((latest, item) => {
+          const bottom = item.box.y + item.box.height;
+          if (!latest || item.page > latest.page || (item.page === latest.page && bottom > latest.bottom)) return { page: item.page, bottom };
+          return latest;
+        }, undefined);
+      const currentIndex = line
+        ? candidates.findIndex((candidate) => candidate.page === line.page && candidate.slotId === line.slotId.replace(/^\d+:/u, ''))
+        : -1;
+      const earliestIndex = Math.max(previousCandidateIndex + 1, currentIndex, 0);
+      const selectedIndex = candidates.findIndex((candidate, index) => index >= earliestIndex
+        && (!predecessorBottom || candidate.page > predecessorBottom.page || (candidate.page === predecessorBottom.page && candidate.box.y >= predecessorBottom.bottom - Number.EPSILON)));
+      const selected = selectedIndex >= 0 ? candidates[selectedIndex] : undefined;
+      if (!selected) continue;
+      proposals.set(insertionKey(flowId, block.id), { flowId, blockId: block.id, ...selected });
+      previousCandidateIndex = selectedIndex;
     }
   }
   return proposals;
@@ -462,6 +495,76 @@ function reserveInsertionObstacles(
     });
     plan.decisions.push({ code: 'INSERTION_OBSTACLE_RESERVED', flowId: proposal.flowId, blockId: proposal.blockId, page: proposal.page, slotId: slot.id, box: { ...slot.box } });
   }
+  for (const page of pages) {
+    for (const [flowId, route] of Object.entries(template.routes)) {
+      if (!route.insertionSlots?.length) continue;
+      const plannedSlotIds = new Set([...proposals.values()]
+        .filter((proposal) => proposal.flowId === flowId && proposal.page === page.page)
+        .map((proposal) => proposal.slotId));
+      for (const insertionId of route.insertionSlots) {
+        if (plannedSlotIds.has(insertionId)) continue;
+        const slot = page.slots.get(insertionId);
+        if (!slot || slot.state !== 'open') continue;
+        slot.state = 'exhausted';
+        plan.decisions.push({ code: 'INSERTION_SLOT_COLLAPSED', flowId, page: page.page, slotId: slot.id, reason: 'no-authored-insertion-assigned-to-page' });
+      }
+    }
+  }
+}
+
+/**
+ * Lay out authored insertions before the ordinary flow.  The old planner only
+ * reserved their rectangles and then sent the quote back through the main
+ * block loop, which made a quote look like another route segment and allowed
+ * the text cursor to decide its placement.  Here the quote is measured and
+ * painted as a separate layer first; the main cursor only sees its obstacle.
+ */
+function placeInsertionLayer(
+  document: CompositionDocument,
+  metrics: CompositionTextMetrics,
+  template: CompositionTemplate,
+  plan: CompositionPlan,
+  pages: PageState[],
+  proposals: Map<string, PlannedInsertion>,
+): Set<string> {
+  const placed = new Set<string>();
+  for (const [flowId, flow] of Object.entries(document.flows)) {
+    const route = template.routes[flowId];
+    if (!route?.insertionSlots?.length) continue;
+    for (const block of flow.blocks.filter((candidate) => candidate.role === 'quote')) {
+      const key = insertionKey(flowId, block.id);
+      const proposal = proposals.get(key);
+      if (!proposal) {
+        plan.diagnostics.push(diagnostic('error', 'INSERTION_PLAN_MISSING', `Insertion '${block.id}' has no planned obstacle slot.`, { flowId, blockId: block.id }));
+        addResidual(plan.residualContent, flowId, block, 0, undefined, 'insertion-plan-missing');
+        continue;
+      }
+      const page = ensurePage(pages, template, route, proposal.page, plan.diagnostics, flowId);
+      const definition = page?.layout.slots.find((slot) => slot.id === proposal.slotId && slot.allowedRoles?.includes('quote'));
+      const slot = definition && page ? page.slots.get(definition.id) : undefined;
+      if (!page || !definition || !slot) {
+        plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Insertion '${block.id}' cannot place its planned slot '${proposal.slotId}'.`, { flowId, blockId: block.id, page: proposal.page, slotId: proposal.slotId }));
+        addResidual(plan.residualContent, flowId, block, 0, undefined, 'insertion-slot-not-found');
+        continue;
+      }
+      const leading = lineHeight(metrics, block);
+      const lines = wrapBlock(metrics, block, 0, slot.box, 0, rectBottom(slot.box), [], leading);
+      const wordCount = wordsForBlock(block).length;
+      const consumed = lines.at(-1)?.endWord ?? 0;
+      if (consumed < wordCount) {
+        plan.diagnostics.push(diagnostic('error', 'INSERTION_OVERFLOW', `Insertion '${block.id}' does not fit in its measured obstacle box.`, { flowId, blockId: block.id, page: page.page, slotId: slot.id, details: { consumed, wordCount, box: { ...slot.box } } }));
+        addResidual(plan.residualContent, flowId, block, consumed, slot.id, 'insertion-overflow');
+        continue;
+      }
+      placeLines(page, definition, block, flowId, undefined, lines, leading, plan.placements, plan.lines, 'insertion');
+      slot.state = 'exhausted';
+      const obstacle = plan.graphicPlacements.find((graphic) => graphic.graphicId === `insertion:${block.id}` && graphic.page === page.page);
+      if (obstacle) obstacle.box = { ...slot.box };
+      plan.decisions.push({ code: 'INSERTION_LAYER_PLACED', flowId, blockId: block.id, page: page.page, slotId: slot.id, lineCount: lines.length, box: { ...slot.box } });
+      placed.add(key);
+    }
+  }
+  return placed;
 }
 
 function absoluteGraphicPoints(graphic: { points?: Array<{ x: number; y: number }> }, box: CompositionRect): Array<{ x: number; y: number }> | undefined {
@@ -581,7 +684,7 @@ function slotCollidesWithPlacedBlock(pageState: PageState, slotId: string, plan:
   const slot = pageState.slots.get(slotId);
   const box = slot?.box;
   if (!box) return false;
-  return plan.lines.some((line) => line.page === pageState.page && line.slotId !== slot.id && line.flowId !== flowId && rectsOverlap(box, line.box))
+  return plan.lines.some((line) => line.layer !== 'insertion' && line.page === pageState.page && line.slotId !== slot.id && line.flowId !== flowId && rectsOverlap(box, line.box))
     || plan.blockPlacements.some((placement) => placement.page === pageState.page && placement.slotId !== slot.id && rectsOverlap(box, placement.box))
     || plan.tablePlacements.some((placement) => placement.page === pageState.page && placement.slotId !== slot.id && rectsOverlap(box, placement.box))
     || pageState.layout.slots.some((candidate) => candidate.reserved === true && candidate.id !== slot.id && rectsOverlap(box, candidate.box));
@@ -648,7 +751,7 @@ function flowingTextBottom(plan: CompositionPlan, slotId: string, fallback: numb
     .filter((block) => block.kind === 'image' && (block.image?.wrap === 'left' || block.image?.wrap === 'right'))
     .map((block) => block.id));
   const lineBottom = plan.lines
-    .filter((line) => line.slotId === slotId)
+    .filter((line) => line.slotId === slotId && line.layer !== 'insertion')
     .reduce((bottom, line) => Math.max(bottom, line.box.y + line.box.height), fallback);
   const blockBottom = plan.blockPlacements
     .filter((placement) => placement.slotId === slotId && !wrappedImages.has(placement.blockId))
@@ -682,6 +785,7 @@ function occupiedBottomInOverlappingSlots(
   );
   const bottomOf = (item: { page: number; slotId: string; box: CompositionRect }): number => {
     if (item.page !== pageState.page || item.slotId === targetSlot.id) return fallback;
+    if ('layer' in item && item.layer === 'insertion') return fallback;
     const source = occupiedSlots.get(item.slotId);
     if (!source || source.flowId !== targetSlot.flowId || source.box.y >= rectBottom(targetSlot.box) || !horizontalOverlap(source.box, targetSlot.box)) return fallback;
     return item.box.y + item.box.height;
@@ -707,6 +811,7 @@ function previousBlockInOverlappingSlots(
     ...plan.tablePlacements,
   ].filter((item) => {
     if (item.page !== pageState.page || item.slotId === targetSlot.id) return false;
+    if ('layer' in item && item.layer === 'insertion') return false;
     const source = pageState.slots.get(item.slotId);
     return source?.flowId === targetSlot.flowId && source !== undefined && source.box.y < rectBottom(targetSlot.box) && horizontalOverlap(source.box, targetSlot.box);
   }).sort((left, right) => (left.box.y + left.box.height) - (right.box.y + right.box.height));
@@ -807,7 +912,37 @@ function collapseInsertionBeforeContinuation(
  * wrapBlock can see the obstacle, skip over it, and place the text authored
  * before the quote below the quote itself.
  */
+function nextInsertionProposal(
+  flow: CompositionFlowRoute,
+  blocks: CompositionBlock[],
+  blockIndex: number,
+  page: number,
+  proposals: Map<string, PlannedInsertion>,
+  flowId: string,
+  afterY = Number.NEGATIVE_INFINITY,
+): PlannedInsertion | undefined {
+  if ((flow.insertionSlots?.length ?? 0) === 0) return undefined;
+  return blocks
+    .slice(blockIndex + 1)
+    .filter((block) => block.role === 'quote')
+    .map((block) => proposals.get(insertionKey(flowId, block.id)))
+    .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === page && proposal.box.y > afterY + Number.EPSILON)
+    .sort((left, right) => left.box.y - right.box.y)[0];
+}
+
 function nextInsertionBoundary(
+  flow: CompositionFlowRoute,
+  blocks: CompositionBlock[],
+  blockIndex: number,
+  page: number,
+  proposals: Map<string, PlannedInsertion>,
+  flowId: string,
+  afterY = Number.NEGATIVE_INFINITY,
+): number | undefined {
+  return nextInsertionProposal(flow, blocks, blockIndex, page, proposals, flowId, afterY)?.box.y;
+}
+
+function previousInsertionBoundary(
   flow: CompositionFlowRoute,
   blocks: CompositionBlock[],
   blockIndex: number,
@@ -817,12 +952,12 @@ function nextInsertionBoundary(
 ): number | undefined {
   if ((flow.insertionSlots?.length ?? 0) === 0) return undefined;
   return blocks
-    .slice(blockIndex + 1)
+    .slice(0, blockIndex)
     .filter((block) => block.role === 'quote')
     .map((block) => proposals.get(insertionKey(flowId, block.id)))
     .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === page)
-    .map((proposal) => proposal.box.y)
-    .sort((left, right) => left - right)[0];
+    .map((proposal) => proposal.box.y + proposal.box.height)
+    .sort((left, right) => right - left)[0];
 }
 
 function placeLines(
@@ -835,6 +970,7 @@ function placeLines(
   lineHeightValue: number,
   placements: CompositionPlacement[],
   outputLines: CompositionLine[],
+  layer: 'flow' | 'insertion' = 'flow',
 ): void {
   const slot = pageState.slots.get(definition.id);
   if (!slot || lines.length === 0) return;
@@ -854,6 +990,7 @@ function placeLines(
     box: { x: left, y: firstY, width: right - left, height: lastBottom - firstY },
     startWord: first.startWord,
     endWord: last.endWord,
+    ...(layer === 'flow' ? {} : { layer }),
   });
   lines.forEach((line) => {
     outputLines.push({
@@ -873,6 +1010,7 @@ function placeLines(
       naturalWidth: line.naturalWidth,
       startWord: line.startWord,
       endWord: line.endWord,
+      ...(layer === 'flow' ? {} : { layer }),
     });
   });
   const occupiedBottom = lastBottom;
@@ -1006,7 +1144,106 @@ function advanceCursor(
 }
 
 function createPlan(minimumFragmentLines?: number): CompositionPlan {
-  return { pages: [], slots: [], placements: [], blockPlacements: [], tablePlacements: [], graphicPlacements: [], lines: [], decisions: [], diagnostics: [], residualContent: [], repeatFlowIds: [], ...(minimumFragmentLines === undefined ? {} : { minimumFragmentLines }) };
+  return {
+    pages: [],
+    slots: [],
+    placements: [],
+    blockPlacements: [],
+    tablePlacements: [],
+    graphicPlacements: [],
+    lines: [],
+    decisions: [],
+    diagnostics: [],
+    residualContent: [],
+    repeatFlowIds: [],
+    trace: { phases: [], blocks: [], slots: [] },
+    ...(minimumFragmentLines === undefined ? {} : { minimumFragmentLines }),
+  };
+}
+
+function recordPlanningPhase(
+  plan: CompositionPlan,
+  name: CompositionPlanningPhaseName,
+  status: 'completed' | 'failed',
+  details?: Record<string, unknown>,
+  iteration?: number,
+): void {
+  plan.trace?.phases.push({ name, status, ...(iteration === undefined ? {} : { iteration }), ...(details ? { details } : {}) });
+}
+
+function sourceWordCount(block: CompositionBlock): number {
+  return wordsForBlock(block).length;
+}
+
+function tracePlan(document: CompositionDocument, metrics: CompositionTextMetrics, plan: CompositionPlan): void {
+  const sourceBlocks = Object.values(document.flows).flatMap((flow) => flow.blocks.map((block) => ({ flowId: flow.id, block })));
+  const decisionsByBlock = new Map<string, CompositionTraceDecision[]>();
+  for (const decision of plan.decisions) {
+    const blockId = typeof decision.blockId === 'string' ? decision.blockId : undefined;
+    if (!blockId) continue;
+    const details = Object.fromEntries(Object.entries(decision).filter(([key]) => key !== 'code' && key !== 'blockId'));
+    const decisions = decisionsByBlock.get(blockId) ?? [];
+    if (!decisions.some((item) => item.code === decision.code && JSON.stringify(item.details) === JSON.stringify(details))) {
+      decisions.push({ code: decision.code, details });
+    }
+    decisionsByBlock.set(blockId, decisions);
+  }
+  const fragmentsByBlock = new Map<string, CompositionBlockTrace['fragments']>();
+  const addFragment = (blockId: string, fragment: CompositionBlockTrace['fragments'][number]): void => {
+    const fragments = fragmentsByBlock.get(blockId) ?? [];
+    fragments.push(fragment);
+    fragmentsByBlock.set(blockId, fragments);
+  };
+  for (const line of plan.lines) addFragment(line.blockId, { page: line.page, slotId: line.slotId, ...(line.routeIndex === undefined ? {} : { routeIndex: line.routeIndex }), startWord: line.startWord, endWord: line.endWord, box: { ...line.box } });
+  for (const placement of plan.blockPlacements) addFragment(placement.blockId, { page: placement.page, slotId: placement.slotId, routeIndex: placement.routeIndex, box: { ...placement.box } });
+  for (const placement of plan.tablePlacements) addFragment(placement.blockId, { page: placement.page, slotId: placement.slotId, routeIndex: placement.routeIndex, box: { ...placement.box } });
+  const residualIds = new Set(plan.residualContent.map((residual) => residual.blockId));
+  const blocks = sourceBlocks.map(({ flowId, block }) => {
+    const fragments = (fragmentsByBlock.get(block.id) ?? []).sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
+    const coveredWords = fragments.reduce((total, fragment) => total + Math.max(0, (fragment.endWord ?? fragment.startWord ?? 0) - (fragment.startWord ?? 0)), 0);
+    const status: CompositionBlockTrace['status'] = fragments.length === 0 ? 'empty' : residualIds.has(block.id) ? 'residual' : coveredWords < sourceWordCount(block) ? 'partial' : 'placed';
+    return { flowId, blockId: block.id, kind: block.kind, role: block.role, sourceWordCount: sourceWordCount(block), status, fragments, decisions: decisionsByBlock.get(block.id) ?? [] };
+  });
+  const lineHeightBySlot = new Map<string, number>();
+  for (const line of plan.lines) if (!lineHeightBySlot.has(line.slotId)) lineHeightBySlot.set(line.slotId, line.box.height);
+  const defaultLineHeight = metrics.lineHeight('body');
+  const slots = plan.slots.map((slot) => {
+    const lineHeightValue = lineHeightBySlot.get(slot.id) ?? defaultLineHeight;
+    const occupiedBottom = Math.max(
+      slot.box.y,
+      ...plan.lines.filter((line) => line.slotId === slot.id).map((line) => line.box.y + line.box.height),
+      ...plan.blockPlacements.filter((placement) => placement.slotId === slot.id).map((placement) => placement.box.y + placement.box.height),
+      ...plan.tablePlacements.filter((placement) => placement.slotId === slot.id).map((placement) => placement.box.y + placement.box.height),
+    );
+    const occupiedHeight = Math.max(0, occupiedBottom - slot.box.y);
+    const remainingHeight = Math.max(0, slot.box.height - occupiedHeight);
+    return {
+      page: slot.page,
+      slotId: slot.id,
+      regionId: slot.regionId,
+      ...(slot.flowId === undefined ? {} : { flowId: slot.flowId }),
+      state: slot.state,
+      box: { ...slot.box },
+      lineCount: plan.lines.filter((line) => line.slotId === slot.id).length,
+      occupiedHeight,
+      remainingHeight,
+      lineHeight: lineHeightValue,
+      remainingLines: availableLineCount(remainingHeight, lineHeightValue),
+    };
+  });
+  plan.trace = { phases: plan.trace?.phases ?? [], blocks, slots } satisfies CompositionPlanTrace;
+}
+
+function normalizePlanReadingOrder(document: CompositionDocument, plan: CompositionPlan): void {
+  const flowOrder = new Map(Object.keys(document.flows).map((flowId, index) => [flowId, index]));
+  const blockOrder = new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block, index) => [`${flowId}:${block.id}`, index] as const)));
+  plan.lines.sort((left, right) => {
+    const flowDifference = (flowOrder.get(left.flowId) ?? Number.MAX_SAFE_INTEGER) - (flowOrder.get(right.flowId) ?? Number.MAX_SAFE_INTEGER);
+    if (flowDifference !== 0) return flowDifference;
+    const blockDifference = (blockOrder.get(`${left.flowId}:${left.blockId}`) ?? Number.MAX_SAFE_INTEGER) - (blockOrder.get(`${right.flowId}:${right.blockId}`) ?? Number.MAX_SAFE_INTEGER);
+    if (blockDifference !== 0) return blockDifference;
+    return left.startWord - right.startWord || left.page - right.page || (left.routeIndex ?? Number.MAX_SAFE_INTEGER) - (right.routeIndex ?? Number.MAX_SAFE_INTEGER) || left.box.y - right.box.y || left.box.x - right.box.x;
+  });
 }
 
 function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
@@ -1038,23 +1275,29 @@ function planFlow(
   plan: CompositionPlan,
   startPage = 1,
   insertionProposals: Map<string, PlannedInsertion> = new Map(),
+  skipPreplannedInsertions = false,
 ): void {
   const flow = document.flows[flowId];
   if (!flow) return;
+  const authoredBlocks = flow.blocks;
+  const blocks = skipPreplannedInsertions
+    ? authoredBlocks.filter((block) => block.role !== 'quote')
+    : authoredBlocks;
+  const authoredIndexOf = (blockId: string): number => authoredBlocks.findIndex((candidate) => candidate.id === blockId);
   const cursor: FlowCursor = { blockIndex: 0, startWord: 0, startRow: 0, page: startPage, routeIndex: 0 };
   let deferredQuote: { blockIndex: number; deferredPage: number; routeIndex?: number } | undefined;
   let activeDeferredQuote: { blockIndex: number; blockId: string; resume: { blockIndex: number; startWord: number; startRow: number } } | undefined;
   let lastLegalSlotId: string | undefined;
-  while (cursor.blockIndex < flow.blocks.length) {
+  while (cursor.blockIndex < blocks.length) {
     if (cursor.page > template.maxPages) {
-      const block = flow.blocks[cursor.blockIndex];
+      const block = blocks[cursor.blockIndex];
       plan.diagnostics.push(diagnostic('error', 'MAX_PAGES_EXCEEDED', `Flow '${flowId}' exceeded the template page limit.`, { flowId, blockId: block.id, page: cursor.page }));
       if (block.kind === 'table') addTableResidual(plan.residualContent, flowId, block, cursor.startRow, lastLegalSlotId, 'max-pages');
       else addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'max-pages');
       return;
     }
     if (cursor.page > startPage && route.continuation === 'forbidden') {
-      const block = flow.blocks[cursor.blockIndex];
+      const block = blocks[cursor.blockIndex];
       plan.diagnostics.push(diagnostic('error', 'FLOW_CONTINUATION_FORBIDDEN', `Flow '${flowId}' cannot continue beyond its first page.`, { flowId, blockId: block.id, page: cursor.page }));
       if (block.kind === 'table') addTableResidual(plan.residualContent, flowId, block, cursor.startRow, lastLegalSlotId, 'flow-continuation-forbidden');
       else addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'flow-continuation-forbidden');
@@ -1062,33 +1305,47 @@ function planFlow(
     }
     const currentPage = ensurePage(pages, template, route, cursor.page, plan.diagnostics, flowId);
     if (!currentPage) return;
+    const currentBlockAuthoredIndex = authoredIndexOf(blocks[cursor.blockIndex]?.id ?? '');
+    const precedingInsertionPage = authoredBlocks
+      .slice(0, currentBlockAuthoredIndex)
+      .filter((candidate) => candidate.role === 'quote')
+      .map((candidate) => insertionProposals.get(insertionKey(flowId, candidate.id))?.page)
+      .filter((page): page is number => page !== undefined)
+      .sort((left, right) => right - left)[0];
+    if (precedingInsertionPage !== undefined && cursor.page < precedingInsertionPage) {
+      cursor.page = precedingInsertionPage;
+      cursor.routeIndex = 0;
+      cursor.resumeY = undefined;
+      plan.decisions.push({ code: 'FLOW_HELD_FOR_PREPLANNED_INSERTION', flowId, blockId: blocks[cursor.blockIndex].id, page: currentPage.page, reason: 'successor-must-not-pass-earlier-insertion', details: { insertionPage: precedingInsertionPage } });
+      continue;
+    }
     if (deferredQuote && !activeDeferredQuote && cursor.page === deferredQuote.deferredPage && deferredQuote.routeIndex !== undefined && cursor.routeIndex >= deferredQuote.routeIndex) {
       activeDeferredQuote = {
         blockIndex: deferredQuote.blockIndex,
-        blockId: flow.blocks[deferredQuote.blockIndex].id,
+        blockId: blocks[deferredQuote.blockIndex].id,
         resume: { blockIndex: cursor.blockIndex, startWord: cursor.startWord, startRow: cursor.startRow },
       };
       cursor.blockIndex = deferredQuote.blockIndex;
       cursor.startWord = 0;
       cursor.startRow = 0;
       cursor.routeIndex = deferredQuote.routeIndex;
-      plan.decisions.push({ code: 'INSERTION_REPOSITIONED_PLACED', flowId, blockId: flow.blocks[cursor.blockIndex].id, page: cursor.page, routeIndex: cursor.routeIndex, reason: 'earlier-route-segment-was-empty' });
+      plan.decisions.push({ code: 'INSERTION_REPOSITIONED_PLACED', flowId, blockId: blocks[cursor.blockIndex].id, page: cursor.page, routeIndex: cursor.routeIndex, reason: 'earlier-route-segment-was-empty' });
     }
     if (deferredQuote && !activeDeferredQuote && cursor.page > deferredQuote.deferredPage) {
       activeDeferredQuote = {
         blockIndex: deferredQuote.blockIndex,
-        blockId: flow.blocks[deferredQuote.blockIndex].id,
+        blockId: blocks[deferredQuote.blockIndex].id,
         resume: { blockIndex: cursor.blockIndex, startWord: cursor.startWord, startRow: cursor.startRow },
       };
       cursor.blockIndex = deferredQuote.blockIndex;
       cursor.startWord = 0;
       cursor.startRow = 0;
       cursor.routeIndex = 0;
-      plan.decisions.push({ code: 'DEFERRED_INSERTION_PLACED', flowId, blockId: flow.blocks[cursor.blockIndex].id, page: cursor.page, reason: 'next-page-insertion-slot' });
+      plan.decisions.push({ code: 'DEFERRED_INSERTION_PLACED', flowId, blockId: blocks[cursor.blockIndex].id, page: cursor.page, reason: 'next-page-insertion-slot' });
     }
     placeGraphicsForPage(document, currentPage, plan);
     const availableRouteSlots = routeSlots(route, currentPage.layout);
-    const block = flow.blocks[cursor.blockIndex];
+    const block = blocks[cursor.blockIndex];
     const plannedInsertion = block.role === 'quote' ? insertionProposals.get(insertionKey(flowId, block.id)) : undefined;
     if (plannedInsertion && currentPage.page > plannedInsertion.page) {
       plan.diagnostics.push(diagnostic('error', 'INSERTION_PLAN_PASSED', `Insertion '${block.id}' passed its stabilized page ${plannedInsertion.page}.`, { flowId, blockId: block.id, page: currentPage.page, details: { plannedPage: plannedInsertion.page, plannedSlotId: plannedInsertion.slotId } }));
@@ -1150,7 +1407,7 @@ function planFlow(
         }
       }
       plan.diagnostics.push(diagnostic('error', 'FLOW_SLOT_NOT_FOUND', `Flow '${flowId}' cannot use route slot '${availableRouteSlots[cursor.routeIndex] ?? ''}'.`, { flowId, page: currentPage.page }));
-      addResidual(plan.residualContent, flowId, flow.blocks[cursor.blockIndex], cursor.startWord, lastLegalSlotId, 'no-legal-slot');
+      addResidual(plan.residualContent, flowId, blocks[cursor.blockIndex], cursor.startWord, lastLegalSlotId, 'no-legal-slot');
       return;
     }
     const routeStartIndex = cursor.routeIndex;
@@ -1287,7 +1544,7 @@ function planFlow(
       plan.decisions.push({ code: 'ATOMIC_BLOCK_PLACED', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, height: measurement.height });
       cursor.blockIndex += 1;
       cursor.startWord = 0;
-      if (cursor.blockIndex < flow.blocks.length && definition.kind !== 'text') advanceCursor(cursor, availableRouteSlots);
+      if (cursor.blockIndex < blocks.length && definition.kind !== 'text') advanceCursor(cursor, availableRouteSlots);
       continue;
     }
     const leading = lineHeight(metrics, block);
@@ -1298,7 +1555,7 @@ function planFlow(
       : rectBottom(initialBox);
     const insertionBoundary = block.role === 'quote'
       ? undefined
-      : nextInsertionBoundary(route, flow.blocks, cursor.blockIndex, currentPage.page, insertionProposals, flowId);
+      : nextInsertionBoundary(route, authoredBlocks, authoredIndexOf(block.id), currentPage.page, insertionProposals, flowId, cursor.resumeY);
     const textBottom = insertionBoundary === undefined
       ? growthBottom
       : Math.min(growthBottom, insertionBoundary);
@@ -1308,7 +1565,20 @@ function planFlow(
       ? previousBlockInOverlappingSlots(currentPage, plan, slot, document)
       : undefined;
     const crossSlotGap = crossSlotPrevious ? metrics.blockGap?.(styleFor(crossSlotPrevious), styleFor(block)) ?? 0 : 0;
-    const usedBottom = Math.max(localBottom, crossSlotBottom, cursor.resumeY ?? Number.NEGATIVE_INFINITY) + crossSlotGap;
+    const previousInsertionBottom = previousInsertionBoundary(
+      route,
+      authoredBlocks,
+      authoredIndexOf(block.id),
+      currentPage.page,
+      insertionProposals,
+      flowId,
+    );
+    const usedBottom = Math.max(
+      localBottom,
+      crossSlotBottom,
+      previousInsertionBottom ?? Number.NEGATIVE_INFINITY,
+      cursor.resumeY ?? Number.NEGATIVE_INFINITY,
+    ) + crossSlotGap;
     const startLineOffset = Math.max(0, (usedBottom - initialBox.y) / leading);
     const pageGraphics = plan.graphicPlacements.filter((graphic) => graphic.page === currentPage.page && graphic.graphicId !== `insertion:${block.id}`);
     const previous = cursor.startWord === 0 ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
@@ -1363,7 +1633,7 @@ function planFlow(
         continue;
       }
     }
-    const next = flow.blocks[cursor.blockIndex + 1];
+    const next = blocks[cursor.blockIndex + 1];
     const keepLines = block.keepWithNextLines
       ?? (block.kind === 'heading' ? policy.headingKeepWithNextLines ?? 0 : 0);
     const nextLeading = next ? lineHeight(metrics, next) : leading;
@@ -1457,23 +1727,27 @@ function planFlow(
       plan.decisions.push({ code: 'BLOCK_CONTINUED', flowId, blockId: block.id, slotId: slot.id });
     }
     if (insertionBoundary !== undefined && consumedEnd < wordsForBlock(block).length) {
-      plan.diagnostics.push(diagnostic(
-        'error',
-        'INSERTION_PRECEDENCE_CONFLICT',
-        `Insertion boundary for the next quote leaves authored block '${block.id}' unfinished above it.`,
-        {
-          flowId,
-          blockId: block.id,
-          page: currentPage.page,
-          slotId: slot.id,
-          details: { insertionBoundary, consumedEnd, totalWords: wordsForBlock(block).length },
-        },
-      ));
-      addResidual(plan.residualContent, flowId, block, consumedEnd, slot.id, 'insertion-precedence-conflict');
-      return;
+      const boundary = nextInsertionProposal(
+        route,
+        authoredBlocks,
+        authoredIndexOf(block.id),
+        currentPage.page,
+        insertionProposals,
+        flowId,
+        cursor.resumeY,
+      );
+      if (!boundary) {
+        plan.diagnostics.push(diagnostic('error', 'INSERTION_PRECEDENCE_CONFLICT', `Insertion boundary for the next quote leaves authored block '${block.id}' unfinished above it.`, { flowId, blockId: block.id, page: currentPage.page, slotId: slot.id, details: { insertionBoundary, consumedEnd, totalWords: wordsForBlock(block).length } }));
+        addResidual(plan.residualContent, flowId, block, consumedEnd, slot.id, 'insertion-precedence-conflict');
+        return;
+      }
+      cursor.startWord = consumedEnd;
+      cursor.resumeY = boundary.box.y + boundary.box.height;
+      plan.decisions.push({ code: 'FLOW_RESUMED_BELOW_INSERTION', flowId, blockId: block.id, page: currentPage.page, slotId: slot.id, consumedEnd, obstacleY: boundary.box.y, obstacleBottom: cursor.resumeY });
+      continue;
     }
-    if (consumedEnd < wordsForBlock(block).length || cursor.blockIndex < flow.blocks.length) {
-      const nextBlock = flow.blocks[cursor.blockIndex];
+    if (consumedEnd < wordsForBlock(block).length || cursor.blockIndex < blocks.length) {
+      const nextBlock = blocks[cursor.blockIndex];
       // Keep the current column alive for an authored insertion that follows
       // this block.  An insertion is an obstacle in the same continuous
       // route, not a reason to finish the page before we have tried its next
@@ -1494,16 +1768,27 @@ function planFlow(
         });
         const pageBeforeAdvance = cursor.page;
         advanceCursor(cursor, availableRouteSlots);
-        if (cursor.page > pageBeforeAdvance && cursor.blockIndex < flow.blocks.length) {
-          plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_PAGE', flowId, blockId: flow.blocks[cursor.blockIndex].id, page: cursor.page, reason: 'previous-slot-exhausted' });
+        if (cursor.page > pageBeforeAdvance && cursor.blockIndex < blocks.length) {
+          plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_PAGE', flowId, blockId: blocks[cursor.blockIndex].id, page: cursor.page, reason: 'previous-slot-exhausted' });
         }
       }
     }
   }
 }
 
-function flattenPages(pages: PageState[], plan: CompositionPlan): void {
+function flattenPages(pages: PageState[], plan: CompositionPlan, template: CompositionTemplate): void {
   plan.pages = pages.map((page) => ({ page: page.page, layoutId: page.layout.id, width: page.layout.width, height: page.layout.height }));
+  for (const page of pages) {
+    for (const [flowId, route] of Object.entries(template.routes)) {
+      const routeIds = route.slotsByLayout?.[page.layout.id] ?? route.slots;
+      routeIds.forEach((id, index) => {
+        const slot = page.slots.get(id);
+        if (!slot || slot.routeIndex !== undefined) return;
+        slot.routeIndex = index;
+        if (slot.flowId === undefined) slot.flowId = flowId;
+      });
+    }
+  }
   plan.slots = pages.flatMap((page) => [...page.slots.values()]);
 }
 
@@ -1516,6 +1801,7 @@ function planDocumentOnce(
 ): CompositionPlan {
   const plan = createPlan(policy.minimumFragmentLines);
   validateGrowthPolicies(template, plan);
+  recordPlanningPhase(plan, 'preflight', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { layoutCount: template.layouts.length, flowCount: Object.keys(document.flows).length });
   const pages: PageState[] = [];
   materializeGraphicPages(document, template, pages, plan);
   // A rendered document always has a first page, even when all content
@@ -1524,6 +1810,9 @@ function planDocumentOnce(
   const firstRoute = template.routes.main ?? Object.values(template.routes)[0];
   if (firstRoute) ensurePage(pages, template, firstRoute, 1, plan.diagnostics, 'document');
   reserveInsertionObstacles(template, pages, plan, insertionProposals);
+  recordPlanningPhase(plan, 'obstacle-reservation', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { obstacleCount: plan.graphicPlacements.filter((graphic) => graphic.graphicId.startsWith('insertion:')).length });
+  const insertionKeys = placeInsertionLayer(document, metrics, template, plan, pages, insertionProposals);
+  recordPlanningPhase(plan, 'insertion-placement', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { insertionCount: insertionKeys.size });
   // Repeated chrome depends on the final number of pages. Plan all ordinary
   // flows first so a header/footer that starts on page 2 cannot observe the
   // provisional one-page document and silently disappear.
@@ -1550,10 +1839,13 @@ function planDocumentOnce(
         plan.diagnostics.push(diagnostic('error', 'FLOW_START_PAGE_INVALID', `Flow '${flowId}' has an invalid start page ${route.startPage}.`, { flowId }));
         continue;
       }
-      planFlow(document, metrics, template, policy, flowId, route, pages, plan, route.startPage ?? 1, insertionProposals);
+      planFlow(document, metrics, template, policy, flowId, route, pages, plan, route.startPage ?? 1, insertionProposals, Boolean(route.insertionSlots?.length));
     }
   }
-  flattenPages(pages, plan);
+  flattenPages(pages, plan, template);
+  normalizePlanReadingOrder(document, plan);
+  recordPlanningPhase(plan, 'flow-placement', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { lineCount: plan.lines.length, pageCount: plan.pages.length });
+  tracePlan(document, metrics, plan);
   return plan;
 }
 
@@ -1576,11 +1868,13 @@ export function createTextCompositionPlanner(
         const nextProposals = insertionProposalsFromPlan(document, template, latestPlan);
         const signature = insertionProposalSignature(nextProposals);
         latestPlan.decisions.push({ code: 'PLANNER_PASS_COMPLETED', iteration, insertionCount: nextProposals.size, signature });
+        recordPlanningPhase(latestPlan, 'reflow', 'completed', { insertionCount: nextProposals.size, signature }, iteration);
         if (signature === previousSignature || (iteration === 1 && nextProposals.size === 0)) {
           latestPlan.decisions.push({ code: 'PLANNER_STABILIZED', iteration, insertionCount: nextProposals.size });
           return latestPlan;
         }
         if (iteration === maxIterations) {
+          recordPlanningPhase(latestPlan, 'reflow', 'failed', { insertionCount: nextProposals.size, signature, iterations: maxIterations }, iteration);
           latestPlan.diagnostics.push(diagnostic('error', 'PLANNER_DID_NOT_STABILIZE', `Planner did not stabilize after ${maxIterations} pass(es).`, { details: { iterations: maxIterations, insertionCount: nextProposals.size } }));
           return latestPlan;
         }

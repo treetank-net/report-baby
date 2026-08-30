@@ -291,6 +291,7 @@ try {
   const continuationRoute = result.template.routes.main.slotsByLayout?.[continuationLayout?.id ?? ''] ?? [];
   assert.equal(continuationRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'continuous quote flow must retain one segment per column');
   assert.deepEqual(result.template.routes.main.insertionSlots, ['quote-a', 'quote-b'], 'quotes must be declared as flow obstacles, not route segments');
+  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'plan-trace.json'), JSON.stringify(result.plan.trace ?? {}, null, 2));
   assert.notEqual(result.evaluation.status, 'rejected', JSON.stringify(result.evaluation));
   assert.equal(result.plan.residualContent.length, 0, JSON.stringify(result.plan.residualContent));
   assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
