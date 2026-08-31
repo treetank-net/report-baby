@@ -364,6 +364,31 @@ function obstructionBetweenLines(
   return undefined;
 }
 
+function obstructionAcrossLineBands(
+  bands: Array<{ lines: WrappedLine[]; lineHeight: number }>,
+  slot: CompositionRect,
+  slotY: number,
+  graphics: CompositionGraphicPlacement[],
+  tolerance: number,
+): CompositionGraphicPlacement | undefined {
+  const occupiedBands = bands
+    .filter((band) => band.lines.length > 0)
+    .map((band) => ({
+      top: slotY + band.lines[0].lineOffset * band.lineHeight,
+      bottom: slotY + (band.lines.at(-1)!.lineOffset + 1) * band.lineHeight,
+    }));
+  if (occupiedBands.length === 0) return undefined;
+  const top = Math.min(...occupiedBands.map((band) => band.top));
+  const bottom = Math.max(...occupiedBands.map((band) => band.bottom));
+  return graphics
+    .filter((graphic) => graphic.wrap === 'around'
+      && graphic.box.y < bottom - tolerance
+      && rectBottom(graphic.box) > top + tolerance
+      && graphic.box.x < slot.x + slot.width + tolerance
+      && graphic.box.x + graphic.box.width > slot.x - tolerance)
+    .sort((left, right) => left.box.y - right.box.y)[0];
+}
+
 function wordsForBlock(block: CompositionBlock): string[] {
   return wordsOf(textOf(block));
 }
@@ -1771,17 +1796,28 @@ function planFlow(
       ?? (block.kind === 'heading' ? policy.headingKeepWithNextLines ?? 0 : 0);
     const nextLeading = next ? lineHeight(metrics, next) : leading;
     const nextWrapped = next ? wrapBlock(metrics, next, 0, currentBox, 0, rectBottom(currentBox), pageGraphics, nextLeading, policy.minimumWrapWidth) : [];
-    if (isHeadingBlock && keepLines > 0 && next && nextWrapped.length >= keepLines) {
-      const headingObstacle = obstructionBetweenLines(completeWrapped, pageGraphics, initialBox.y, leading, geometryTolerance);
+    if (isHeadingBlock && keepLines > 0 && next) {
       const headingStartOffset = startLineOffset + blockGap / leading;
-      const nextProbeStart = headingStartOffset + completeWrapped.length + blockGap / leading;
-      const nextProbe = wrapBlock(metrics, next, 0, currentBox, nextProbeStart, Number.POSITIVE_INFINITY, pageGraphics, nextLeading, policy.minimumWrapWidth);
-      const leadObstacle = obstructionBetweenLines(nextProbe.slice(0, keepLines), pageGraphics, currentBox.y, nextLeading, geometryTolerance);
-      const clusterObstacle = [headingObstacle, leadObstacle]
-        .filter((obstacle): obstacle is CompositionGraphicPlacement => obstacle !== undefined)
-        .sort((left, right) => left.box.y - right.box.y)[0];
-      if (clusterObstacle) {
-        const requiredClusterLines = completeWrapped.length + keepLines;
+      // Probe the cluster without obstacles first.  Using the wrapped result
+      // from the real page here is insufficient: wrapBlock can skip lines
+      // under an obstacle, making a quote that cuts through the lead look
+      // like a normal gap instead of a violation of the keep rule.
+      const headingProbe = wrapBlock(metrics, block, cursor.startWord, initialBox, headingStartOffset, Number.POSITIVE_INFINITY, [], leading, policy.minimumWrapWidth);
+      const headingBottom = headingProbe.length > 0
+        ? initialBox.y + (headingProbe.at(-1)!.lineOffset + 1) * leading
+        : initialBox.y + headingStartOffset * leading;
+      const nextProbeStart = (headingBottom + blockGap - currentBox.y) / nextLeading;
+      const leadProbe = wrapBlock(metrics, next, 0, currentBox, nextProbeStart, Number.POSITIVE_INFINITY, [], nextLeading, policy.minimumWrapWidth);
+      if (leadProbe.length >= keepLines) {
+        const clusterObstacle = obstructionAcrossLineBands(
+          [{ lines: headingProbe, lineHeight: leading }, { lines: leadProbe.slice(0, keepLines), lineHeight: nextLeading }],
+          initialBox,
+          initialBox.y,
+          pageGraphics,
+          geometryTolerance,
+        );
+        if (clusterObstacle) {
+        const requiredClusterLines = headingProbe.length + keepLines;
         const resumeY = Math.max(cursor.resumeY ?? initialBox.y, rectBottom(clusterObstacle.box));
         const availableAfterObstacle = availableLineCount(rectBottom(currentBox) - resumeY, leading);
         if (availableAfterObstacle >= requiredClusterLines) {
@@ -1793,6 +1829,7 @@ function planFlow(
         plan.decisions.push({ code: 'HEADING_CLUSTER_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, reason: 'keep-heading-and-lead-together', details: { obstacleId: clusterObstacle.graphicId, requiredClusterLines, availableAfterObstacle } });
         advanceCursor(cursor, availableRouteSlots);
         continue;
+        }
       }
     }
     const keepRequired = keepLines > 0 && cursor.startWord === 0

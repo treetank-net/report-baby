@@ -327,6 +327,34 @@ try {
   assert.ok(spacingLines.get('spacing-list').box.y >= spacingLines.get('spacing-body').box.y + spacingLines.get('spacing-body').box.height + 3, 'body-to-list spacing must be applied in the planner');
   assert.ok(Math.abs(spacingLines.get('spacing-list').box.y - spacingLines.get('spacing-body').box.y - spacingLines.get('spacing-body').box.height - 3) < 0.001, 'body-to-list spacing must remain a fractional configured gap instead of a full extra line');
 
+  const obstacleInsideHeadingClusterTemplate = {
+    maxPages: 1,
+    layouts: [{ id: 'obstacle-inside-heading-cluster', width: 100, height: 100, slots: [
+      { id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 90 }, allowedRoles: ['heading', 'body'] },
+      { id: 'quote', regionId: 'quotes', kind: 'text', box: { x: 5, y: 35, width: 90, height: 10 }, allowedRoles: ['quote'] },
+    ] }],
+    routes: {
+      main: { slots: ['body'], layouts: ['obstacle-inside-heading-cluster'], continuation: 'forbidden' },
+      quotes: { slots: ['quote'], insertionSlots: ['quote'], layouts: ['obstacle-inside-heading-cluster'], continuation: 'forbidden' },
+    },
+  };
+  const obstacleInsideHeadingCluster = createTextCompositionEngine(obstacleInsideHeadingClusterTemplate, { headingKeepWithNextLines: 3 }).plan({
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [
+        { id: 'cluster-heading', kind: 'heading', role: 'heading', keepWithNextLines: 3, text: 'Heading cluster first second third fourth' },
+        { id: 'cluster-body', kind: 'paragraph', role: 'body', text: 'One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen.' },
+      ] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'cluster-quote', kind: 'paragraph', role: 'quote', text: 'A short quote blocks the cluster.' }] },
+    },
+  }, { ...metrics, lineHeight() { return 10; } });
+  assert.equal(obstacleInsideHeadingCluster.evaluation.status, 'accepted', JSON.stringify(obstacleInsideHeadingCluster.evaluation));
+  const clusterFixtureObstacle = obstacleInsideHeadingCluster.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:cluster-quote');
+  const clusterFixtureLines = obstacleInsideHeadingCluster.plan.lines.filter((line) => ['cluster-heading', 'cluster-body'].includes(line.blockId));
+  assert.ok(clusterFixtureObstacle, 'heading-cluster fixture must expose the quote as an exclusion obstacle');
+  assert.ok(clusterFixtureLines.length > 0, 'heading-cluster fixture must place the main flow');
+  assert.ok(clusterFixtureLines.every((line) => line.box.y >= clusterFixtureObstacle.box.y + clusterFixtureObstacle.box.height), `a heading and its first three lead lines must move below an obstacle that intersects the cluster: ${JSON.stringify({ obstacle: clusterFixtureObstacle.box, lines: clusterFixtureLines.map((line) => ({ blockId: line.blockId, y: line.box.y, text: line.text })), decisions: obstacleInsideHeadingCluster.plan.decisions.filter((decision) => decision.blockId?.startsWith('cluster-')) })}`);
+  assert.ok(obstacleInsideHeadingCluster.plan.decisions.some((decision) => ['HEADING_CLUSTER_PUSHED_BELOW_OBSTACLE', 'HEADING_CLUSTER_PUSHED_TO_NEXT_SLOT'].includes(decision.code)), 'planner must record the hard heading-cluster decision when an obstacle intersects the lead probe');
+
   const deferredQuoteTemplate = {
     maxPages: 2,
     layouts: [
