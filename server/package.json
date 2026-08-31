@@ -34,6 +34,7 @@
     "test:report-images": "node scripts/test-report-images.mjs",
     "test:slide-artifacts": "node scripts/test-slide-artifacts.mjs",
     "test:editorial-flow": "node scripts/test-editorial-flow.mjs",
+    "prototype:composition-debug": "node scripts/prototype-composition-debug.mjs",
     "prototype:composition": "node scripts/prototype-composition-kernel.mjs",
     "prototype:engine-spike": "node scripts/editorial-engine-spike.mjs",
     "prototype:reserved-slot": "node scripts/editorial-reserved-slot-spike.mjs",

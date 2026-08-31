@@ -1,0 +1,41 @@
+# PROTOTYPE — heuristic composition score for the debug artifact.
+# This score is not a legality gate and is not statistically calibrated.
+score:
+  base: 100
+  full_width_insertion_bonus: 8
+  full_width_measure_factor: 1.8
+  insertion_target_bonus: 4
+  insertion_target_penalty_per_fraction: 8
+  heading_following_line_bonus: 4
+  balanced_columns_bonus: 12
+  balanced_columns_threshold: 0.8
+  column_count: 2
+  occupied_placement_bonus: 2
+  internal_empty_penalty: 18
+  visible_trailing_gap_penalty: 8
+  trailing_gap_ratio_threshold: 0.18
+
+debug:
+  header_size: 4
+  label_size: 2.2
+  line_width: 0.35
+  placement_line_width: 0.55
+  obstacle_line_width: 0.8
+  line_fill_opacity: 0.18
+  placement_fill_opacity: 0.06
+  obstacle_fill_opacity: 0.22
+  page_padding: 8
+  label_gap: 1.2
+  heading_color: [126, 87, 166]
+  title_color: [18, 42, 67]
+  main_color: [25, 51, 79]
+  quote_color: [196, 87, 40]
+  intro_color: [42, 110, 166]
+  placement_color: [78, 134, 184]
+  empty_color: [210, 38, 70]
+  obstacle_color: [232, 117, 61]
+  block_color: [126, 87, 166]
+
+  # Relative vertical positions are preferences only. The plan may move an
+  # insertion when the content or an obstacle makes the target undesirable.
+  preferred_insertion_fractions: [0.25, 0.50, 0.75]
