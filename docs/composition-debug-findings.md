@@ -54,6 +54,16 @@ dense.
    the line group in the measured `captionBox`. The backend now centers one or
    more caption lines in that box, with a configurable optical baseline offset,
    and the image test compares actual PDF word bboxes against the box edges.
+9. The report header metadata line used the title/header baseline offset of
+   `2 mm` even though its normal 12 pt glyphs need a lower baseline. The plan
+   line box was correct, but the painted glyphs extended above it by about
+   `1.9 mm`. The normal header style now has its own configured baseline offset,
+   and the PDF regression checks metadata glyphs as well as the title.
+10. The gap after the image caption is currently the shared body `blockGap`
+    (`body_margin_after = 2.8 mm`), while the gap between the intro and main
+    flow is the intentional `0.24 → 0.25` template separation (`2.97 mm`).
+    Both are legal and explainable, but the debug view does not expose their
+    ownership yet.
 
 ## Follow-up tasks
 
@@ -64,8 +74,13 @@ dense.
 - [x] Reject the old header-style mismatch with a rendered-PDF bounds test.
 - [x] Center caption ink in its measured image `captionBox` and guard the
   vertical balance with a rendered-PDF bbox assertion.
+- [x] Give report header metadata its own baseline offset and guard its glyphs
+  against the planned line box.
 - [ ] Add an explicit post-obstacle anchor to the plan trace, recording the
   first main-flow placement after each full-width insertion.
+- [ ] Extend composition-debug with visible padding and margin intervals,
+  including their owner and source rule (`marginBefore`, `marginAfter`,
+  container padding, column gap, obstacle gap, or reserved space).
 - [ ] Add a soft score for vertical alignment of the first post-obstacle lines
   in the two columns; do not turn this aesthetic preference into a legality
   rule.

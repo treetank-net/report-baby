@@ -116,7 +116,7 @@ export function compositionStylesFromRenderConfig(colors?: CompositionTextColors
     header: {
       fontSize: pdfNumber(pdf, 'headerSubtitleSize'),
       lineHeight: pdfNumber(pdf, 'headerSubtitleLineHeight'),
-      baselineOffset: pdfNumber(pdf, 'headerTextBaselineOffset'),
+      baselineOffset: pdfNumber(pdf, 'headerBaselineOffset'),
       fontStyle: 'normal',
       marginBefore: pdfNumber(pdf, 'headerMarginBefore'),
       marginAfter: pdfNumber(pdf, 'headerMarginAfter'),

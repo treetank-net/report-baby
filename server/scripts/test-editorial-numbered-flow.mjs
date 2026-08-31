@@ -78,6 +78,22 @@ function assertRenderedHeaderLinesStayInsidePlan(pdfPath, result, toleranceMm) {
   }
 }
 
+function assertRenderedHeaderMetaStaysInsidePlan(pdfPath, result, toleranceMm) {
+  const words = pdfWords(pdfPath).filter((word) => word.page === 0);
+  const metaLine = result.plan.lines.find((line) => line.flowId === 'header' && line.blockId === 'header-meta');
+  assert.ok(metaLine, 'header metadata regression must produce a planned metadata line');
+  const expected = metaLine.text.split(/\s+/u).map(normalizedPdfToken).filter(Boolean);
+  const actual = words.filter((word) => expected.includes(normalizedPdfToken(word.text)));
+  assert.equal(actual.length, expected.length, `PDF must retain every word from header metadata '${metaLine.text}'`);
+  const pointPerMm = 72 / 25.4;
+  const tolerance = toleranceMm * pointPerMm;
+  const left = metaLine.box.x * pointPerMm - tolerance;
+  const top = metaLine.box.y * pointPerMm - tolerance;
+  const right = (metaLine.box.x + metaLine.box.width) * pointPerMm + tolerance;
+  const bottom = (metaLine.box.y + metaLine.box.height) * pointPerMm + tolerance;
+  assert.ok(actual.every((word) => word.xMin >= left && word.xMax <= right && word.yMin >= top && word.yMax <= bottom), `rendered header metadata escaped its plan box: ${JSON.stringify({ metaLine, actual, left, top, right, bottom })}`);
+}
+
 function decodePpm(buffer) {
   assert.equal(buffer.subarray(0, 2).toString('ascii'), 'P6', 'raster output must be an RGB PPM');
   let offset = 2;
@@ -570,6 +586,7 @@ try {
   const headerOverflowPath = join(temporary, 'header-overflow-regression.pdf');
   await writeFile(headerOverflowPath, headerOverflowArtifact);
   assertRenderedHeaderLinesStayInsidePlan(headerOverflowPath, headerOverflow, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
+  assertRenderedHeaderMetaStaysInsidePlan(headerOverflowPath, headerOverflow, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
 
   const columnBalance = inspectColumnBalance(readPdfLayout(artifactPath), renderConfig.quality.layout_diff);
   if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));

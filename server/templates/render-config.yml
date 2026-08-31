@@ -128,6 +128,7 @@ pdf:
   header_repeat_title_y: 24
   header_repeat_rule_width: 0.5
   header_repeat_bottom_gap: 9
+  header_baseline_offset: 4
   intro_line_height: 5.2
   intro_keep_padding: 6
   quote_size: 10.5
