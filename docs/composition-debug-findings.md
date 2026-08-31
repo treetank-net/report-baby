@@ -15,9 +15,9 @@ list, not a promise that every item is already solved.
 - `FLOW BARRIER BOX CANDIDATE` — a diagnostic fragment inside an ordinary
     flow placement, bounded by the flow edge or collision-graphic contact
     points. It is drawn in yellow with a small configured inset so it remains
-    distinguishable from the placement and line-box frames. It is only a
-    hypothesis about a future barrier-aware flow; it does not change the
-    planner or cursor.
+    distinguishable from the placement and line-box frames. The same geometry
+    is now consumed by ordinary text wrapping; the existing graphic exclusion
+    lookup remains as a defensive collision check.
 - `CHROME header band` and `CHROME footer {page}/{pages}` — page chrome, not
   editorial flow content.
 - line boxes — the concrete rectangles where a particular flow line was
@@ -71,11 +71,11 @@ dense.
     Both are legal and explainable, but the debug view does not expose their
     ownership yet.
 11. Around graphics now produce explicit `FLOW BARRIER BOX CANDIDATE` fragments
-    after final placement. In the Trans.INFO editorial, each ordinary `main`
-    placement is partitioned into non-overlapping vertical segments between
-    the flow edges and quote contacts. This is deliberately observational: the
-    current planner still uses its existing obstacle lookup and the cursor is
-    not driven by these candidates.
+    from the current page geometry. In the Trans.INFO editorial, each ordinary
+    `main` placement is partitioned into non-overlapping vertical segments
+    between the flow edges and quote contacts. `wrapBlock` rejects line
+    positions outside those segments, so the cursor can only consume a legal
+    segment; the existing obstacle lookup remains a second collision guard.
 
 ## Follow-up tasks
 
@@ -91,8 +91,12 @@ dense.
 - [x] Register non-overlapping candidate flow boxes split at around-graphic
   contact points and draw them as labelled dashed frames in the normal
   composition debug PDF.
-- [ ] Promote validated candidates to a pre-planning barrier registry and make
-  cursor obstacle consumption read from that registry as its sole source.
+- [x] Consume validated candidate boxes while wrapping ordinary flow text and
+  record the candidate IDs in the plan decisions.
+- [ ] Promote candidate fragments to a public pre-planning barrier registry;
+  the current implementation derives them immediately before each block from
+  the current page geometry, which is safe during growth but not yet a
+  standalone registry phase.
 - [ ] Add an explicit post-obstacle anchor to the plan trace, recording the
   first main-flow placement after each full-width insertion.
 - [ ] Extend composition-debug with visible padding and margin intervals,

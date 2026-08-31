@@ -267,7 +267,7 @@ export interface CompositionPlan {
   blockPlacements: CompositionBlockPlacement[];
   tablePlacements: CompositionTablePlacement[];
   graphicPlacements: CompositionGraphicPlacement[];
-  /** Diagnostic candidate boxes split around current collision graphics. */
+  /** Candidate boxes split around collision graphics and consumed by ordinary flow wrapping. */
   flowBarrierBoxCandidates?: CompositionFlowBarrierBoxCandidate[];
   /** Ordinary flowing text only. Insertions are exposed separately below. */
   lines: CompositionLine[];

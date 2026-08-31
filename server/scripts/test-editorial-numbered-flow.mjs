@@ -25,6 +25,7 @@ function plannedLines(plan) {
 function assertFlowBarrierBoxCandidates(result) {
   const candidates = result.plan.flowBarrierBoxCandidates ?? [];
   assert.ok(candidates.length > 0, 'editorial plan must expose flow barrier box candidates');
+  assert.ok(result.plan.decisions.some((decision) => decision.code === 'FLOW_BARRIER_BOXES_CONSUMED'), 'editorial planner must consume flow barrier box candidates while wrapping text');
   for (const candidate of candidates) {
     assert.equal(typeof candidate.flowId, 'string');
     assert.ok(candidate.previousSourceId || candidate.nextSourceId);
@@ -39,6 +40,25 @@ function assertFlowBarrierBoxCandidates(result) {
     assert.ok(candidate.box.y >= placement.box.y && candidate.box.y + candidate.box.height <= placement.box.y + placement.box.height);
   }
   assert.ok(candidates.some((candidate) => candidate.flowId === 'main' && (candidate.previousSourceId?.startsWith('insertion:') || candidate.nextSourceId?.startsWith('insertion:'))), 'editorial main flow must expose at least one insertion candidate');
+}
+
+function assertOrdinaryLinesRespectFlowBarrierBoxCandidates(result) {
+  const candidatesByPlacement = new Map();
+  for (const candidate of result.plan.flowBarrierBoxCandidates ?? []) {
+    const group = candidatesByPlacement.get(candidate.placementId) ?? [];
+    group.push(candidate);
+    candidatesByPlacement.set(candidate.placementId, group);
+  }
+  for (const placement of result.plan.flowPlacements ?? []) {
+    const candidates = candidatesByPlacement.get(placement.id);
+    if (!candidates) continue;
+    const lines = result.plan.lines.filter((line) => line.page === placement.page && line.slotId === placement.slotId);
+    for (const line of lines) {
+      assert.ok(candidates.some((candidate) => line.box.y >= candidate.box.y
+        && line.box.y + line.box.height <= candidate.box.y + candidate.box.height),
+      `ordinary line escaped its consumed flow barrier candidate: ${JSON.stringify({ line, candidates })}`);
+    }
+  }
 }
 
 function build(entry, output, extra = []) {
@@ -572,6 +592,7 @@ try {
   assertNoInternalRouteGaps(result);
   assertNoEmptyContinuationColumn(result);
   assertFlowBarrierBoxCandidates(result);
+  assertOrdinaryLinesRespectFlowBarrierBoxCandidates(result);
 
   const artifact = renderComposition(result.document, result, createJsPdfTextBackend(pdf, 'DejaVu', compositionStylesFromRenderConfig({
     foreground: [25, 51, 79],

@@ -31,10 +31,10 @@ z materializowanym pod-placementem.
    albo po spełnieniu reguły keep/minimum fragmentu.
 6. Po planowaniu powstaje pełny `flowPlacements` registry, zawierający także
    legalne, ale puste miejsca końcowe.
-7. Planner publikuje diagnostyczne `flowBarrierBoxCandidates`: fragmenty
-   zwykłych placementów rozcięte w punktach styku z aktualną grafiką-kolizją.
-   Nie są jeszcze używane do planowania ani przez cursor; pokazują tylko,
-   jakie boksy można byłoby później uczynić barierami.
+7. Planner wyznacza `flowBarrierBoxCandidates`: fragmenty zwykłych placementów
+   rozcięte w punktach styku z aktualną grafiką-kolizją. `wrapBlock` używa ich
+   do odrzucenia pozycji linii poza legalnym segmentem, a istniejące odejmowanie
+   interwałów grafiki pozostaje kontrolą kolizji.
 8. Evaluator odrzuca plan, gdy niezablokowany placement jest pusty pomiędzy
    placementem zawierającym treść wcześniej i placementem zawierającym treść
    później.
@@ -108,6 +108,6 @@ Etap jest zakończony, gdy:
   kontrakt bez specjalnych wyjątków.
 
 Docelowe wzmocnienie po tym etapie to materializowanie pod-placementów
-`before-obstacle` i `after-obstacle`. Obecny etap już wymaga ich zachowania w
-geometrii linii i w kontroli atramentu, ale nie zmienia jeszcze publicznego
-modelu na pełny solver pasów.
+`before-obstacle` i `after-obstacle` jako pełnego publicznego rejestru. Obecny
+etap już wymaga ich zachowania w geometrii linii i w kontroli atramentu, ale
+nie zmienia jeszcze publicznego modelu na pełny solver pasów.

@@ -260,6 +260,19 @@ function availableIntervals(
   return available;
 }
 
+function lineFitsFlowBarrierBox(
+  y: number,
+  lineHeightValue: number,
+  candidates: CompositionFlowBarrierBoxCandidate[],
+  tolerance: number,
+): boolean {
+  if (candidates.length === 0) return true;
+  return candidates.some((candidate) =>
+    y >= candidate.box.y - tolerance
+    && y + lineHeightValue <= rectBottom(candidate.box) + tolerance,
+  );
+}
+
 function widestInterval(intervals: Interval[], minimumWidth = 0): Interval | undefined {
   return intervals.filter((interval) => interval.end - interval.start >= minimumWidth).reduce<Interval | undefined>((widest, current) => {
     if (!widest || current.end - current.start > widest.end - widest.start) return current;
@@ -277,17 +290,27 @@ function wrapBlock(
   graphics: CompositionGraphicPlacement[],
   lineHeightValue: number,
   minimumWrapWidth = 0,
+  flowBarrierBoxCandidates: CompositionFlowBarrierBoxCandidate[] = [],
+  geometryTolerance = 0,
 ): WrappedLine[] {
   if (!Number.isFinite(slot.width) || slot.width <= 0) return [];
   const words = wordsOf(textOf(block));
   const indent = Math.max(0, metrics.textIndent?.(styleFor(block)) ?? 0);
   const textSlot = { x: slot.x + indent, y: slot.y, width: Math.max(0, slot.width - indent), height: slot.height };
   const lines: WrappedLine[] = [];
+  const lastFlowBarrierBottom = flowBarrierBoxCandidates.length > 0
+    ? Math.max(...flowBarrierBoxCandidates.map((candidate) => rectBottom(candidate.box)))
+    : Number.POSITIVE_INFINITY;
   let index = startWord;
   let lineOffset = startLineOffset;
   while (index < words.length) {
     const lineY = slot.y + lineOffset * lineHeightValue;
     if (lineY + lineHeightValue > bottom) break;
+    if (!lineFitsFlowBarrierBox(lineY, lineHeightValue, flowBarrierBoxCandidates, geometryTolerance)) {
+      if (lineY >= lastFlowBarrierBottom - geometryTolerance) break;
+      lineOffset += 1;
+      continue;
+    }
     const interval = widestInterval(availableIntervals(textSlot, lineY, lineHeightValue, graphics), minimumWrapWidth);
     if (!interval || interval.end <= interval.start) {
       lineOffset += 1;
@@ -1366,9 +1389,11 @@ function registerFlowPlacements(document: CompositionDocument, plan: Composition
     .sort((left, right) => left.page - right.page || left.routeIndex - right.routeIndex || left.slotId.localeCompare(right.slotId));
 }
 
-function registerFlowBarrierBoxCandidates(plan: CompositionPlan): CompositionFlowBarrierBoxCandidate[] {
-  const textPlacements = (plan.flowPlacements ?? []).filter((placement) => placement.flowId !== undefined);
-  const barriers = plan.graphicPlacements.filter((candidate) => candidate.wrap === 'around');
+function splitFlowBarrierBoxCandidates(
+  textPlacements: Array<Pick<CompositionFlowPlacement, 'id' | 'flowId' | 'page' | 'slotId' | 'box'>>,
+  graphics: CompositionGraphicPlacement[],
+): CompositionFlowBarrierBoxCandidate[] {
+  const barriers = graphics.filter((candidate) => candidate.wrap === 'around');
   const candidates: CompositionFlowBarrierBoxCandidate[] = [];
   for (const placement of textPlacements) {
     const placementBottom = rectBottom(placement.box);
@@ -1406,6 +1431,27 @@ function registerFlowBarrierBoxCandidates(plan: CompositionPlan): CompositionFlo
     }
   }
   return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.flowId.localeCompare(right.flowId) || left.placementId.localeCompare(right.placementId) || (left.nextSourceId ?? '').localeCompare(right.nextSourceId ?? ''));
+}
+
+function flowBarrierBoxCandidatesForSlot(
+  pageState: PageState,
+  slot: CompositionSlot,
+  flowId: string,
+  plan: CompositionPlan,
+): CompositionFlowBarrierBoxCandidate[] {
+  if (slot.kind !== 'text') return [];
+  return splitFlowBarrierBoxCandidates([{
+    id: `flow-placement:${slot.id}`,
+    flowId,
+    page: pageState.page,
+    slotId: slot.id,
+    box: { ...slot.box },
+  }], plan.graphicPlacements);
+}
+
+function registerFlowBarrierBoxCandidates(plan: CompositionPlan): CompositionFlowBarrierBoxCandidate[] {
+  const textPlacements = (plan.flowPlacements ?? []).filter((placement) => placement.flowId !== undefined);
+  return splitFlowBarrierBoxCandidates(textPlacements, plan.graphicPlacements);
 }
 
 function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
@@ -1753,11 +1799,24 @@ function planFlow(
     ) + crossSlotGap;
     const startLineOffset = Math.max(0, (usedBottom - initialBox.y) / leading);
     const pageGraphics = plan.graphicPlacements.filter((graphic) => graphic.page === currentPage.page && graphic.graphicId !== `insertion:${block.id}`);
+    const flowBarrierBoxCandidates = block.role === 'quote'
+      ? []
+      : flowBarrierBoxCandidatesForSlot(currentPage, slot, flowId, plan);
+    if (flowBarrierBoxCandidates.length > 0) {
+      plan.decisions.push({
+        code: 'FLOW_BARRIER_BOXES_CONSUMED',
+        flowId,
+        blockId: block.id,
+        slotId: slot.id,
+        page: currentPage.page,
+        details: { candidateIds: flowBarrierBoxCandidates.map((candidate) => candidate.id) },
+      });
+    }
     const previous = cursor.startWord === 0 ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
     let blockGap = previous ? metrics.blockGap?.(styleFor(previous), styleFor(block)) ?? 0 : 0;
     const isHeadingBlock = block.kind === 'heading' || block.role === 'heading' || block.role === 'title';
-    let wrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, textBottom, pageGraphics, leading, policy.minimumWrapWidth);
-    let completeWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth);
+    let wrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
+    let completeWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
     // If only the inter-block gap prevents a whole heading from fitting in
     // the remaining physical lines, use the configured gap as a soft value
     // and compress it to zero for this boundary. Keeping a heading whole is
@@ -1765,8 +1824,8 @@ function planFlow(
     // ordinary body-to-body spacing remains unchanged.
     const availableWithoutGap = availableLineCount(rectBottom(initialBox) - (initialBox.y + startLineOffset * leading), leading);
     if (isHeadingBlock && blockGap > 0 && wrapped.length < completeWrapped.length) {
-      const noGapWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, textBottom, pageGraphics, leading, policy.minimumWrapWidth);
-      const noGapComplete = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth);
+      const noGapWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
+      const noGapComplete = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
       if (noGapComplete.length <= availableWithoutGap && noGapWrapped.length === noGapComplete.length) {
         plan.decisions.push({ code: 'BLOCK_GAP_COMPRESSED', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, from: blockGap, to: 0, reason: 'keep-heading-whole-without-empty-column' });
         blockGap = 0;
@@ -1814,7 +1873,7 @@ function planFlow(
       continue;
     }
     if (block.kind === 'list-item' && policy.keepListItemsTogether && cursor.startWord === 0) {
-      const complete = wrapBlock(metrics, block, 0, initialBox, 0, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth);
+      const complete = wrapBlock(metrics, block, 0, initialBox, 0, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
       const slotCapacity = availableLineCount(rectBottom(initialBox) - initialBox.y, leading);
       if (complete.length > currentAvailableLines && complete.length <= slotCapacity && usedLines > 0) {
         const minimumFragmentLines = policy.minimumFragmentLines ?? 1;
@@ -1830,7 +1889,7 @@ function planFlow(
     const keepLines = block.keepWithNextLines
       ?? (block.kind === 'heading' ? policy.headingKeepWithNextLines ?? 0 : 0);
     const nextLeading = next ? lineHeight(metrics, next) : leading;
-    const nextWrapped = next ? wrapBlock(metrics, next, 0, currentBox, 0, rectBottom(currentBox), pageGraphics, nextLeading, policy.minimumWrapWidth) : [];
+    const nextWrapped = next ? wrapBlock(metrics, next, 0, currentBox, 0, rectBottom(currentBox), pageGraphics, nextLeading, policy.minimumWrapWidth, next.role === 'quote' ? [] : flowBarrierBoxCandidates, geometryTolerance) : [];
     if (isHeadingBlock && keepLines > 0 && next) {
       const headingStartOffset = startLineOffset + blockGap / leading;
       // Probe the cluster without obstacles first.  Using the wrapped result
