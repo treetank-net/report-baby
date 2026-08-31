@@ -498,8 +498,8 @@ try {
       { id: 'repositioned-after', kind: 'paragraph', role: 'body', text: 'Second material fills the otherwise empty earlier segment.' },
     ] } },
   }, metrics);
-  assert.equal(orderedInsertion.evaluation.status, 'accepted', JSON.stringify(orderedInsertion.evaluation));
-  assert.ok(plannedLines(orderedInsertion.plan).find((line) => line.blockId === 'repositioned-quote')?.page <= plannedLines(orderedInsertion.plan).find((line) => line.blockId === 'repositioned-after')?.page, 'a quote must remain before the following authored body even when an earlier segment has spare capacity');
+  assert.equal(orderedInsertion.evaluation.status, 'rejected', JSON.stringify(orderedInsertion.evaluation));
+  assert.ok(orderedInsertion.evaluation.diagnostics.some((item) => item.code === 'EMPTY_FLOW_PLACEMENT'), 'an empty placement between earlier and later content must reject the route');
 
   const numberedInsetTemplate = {
     maxPages: 1,
@@ -807,6 +807,36 @@ try {
   const impossibleInsertion = createTextCompositionEngine(continuousQuoteTemplate).plan(impossibleInsertionDocument, metrics);
   assert.equal(impossibleInsertion.evaluation.status, 'rejected');
   assert.ok(impossibleInsertion.evaluation.diagnostics.some((item) => ['INSERTION_PRECEDENCE_CONFLICT', 'INSERTION_SOURCE_ORDER_VIOLATION', 'MAX_PAGES_EXCEEDED'].includes(item.code)), `planner must reject an insertion that cannot preserve source order above its obstacle: ${JSON.stringify(impossibleInsertion.evaluation)}`);
+
+  const headingClusterTemplate = {
+    maxPages: 1,
+    layouts: [{ id: 'heading-cluster', width: 100, height: 100, slots: [
+      { id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 95 }, allowedRoles: ['body', 'heading'] },
+      { id: 'quote', regionId: 'quotes', kind: 'text', box: { x: 5, y: 25, width: 90, height: 10 }, allowedRoles: ['quote'] },
+    ] }],
+    routes: {
+      main: { slots: ['body'], layouts: ['heading-cluster'], continuation: 'forbidden' },
+      quotes: { slots: ['quote'], insertionSlots: ['quote'], layouts: ['heading-cluster'], continuation: 'forbidden' },
+    },
+  };
+  const headingClusterDocument = {
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [
+        { id: 'cluster-heading', kind: 'heading', role: 'heading', text: Array.from({ length: 20 }, (_, index) => `heading${String(index + 1).padStart(4, '0')}`).join(' ') },
+        { id: 'cluster-body', kind: 'paragraph', role: 'body', text: Array.from({ length: 24 }, (_, index) => `body${String(index + 1).padStart(4, '0')}`).join(' ') },
+      ] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'cluster-quote', kind: 'paragraph', role: 'quote', text: 'A quote is an obstacle, not a route segment.' }] },
+    },
+  };
+  const headingCluster = createTextCompositionEngine(headingClusterTemplate, { headingKeepWithNextLines: 3, maxPlanningIterations: 2 }).plan(headingClusterDocument, metrics);
+  assert.equal(headingCluster.evaluation.status, 'accepted', JSON.stringify(headingCluster.evaluation));
+  const clusterObstacle = headingCluster.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:cluster-quote');
+  const clusterHeadingLines = headingCluster.plan.lines.filter((line) => line.blockId === 'cluster-heading');
+  const clusterBodyLines = headingCluster.plan.lines.filter((line) => line.blockId === 'cluster-body');
+  assert.ok(clusterObstacle && clusterHeadingLines.length > 0 && clusterBodyLines.length >= 3, 'heading cluster fixture must place its obstacle, heading, and lead text');
+  const clusterLines = [...clusterHeadingLines, ...clusterBodyLines.slice(0, 3)].sort((left, right) => left.box.y - right.box.y);
+  assert.ok(clusterLines.every((line) => line.box.y >= clusterObstacle.box.y + clusterObstacle.box.height), 'heading plus three lead lines must not be split by an insertion obstacle');
+  assert.ok(clusterLines.every((line, index) => index === 0 || Math.abs(line.box.y - clusterLines[index - 1].box.y - line.box.height) < 0.001), 'heading plus three lead lines must occupy one continuous text band');
 
   const earlyColumnAdvance = structuredClone(result.plan);
   const continuedLines = earlyColumnAdvance.lines.filter((line) => line.blockId === 'body' && line.page === 2);

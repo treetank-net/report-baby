@@ -96,6 +96,56 @@ function plannerFoundNoUsableLine(
   });
 }
 
+function checkEmptyFlowPlacements(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
+  const blockFlowIds = new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block) => [block.id, flowId] as const)));
+  const fallbackContent = new Set<string>();
+  for (const line of allLines(plan)) fallbackContent.add(`${line.flowId}:${line.slotId}`);
+  for (const placement of [...plan.placements, ...plan.blockPlacements, ...plan.tablePlacements]) {
+    const flowId = 'flowId' in placement ? placement.flowId : blockFlowIds.get(placement.blockId);
+    if (flowId) fallbackContent.add(`${flowId}:${placement.slotId}`);
+  }
+  const registry = plan.flowPlacements ?? plan.slots
+    .filter((slot): slot is CompositionSlot & { flowId: string; routeIndex: number } => slot.flowId !== undefined && slot.routeIndex !== undefined && slot.kind === 'text')
+    .map((slot) => ({
+      flowId: slot.flowId,
+      page: slot.page,
+      slotId: slot.id,
+      routeIndex: slot.routeIndex,
+      state: slot.state,
+      hasContent: fallbackContent.has(`${slot.flowId}:${slot.id}`),
+      blockedBy: plan.graphicPlacements.filter((graphic) => graphic.page === slot.page && graphic.wrap === 'around' && fitsInside(slot.box, graphic.box)).map((graphic) => graphic.graphicId),
+    }));
+  for (const flowId of new Set(registry.map((placement) => placement.flowId))) {
+    const placements = registry.filter((placement) => placement.flowId === flowId).sort((left, right) => left.page - right.page || left.routeIndex - right.routeIndex);
+    const occupied = placements.filter((placement) => placement.hasContent);
+    if (occupied.length < 2) continue;
+    const firstOccupied = placements.indexOf(occupied[0]);
+    const lastOccupied = placements.lastIndexOf(occupied.at(-1)!);
+    for (const empty of placements.slice(firstOccupied, lastOccupied + 1).filter((placement) => !placement.hasContent && placement.state !== 'exhausted' && placement.blockedBy.length === 0)) {
+      const beforeEmpty = placements.slice(0, placements.indexOf(empty));
+      const preceding = [...beforeEmpty].reverse().find((placement) => placement.hasContent);
+      const following = placements.slice(placements.indexOf(empty) + 1).find((placement) => placement.hasContent);
+      if (!preceding || !following) continue;
+      diagnostics.push(error(
+        'EMPTY_FLOW_PLACEMENT',
+        `Flow '${flowId}' leaves placement '${empty.slotId}' empty between occupied placements.`,
+        {
+          flowId,
+          page: empty.page,
+          slotId: empty.slotId,
+          details: {
+            precedingSlotId: preceding.slotId,
+            precedingPage: preceding.page,
+            followingSlotId: following.slotId,
+            followingPage: following.page,
+            routeIndex: empty.routeIndex,
+          },
+        },
+      ));
+    }
+  }
+}
+
 function checkEarlyRouteTransitions(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
   const minimum = plan.minimumFragmentLines;
   if (minimum === undefined || !Number.isInteger(minimum) || minimum <= 0) return;
@@ -318,6 +368,7 @@ function checkInsertionSourceOrder(document: CompositionDocument, plan: Composit
  */
 export function evaluateCompositionPlan(document: CompositionDocument, plan: CompositionPlan): CompositionEvaluation {
   const diagnostics = [...plan.diagnostics];
+  checkEmptyFlowPlacements(document, plan, diagnostics);
   checkEmptyAndUnderfilledSlots(document, plan, diagnostics);
   checkEarlyRouteTransitions(document, plan, diagnostics);
   checkInsertionSourceOrder(document, plan, diagnostics);

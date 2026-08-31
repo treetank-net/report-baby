@@ -39,6 +39,7 @@ export type {
   CompositionPlanningPhaseName,
   CompositionBlockTrace,
   CompositionBlockTraceFragment,
+  CompositionFlowPlacement,
   CompositionSlotTrace,
   CompositionTraceDecision,
   CompositionPlanResult,

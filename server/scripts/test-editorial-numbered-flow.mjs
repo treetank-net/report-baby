@@ -320,7 +320,12 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
         usedHeight: Math.max(0, bottom - slot.box.y),
       };
     });
-    await writeFile(join(directory, `debug-page-${page.page}.json`), JSON.stringify({ page: page.page, layoutId: page.layoutId, slots: slotInfo }, null, 2));
+    await writeFile(join(directory, `debug-page-${page.page}.json`), JSON.stringify({
+      page: page.page,
+      layoutId: page.layoutId,
+      slots: slotInfo,
+      flowPlacements: (result.plan.flowPlacements ?? []).filter((placement) => placement.page === page.page),
+    }, null, 2));
     const slotSvg = slots.map((slot) => {
       const rawId = slot.id.replace(/^\d+:/u, '');
       const definition = layout?.slots.find((candidate) => candidate.id === rawId);
@@ -355,6 +360,7 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
 
 try {
   const { planReportCompositionShadow, compositionStylesFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig } = await import(shadowBundle);
+  const { evaluateCompositionPlan } = await import(backendBundle);
   const { createJsPdfTextBackend, renderComposition } = await import(backendBundle);
   const { newPdf } = await import(primitivesBundle);
   const { compileTemplateSource } = await import(templateBundle);
@@ -377,8 +383,41 @@ try {
   assert.deepEqual(result.template.routes.intro.slots, ['intro'], 'intro Markdown image and lead must share a dedicated flow');
   assert.equal(result.template.routes.chart, undefined, 'editorial inset template must not reserve a chart section');
   if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'plan-trace.json'), JSON.stringify(result.plan.trace ?? {}, null, 2));
-  assert.notEqual(result.evaluation.status, 'rejected', JSON.stringify(result.evaluation));
+  assert.equal(result.evaluation.status, 'accepted', JSON.stringify(result.evaluation));
   assert.equal(result.plan.residualContent.length, 0, JSON.stringify(result.plan.residualContent));
+  const incompleteTraceBlocks = (result.plan.trace?.blocks ?? []).filter((block) => block.status !== 'placed');
+  assert.deepEqual(incompleteTraceBlocks, [], `every authored block must be present in the final plan: ${JSON.stringify(incompleteTraceBlocks)}`);
+  const mainFlowPlacements = (result.plan.flowPlacements ?? []).filter((placement) => placement.flowId === 'main');
+  assert.ok(mainFlowPlacements.length > 0, 'plan must register every main-flow placement, including empty capacity');
+  assert.ok(mainFlowPlacements.every((placement, index, placements) => index === 0
+    || placement.page > placements[index - 1].page
+    || placement.page === placements[index - 1].page && placement.routeIndex > placements[index - 1].routeIndex), 'flow placements must be registered in page and route order');
+  const illegalEmptyPlacements = [];
+  for (const flowId of new Set((result.plan.flowPlacements ?? []).map((placement) => placement.flowId))) {
+    const placements = (result.plan.flowPlacements ?? []).filter((placement) => placement.flowId === flowId);
+    const occupied = placements.flatMap((placement, index) => placement.hasContent ? [index] : []);
+    if (occupied.length < 2) continue;
+    for (const placement of placements.slice(occupied[0], occupied.at(-1) + 1)) {
+      if (!placement.hasContent && placement.state !== 'exhausted' && placement.blockedBy.length === 0) illegalEmptyPlacements.push(placement.slotId);
+    }
+  }
+  assert.deepEqual(illegalEmptyPlacements, [], `accepted plan must not contain an unblocked empty placement between content: ${JSON.stringify(illegalEmptyPlacements)}`);
+  const occupiedMainPlacementIndex = mainFlowPlacements.findIndex((placement, index, placements) => placement.hasContent
+    && placement.blockedBy.length === 0
+    && index > 0
+    && index < placements.length - 1
+    && placements.slice(0, index).some((candidate) => candidate.hasContent)
+    && placements.slice(index + 1).some((candidate) => candidate.hasContent));
+  assert.ok(occupiedMainPlacementIndex >= 0, 'fixture must expose an occupied main-flow placement with content on both sides');
+  const invalidPlan = structuredClone(result.plan);
+  const invalidMainPlacements = invalidPlan.flowPlacements.filter((placement) => placement.flowId === 'main');
+  const invalidTarget = invalidMainPlacements[occupiedMainPlacementIndex];
+  invalidTarget.hasContent = false;
+  invalidTarget.blockIds = [];
+  invalidTarget.lineCount = 0;
+  const invalidEvaluation = evaluateCompositionPlan(result.document, invalidPlan);
+  assert.equal(invalidEvaluation.status, 'rejected', 'an empty placement between occupied placements must reject the plan');
+  assert.ok(invalidEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'EMPTY_FLOW_PLACEMENT'), 'empty placement rejection must be explicit');
   assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_STABILIZED'), 'editorial fixture must finish with a stabilized insertion plan');
@@ -396,6 +435,27 @@ try {
   const firstDriverLine = result.plan.lines.find((line) => line.page === 2 && line.blockId === 'body-drivers-1');
   assert.ok(continuationRight && firstDriverLine, 'fixture must create both continuation columns and place the drivers block on the continuation page');
   assert.ok(Number.isInteger(firstDriverLine.routeIndex) && firstDriverLine.slotId.includes(':segment-'), 'the drivers block must enter through the main flow route, not by a separate block placement');
+  const dieselObstacle = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-diesel');
+  const rightColumnBeforeDieselQuote = result.plan.lines.some((line) => line.page === 3
+    && line.flowId === 'main'
+    && line.routeIndex === 1
+    && dieselObstacle
+    && line.box.y + line.box.height <= dieselObstacle.box.y + renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
+  assert.ok(rightColumnBeforeDieselQuote, 'the second column must use the available band above the diesel quote instead of inheriting the first column resumeY');
+  const physicalLineOrder = new Map();
+  for (const line of plannedLines(result.plan).filter((candidate) => candidate.flowId === 'main' || candidate.flowId === 'quotes')) {
+    const group = physicalLineOrder.get(line.blockId) ?? [];
+    group.push(line);
+    physicalLineOrder.set(line.blockId, group);
+  }
+  for (const [blockId, lines] of physicalLineOrder) {
+    const orderedLines = [...lines].sort((left, right) => left.page - right.page || (left.routeIndex ?? Number.MAX_SAFE_INTEGER) - (right.routeIndex ?? Number.MAX_SAFE_INTEGER) || left.box.y - right.box.y || left.box.x - right.box.x);
+    let nextWord = 0;
+    for (const line of orderedLines) {
+      assert.equal(line.startWord, nextWord, `block ${blockId} must advance its words in physical column order`);
+      nextWord = line.endWord;
+    }
+  }
   assertExactNumberSet(numbers(numberedTokens(plannedLines(result.plan).map((line) => line.text).join(' '), fixture.tokenPrefixes)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner must retain every numbered word exactly once');
   const quoteTolerance = renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm;
   const insertionGroups = new Map();

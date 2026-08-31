@@ -202,7 +202,7 @@ pdf:
   body_margin_after: 2.8
   heading_margin_before: 4.2
   heading_margin_after: 1.4
-  heading_keep_with_next_lines: 1
+  heading_keep_with_next_lines: 3
   list_item_margin_before: 0
   list_item_margin_after: 1.4
   header_margin_before: 0

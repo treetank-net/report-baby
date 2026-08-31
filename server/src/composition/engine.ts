@@ -226,11 +226,27 @@ export interface CompositionSlotTrace {
   remainingLines?: number;
 }
 
+/** Every route location offered to a flow, including empty locations. */
+export interface CompositionFlowPlacement {
+  id: string;
+  flowId: string;
+  page: number;
+  slotId: string;
+  routeIndex: number;
+  box: CompositionBox;
+  state: CompositionSlot['state'];
+  hasContent: boolean;
+  blockIds: string[];
+  lineCount: number;
+  blockedBy: string[];
+}
+
 /** A compact, human-oriented projection of the otherwise flat plan. */
 export interface CompositionPlanTrace {
   phases: CompositionPlanningPhase[];
   blocks: CompositionBlockTrace[];
   slots: CompositionSlotTrace[];
+  flowPlacements?: CompositionFlowPlacement[];
 }
 
 export interface CompositionPlan {
@@ -250,6 +266,8 @@ export interface CompositionPlan {
   repeatFlowIds?: string[];
   /** Policy carried into evaluation so underfilled route transitions fail closed. */
   minimumFragmentLines?: number;
+  /** Complete route registry used to detect empty locations between content. */
+  flowPlacements?: CompositionFlowPlacement[];
   /** Grouped explanation of the plan, kept alongside the executable records. */
   trace?: CompositionPlanTrace;
 }

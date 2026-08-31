@@ -11,6 +11,7 @@ import type {
   CompositionBlockMeasurement,
   CompositionBlockTrace,
   CompositionBlockPlacement,
+  CompositionFlowPlacement,
   CompositionDiagnostic,
   CompositionGraphicPlacement,
   CompositionLine,
@@ -66,6 +67,8 @@ interface FlowCursor {
   routeIndex: number;
   /** The earliest y-coordinate available after an authored obstacle on this page. */
   resumeY?: number;
+  /** The route slot whose local obstacle boundary produced resumeY. */
+  resumeSlotId?: string;
 }
 
 interface PageState {
@@ -336,6 +339,29 @@ function wrapBlock(
     lineOffset += 1;
   }
   return lines;
+}
+
+function obstructionBetweenLines(
+  lines: WrappedLine[],
+  graphics: CompositionGraphicPlacement[],
+  slotY: number,
+  lineHeightValue: number,
+  tolerance: number,
+): CompositionGraphicPlacement | undefined {
+  for (let index = 1; index < lines.length; index += 1) {
+    const previous = lines[index - 1];
+    const current = lines[index];
+    const gapTop = slotY + (previous.lineOffset + 1) * lineHeightValue;
+    const gapBottom = slotY + current.lineOffset * lineHeightValue;
+    if (gapBottom - gapTop <= tolerance) continue;
+    const obstruction = graphics.find((graphic) => graphic.wrap === 'around'
+      && graphic.box.y < gapBottom - tolerance
+      && rectBottom(graphic.box) > gapTop + tolerance
+      && graphic.box.x < Math.max(previous.x + previous.width, current.x + current.width) + tolerance
+      && graphic.box.x + graphic.box.width > Math.min(previous.x, current.x) - tolerance);
+    if (obstruction) return obstruction;
+  }
+  return undefined;
 }
 
 function wordsForBlock(block: CompositionBlock): string[] {
@@ -1131,6 +1157,8 @@ function advanceCursor(
   routeSlotsForPage: string[],
 ): void {
   cursor.routeIndex += 1;
+  cursor.resumeY = undefined;
+  cursor.resumeSlotId = undefined;
   if (cursor.routeIndex >= routeSlotsForPage.length) {
     cursor.routeIndex = 0;
     cursor.page += 1;
@@ -1233,7 +1261,12 @@ function tracePlan(document: CompositionDocument, metrics: CompositionTextMetric
       remainingLines: availableLineCount(remainingHeight, lineHeightValue),
     };
   });
-  plan.trace = { phases: plan.trace?.phases ?? [], blocks, slots } satisfies CompositionPlanTrace;
+  plan.trace = {
+    phases: plan.trace?.phases ?? [],
+    blocks,
+    slots,
+    ...(plan.flowPlacements ? { flowPlacements: plan.flowPlacements } : {}),
+  } satisfies CompositionPlanTrace;
 }
 
 function normalizePlanReadingOrder(document: CompositionDocument, plan: CompositionPlan): void {
@@ -1246,6 +1279,53 @@ function normalizePlanReadingOrder(document: CompositionDocument, plan: Composit
     if (blockDifference !== 0) return blockDifference;
     return left.startWord - right.startWord || left.page - right.page || (left.routeIndex ?? Number.MAX_SAFE_INTEGER) - (right.routeIndex ?? Number.MAX_SAFE_INTEGER) || left.box.y - right.box.y || left.box.x - right.box.x;
   });
+}
+
+function registerFlowPlacements(document: CompositionDocument, plan: CompositionPlan): CompositionFlowPlacement[] {
+  const blockFlowIds = new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block) => [block.id, flowId] as const)));
+  const contentBySlot = new Map<string, Set<string>>();
+  const linesBySlot = new Map<string, number>();
+  const addContent = (flowId: string | undefined, slotId: string, blockId: string): void => {
+    if (!flowId) return;
+    const key = `${flowId}:${slotId}`;
+    const blockIds = contentBySlot.get(key) ?? new Set<string>();
+    blockIds.add(blockId);
+    contentBySlot.set(key, blockIds);
+  };
+  for (const line of plannedLines(plan)) {
+    addContent(line.flowId, line.slotId, line.blockId);
+    linesBySlot.set(line.slotId, (linesBySlot.get(line.slotId) ?? 0) + 1);
+  }
+  for (const placement of [...plan.placements, ...plan.blockPlacements, ...plan.tablePlacements]) {
+    addContent(blockFlowIds.get(placement.blockId), placement.slotId, placement.blockId);
+  }
+  return plan.slots
+    .filter((slot): slot is CompositionSlot & { flowId: string; routeIndex: number } => slot.flowId !== undefined && slot.routeIndex !== undefined && slot.kind === 'text')
+    .map((slot) => {
+      const key = `${slot.flowId}:${slot.id}`;
+      const blockIds = [...(contentBySlot.get(key) ?? new Set<string>())];
+      const blockedBy = plan.graphicPlacements
+        .filter((graphic) => graphic.page === slot.page && graphic.wrap === 'around'
+          && graphic.box.x <= slot.box.x
+          && graphic.box.y <= slot.box.y
+          && rectBottom(graphic.box) >= rectBottom(slot.box)
+          && graphic.box.x + graphic.box.width >= slot.box.x + slot.box.width)
+        .map((graphic) => graphic.graphicId);
+      return {
+        id: `flow-placement:${slot.id}`,
+        flowId: slot.flowId,
+        page: slot.page,
+        slotId: slot.id,
+        routeIndex: slot.routeIndex,
+        box: { ...slot.box },
+        state: slot.state,
+        hasContent: blockIds.length > 0,
+        blockIds,
+        lineCount: linesBySlot.get(slot.id) ?? 0,
+        blockedBy,
+      };
+    })
+    .sort((left, right) => left.page - right.page || left.routeIndex - right.routeIndex || left.slotId.localeCompare(right.slotId));
 }
 
 function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
@@ -1282,6 +1362,7 @@ function planFlow(
   const flow = document.flows[flowId];
   if (!flow) return;
   const authoredBlocks = flow.blocks;
+  const geometryTolerance = policy.geometryTolerance ?? 0;
   const blocks = skipPreplannedInsertions
     ? authoredBlocks.filter((block) => block.role !== 'quote')
     : authoredBlocks;
@@ -1588,7 +1669,7 @@ function planFlow(
       localBottom,
       crossSlotBottom,
       ...(insertionIsBeforeCurrentColumn && previousInsertionBottom !== undefined ? [previousInsertionBottom] : []),
-      cursor.resumeY ?? Number.NEGATIVE_INFINITY,
+      cursor.resumeSlotId === slot.id ? cursor.resumeY ?? Number.NEGATIVE_INFINITY : Number.NEGATIVE_INFINITY,
     ) + crossSlotGap;
     const startLineOffset = Math.max(0, (usedBottom - initialBox.y) / leading);
     const pageGraphics = plan.graphicPlacements.filter((graphic) => graphic.page === currentPage.page && graphic.graphicId !== `insertion:${block.id}`);
@@ -1670,6 +1751,30 @@ function planFlow(
       ?? (block.kind === 'heading' ? policy.headingKeepWithNextLines ?? 0 : 0);
     const nextLeading = next ? lineHeight(metrics, next) : leading;
     const nextWrapped = next ? wrapBlock(metrics, next, 0, currentBox, 0, rectBottom(currentBox), pageGraphics, nextLeading, policy.minimumWrapWidth) : [];
+    if (isHeadingBlock && keepLines > 0 && next && nextWrapped.length >= keepLines) {
+      const headingObstacle = obstructionBetweenLines(completeWrapped, pageGraphics, initialBox.y, leading, geometryTolerance);
+      const headingStartOffset = startLineOffset + blockGap / leading;
+      const nextProbeStart = headingStartOffset + completeWrapped.length + blockGap / leading;
+      const nextProbe = wrapBlock(metrics, next, 0, currentBox, nextProbeStart, Number.POSITIVE_INFINITY, pageGraphics, nextLeading, policy.minimumWrapWidth);
+      const leadObstacle = obstructionBetweenLines(nextProbe.slice(0, keepLines), pageGraphics, currentBox.y, nextLeading, geometryTolerance);
+      const clusterObstacle = [headingObstacle, leadObstacle]
+        .filter((obstacle): obstacle is CompositionGraphicPlacement => obstacle !== undefined)
+        .sort((left, right) => left.box.y - right.box.y)[0];
+      if (clusterObstacle) {
+        const requiredClusterLines = completeWrapped.length + keepLines;
+        const resumeY = Math.max(cursor.resumeY ?? initialBox.y, rectBottom(clusterObstacle.box));
+        const availableAfterObstacle = availableLineCount(rectBottom(currentBox) - resumeY, leading);
+        if (availableAfterObstacle >= requiredClusterLines) {
+          cursor.resumeY = resumeY;
+          cursor.resumeSlotId = slot.id;
+          plan.decisions.push({ code: 'HEADING_CLUSTER_PUSHED_BELOW_OBSTACLE', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, reason: 'keep-heading-and-lead-together', details: { obstacleId: clusterObstacle.graphicId, resumeY, requiredClusterLines, availableAfterObstacle } });
+          continue;
+        }
+        plan.decisions.push({ code: 'HEADING_CLUSTER_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, reason: 'keep-heading-and-lead-together', details: { obstacleId: clusterObstacle.graphicId, requiredClusterLines, availableAfterObstacle } });
+        advanceCursor(cursor, availableRouteSlots);
+        continue;
+      }
+    }
     const keepRequired = keepLines > 0 && cursor.startWord === 0 ? wrapped.length + Math.min(keepLines, nextWrapped.length) : 0;
     // Keep-with-next is a preference only after the heading itself fits. A
     // heading must remain whole, but it must not abandon a nearly empty
@@ -1769,6 +1874,7 @@ function planFlow(
           });
           plan.decisions.push({ code: 'FLOW_INSERTION_OBSTACLE_PLACED', flowId, blockId: block.id, page: currentPage.page, slotId: slot.id, box: { ...slot.box } });
           cursor.resumeY = Math.max(cursor.resumeY ?? Number.NEGATIVE_INFINITY, rectBottom(slot.box));
+          cursor.resumeSlotId = slot.id;
         }
         if (activeDeferredQuote?.blockId === block.id) {
           const resume = activeDeferredQuote.resume;
@@ -1802,6 +1908,7 @@ function planFlow(
       }
       cursor.startWord = consumedEnd;
       cursor.resumeY = boundary.box.y + boundary.box.height;
+      cursor.resumeSlotId = slot.id;
       plan.decisions.push({ code: 'FLOW_RESUMED_BELOW_INSERTION', flowId, blockId: block.id, page: currentPage.page, slotId: slot.id, consumedEnd, obstacleY: boundary.box.y, obstacleBottom: cursor.resumeY });
       continue;
     }
@@ -1930,6 +2037,7 @@ function planDocumentOnce(
   }
   flattenPages(pages, plan, template);
   normalizePlanReadingOrder(document, plan);
+  plan.flowPlacements = registerFlowPlacements(document, plan);
   recordPlanningPhase(plan, 'flow-placement', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { lineCount: plan.lines.length, pageCount: plan.pages.length });
   tracePlan(document, metrics, plan);
   return plan;
