@@ -27,6 +27,7 @@ import type {
   CompositionWordRange,
 } from './engine.js';
 import { graphicIntervalsForLine, polygonPoints } from './graphic-geometry.js';
+import { compositionStyleName } from './style-name.js';
 
 export interface TextCompositionPlannerPolicy {
   minimumLinesAtStart?: number;
@@ -102,17 +103,7 @@ function requiresBlockSlot(block: CompositionBlock): boolean {
 }
 
 function styleFor(block: CompositionBlock): string {
-  if (block.kind === 'list-item') return 'list-item';
-  if (block.role === 'title') return 'title';
-  if (block.role === 'subtitle') return 'subtitle';
-  if (block.role === 'eyebrow') return 'eyebrow';
-  if (block.role === 'header') return 'header';
-  if (block.role === 'heading' || block.kind === 'heading') return 'heading';
-  if (block.role === 'intro') return 'intro';
-  if (block.role === 'quote') return 'quote';
-  if (block.role === 'sidebar') return 'sidebar';
-  if (block.role === 'footer') return 'footer';
-  return 'body';
+  return compositionStyleName(block);
 }
 
 function diagnostic(

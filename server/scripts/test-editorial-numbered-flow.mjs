@@ -58,6 +58,26 @@ function pdfWords(path) {
   return words;
 }
 
+function normalizedPdfToken(value) {
+  return value.toLocaleLowerCase('und').replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function assertRenderedHeaderLinesStayInsidePlan(pdfPath, result, toleranceMm) {
+  const words = pdfWords(pdfPath).filter((word) => word.page === 0);
+  const titleLines = result.plan.lines.filter((line) => line.flowId === 'header' && line.blockId === 'header-overflow-title');
+  assert.ok(titleLines.length > 0, 'header overflow regression must produce planned title lines');
+  const pointPerMm = 72 / 25.4;
+  const tolerance = toleranceMm * pointPerMm;
+  for (const line of titleLines) {
+    const expected = line.text.split(/\s+/u).map(normalizedPdfToken).filter(Boolean);
+    const actual = words.filter((word) => expected.includes(normalizedPdfToken(word.text)));
+    assert.equal(actual.length, expected.length, `PDF must retain every word from header line '${line.text}'`);
+    const left = line.box.x * pointPerMm - tolerance;
+    const right = (line.box.x + line.box.width) * pointPerMm + tolerance;
+    assert.ok(actual.every((word) => word.xMin >= left && word.xMax <= right), `rendered header line escaped its plan box: ${JSON.stringify({ line, actual, left, right })}`);
+  }
+}
+
 function decodePpm(buffer) {
   assert.equal(buffer.subarray(0, 2).toString('ascii'), 'P6', 'raster output must be an RGB PPM');
   let offset = 2;
@@ -530,6 +550,26 @@ try {
   const tokenPattern = new RegExp(`^(?:${fixture.tokenPrefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|')})\\d{4}$`, 'u');
   const words = pdfWords(artifactPath).filter((word) => tokenPattern.test(word.text));
   assertExactNumberSet(numbers(words.map((word) => word.text)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'final PDF must contain every numbered word exactly once');
+
+  const headerOverflowInput = structuredClone(fixture.input);
+  headerOverflowInput.flows.header.blocks[0] = {
+    id: 'header-overflow-title',
+    type: 'heading',
+    role: 'header',
+    text: 'Kierowców brakuje już niemal w każdym powiecie. Branża stawia na technologie i nowe kompetencje',
+  };
+  const headerOverflowPdf = newPdf('portrait', [geometry.width, geometry.height]);
+  const headerOverflow = planReportCompositionShadow(headerOverflowPdf, template, geometry, headerOverflowInput, { family: 'DejaVu', maxPages: 12 });
+  assert.equal(headerOverflow.evaluation.status, 'accepted', JSON.stringify(headerOverflow.evaluation));
+  const headerOverflowArtifact = renderComposition(headerOverflow.document, headerOverflow, createJsPdfTextBackend(headerOverflowPdf, 'DejaVu', compositionStylesFromRenderConfig({
+    foreground: [25, 51, 79],
+    muted: [88, 106, 131],
+    primary: [42, 110, 166],
+    quote: [232, 117, 61],
+  }), compositionPdfBackendOptionsFromRenderConfig()));
+  const headerOverflowPath = join(temporary, 'header-overflow-regression.pdf');
+  await writeFile(headerOverflowPath, headerOverflowArtifact);
+  assertRenderedHeaderLinesStayInsidePlan(headerOverflowPath, headerOverflow, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
 
   const columnBalance = inspectColumnBalance(readPdfLayout(artifactPath), renderConfig.quality.layout_diff);
   if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));

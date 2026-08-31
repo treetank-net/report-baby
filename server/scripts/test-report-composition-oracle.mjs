@@ -134,7 +134,11 @@ function fixturePng(width, height) {
 
 function lineBoxParity(plan, pdfPath) {
   const toleranceMm = parityConfig.pdf_parity.points_tolerance * 25.4 / 72;
-  const lines = plan.lines.map((line) => ({
+  // This oracle compares the narrative/footer token stream below. Header
+  // chrome is painted by the report renderer and has a dedicated rendered
+  // bounds regression in the editorial-flow harness; mixing it here makes
+  // the oracle compare two different contracts.
+  const lines = plan.lines.filter((line) => line.flowId === 'main' || line.flowId === 'footer').map((line) => ({
     page: line.page - 1,
     x0: line.box.x - toleranceMm,
     y0: line.box.y - toleranceMm,

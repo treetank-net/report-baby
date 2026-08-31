@@ -29,7 +29,7 @@ import {
 import type { CompositionBlockKind } from './composition/model.js';
 import type { JsPdfCompositionBlockCapability } from './composition/js-pdf-adapter.js';
 import { renderComposition } from './composition/engine.js';
-import type { CompositionBox } from './composition/engine.js';
+import type { CompositionBox, CompositionPlan } from './composition/engine.js';
 import { assertReportPlan } from './report-plan-assertions.js';
 import { installReportDrawingRecorder, type ReportDrawing } from './report-drawing-recorder.js';
 import { loadRenderFontSet, newPdf, pdfFont, readableTextColor } from './render-primitives.js';
@@ -147,7 +147,7 @@ function configNumber(value: unknown, key: string): number {
   return value;
 }
 
-function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionResult, theme: RenderTheme): void {
+function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionResult, theme: RenderTheme, geometry: PageGeometry): void {
   const debug = RENDER_CONFIG.compositionDebug;
   const plan = composition.plan;
   const headingBlocks = new Set((plan.trace?.blocks ?? []).filter((block) => block.kind === 'heading').map((block) => block.blockId));
@@ -158,44 +158,99 @@ function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionR
     doc.setLineDashPattern(dashed ? [2, 1] : [], 0);
     doc.rect(box.x, box.y, box.width, box.height, 'S');
   };
-  const drawLabel = (text: string, box: CompositionBox): void => {
+  const drawLabel = (text: string, box: CompositionBox, page: CompositionPlan['pages'][number], labelColor = theme.primary, preferredPosition: 'above' | 'side' = 'above'): void => {
     doc.setFont(pdfFont(theme), 'normal');
     doc.setFontSize(debug.labelSize);
-    doc.setTextColor(...rgb(theme.primary));
-    doc.text(text, box.x + debug.labelGap, box.y + debug.labelGap + debug.labelSize);
+    doc.setTextColor(...rgb(labelColor));
+    const width = doc.getTextWidth(text);
+    const canPlaceAbove = preferredPosition === 'above' && box.y > debug.labelGap + debug.labelSize;
+    if (canPlaceAbove) {
+      doc.text(text, box.x, box.y - debug.labelGap);
+      return;
+    }
+    if (box.x <= page.width / 2) {
+      doc.text(text, Math.max(debug.labelGap, box.x - debug.labelGap), box.y + debug.labelSize, { align: 'right' });
+      return;
+    }
+    const rightX = box.x + box.width + debug.labelGap;
+    if (rightX + width <= page.width - debug.labelGap) {
+      doc.text(text, rightX, box.y + debug.labelSize);
+    } else {
+      doc.text(text, page.width - debug.labelGap, box.y + debug.labelSize, { align: 'right' });
+    }
   };
   for (const page of plan.pages ?? []) {
     doc.setPage(page.page);
+    const pageGeometry = page.layoutId.endsWith(':continuation') ? geometry.continuation ?? geometry : geometry;
     doc.setFont(pdfFont(theme), 'bold');
     doc.setFontSize(debug.labelSize);
     doc.setTextColor(...rgb(theme.primary));
-    doc.text(`DEBUG overlay p${page.page} - ${composition.evaluation.status}`, debug.pagePadding, debug.pagePadding);
+    doc.text(`DEBUG overlay p${page.page} - ${composition.evaluation.status}`, debug.pagePadding / 2, debug.pagePadding);
+
+    const headerBandBottom = pageGeometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight;
+    drawRect({ x: 0, y: 0, width: page.width, height: headerBandBottom }, debug.lineWidth, theme.muted, true);
+    drawLabel('CHROME header band', { x: 0, y: 0, width: page.width, height: headerBandBottom }, page, theme.muted, 'side');
 
     for (const placement of plan.flowPlacements ?? []) {
       if (placement.page !== page.page) continue;
       const empty = !placement.hasContent && (placement.blockedBy ?? []).length === 0;
-      const placementColor = empty ? theme.danger : placement.flowId === 'quotes' ? theme.secondary : theme.primary;
+      const reserved = empty && placement.flowId === 'quotes';
+      const placementColor = reserved ? theme.secondary : empty ? theme.danger : placement.flowId === 'quotes' ? theme.secondary : theme.primary;
       drawRect(placement.box, empty ? debug.obstacleLineWidth : debug.placementLineWidth, placementColor, true);
-      drawLabel(`${placement.flowId} r${placement.routeIndex} ${placement.hasContent ? `${placement.lineCount} lines` : 'EMPTY'}`, placement.box);
+      const placementLabel = reserved
+        ? `RESERVED ${placement.flowId} r${placement.routeIndex}`
+        : placement.hasContent
+          ? `${placement.flowId} r${placement.routeIndex} ${placement.lineCount} lines`
+          : `EMPTY ${placement.flowId} r${placement.routeIndex}`;
+      drawLabel(placementLabel, placement.box, page, placementColor);
     }
 
     for (const graphic of plan.graphicPlacements ?? []) {
       if (graphic.page !== page.page || !(graphic.wrap === 'around' || graphic.graphicId.startsWith('insertion:'))) continue;
       drawRect(graphic.box, debug.obstacleLineWidth, theme.secondary);
-      drawLabel(`OBSTACLE ${graphic.graphicId}`, graphic.box);
+      drawLabel(`OBSTACLE ${graphic.graphicId}`, graphic.box, page, theme.secondary);
     }
 
-    for (const placement of [...(plan.blockPlacements ?? []), ...(plan.tablePlacements ?? [])]) {
+    for (const placement of plan.blockPlacements ?? []) {
       if (placement.page !== page.page) continue;
       drawRect(placement.box, debug.lineWidth, theme.primary);
-      drawLabel(`BLOCK ${placement.blockId}`, placement.box);
+      drawLabel(`BLOCK ${placement.blockId}`, placement.box, page, theme.primary);
+      if (placement.kind === 'image' && placement.imageBox) {
+        drawRect(placement.imageBox, debug.lineWidth, theme.primary);
+        drawLabel(`IMAGE ${placement.blockId}`, placement.imageBox, page, theme.primary);
+      }
+      if (placement.kind === 'image' && placement.captionBox) {
+        drawRect(placement.captionBox, debug.lineWidth, theme.secondary);
+        drawLabel(`CAPTION ${placement.blockId}`, placement.captionBox, page, theme.secondary);
+      }
     }
+
+    for (const placement of plan.tablePlacements ?? []) {
+      if (placement.page !== page.page) continue;
+      drawRect(placement.box, debug.lineWidth, theme.primary);
+      drawLabel(`TABLE ${placement.blockId}`, placement.box, page, theme.primary);
+    }
+
+    const footerSlot = plan.slots.find((slot) => slot.page === page.page && slot.id.endsWith(':flow:footer'));
+    const footerTop = footerSlot?.box.y ?? PDF_CONFIG.footerY - PDF_CONFIG.footerFontSize;
+    doc.setFont(pdfFont(theme), 'normal');
+    doc.setFontSize(PDF_CONFIG.footerFontSize);
+    const pageNumber = `${page.page} / ${plan.pages.length}`;
+    const pageNumberWidth = doc.getTextWidth(pageNumber);
+    const pageNumberBox: CompositionBox = {
+      x: page.width - PDF_CONFIG.margin - pageNumberWidth,
+      y: footerTop,
+      width: pageNumberWidth,
+      height: doc.getTextDimensions(pageNumber).h,
+    };
+    drawRect(pageNumberBox, debug.lineWidth, theme.muted);
+    drawLabel('CHROME footer {page}/{pages}', pageNumberBox, page, theme.muted, 'side');
 
     for (const line of lines) {
       if (line.page !== page.page) continue;
       const lineColor = headingBlocks.has(line.blockId) ? theme.primary : line.flowId === 'quotes' ? theme.secondary : line.flowId === 'intro' ? theme.primary : theme.foreground;
       drawRect(line.box, debug.lineWidth, lineColor);
-      if (line.layer === 'insertion' || line.startWord === 0) drawLabel(`${line.flowId}:${line.blockId} ${line.startWord}-${line.endWord}`, line.box);
+      if (line.layer === 'insertion' || line.startWord === 0) drawLabel(`${line.flowId}:${line.blockId} ${line.startWord}-${line.endWord}`, line.box, page, lineColor, 'side');
     }
   }
   doc.setLineDashPattern([], 0);
@@ -306,7 +361,7 @@ export async function renderReportCompositionPdf(name: string, data: Composition
       drawReportChrome(doc, page.page, composition.plan.pages.length, pageGeometry, theme, logo, theme.brandName, lockup?.box, page.layoutId === `${template.id}:continuation`);
     }
   }
-  if (compositionDebug) drawCompositionDebugOverlay(doc, composition, theme);
+  if (compositionDebug) drawCompositionDebugOverlay(doc, composition, theme, geometry);
   renderComposition(composition.document, composition, createJsPdfTextBackend(doc, family, compositionStyles, { ...compositionPdfBackendOptionsFromRenderConfig(), ...(resolvedImages.size > 0 ? { imageAssets: resolvedImages } : {}), ...(combined ? { blockRenderers: combined.blockRenderers } : {}), ...(tableCapabilities ? { tableRenderer: tableCapabilities.renderer } : {}) }));
   return { buffer: Buffer.from(doc.output('arraybuffer')), composition, drawings };
 }
