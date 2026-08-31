@@ -31,10 +31,14 @@ z materializowanym pod-placementem.
    albo po spełnieniu reguły keep/minimum fragmentu.
 6. Po planowaniu powstaje pełny `flowPlacements` registry, zawierający także
    legalne, ale puste miejsca końcowe.
-7. Evaluator odrzuca plan, gdy niezablokowany placement jest pusty pomiędzy
+7. Planner publikuje `flowBarriers`: finalne boksy kolizji przypisane do
+   konkretnego docelowego flowu. Są obecnie rejestrem diagnostycznym i są
+   rysowane w composition debug; następny krok to uczynienie ich jedynym
+   źródłem przeszkód dla cursora.
+8. Evaluator odrzuca plan, gdy niezablokowany placement jest pusty pomiędzy
    placementem zawierającym treść wcześniej i placementem zawierającym treść
    później.
-8. Renderer PDF może działać wyłącznie na planie zaakceptowanym przez
+9. Renderer PDF może działać wyłącznie na planie zaakceptowanym przez
    evaluator.
 
 ## Niezmienniki testowe

@@ -11,6 +11,7 @@ import type {
   CompositionBlockMeasurement,
   CompositionBlockTrace,
   CompositionBlockPlacement,
+  CompositionFlowBarrier,
   CompositionFlowPlacement,
   CompositionDiagnostic,
   CompositionGraphicPlacement,
@@ -1210,6 +1211,7 @@ function createPlan(minimumFragmentLines?: number): CompositionPlan {
     blockPlacements: [],
     tablePlacements: [],
     graphicPlacements: [],
+    flowBarriers: [],
     lines: [],
     insertionLines: [],
     decisions: [],
@@ -1362,6 +1364,26 @@ function registerFlowPlacements(document: CompositionDocument, plan: Composition
       };
     })
     .sort((left, right) => left.page - right.page || left.routeIndex - right.routeIndex || left.slotId.localeCompare(right.slotId));
+}
+
+function registerFlowBarriers(plan: CompositionPlan): CompositionFlowBarrier[] {
+  const textSlots = plan.slots.filter((slot) => slot.kind === 'text' && slot.flowId !== undefined);
+  const barriers: CompositionFlowBarrier[] = [];
+  for (const graphic of plan.graphicPlacements.filter((candidate) => candidate.wrap === 'around')) {
+    const targetFlows = new Set(textSlots
+      .filter((slot) => slot.page === graphic.page && slot.id !== graphic.slotId && rectsOverlap(slot.box, graphic.box))
+      .map((slot) => slot.flowId!));
+    for (const flowId of targetFlows) {
+      barriers.push({
+        id: `flow-barrier:${graphic.page}:${flowId}:${graphic.graphicId}`,
+        flowId,
+        sourceId: graphic.graphicId,
+        page: graphic.page,
+        box: { ...graphic.box },
+      });
+    }
+  }
+  return barriers.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.flowId.localeCompare(right.flowId) || left.sourceId.localeCompare(right.sourceId));
 }
 
 function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
@@ -2096,6 +2118,7 @@ function planDocumentOnce(
   flattenPages(pages, plan, template);
   normalizePlanReadingOrder(document, plan);
   plan.flowPlacements = registerFlowPlacements(document, plan);
+  plan.flowBarriers = registerFlowBarriers(plan);
   recordPlanningPhase(plan, 'flow-placement', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { lineCount: plan.lines.length, pageCount: plan.pages.length });
   tracePlan(document, metrics, plan);
   return plan;

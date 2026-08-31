@@ -22,6 +22,20 @@ function plannedLines(plan) {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
+function assertFlowBarriers(result) {
+  const barriers = result.plan.flowBarriers ?? [];
+  assert.ok(barriers.length > 0, 'editorial plan must expose flow barriers');
+  for (const barrier of barriers) {
+    assert.equal(typeof barrier.flowId, 'string');
+    assert.equal(typeof barrier.sourceId, 'string');
+    assert.ok(barrier.box.width > 0 && barrier.box.height > 0, `flow barrier must have a positive box: ${JSON.stringify(barrier)}`);
+    const source = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === barrier.sourceId && graphic.page === barrier.page);
+    assert.ok(source, `flow barrier must reference an existing graphic: ${JSON.stringify(barrier)}`);
+    assert.deepEqual(barrier.box, source.box, `flow barrier must expose the current collision box: ${JSON.stringify({ barrier, source })}`);
+  }
+  assert.ok(barriers.some((barrier) => barrier.flowId === 'main' && barrier.sourceId.startsWith('insertion:')), 'editorial main flow must expose at least one insertion barrier');
+}
+
 function build(entry, output, extra = []) {
   const result = runProcess('npx', [
     'esbuild', entry, '--bundle', '--platform=node', '--target=node18', '--format=cjs', ...extra, `--outfile=${output}`,
@@ -552,6 +566,7 @@ try {
   }
   assertNoInternalRouteGaps(result);
   assertNoEmptyContinuationColumn(result);
+  assertFlowBarriers(result);
 
   const artifact = renderComposition(result.document, result, createJsPdfTextBackend(pdf, 'DejaVu', compositionStylesFromRenderConfig({
     foreground: [25, 51, 79],

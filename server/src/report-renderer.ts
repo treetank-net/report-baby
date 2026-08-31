@@ -211,6 +211,12 @@ function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionR
       drawLabel(`OBSTACLE ${graphic.graphicId}`, graphic.box, page, theme.secondary);
     }
 
+    for (const barrier of plan.flowBarriers ?? []) {
+      if (barrier.page !== page.page) continue;
+      drawRect(barrier.box, debug.obstacleLineWidth, theme.danger, true);
+      drawLabel(`FLOW BARRIER ${barrier.flowId} <- ${barrier.sourceId}`, barrier.box, page, theme.danger, 'side');
+    }
+
     for (const placement of plan.blockPlacements ?? []) {
       if (placement.page !== page.page) continue;
       drawRect(placement.box, debug.lineWidth, theme.primary);

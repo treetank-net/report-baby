@@ -121,6 +121,15 @@ export interface CompositionGraphicPlacement {
   innerRatio?: number;
 }
 
+/** A collision boundary exposed to a target text flow. */
+export interface CompositionFlowBarrier {
+  id: string;
+  flowId: string;
+  sourceId: string;
+  page: number;
+  box: CompositionBox;
+}
+
 export interface CompositionLine {
   blockId: string;
   flowId: string;
@@ -256,6 +265,8 @@ export interface CompositionPlan {
   blockPlacements: CompositionBlockPlacement[];
   tablePlacements: CompositionTablePlacement[];
   graphicPlacements: CompositionGraphicPlacement[];
+  /** Collision boxes that currently constrain a target text flow. */
+  flowBarriers?: CompositionFlowBarrier[];
   /** Ordinary flowing text only. Insertions are exposed separately below. */
   lines: CompositionLine[];
   /** Text painted into fixed insertion/obstacle boxes, outside the main route. */
