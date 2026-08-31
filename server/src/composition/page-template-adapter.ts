@@ -154,6 +154,7 @@ function declaredTextSlotsForFlow(compiled: CompiledTemplate, flowId: string, pa
       ...(source.allowedBlockKinds ? { allowedBlockKinds: source.allowedBlockKinds as CompositionBlockKind[] } : {}),
       ...(source.textAlign ? { textAlign: source.textAlign } : {}),
       ...(source.verticalAlign ? { verticalAlign: source.verticalAlign } : {}),
+      ...(source.fitContent === undefined ? {} : { fitContent: source.fitContent }),
       ...(slotGrowth(source, pageGeometry, continuation) === undefined ? {} : { grow: slotGrowth(source, pageGeometry, continuation) }),
     }];
   });
@@ -188,6 +189,7 @@ function declaredAuxiliaryTextSlotsForFlow(compiled: CompiledTemplate, flowId: s
       ...(source.allowedBlockKinds ? { allowedBlockKinds: source.allowedBlockKinds as CompositionBlockKind[] } : {}),
       ...(source.textAlign ? { textAlign: source.textAlign } : {}),
       ...(source.verticalAlign ? { verticalAlign: source.verticalAlign } : {}),
+      ...(source.fitContent === undefined ? {} : { fitContent: source.fitContent }),
       ...(slotGrowth(source, pageGeometry, continuation) === undefined ? {} : { grow: slotGrowth(source, pageGeometry, continuation) }),
     }];
   });
@@ -430,6 +432,7 @@ export function compositionTemplateFromPageGeometry(
       ...(source.allowedBlockIds ? { allowedBlockIds: source.allowedBlockIds } : {}),
       ...(source.allowedBlockKinds ? { allowedBlockKinds: source.allowedBlockKinds as CompositionBlockKind[] } : {}),
       ...(source.textAlign ? { textAlign: source.textAlign } : {}),
+      ...(source.fitContent === undefined ? {} : { fitContent: source.fitContent }),
       ...(slotGrowth(source, pageGeometry, continuation) === undefined ? {} : { grow: slotGrowth(source, pageGeometry, continuation) }),
     }, source, segments));
   const declaredTextSlots = declaredTextSlotsFor(geometry, firstMainSlotIds, firstSegments);

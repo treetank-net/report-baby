@@ -42,18 +42,28 @@ slots:
     grow: { axis: y, pushes: [content] }
   quote-a:
     type: text
-    frame: { x: 0.081, y: 0.36, width: 0.838, height: 0.09 }
-    continuation_frame: { x: 0.081, y: 0.36, width: 0.838, height: 0.09 }
+    frame: { x: 0.081, y: 0.34, width: 0.838, height: 0.045 }
+    continuation_frame: { x: 0.081, y: 0.34, width: 0.838, height: 0.045 }
     role: quote
     vertical_align: middle
-    grow: { axis: y }
+    fit_content: true
+    grow: { axis: y, max_height: 0.12 }
   quote-b:
     type: text
-    frame: { x: 0.081, y: 0.63, width: 0.838, height: 0.09 }
-    continuation_frame: { x: 0.081, y: 0.63, width: 0.838, height: 0.09 }
+    frame: { x: 0.081, y: 0.52, width: 0.838, height: 0.045 }
+    continuation_frame: { x: 0.081, y: 0.52, width: 0.838, height: 0.045 }
     role: quote
     vertical_align: middle
-    grow: { axis: y }
+    fit_content: true
+    grow: { axis: y, max_height: 0.12 }
+  quote-c:
+    type: text
+    frame: { x: 0.081, y: 0.70, width: 0.838, height: 0.045 }
+    continuation_frame: { x: 0.081, y: 0.70, width: 0.838, height: 0.045 }
+    role: quote
+    vertical_align: middle
+    fit_content: true
+    grow: { axis: y, max_height: 0.12 }
   content:
     type: text
     frame: { x: 0.081, y: 0.25, width: 0.838, height: 0.68 }
@@ -70,8 +80,8 @@ flows:
     continuation_slots: [content]
     continuation: allowed
   quotes:
-    slots: [quote-a, quote-b]
-    insertion_slots: [quote-a, quote-b]
+    slots: [quote-a, quote-b, quote-c]
+    insertion_slots: [quote-a, quote-b, quote-c]
     start_page: 2
     continuation: allowed
   footer:

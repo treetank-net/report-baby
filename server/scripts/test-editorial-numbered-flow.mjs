@@ -408,7 +408,7 @@ try {
   const continuationRoute = result.template.routes.main.slotsByLayout?.[continuationLayout?.id ?? ''] ?? [];
   assert.equal(continuationRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');
   assert.equal(result.template.routes.main.insertionSlots, undefined, 'main flow must not own quote insertions');
-  assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b'], 'quotes must be declared as a separate obstacle flow');
+  assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b', 'quote-c'], 'quotes must be declared as a separate obstacle flow with three per-page insertion slots');
   assert.deepEqual(result.template.routes.intro.slots, ['intro'], 'intro Markdown image and lead must share a dedicated flow');
   assert.equal(result.template.routes.chart, undefined, 'editorial inset template must not reserve a chart section');
   if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'plan-trace.json'), JSON.stringify(result.plan.trace ?? {}, null, 2));

@@ -33,6 +33,7 @@ export interface CompiledTemplateSlot {
   allowedBlockKinds?: string[];
   textAlign?: 'left' | 'center' | 'right';
   verticalAlign?: TemplateVerticalAlign;
+  fitContent?: boolean;
   gap?: TemplateLength;
   maxLines?: number;
   overflow?: TemplateOverflow;
@@ -371,6 +372,9 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
     const verticalAlign = slot.vertical_align === undefined || slot.vertical_align === 'top' || slot.vertical_align === 'middle' || slot.vertical_align === 'bottom'
       ? slot.vertical_align
       : fail(`slots.${slotId}.vertical_align`, "must be 'top', 'middle' or 'bottom'.");
+    const fitContent = slot.fit_content === undefined || typeof slot.fit_content === 'boolean'
+      ? slot.fit_content
+      : fail(`slots.${slotId}.fit_content`, 'must be boolean.');
     const gap = slotKind === 'lockup' ? lengthAt(slot.gap, `slots.${slotId}.gap`) : undefined;
     const grow = blockGrowthAt(slot.grow, `slots.${slotId}.grow`, frame);
     slots[slotId] = {
@@ -386,6 +390,7 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
         ? slot.align
         : fail(`slots.${slotId}.align`, "must be 'left', 'center' or 'right'."),
       ...(verticalAlign === undefined ? {} : { verticalAlign }),
+      ...(fitContent === undefined ? {} : { fitContent }),
       ...(gap === undefined ? {} : { gap }),
       maxLines: optionalPositiveInteger(slot.max_lines, `slots.${slotId}.max_lines`),
       overflow,

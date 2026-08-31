@@ -52,6 +52,7 @@ export interface CompositionSlotTemplate {
   reserved?: boolean;
   textAlign?: 'left' | 'center' | 'right';
   verticalAlign?: 'top' | 'middle' | 'bottom';
+  fitContent?: boolean;
   allowedRoles?: CompositionBlockRole[];
   allowedBlockIds?: string[];
   allowedBlockKinds?: CompositionBlockKind[];

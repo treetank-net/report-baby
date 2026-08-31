@@ -576,13 +576,33 @@ function placeInsertionLayer(
         continue;
       }
       const leading = lineHeight(metrics, block);
-      const lines = wrapBlock(metrics, block, 0, slot.box, 0, rectBottom(slot.box), [], leading);
+      const measurementBox = definition.fitContent && definition.grow?.axis === 'y'
+        ? { ...slot.box, height: Math.max(slot.box.height, definition.grow.maxHeight) }
+        : slot.box;
+      const lines = wrapBlock(metrics, block, 0, measurementBox, 0, rectBottom(measurementBox), [], leading);
       const wordCount = wordsForBlock(block).length;
       const consumed = lines.at(-1)?.endWord ?? 0;
       if (consumed < wordCount) {
         plan.diagnostics.push(diagnostic('error', 'INSERTION_OVERFLOW', `Insertion '${block.id}' does not fit in its measured obstacle box.`, { flowId, blockId: block.id, page: page.page, slotId: slot.id, details: { consumed, wordCount, box: { ...slot.box } } }));
         addResidual(plan.residualContent, flowId, block, consumed, slot.id, 'insertion-overflow');
         continue;
+      }
+      if (definition.fitContent && lines.length > 0) {
+        const contentHeight = (lines.at(-1)!.lineOffset + 1) * leading;
+        const maxHeight = definition.grow?.axis === 'y' ? definition.grow.maxHeight : slot.box.height;
+        const fittedHeight = Math.min(maxHeight, contentHeight);
+        slot.box.height = fittedHeight;
+        plan.decisions.push({
+          code: 'INSERTION_SLOT_FIT_CONTENT',
+          flowId,
+          blockId: block.id,
+          page: page.page,
+          slotId: slot.id,
+          fromHeight: proposal.box.height,
+          toHeight: fittedHeight,
+          contentHeight,
+          maxHeight,
+        });
       }
       placeLines(page, definition, block, flowId, undefined, lines, leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion');
       slot.state = 'exhausted';

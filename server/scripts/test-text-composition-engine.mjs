@@ -481,6 +481,29 @@ try {
   assert.ok(preplannedInsertion.plan.decisions.some((decision) => decision.code === 'INSERTION_LAYER_PLACED'));
   assert.ok(preplannedInsertion.plan.trace?.phases.some((phase) => phase.name === 'insertion-placement'));
 
+  const fitContentInsertionTemplate = {
+    maxPages: 1,
+    layouts: [{ id: 'fit-content-insertion', width: 100, height: 100, slots: [
+      { id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 90 }, allowedRoles: ['body'] },
+      { id: 'quote', regionId: 'quotes', kind: 'text', box: { x: 5, y: 40, width: 90, height: 30 }, allowedRoles: ['quote'], verticalAlign: 'middle', fitContent: true, grow: { axis: 'y', maxHeight: 40 } },
+    ] }],
+    routes: {
+      main: { slots: ['body'], layouts: ['fit-content-insertion'], continuation: 'forbidden' },
+      quotes: { slots: ['quote'], insertionSlots: ['quote'], layouts: ['fit-content-insertion'], continuation: 'forbidden' },
+    },
+  };
+  const fitContentInsertion = createTextCompositionEngine(fitContentInsertionTemplate).plan({
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [{ id: 'fit-body', kind: 'paragraph', role: 'body', text: Array.from({ length: 30 }, (_, index) => `body${index}`).join(' ') }] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'fit-quote', kind: 'paragraph', role: 'quote', text: 'A short quote remains prominent without a large empty box.' }] },
+    },
+  }, metrics);
+  assert.equal(fitContentInsertion.evaluation.status, 'accepted', JSON.stringify(fitContentInsertion.evaluation));
+  const fitQuoteSlot = fitContentInsertion.plan.slots.find((slot) => slot.id === '1:quote');
+  const fitQuoteObstacle = fitContentInsertion.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:fit-quote');
+  assert.ok(fitQuoteSlot && fitQuoteSlot.box.height < 30, 'fit-content insertion must shrink below its initial frame when the quote is short');
+  assert.ok(fitQuoteObstacle && fitQuoteSlot && fitQuoteObstacle.box.height === fitQuoteSlot.box.height, 'the exclusion obstacle must use the measured quote height');
+
   const repositionedInsertionTemplate = {
     maxPages: 1,
     layouts: [{ id: 'repositioned-insertion', width: 100, height: 100, slots: [
