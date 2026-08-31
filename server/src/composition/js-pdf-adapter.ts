@@ -219,6 +219,38 @@ function applyStyle(doc: jsPDF, family: string, style: JsPdfCompositionStyle): v
   if (style.textColor) doc.setTextColor(...style.textColor);
 }
 
+interface JsPdfFontMetricsMetadata {
+  ascender?: number;
+  decender?: number;
+}
+
+/**
+ * Read the same font metadata that jsPDF uses for the eventual PDF text.
+ * jsPDF exposes ascender/decender in its normalized 1000-unit font space.
+ */
+function measureLineInkBounds(doc: jsPDF, family: string, style: JsPdfCompositionStyle): { top: number; bottom: number } {
+  applyStyle(doc, family, style);
+  const internal = doc.internal as unknown as { getFont?: () => { metadata?: JsPdfFontMetricsMetadata } };
+  const font = internal.getFont?.();
+  const metadata = font?.metadata;
+  // The built-in PDF fonts (for example Helvetica) have no TTF metadata in
+  // jsPDF. Preserve the renderer-neutral line-box contract for those fonts;
+  // registered TTF/brand fonts take the measured path below.
+  if (metadata === undefined || (metadata.ascender === undefined && metadata.decender === undefined)) {
+    return { top: 0, bottom: style.lineHeight };
+  }
+  const ascender = metadata?.ascender;
+  const decender = metadata?.decender;
+  if (!Number.isFinite(ascender) || !Number.isFinite(decender) || ascender === undefined || decender === undefined || ascender <= 0 || decender >= 0) {
+    throw new Error(`jsPDF did not expose usable ascender/decender metrics for '${family}' '${style.fontStyle}'.`);
+  }
+  const fontSizeMm = style.fontSize * 25.4 / 72;
+  return {
+    top: style.baselineOffset - (ascender / 1000) * fontSizeMm,
+    bottom: style.baselineOffset + (Math.abs(decender) / 1000) * fontSizeMm,
+  };
+}
+
 function textForStyle(value: string, style: JsPdfCompositionStyle): string {
   return style.textTransform === 'uppercase' ? value.toUpperCase() : value;
 }
@@ -745,6 +777,11 @@ export function createJsPdfTextMetrics(
   family: string,
   styles: JsPdfCompositionStyles,
 ): CompositionTextMetrics {
+  // Capture the font geometry once. Planning may ask for the same style many
+  // times; this also makes the adapter an explicit measurement overlay rather
+  // than letting the planner depend on mutable jsPDF state.
+  const measuredLineInkBounds = new Map<string, { top: number; bottom: number }>();
+  for (const [name, style] of Object.entries(styles)) measuredLineInkBounds.set(name, measureLineInkBounds(doc, family, style));
   return {
     units: 'mm',
     family,
@@ -758,6 +795,11 @@ export function createJsPdfTextMetrics(
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return selected.lineHeight;
+    },
+    lineInkBounds(style) {
+      const bounds = measuredLineInkBounds.get(style);
+      if (!bounds) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
+      return bounds;
     },
     textIndent(style) {
       const selected = styles[style];

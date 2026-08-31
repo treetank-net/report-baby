@@ -5,6 +5,12 @@ export interface CompositionTextMetrics {
   family?: string;
   measureText(text: string, styleName: string): number;
   lineHeight(styleName: string): number;
+  /**
+   * Actual painted glyph bounds relative to the top of a planned line box.
+   * The values include the configured baseline offset and are expressed in
+   * the same units as the composition geometry.
+   */
+  lineInkBounds?(styleName: string): { top: number; bottom: number };
   textIndent?(styleName: string): number;
   /** Width reserved after the final line for a trailing inline decoration. */
   textTrailingReserve?(styleName: string): number;

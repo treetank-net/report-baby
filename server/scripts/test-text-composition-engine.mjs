@@ -705,13 +705,38 @@ try {
     },
   };
   const numberedPlannerPdf = newPdf('portrait', [pixelFixture.page.width, pixelFixture.page.height]);
-  const numberedObstacle = createTextCompositionEngine(numberedObstacleTemplate).plan(numberedObstacleDocument, createJsPdfTextMetrics(numberedPlannerPdf, 'DejaVu', numberedStyles));
+  const numberedMetrics = createJsPdfTextMetrics(numberedPlannerPdf, 'DejaVu', numberedStyles);
+  const numberedObstacle = createTextCompositionEngine(numberedObstacleTemplate).plan(numberedObstacleDocument, numberedMetrics);
   assert.equal(numberedObstacle.evaluation.status, 'accepted', JSON.stringify(numberedObstacle.evaluation));
   assert.equal(numberedObstacle.plan.pages.length, pixelFixture.max_pages, 'the numbered obstacle fixture must occupy its configured page count');
   const numberedBodyIds = new Set(numberedBlocks.filter((block) => block.role === 'body').map((block) => block.id));
   const numberedObstacleLines = numberedObstacle.plan.lines.filter((line) => numberedBodyIds.has(line.blockId));
   const numberedInsertionLines = (numberedObstacle.plan.insertionLines ?? []).filter((line) => line.flowId === 'quotes');
   const numberedObstaclePattern = new RegExp(`(?:${numberedWordBases.join('|')})\\d{4}`, 'gu');
+  const numberedBodyInk = numberedMetrics.lineInkBounds('body');
+  for (const line of numberedObstacleLines) {
+    const inkTop = line.box.y + numberedBodyInk.top;
+    const inkBottom = line.box.y + numberedBodyInk.bottom;
+    for (const obstacle of numberedObstacle.plan.graphicPlacements.filter((graphic) => graphic.wrap === 'around' && graphic.page === line.page)) {
+      const horizontalOverlap = line.box.x < obstacle.box.x + obstacle.box.width && line.box.x + line.box.width > obstacle.box.x;
+      const verticalOverlap = inkTop < obstacle.box.y + obstacle.box.height && inkBottom > obstacle.box.y;
+      assert.equal(horizontalOverlap && verticalOverlap, false, `planned text ink must not overlap ${obstacle.graphicId}: ${JSON.stringify({ line: line.box, inkTop, inkBottom, obstacle: obstacle.box })}`);
+    }
+  }
+  for (const obstacle of numberedObstacle.plan.graphicPlacements.filter((graphic) => graphic.wrap === 'around')) {
+    for (const column of ['left', 'right']) {
+      const columnLines = numberedObstacleLines
+        .filter((line) => line.page === obstacle.page && (column === 'left' ? line.box.x < pixelFixture.columns.divider_x : line.box.x >= pixelFixture.columns.divider_x))
+        .filter((line) => line.box.y + numberedBodyInk.top >= obstacle.box.y + obstacle.box.height)
+        .sort((left, right) => left.box.y - right.box.y);
+      const firstAfterObstacle = columnLines[0];
+      assert.ok(firstAfterObstacle, `${column} column on page ${obstacle.page} must resume after ${obstacle.graphicId}`);
+      assert.ok(
+        Math.abs((firstAfterObstacle.box.y + numberedBodyInk.top) - (obstacle.box.y + obstacle.box.height)) <= pixelFixture.obstacle_boundary_tolerance,
+        `${column} column must use the ${obstacle.graphicId} lower boundary as a line-placement candidate: ${JSON.stringify({ line: firstAfterObstacle.box, inkTop: numberedBodyInk.top, obstacle: obstacle.box })}`,
+      );
+    }
+  }
   assert.deepEqual(numberedObstacleLines.flatMap((line) => line.text.match(numberedObstaclePattern) ?? []), numberedObstacleWords, 'the 1000-word obstacle fixture must retain source order');
   assert.deepEqual(
     [...new Set(numberedInsertionLines.map((line) => line.blockId))],

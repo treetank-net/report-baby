@@ -228,6 +228,14 @@ function measure(metrics: CompositionTextMetrics, text: string, block: Compositi
   return width;
 }
 
+function lineInkBounds(metrics: CompositionTextMetrics, block: CompositionBlock, lineHeightValue: number): { top: number; bottom: number } {
+  const bounds = metrics.lineInkBounds?.(styleFor(block)) ?? { top: 0, bottom: lineHeightValue };
+  if (!Number.isFinite(bounds.top) || !Number.isFinite(bounds.bottom) || bounds.bottom < bounds.top) {
+    throw new Error(`Text metrics returned invalid ink bounds for '${styleFor(block)}': ${JSON.stringify(bounds)}.`);
+  }
+  return bounds;
+}
+
 function mergeIntervals(intervals: Interval[]): Interval[] {
   const sorted = intervals
     .filter((interval) => interval.end > interval.start)
@@ -262,15 +270,40 @@ function availableIntervals(
 
 function lineFitsFlowBarrierBox(
   y: number,
-  lineHeightValue: number,
+  lineBounds: { top: number; bottom: number },
   candidates: CompositionFlowBarrierBoxCandidate[],
   tolerance: number,
 ): boolean {
   if (candidates.length === 0) return true;
   return candidates.some((candidate) =>
-    y >= candidate.box.y - tolerance
-    && y + lineHeightValue <= rectBottom(candidate.box) + tolerance,
+    y + lineBounds.top >= candidate.box.y - tolerance
+    && y + lineBounds.bottom <= rectBottom(candidate.box) + tolerance,
   );
+}
+
+/**
+ * Return the first legal line-box position at a candidate boundary.
+ * The candidate boundary is a placement opportunity, not the baseline: the
+ * font's actual ink top must be accounted for before handing it to the
+ * cursor. This keeps the planner and the PDF renderer on the same geometry.
+ */
+function nextFlowBarrierBoxLineY(
+  currentY: number,
+  lineBounds: { top: number; bottom: number },
+  candidates: CompositionFlowBarrierBoxCandidate[],
+  tolerance: number,
+): number | undefined {
+  return candidates
+    .map((candidate) => ({ top: candidate.box.y, bottom: rectBottom(candidate.box) }))
+    .sort((left, right) => left.top - right.top)
+    .map((candidate) => ({
+      lineY: candidate.top - lineBounds.top,
+      bottom: candidate.bottom,
+    }))
+    .find((candidate) => {
+      return candidate.lineY > currentY + tolerance
+        && candidate.lineY + lineBounds.bottom <= candidate.bottom + tolerance;
+    })?.lineY;
 }
 
 function widestInterval(intervals: Interval[], minimumWidth = 0): Interval | undefined {
@@ -298,6 +331,11 @@ function wrapBlock(
   const indent = Math.max(0, metrics.textIndent?.(styleFor(block)) ?? 0);
   const textSlot = { x: slot.x + indent, y: slot.y, width: Math.max(0, slot.width - indent), height: slot.height };
   const lines: WrappedLine[] = [];
+  const inkBounds = lineInkBounds(metrics, block, lineHeightValue);
+  const lineBounds = {
+    top: Math.min(0, inkBounds.top),
+    bottom: Math.max(lineHeightValue, inkBounds.bottom),
+  };
   const lastFlowBarrierBottom = flowBarrierBoxCandidates.length > 0
     ? Math.max(...flowBarrierBoxCandidates.map((candidate) => rectBottom(candidate.box)))
     : Number.POSITIVE_INFINITY;
@@ -305,9 +343,18 @@ function wrapBlock(
   let lineOffset = startLineOffset;
   while (index < words.length) {
     const lineY = slot.y + lineOffset * lineHeightValue;
-    if (lineY + lineHeightValue > bottom) break;
-    if (!lineFitsFlowBarrierBox(lineY, lineHeightValue, flowBarrierBoxCandidates, geometryTolerance)) {
+    if (lineY + lineBounds.bottom > bottom) break;
+    if (lineY + lineBounds.top < slot.y - geometryTolerance) {
+      lineOffset = (-lineBounds.top) / lineHeightValue;
+      continue;
+    }
+    if (!lineFitsFlowBarrierBox(lineY, lineBounds, flowBarrierBoxCandidates, geometryTolerance)) {
       if (lineY >= lastFlowBarrierBottom - geometryTolerance) break;
+      const nextLineY = nextFlowBarrierBoxLineY(lineY, lineBounds, flowBarrierBoxCandidates, geometryTolerance);
+      if (nextLineY !== undefined) {
+        lineOffset = (nextLineY - slot.y) / lineHeightValue;
+        continue;
+      }
       lineOffset += 1;
       continue;
     }
@@ -1813,7 +1860,16 @@ function planFlow(
       });
     }
     const previous = cursor.startWord === 0 ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
-    let blockGap = previous ? metrics.blockGap?.(styleFor(previous), styleFor(block)) ?? 0 : 0;
+    // A resume boundary created by an obstacle is already the start of a new
+    // legal content segment. The previous authored block is separated from
+    // this heading by that barrier, so its margin-before must not be added a
+    // second time after resumeY.
+    const resumedAfterFlowBarrier = cursor.resumeSlotId === slot.id
+      && cursor.resumeY !== undefined
+      && cursor.resumeY > localBottom + geometryTolerance;
+    let blockGap = resumedAfterFlowBarrier
+      ? 0
+      : previous ? metrics.blockGap?.(styleFor(previous), styleFor(block)) ?? 0 : 0;
     const isHeadingBlock = block.kind === 'heading' || block.role === 'heading' || block.role === 'title';
     let wrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
     let completeWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
