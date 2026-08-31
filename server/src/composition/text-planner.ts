@@ -39,6 +39,8 @@ export interface TextCompositionPlannerPolicy {
   maxPlanningIterations?: number;
   /** A non-final fragment must retain at least this many lines. */
   minimumFragmentLines?: number;
+  /** Tolerance for renderer-neutral geometry comparisons, in planner units. */
+  geometryTolerance?: number;
 }
 
 interface WrappedLine {
@@ -556,7 +558,7 @@ function placeInsertionLayer(
         addResidual(plan.residualContent, flowId, block, consumed, slot.id, 'insertion-overflow');
         continue;
       }
-      placeLines(page, definition, block, flowId, undefined, lines, leading, plan.placements, plan.lines, 'insertion');
+      placeLines(page, definition, block, flowId, undefined, lines, leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion');
       slot.state = 'exhausted';
       const obstacle = plan.graphicPlacements.find((graphic) => graphic.graphicId === `insertion:${block.id}` && graphic.page === page.page);
       if (obstacle) obstacle.box = { ...slot.box };
@@ -942,24 +944,6 @@ function nextInsertionBoundary(
   return nextInsertionProposal(flow, blocks, blockIndex, page, proposals, flowId, afterY)?.box.y;
 }
 
-function previousInsertionBoundary(
-  flow: CompositionFlowRoute,
-  blocks: CompositionBlock[],
-  blockIndex: number,
-  page: number,
-  proposals: Map<string, PlannedInsertion>,
-  flowId: string,
-): number | undefined {
-  if ((flow.insertionSlots?.length ?? 0) === 0) return undefined;
-  return blocks
-    .slice(0, blockIndex)
-    .filter((block) => block.role === 'quote')
-    .map((block) => proposals.get(insertionKey(flowId, block.id)))
-    .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === page)
-    .map((proposal) => proposal.box.y + proposal.box.height)
-    .sort((left, right) => right - left)[0];
-}
-
 function placeLines(
   pageState: PageState,
   definition: CompositionSlotTemplate,
@@ -977,8 +961,15 @@ function placeLines(
   const box = slot.box;
   const first = lines[0];
   const last = lines.at(-1)!;
-  const firstY = box.y + first.lineOffset * lineHeightValue;
-  const lastBottom = box.y + (last.lineOffset + 1) * lineHeightValue;
+  const contentHeight = (last.lineOffset - first.lineOffset + 1) * lineHeightValue;
+  const freeHeight = Math.max(0, box.height - contentHeight);
+  const verticalOffset = definition.verticalAlign === 'middle'
+    ? freeHeight / 2
+    : definition.verticalAlign === 'bottom'
+      ? freeHeight
+      : 0;
+  const firstY = box.y + first.lineOffset * lineHeightValue + verticalOffset;
+  const lastBottom = box.y + (last.lineOffset + 1) * lineHeightValue + verticalOffset;
   const left = Math.min(...lines.map((line) => line.x));
   const right = Math.max(...lines.map((line) => line.x + line.width));
   placements.push({
@@ -993,7 +984,7 @@ function placeLines(
     ...(layer === 'flow' ? {} : { layer }),
   });
   lines.forEach((line) => {
-    outputLines.push({
+    const outputLine: CompositionLine = {
       blockId: block.id,
       flowId,
       slotId: slot.id,
@@ -1002,7 +993,7 @@ function placeLines(
       text: line.text,
       box: {
         x: line.x,
-        y: box.y + line.lineOffset * lineHeightValue,
+        y: box.y + line.lineOffset * lineHeightValue + verticalOffset,
         width: line.width,
         height: lineHeightValue,
       },
@@ -1011,7 +1002,8 @@ function placeLines(
       startWord: line.startWord,
       endWord: line.endWord,
       ...(layer === 'flow' ? {} : { layer }),
-    });
+    };
+    outputLines.push(outputLine);
   });
   const occupiedBottom = lastBottom;
   slot.state = occupiedBottom >= rectBottom(box) ? 'exhausted' : 'partial';
@@ -1073,7 +1065,10 @@ function placeAtomicBlock(
     }
   }
   blockPlacements.push(placement);
-  slot.state = top + measurement.height >= rectBottom(slot.box) ? 'exhausted' : 'partial';
+  const canGrowFurther = definition.kind === 'text'
+    && definition.grow?.axis === 'y'
+    && rectBottom(slot.box) < definition.box.y + definition.grow.maxHeight - Number.EPSILON;
+  slot.state = top + measurement.height >= rectBottom(slot.box) && !canGrowFurther ? 'exhausted' : 'partial';
 }
 
 function placeTableFragment(
@@ -1152,6 +1147,7 @@ function createPlan(minimumFragmentLines?: number): CompositionPlan {
     tablePlacements: [],
     graphicPlacements: [],
     lines: [],
+    insertionLines: [],
     decisions: [],
     diagnostics: [],
     residualContent: [],
@@ -1159,6 +1155,10 @@ function createPlan(minimumFragmentLines?: number): CompositionPlan {
     trace: { phases: [], blocks: [], slots: [] },
     ...(minimumFragmentLines === undefined ? {} : { minimumFragmentLines }),
   };
+}
+
+function plannedLines(plan: CompositionPlan): CompositionLine[] {
+  return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
 function recordPlanningPhase(
@@ -1194,7 +1194,7 @@ function tracePlan(document: CompositionDocument, metrics: CompositionTextMetric
     fragments.push(fragment);
     fragmentsByBlock.set(blockId, fragments);
   };
-  for (const line of plan.lines) addFragment(line.blockId, { page: line.page, slotId: line.slotId, ...(line.routeIndex === undefined ? {} : { routeIndex: line.routeIndex }), startWord: line.startWord, endWord: line.endWord, box: { ...line.box } });
+  for (const line of plannedLines(plan)) addFragment(line.blockId, { page: line.page, slotId: line.slotId, ...(line.routeIndex === undefined ? {} : { routeIndex: line.routeIndex }), startWord: line.startWord, endWord: line.endWord, text: line.text, box: { ...line.box } });
   for (const placement of plan.blockPlacements) addFragment(placement.blockId, { page: placement.page, slotId: placement.slotId, routeIndex: placement.routeIndex, box: { ...placement.box } });
   for (const placement of plan.tablePlacements) addFragment(placement.blockId, { page: placement.page, slotId: placement.slotId, routeIndex: placement.routeIndex, box: { ...placement.box } });
   const residualIds = new Set(plan.residualContent.map((residual) => residual.blockId));
@@ -1202,16 +1202,16 @@ function tracePlan(document: CompositionDocument, metrics: CompositionTextMetric
     const fragments = (fragmentsByBlock.get(block.id) ?? []).sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
     const coveredWords = fragments.reduce((total, fragment) => total + Math.max(0, (fragment.endWord ?? fragment.startWord ?? 0) - (fragment.startWord ?? 0)), 0);
     const status: CompositionBlockTrace['status'] = fragments.length === 0 ? 'empty' : residualIds.has(block.id) ? 'residual' : coveredWords < sourceWordCount(block) ? 'partial' : 'placed';
-    return { flowId, blockId: block.id, kind: block.kind, role: block.role, sourceWordCount: sourceWordCount(block), status, fragments, decisions: decisionsByBlock.get(block.id) ?? [] };
+    return { flowId, blockId: block.id, kind: block.kind, role: block.role, sourceText: textOf(block), sourceWordCount: sourceWordCount(block), status, fragments, decisions: decisionsByBlock.get(block.id) ?? [] };
   });
   const lineHeightBySlot = new Map<string, number>();
-  for (const line of plan.lines) if (!lineHeightBySlot.has(line.slotId)) lineHeightBySlot.set(line.slotId, line.box.height);
+  for (const line of plannedLines(plan)) if (!lineHeightBySlot.has(line.slotId)) lineHeightBySlot.set(line.slotId, line.box.height);
   const defaultLineHeight = metrics.lineHeight('body');
   const slots = plan.slots.map((slot) => {
     const lineHeightValue = lineHeightBySlot.get(slot.id) ?? defaultLineHeight;
     const occupiedBottom = Math.max(
       slot.box.y,
-      ...plan.lines.filter((line) => line.slotId === slot.id).map((line) => line.box.y + line.box.height),
+      ...plannedLines(plan).filter((line) => line.slotId === slot.id).map((line) => line.box.y + line.box.height),
       ...plan.blockPlacements.filter((placement) => placement.slotId === slot.id).map((placement) => placement.box.y + placement.box.height),
       ...plan.tablePlacements.filter((placement) => placement.slotId === slot.id).map((placement) => placement.box.y + placement.box.height),
     );
@@ -1222,9 +1222,11 @@ function tracePlan(document: CompositionDocument, metrics: CompositionTextMetric
       slotId: slot.id,
       regionId: slot.regionId,
       ...(slot.flowId === undefined ? {} : { flowId: slot.flowId }),
+      ...(slot.routeIndex === undefined ? {} : { routeIndex: slot.routeIndex }),
+      ...(slot.allowedRoles === undefined ? {} : { allowedRoles: [...slot.allowedRoles] }),
       state: slot.state,
       box: { ...slot.box },
-      lineCount: plan.lines.filter((line) => line.slotId === slot.id).length,
+      lineCount: plannedLines(plan).filter((line) => line.slotId === slot.id).length,
       occupiedHeight,
       remainingHeight,
       lineHeight: lineHeightValue,
@@ -1511,7 +1513,10 @@ function planFlow(
       const blockTop = definition.kind === 'text'
         ? contentStartBottom(currentPage, plan, slot, document) + blockGap
         : slot.box.y;
-      const blockBox = { ...slot.box, y: blockTop, height: Math.max(0, rectBottom(slot.box) - blockTop) };
+      const blockMeasureBottom = definition.kind === 'text' && definition.grow?.axis === 'y'
+        ? definition.box.y + definition.grow.maxHeight
+        : rectBottom(slot.box);
+      const blockBox = { ...slot.box, y: blockTop, height: Math.max(0, blockMeasureBottom - blockTop) };
       let measurement: CompositionBlockMeasurement;
       try {
         measurement = metrics.measureBlock(block, blockBox);
@@ -1527,12 +1532,17 @@ function planFlow(
         cursor.startWord = 0;
         continue;
       }
-      if (measurement.height > blockBox.height) {
+      if (definition.kind === 'text' && definition.grow?.axis === 'y') {
+        growSlot(currentPage, definition, blockTop + measurement.height, plan, flowId, block.id);
+      }
+      const availableBlockHeight = rectBottom(slot.box) - blockTop;
+      const geometryTolerance = policy.geometryTolerance ?? 0;
+      if (measurement.height > availableBlockHeight + geometryTolerance) {
         plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'atomic-block-does-not-fit' });
         advanceCursor(cursor, availableRouteSlots);
         continue;
       }
-      if (blockTop + measurement.height > rectBottom(slot.box)) {
+      if (blockTop + measurement.height > rectBottom(slot.box) + geometryTolerance) {
         plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'atomic-block-does-not-fit-after-existing-content' });
         advanceCursor(cursor, availableRouteSlots);
         continue;
@@ -1565,18 +1575,19 @@ function planFlow(
       ? previousBlockInOverlappingSlots(currentPage, plan, slot, document)
       : undefined;
     const crossSlotGap = crossSlotPrevious ? metrics.blockGap?.(styleFor(crossSlotPrevious), styleFor(block)) ?? 0 : 0;
-    const previousInsertionBottom = previousInsertionBoundary(
-      route,
-      authoredBlocks,
-      authoredIndexOf(block.id),
-      currentPage.page,
-      insertionProposals,
-      flowId,
-    );
+    const previousInsertion = authoredBlocks
+      .slice(0, authoredIndexOf(block.id))
+      .filter((candidate) => candidate.role === 'quote')
+      .map((candidate) => insertionProposals.get(insertionKey(flowId, candidate.id)))
+      .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === currentPage.page)
+      .sort((left, right) => right.box.y - left.box.y)[0];
+    const previousInsertionBottom = previousInsertion ? previousInsertion.box.y + previousInsertion.box.height : undefined;
+    const insertionIsBeforeCurrentColumn = previousInsertion !== undefined
+      && initialBox.x + initialBox.width / 2 <= previousInsertion.box.x + previousInsertion.box.width / 2;
     const usedBottom = Math.max(
       localBottom,
       crossSlotBottom,
-      previousInsertionBottom ?? Number.NEGATIVE_INFINITY,
+      ...(insertionIsBeforeCurrentColumn && previousInsertionBottom !== undefined ? [previousInsertionBottom] : []),
       cursor.resumeY ?? Number.NEGATIVE_INFINITY,
     ) + crossSlotGap;
     const startLineOffset = Math.max(0, (usedBottom - initialBox.y) / leading);
@@ -1608,7 +1619,20 @@ function planFlow(
         cursor.startWord = 0;
         continue;
       }
-      plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'no-available-text-band' });
+      plan.decisions.push({
+        code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
+        flowId,
+        blockId: block.id,
+        slotId: slot.id,
+        page: currentPage.page,
+        reason: 'no-available-text-band',
+        details: {
+          availableLines: availableLineCount(rectBottom(initialBox) - (initialBox.y + startLineOffset * leading), leading),
+          lineHeight: leading,
+          blockGap,
+          startLineOffset,
+        },
+      });
       advanceCursor(cursor, availableRouteSlots);
       continue;
     }
@@ -1617,7 +1641,11 @@ function planFlow(
       growSlot(currentPage, definition, requiredBottom, plan, flowId, block.id);
     }
     const currentBox = slotBox(currentPage, definition);
-    const currentAvailableLines = availableLineCount(rectBottom(currentBox) - (currentBox.y + startLineOffset * leading), leading);
+    // The inter-block gap is part of the next block's occupied band.  Omitting
+    // it here made the planner claim that a third line was available while the
+    // wrapped block (which starts after that gap) could only place two.
+    const blockStartOffset = startLineOffset + blockGap / leading;
+    const currentAvailableLines = availableLineCount(rectBottom(currentBox) - (currentBox.y + blockStartOffset * leading), leading);
     const usedLines = startLineOffset;
     if ((block.kind === 'heading' || block.role === 'heading' || block.role === 'title') && completeWrapped.length > currentAvailableLines) {
       plan.decisions.push({ code: 'HEADING_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'keep-heading-together', details: { requiredLines: completeWrapped.length, availableLines: currentAvailableLines, startLineOffset, blockGap } });
@@ -1628,9 +1656,13 @@ function planFlow(
       const complete = wrapBlock(metrics, block, 0, initialBox, 0, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth);
       const slotCapacity = availableLineCount(rectBottom(initialBox) - initialBox.y, leading);
       if (complete.length > currentAvailableLines && complete.length <= slotCapacity && usedLines > 0) {
-        plan.decisions.push({ code: 'LIST_ITEM_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'keep-list-item-together' });
-        advanceCursor(cursor, availableRouteSlots);
-        continue;
+        const minimumFragmentLines = policy.minimumFragmentLines ?? 1;
+        if (currentAvailableLines < minimumFragmentLines) {
+          plan.decisions.push({ code: 'LIST_ITEM_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'keep-list-item-together-below-minimum-fragment' });
+          advanceCursor(cursor, availableRouteSlots);
+          continue;
+        }
+        plan.decisions.push({ code: 'LIST_ITEM_SPLIT_TO_AVOID_HOLE', flowId, blockId: block.id, slotId: slot.id, reason: 'available-fragment-meets-minimum-and-whole-item-would-leave-hole', details: { availableLines: currentAvailableLines, minimumFragmentLines, completeLines: complete.length } });
       }
     }
     const next = blocks[cursor.blockIndex + 1];
@@ -1653,6 +1685,15 @@ function planFlow(
     }
     if (currentAvailableLines <= 0) {
       lastLegalSlotId = slot.id;
+      plan.decisions.push({
+        code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
+        flowId,
+        blockId: block.id,
+        slotId: slot.id,
+        page: currentPage.page,
+        reason: 'next-block-spacing-or-line-height-does-not-fit',
+        details: { availableLines: currentAvailableLines, lineHeight: leading, blockGap, startLineOffset },
+      });
       if (route.continuation === 'forbidden' && cursor.routeIndex >= availableRouteSlots.length - 1) {
         plan.diagnostics.push(diagnostic('error', 'FLOW_CONTINUATION_FORBIDDEN', `Flow '${flowId}' cannot continue beyond its available slots on page ${currentPage.page}.`, { flowId, blockId: block.id, page: currentPage.page, slotId: slot.id }));
         addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'flow-continuation-forbidden');
@@ -1669,6 +1710,15 @@ function planFlow(
     }
     if (remainder > 0 && !isHeadingBlock && policy.minimumLinesAtStart !== undefined && take < policy.minimumLinesAtStart) {
       if (usedLines > 0) {
+        plan.decisions.push({
+          code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
+          flowId,
+          blockId: block.id,
+          slotId: slot.id,
+          page: currentPage.page,
+          reason: 'minimum-fragment-start-would-be-violated',
+          details: { availableLines: currentAvailableLines, attemptedLines: take, minimumFragmentLines: policy.minimumLinesAtStart, lineHeight: leading, blockGap, startLineOffset: blockStartOffset },
+        });
         advanceCursor(cursor, availableRouteSlots);
         continue;
       }
@@ -1677,6 +1727,15 @@ function planFlow(
       return;
     }
     if (take <= 0) {
+      plan.decisions.push({
+        code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
+        flowId,
+        blockId: block.id,
+        slotId: slot.id,
+        page: currentPage.page,
+        reason: 'minimum-fragment-orphan-adjustment-left-no-lines',
+        details: { availableLines: currentAvailableLines, attemptedLines: take, lineHeight: leading, blockGap, startLineOffset: blockStartOffset },
+      });
       advanceCursor(cursor, availableRouteSlots);
       continue;
     }
@@ -1756,7 +1815,24 @@ function planFlow(
       // page even when quote-b still fit below the preceding text.
       const nextInsertionFitsCurrentPage = nextBlock?.role === 'quote'
         && insertionSlotFor(route, currentPage.layout, currentPage, plan, availableRouteSlots, cursor.routeIndex, document) !== undefined;
-      if (!continuousInsertion && !nextInsertionFitsCurrentPage && (selected.length >= currentAvailableLines || consumedEnd < wordsForBlock(block).length)) {
+      // A completed block does not end the continuous flow.  Re-enter the
+      // placement loop so the next authored block gets the remaining vertical
+      // band in this same slot; only an unfinished block must advance now.
+      // Treating `selected.length === currentAvailableLines` as a reason to
+      // advance was the source of false holes: that count describes the
+      // current block's starting capacity, not the remaining capacity after
+      // its last line (and it ignores the next block's actual line-height and
+      // gap).
+      if (!continuousInsertion && !nextInsertionFitsCurrentPage && consumedEnd < wordsForBlock(block).length) {
+        const nextBlock = blocks[cursor.blockIndex];
+        const nextLeading = nextBlock ? lineHeight(metrics, nextBlock) : undefined;
+        const nextBlockGap = nextBlock ? metrics.blockGap?.(styleFor(block), styleFor(nextBlock)) ?? 0 : 0;
+        const lastLineBottom = selected.at(-1)
+          ? initialBox.y + (selected.at(-1)!.lineOffset + 1) * leading
+          : initialBox.y;
+        const nextBlockAvailableLines = nextLeading === undefined
+          ? undefined
+          : availableLineCount(rectBottom(currentBox) - lastLineBottom - nextBlockGap, nextLeading);
         plan.decisions.push({
           code: 'FLOW_SEGMENT_ADVANCED',
           flowId,
@@ -1766,6 +1842,16 @@ function planFlow(
           routeIndex: selectedSlot.routeIndex,
           details: { selectedLines: selected.length, currentAvailableLines, consumedEnd, totalWords: wordsForBlock(block).length },
         });
+        const transition = plan.decisions.at(-1)!;
+        if (nextBlock && nextLeading !== undefined) {
+          transition.details = {
+            ...(transition.details as Record<string, unknown>),
+            nextBlockId: nextBlock.id,
+            nextBlockAvailableLines,
+            nextBlockLineHeight: nextLeading,
+            nextBlockGap,
+          };
+        }
         const pageBeforeAdvance = cursor.page;
         advanceCursor(cursor, availableRouteSlots);
         if (cursor.page > pageBeforeAdvance && cursor.blockIndex < blocks.length) {

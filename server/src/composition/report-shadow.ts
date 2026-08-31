@@ -340,6 +340,7 @@ export function planReportComposition(
     minimumLinesAtEnd: pdfNumber(readRenderConfig().pdf, 'orphanMinLines'),
     maxPlanningIterations: pdfNumber(readRenderConfig().pdf, 'plannerMaxIterations'),
     minimumFragmentLines: pdfNumber(readRenderConfig().pdf, 'plannerMinimumFragmentLines'),
+    geometryTolerance: pdfNumber(readRenderConfig().pdf, 'compositionGeometryTolerance'),
     keepListItemsTogether: pdfNumber(readRenderConfig().pdf, 'listItemKeepTogether') === 1,
     ...options.policy,
   };

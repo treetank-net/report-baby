@@ -12,6 +12,7 @@ export function createTextCompositionEngine(
   const configuredPolicy: TextCompositionPlannerPolicy = {
     maxPlanningIterations: pdf.plannerMaxIterations,
     minimumFragmentLines: pdf.plannerMinimumFragmentLines,
+    geometryTolerance: pdf.compositionGeometryTolerance,
     ...policy,
   };
   return createCompositionEngine(createTextCompositionPlanner(template, configuredPolicy), { evaluate: evaluateCompositionPlan });

@@ -189,6 +189,7 @@ export interface CompositionBlockTraceFragment {
   routeIndex?: number;
   startWord?: number;
   endWord?: number;
+  text?: string;
   box: CompositionBox;
 }
 
@@ -202,6 +203,7 @@ export interface CompositionBlockTrace {
   blockId: string;
   kind: CompositionBlock['kind'];
   role: CompositionBlock['role'];
+  sourceText: string;
   sourceWordCount: number;
   status: 'placed' | 'partial' | 'residual' | 'empty';
   fragments: CompositionBlockTraceFragment[];
@@ -213,6 +215,8 @@ export interface CompositionSlotTrace {
   slotId: string;
   regionId: string;
   flowId?: string;
+  routeIndex?: number;
+  allowedRoles?: CompositionBlockRole[];
   state: CompositionSlot['state'];
   box: CompositionBox;
   lineCount: number;
@@ -236,7 +240,10 @@ export interface CompositionPlan {
   blockPlacements: CompositionBlockPlacement[];
   tablePlacements: CompositionTablePlacement[];
   graphicPlacements: CompositionGraphicPlacement[];
+  /** Ordinary flowing text only. Insertions are exposed separately below. */
   lines: CompositionLine[];
+  /** Text painted into fixed insertion/obstacle boxes, outside the main route. */
+  insertionLines?: CompositionLine[];
   decisions: CompositionDecision[];
   diagnostics: CompositionDiagnostic[];
   residualContent: CompositionResidualContent[];

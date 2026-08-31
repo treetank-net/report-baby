@@ -51,6 +51,7 @@ export interface CompositionSlotTemplate {
   /** A non-flow box painted by chrome or another renderer that still reserves space. */
   reserved?: boolean;
   textAlign?: 'left' | 'center' | 'right';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
   allowedRoles?: CompositionBlockRole[];
   allowedBlockIds?: string[];
   allowedBlockKinds?: CompositionBlockKind[];

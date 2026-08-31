@@ -828,7 +828,7 @@ export function createJsPdfTextBackend(
         doc.setPage(placement.page);
         renderer(doc, block, placement);
       }
-      for (const line of plan.lines) {
+      const renderLine = (line: CompositionPlan['lines'][number]): void => {
         const block = blocks.get(line.blockId);
         if (!block) throw new Error(`Composition line '${line.blockId}' has no source block.`);
         const style = styleFor(styles, block);
@@ -869,7 +869,12 @@ export function createJsPdfTextBackend(
             doc.text(marks.close, closingX, line.box.y + marks.baselineOffset);
           }
         }
-      }
+      };
+      for (const line of plan.lines.filter((candidate) => candidate.layer !== 'insertion')) renderLine(line);
+      // Insertions are painted after the ordinary flow. Their geometry was
+      // already reserved as an obstacle, but their content is a separate
+      // layer and must not masquerade as another main-flow route fragment.
+      for (const line of plan.insertionLines ?? plan.lines.filter((candidate) => candidate.layer === 'insertion')) renderLine(line);
       return Buffer.from(doc.output('arraybuffer'));
     },
   };

@@ -13,6 +13,10 @@ const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-text-engine-'));
 const bundle = join(temporary, 'composition.cjs');
 const primitivesBundle = join(temporary, 'render-primitives.cjs');
+
+function plannedLines(plan) {
+  return [...plan.lines, ...(plan.insertionLines ?? [])];
+}
 const build = runProcess('npx', [
   'esbuild',
   'src/composition/index.ts',
@@ -62,7 +66,7 @@ function pixelAt(image, x, y) {
   return [image.pixels[offset], image.pixels[offset + 1], image.pixels[offset + 2]];
 }
 
-function inkPixelsInBox(image, box, pageSize, qa) {
+function inkProfileInBox(image, box, pageSize, qa) {
   const scaleX = image.width / pageSize.width;
   const scaleY = image.height / pageSize.height;
   const inset = qa.rectangle_inset_px;
@@ -72,17 +76,63 @@ function inkPixelsInBox(image, box, pageSize, qa) {
   const y1 = Math.min(image.height - 1, Math.ceil((box.y + box.height) * scaleY) - inset);
   const background = pixelAt(image, 0, 0);
   let count = 0;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  const rows = [];
   for (let y = y0; y <= y1; y += 1) {
+    let rowCount = 0;
+    let rowMinX = Number.POSITIVE_INFINITY;
+    let rowMaxX = Number.NEGATIVE_INFINITY;
     for (let x = x0; x <= x1; x += 1) {
       const pixel = pixelAt(image, x, y);
-      if (Math.max(
+      const isInk = Math.max(
         Math.abs(pixel[0] - background[0]),
         Math.abs(pixel[1] - background[1]),
         Math.abs(pixel[2] - background[2]),
-      ) >= qa.background_delta_min) count += 1;
+      ) >= qa.background_delta_min;
+      if (!isInk) continue;
+      count += 1;
+      rowCount += 1;
+      rowMinX = Math.min(rowMinX, x);
+      rowMaxX = Math.max(rowMaxX, x);
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
     }
+    if (rowCount > 0) rows.push({ y, count: rowCount, minX: rowMinX, maxX: rowMaxX });
   }
-  return count;
+  const bands = [];
+  for (const row of rows) {
+    const previous = bands.at(-1);
+    if (previous && row.y === previous.endY + 1) {
+      previous.endY = row.y;
+      previous.inkPixels += row.count;
+      previous.minX = Math.min(previous.minX, row.minX);
+      previous.maxX = Math.max(previous.maxX, row.maxX);
+    } else bands.push({ startY: row.y, endY: row.y, inkPixels: row.count, minX: row.minX, maxX: row.maxX });
+  }
+  const toMm = (value, scale) => value / scale;
+  return {
+    status: count === 0 ? 'empty' : 'occupied',
+    inkPixels: count,
+    boxMm: { x: box.x, y: box.y, width: box.width, height: box.height },
+    boundsMm: count === 0 ? null : {
+      x: toMm(minX, scaleX),
+      y: toMm(minY, scaleY),
+      width: toMm(maxX - minX + 1, scaleX),
+      height: toMm(maxY - minY + 1, scaleY),
+    },
+    rowBands: bands.map((band) => ({
+      x: toMm(band.minX, scaleX),
+      y: toMm(band.startY, scaleY),
+      width: toMm(band.maxX - band.minX + 1, scaleX),
+      height: toMm(band.endY - band.startY + 1, scaleY),
+      inkPixels: band.inkPixels,
+    })),
+  };
 }
 
 function pdfWords(path) {
@@ -145,9 +195,18 @@ async function writeNumberedPixelArtifacts(directory, result, document, artifact
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'numbered-obstacle-pixel-qa.pdf'), artifact);
   await writeFile(join(directory, 'numbered-obstacle-plan.json'), JSON.stringify(result.plan, null, 2));
-  await writeFile(join(directory, 'numbered-obstacle-pixel-occupancy.json'), JSON.stringify({ checks: pixelChecks }, null, 2));
+  await writeFile(join(directory, 'numbered-obstacle-pixel-occupancy.json'), JSON.stringify({
+    coordinateSystem: {
+      unit: 'mm',
+      origin: 'top-left of page',
+      pageWidth: result.plan.pages[0]?.width,
+      pageHeight: result.plan.pages[0]?.height,
+      note: 'boxMm is the expected zone; boundsMm and rowBands are measured raster ink positions',
+    },
+    checks: pixelChecks,
+  }, null, 2));
   for (const page of result.plan.pages) {
-    const lines = result.plan.lines.filter((line) => line.page === page.page && line.flowId === 'main');
+    const lines = plannedLines(result.plan).filter((line) => line.page === page.page);
     const obstacles = result.plan.graphicPlacements.filter((graphic) => graphic.page === page.page && graphic.wrap === 'around');
     const lineSvg = lines.map((line) => `<rect x="${line.box.x}" y="${line.box.y}" width="${line.box.width}" height="${line.box.height}" fill="#16263a" fill-opacity="0.24"/><text x="${line.box.x}" y="${line.box.y + line.box.height * 0.75}" font-size="1.1" fill="#16263a">${line.text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</text>`).join('');
     const obstacleSvg = obstacles.map((graphic) => `<rect x="${graphic.box.x}" y="${graphic.box.y}" width="${graphic.box.width}" height="${graphic.box.height}" fill="#f07b42" fill-opacity="0.22" stroke="#e8753d" stroke-width="0.35"/>`).join('');
@@ -299,7 +358,7 @@ try {
   assert.ok(deferredQuote.plan.decisions.some((decision) => decision.code === 'INSERTION_DEFERRED' && decision.blockId === 'deferred-quote'), 'a quote without an opening insertion slot must be explicitly deferred');
   assert.ok(deferredQuote.plan.decisions.some((decision) => decision.code === 'DEFERRED_INSERTION_PLACED' && decision.blockId === 'deferred-quote'), 'a deferred quote must be placed on the next legal page');
   assert.ok(deferredQuote.plan.lines.some((line) => line.blockId === 'deferred-body' && line.page === 1), 'ordinary article flow should use the opening page after deferring the quote');
-  assert.ok(deferredQuote.plan.lines.some((line) => line.blockId === 'deferred-quote' && line.page === 2 && line.slotId === '2:quote'), 'the quote should occupy the continuation insertion slot');
+  assert.ok(plannedLines(deferredQuote.plan).some((line) => line.blockId === 'deferred-quote' && line.page === 2 && line.slotId === '2:quote'), 'the quote should occupy the continuation insertion slot');
   assert.ok(deferredQuote.plan.lines.some((line) => line.blockId === 'deferred-body' && line.page === 2 && line.slotId === '2:body'), 'article flow should resume after the continuation quote');
   assert.equal(deferredQuote.plan.residualContent.length, 0);
 
@@ -417,8 +476,8 @@ try {
     ] } },
   }, metrics);
   assert.equal(preplannedInsertion.evaluation.status, 'accepted', JSON.stringify(preplannedInsertion.evaluation));
-  assert.ok(preplannedInsertion.plan.lines.some((line) => line.blockId === 'preplanned-quote' && line.layer === 'insertion'), 'quote must be planned in the insertion layer');
-  assert.ok(preplannedInsertion.plan.lines.every((line) => line.blockId !== 'preplanned-quote' || line.routeIndex === undefined), 'insertion text must not consume a main route index');
+  assert.ok(preplannedInsertion.plan.insertionLines?.some((line) => line.blockId === 'preplanned-quote' && line.layer === 'insertion'), 'quote must be planned in the insertion layer');
+  assert.equal(preplannedInsertion.plan.lines.some((line) => line.blockId === 'preplanned-quote'), false, 'insertion text must not be part of ordinary main-flow lines');
   assert.ok(preplannedInsertion.plan.decisions.some((decision) => decision.code === 'INSERTION_LAYER_PLACED'));
   assert.ok(preplannedInsertion.plan.trace?.phases.some((phase) => phase.name === 'insertion-placement'));
 
@@ -440,7 +499,7 @@ try {
     ] } },
   }, metrics);
   assert.equal(orderedInsertion.evaluation.status, 'accepted', JSON.stringify(orderedInsertion.evaluation));
-  assert.ok(orderedInsertion.plan.lines.find((line) => line.blockId === 'repositioned-quote')?.routeIndex < orderedInsertion.plan.lines.find((line) => line.blockId === 'repositioned-after')?.routeIndex, 'a quote must remain before the following authored body even when an earlier segment has spare capacity');
+  assert.ok(plannedLines(orderedInsertion.plan).find((line) => line.blockId === 'repositioned-quote')?.page <= plannedLines(orderedInsertion.plan).find((line) => line.blockId === 'repositioned-after')?.page, 'a quote must remain before the following authored body even when an earlier segment has spare capacity');
 
   const numberedInsetTemplate = {
     maxPages: 1,
@@ -465,7 +524,7 @@ try {
   }, metrics);
   assert.equal(numberedInset.evaluation.status, 'accepted', JSON.stringify(numberedInset.evaluation));
   const numberedBodyLines = numberedInset.plan.lines.filter((line) => line.blockId === 'numbered-body');
-  const numberedQuoteLines = numberedInset.plan.lines.filter((line) => line.blockId === 'numbered-quote');
+  const numberedQuoteLines = plannedLines(numberedInset.plan).filter((line) => line.blockId === 'numbered-quote');
   const numberedTailLines = numberedInset.plan.lines.filter((line) => line.blockId === 'numbered-tail');
   assert.equal(numberedBodyLines.length > 0, true, 'numbered inset fixture must place the body');
   assert.equal(numberedQuoteLines.length > 0, true, 'numbered inset fixture must place the quote');
@@ -557,21 +616,25 @@ try {
     layouts: [{ id: 'numbered-obstacle', width: pixelFixture.page.width, height: pixelFixture.page.height, slots: [
       { id: 'left', regionId: 'main', kind: 'text', box: pixelFixture.columns.left },
       { id: 'right', regionId: 'main', kind: 'text', box: pixelFixture.columns.right },
-      ...pixelFixture.obstacles.map((obstacle) => ({ id: obstacle.id, regionId: 'main', kind: 'graphic', box: { x: obstacle.x, y: obstacle.y, width: obstacle.width, height: obstacle.height } })),
+      ...pixelFixture.obstacles.map((obstacle) => ({ id: obstacle.id, regionId: 'main', kind: 'text', allowedRoles: ['quote'], box: { x: obstacle.x, y: obstacle.y, width: obstacle.width, height: obstacle.height } })),
     ] }],
-    routes: { main: { slots: ['left', 'right'], layouts: ['numbered-obstacle'], continuation: 'allowed' } },
+    routes: {
+      main: { slots: ['left', 'right'], layouts: ['numbered-obstacle'], continuation: 'allowed' },
+      quotes: { slots: [], insertionSlots: pixelFixture.obstacles.map((obstacle) => obstacle.id), layouts: ['numbered-obstacle'], continuation: 'allowed' },
+    },
   };
   const numberedWordBases = ['lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit', 'integer', 'vivamus', 'praesent', 'commodo'];
   const numberedObstacleWords = Array.from({ length: pixelFixture.expected_words }, (_, index) => `${numberedWordBases[index % numberedWordBases.length]}${String(index + 1).padStart(4, '0')}`);
+  const numberedQuoteWords = Array.from({ length: pixelFixture.expected_pages_with_obstacles.length * pixelFixture.obstacles.length }, (_, index) => ({
+    id: `numbered-quote-${index + 1}`,
+    text: Array.from({ length: 8 }, (_, wordIndex) => `quote${index + 1}${String(wordIndex + 1).padStart(4, '0')}`).join(' '),
+  }));
+  const numberedBlocks = [{ id: 'numbered-body', kind: 'paragraph', role: 'body', text: numberedObstacleWords.join(' ') }];
   const numberedObstacleDocument = {
-    flows: { main: { id: 'main', continuation: 'allowed', blocks: [{ id: 'numbered-body', kind: 'paragraph', role: 'body', text: numberedObstacleWords.join(' ') }] } },
-    graphics: pixelFixture.expected_pages_with_obstacles.flatMap((page) => pixelFixture.obstacles.map((obstacle) => ({
-      id: `${obstacle.id}-${page}`,
-      slotId: obstacle.id,
-      shape: 'rectangle',
-      wrap: 'around',
-      page,
-    }))),
+    flows: {
+      main: { id: 'main', continuation: 'allowed', blocks: numberedBlocks },
+      quotes: { id: 'quotes', continuation: 'allowed', blocks: numberedQuoteWords.map((quote) => ({ id: quote.id, kind: 'paragraph', role: 'quote', text: quote.text })) },
+    },
   };
   assert.equal(pixelFixture.expected_words, numberedObstacleWords.length, 'pixel fixture word count must match the numbered planner fixture');
   const numberedStyles = {
@@ -582,14 +645,35 @@ try {
       fontStyle: 'normal',
       textColor: [12, 24, 40],
     },
+    quote: {
+      fontSize: pixelFixture.text_style.font_size,
+      lineHeight: pixelFixture.text_style.line_height,
+      baselineOffset: pixelFixture.text_style.baseline_offset,
+      fontStyle: 'normal',
+      textColor: pixelFixture.obstacle_style.draw_color,
+    },
   };
   const numberedPlannerPdf = newPdf('portrait', [pixelFixture.page.width, pixelFixture.page.height]);
   const numberedObstacle = createTextCompositionEngine(numberedObstacleTemplate).plan(numberedObstacleDocument, createJsPdfTextMetrics(numberedPlannerPdf, 'DejaVu', numberedStyles));
   assert.equal(numberedObstacle.evaluation.status, 'accepted', JSON.stringify(numberedObstacle.evaluation));
   assert.equal(numberedObstacle.plan.pages.length, pixelFixture.max_pages, 'the numbered obstacle fixture must occupy its configured page count');
-  const numberedObstacleLines = numberedObstacle.plan.lines.filter((line) => line.blockId === 'numbered-body');
+  const numberedBodyIds = new Set(numberedBlocks.filter((block) => block.role === 'body').map((block) => block.id));
+  const numberedObstacleLines = numberedObstacle.plan.lines.filter((line) => numberedBodyIds.has(line.blockId));
+  const numberedInsertionLines = (numberedObstacle.plan.insertionLines ?? []).filter((line) => line.flowId === 'quotes');
   const numberedObstaclePattern = new RegExp(`(?:${numberedWordBases.join('|')})\\d{4}`, 'gu');
   assert.deepEqual(numberedObstacleLines.flatMap((line) => line.text.match(numberedObstaclePattern) ?? []), numberedObstacleWords, 'the 1000-word obstacle fixture must retain source order');
+  assert.deepEqual(
+    [...new Set(numberedInsertionLines.map((line) => line.blockId))],
+    numberedQuoteWords.map((quote) => quote.id),
+    'quote insertions must remain a separate, authored stream in source order',
+  );
+  const numberedQuotePattern = /quote[1-4]\d{4}/gu;
+  assert.deepEqual(
+    numberedInsertionLines.flatMap((line) => line.text.match(numberedQuotePattern) ?? []),
+    numberedQuoteWords.flatMap((quote) => quote.text.match(numberedQuotePattern) ?? []),
+    'every numbered quote word must be painted in the insertion layer in source order',
+  );
+  assert.equal(numberedObstacle.plan.lines.some((line) => numberedQuoteWords.some((quote) => quote.id === line.blockId)), false, 'quote text must never masquerade as ordinary column flow');
   const obstacleZones = (page) => Object.fromEntries(pixelFixture.expected_zones.map((zone) => [zone.id, numberedObstacleLines.filter((line) => {
     if (line.page !== page) return false;
     const lineRight = line.box.x + line.box.width;
@@ -634,18 +718,27 @@ try {
   for (const page of pixelFixture.expected_pages_with_obstacles) {
     const image = rasterPages[page - 1];
     for (const zone of pixelFixture.expected_zones) {
-      const inkPixels = inkPixelsInBox(image, zone, pixelFixture.page, pdfRenderConfig.quality.pdf_pixel_qa);
-      const check = { page, zone: zone.id, inkPixels };
+      const profile = inkProfileInBox(image, zone, pixelFixture.page, pdfRenderConfig.quality.pdf_pixel_qa);
+      const check = { page, zone: zone.id, ...profile };
       pixelChecks.push(check);
-      assert.ok(inkPixels >= pdfRenderConfig.quality.pdf_pixel_qa.minimum_ink_pixels, `required obstacle-flow zone is visually empty: ${JSON.stringify(check)}`);
+      assert.ok(profile.boxMm && profile.boundsMm && profile.rowBands.length > 0, `required obstacle-flow zone has no positional ink profile: ${JSON.stringify(check)}`);
+      assert.ok(profile.inkPixels >= pdfRenderConfig.quality.pdf_pixel_qa.minimum_ink_pixels, `required obstacle-flow zone is visually empty: ${JSON.stringify(check)}`);
     }
   }
   for (const [index, column] of pixelFixture.expected_final_columns.entries()) {
     const page = pixelFixture.max_pages;
-    const inkPixels = inkPixelsInBox(rasterPages[page - 1], column, pixelFixture.page, pdfRenderConfig.quality.pdf_pixel_qa);
-    const check = { page, zone: column.id, inkPixels };
+    const profile = inkProfileInBox(rasterPages[page - 1], column, pixelFixture.page, pdfRenderConfig.quality.pdf_pixel_qa);
+    const check = { page, zone: column.id, ...profile };
     pixelChecks.push(check);
-    assert.ok(inkPixels >= pdfRenderConfig.quality.pdf_pixel_qa.minimum_ink_pixels, `final page column ${index + 1} is visually empty: ${JSON.stringify(check)}`);
+    assert.ok(profile.boxMm && profile.boundsMm && profile.rowBands.length > 0, `final page column has no positional ink profile: ${JSON.stringify(check)}`);
+    assert.ok(profile.inkPixels >= pdfRenderConfig.quality.pdf_pixel_qa.minimum_ink_pixels, `final page column ${index + 1} is visually empty: ${JSON.stringify(check)}`);
+  }
+  for (const line of numberedInsertionLines) {
+    const profile = inkProfileInBox(rasterPages[line.page - 1], line.box, pixelFixture.page, pdfRenderConfig.quality.pdf_pixel_qa);
+    const check = { page: line.page, zone: `insertion:${line.blockId}`, ...profile };
+    pixelChecks.push(check);
+    assert.ok(profile.boxMm && profile.boundsMm && profile.rowBands.length > 0, `quote insertion has no positional ink profile: ${JSON.stringify(check)}`);
+    assert.ok(profile.inkPixels >= pdfRenderConfig.quality.pdf_pixel_qa.minimum_ink_pixels, `quote insertion is visually empty: ${JSON.stringify(check)}`);
   }
   await writeNumberedPixelArtifacts(process.env.REPORT_BABY_ARTIFACT_DIR, numberedObstacle, numberedObstacleDocument, await readFile(rasterPdf), pixelChecks);
   const extractedNumberedWords = pdfWords(rasterPdf);
@@ -657,6 +750,22 @@ try {
     pagesWithObstacles: pixelFixture.expected_pages_with_obstacles,
     obstacleBoundaryTolerance: pixelFixture.obstacle_boundary_tolerance,
   }, pdfRenderConfig.quality.pdf_pixel_qa);
+  const quoteTokenPattern = /^quote[1-4]\d{4}$/u;
+  const expectedQuoteTokens = numberedQuoteWords.flatMap((quote) => quote.text.split(/\s+/u));
+  const extractedQuoteTokens = extractedNumberedWords.filter((word) => quoteTokenPattern.test(word.text));
+  assert.deepEqual(extractedQuoteTokens.map((word) => word.text).sort(), expectedQuoteTokens.slice().sort(), 'final PDF must contain every numbered quote word exactly once');
+  for (const word of extractedQuoteTokens) {
+    const quoteNumber = Number(word.text.slice(5, 6));
+    const expectedLine = numberedInsertionLines.find((line) => line.blockId === `numbered-quote-${quoteNumber}`);
+    assert.ok(expectedLine, `final PDF quote word ${word.text} has no planned insertion line`);
+    const expectedSlot = numberedObstacle.plan.slots.find((slot) => slot.id === expectedLine?.slotId);
+    assert.ok(expectedSlot, `final PDF quote word ${word.text} has no planned insertion slot`);
+    assert.equal(word.page, expectedLine.page - 1, `final PDF quote word ${word.text} moved to another page`);
+    const placementTolerance = pdfRenderConfig.quality.pdf_pixel_qa.placement_tolerance_mm;
+    assert.ok(word.xMin >= expectedSlot.box.x - placementTolerance && word.xMax <= expectedSlot.box.x + expectedSlot.box.width + placementTolerance
+      && word.yMin >= expectedSlot.box.y - placementTolerance && word.yMax <= expectedSlot.box.y + expectedSlot.box.height + placementTolerance,
+    `final PDF quote word ${word.text} left its planned insertion box`);
+  }
 
   const continuousQuoteTemplate = {
     maxPages: 1,
@@ -676,8 +785,8 @@ try {
   };
   const continuousQuote = createTextCompositionEngine(continuousQuoteTemplate).plan(continuousQuoteDocument, metrics);
   assert.equal(continuousQuote.evaluation.status, 'accepted', JSON.stringify(continuousQuote.evaluation));
-  assert.ok(continuousQuote.plan.lines.some((line) => line.blockId === 'quote-insertion' && line.slotId === '1:quote-a'), 'an insertion that fits below the current flow must stay on the current page');
-  assert.ok(continuousQuote.plan.lines.filter((line) => line.blockId === 'quote-insertion').every((line) => line.routeIndex === undefined), 'an insertion must not masquerade as a route segment');
+  assert.ok(continuousQuote.plan.insertionLines?.some((line) => line.blockId === 'quote-insertion' && line.slotId === '1:quote-a'), 'an insertion that fits below the current flow must stay on the current page');
+  assert.equal(continuousQuote.plan.lines.some((line) => line.blockId === 'quote-insertion'), false, 'an insertion must not masquerade as an ordinary flow line');
   assert.ok(continuousQuote.plan.graphicPlacements.some((graphic) => graphic.graphicId === 'insertion:quote-insertion' && graphic.wrap === 'around'), 'a placed quote must become a planner-only obstacle');
   const quoteObstacle = continuousQuote.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-insertion');
   const beforeQuoteLine = continuousQuote.plan.lines.find((line) => line.blockId === 'quote-before');
@@ -860,6 +969,24 @@ try {
   assert.equal(sameSlotImage.slotId, '1:body');
   assert.equal(sameSlotAfter?.slotId, '1:body');
   assert.ok(sameSlotAfter && sameSlotAfter.box.y >= sameSlotImage.box.y + sameSlotImage.box.height);
+
+  const growableAtomicTemplate = {
+    maxPages: 1,
+    layouts: [{ id: 'growable-atomic', width: 210, height: 297, slots: [
+      { id: 'intro', regionId: 'intro', kind: 'text', box: { x: 17.01, y: 56.43, width: 175.98, height: 14.85 }, allowedRoles: ['intro'], allowedBlockKinds: ['image', 'paragraph'], grow: { axis: 'y', maxHeight: 220 } },
+    ] }],
+    routes: { intro: { slots: ['intro'], layouts: ['growable-atomic'], continuation: 'forbidden' } },
+  };
+  const growableAtomic = createTextCompositionEngine(growableAtomicTemplate, { geometryTolerance: 0.01 }).plan({
+    flows: { intro: { id: 'intro', continuation: 'forbidden', blocks: [
+      { id: 'hero', kind: 'image', role: 'intro', atomic: true, image: { assetId: 'photo-1', width: 'full', fit: 'contain', keepWithCaption: false } },
+      { id: 'lead', kind: 'paragraph', role: 'intro', text: 'The lead must remain in the same growable intro flow after the image.' },
+    ] } },
+    assets: [{ id: 'photo-1', source: 'assets/photo.png', width: 'full', fit: 'contain', keepWithCaption: false }],
+  }, { ...imageMetrics, measureBlock() { return { height: 125.8943897216274, image: { width: 175.98, height: 125.8943897216274, captionHeight: 0, scale: 1 } }; } });
+  assert.equal(growableAtomic.evaluation.status, 'accepted', JSON.stringify(growableAtomic.evaluation));
+  assert.equal(growableAtomic.plan.blockPlacements[0].slotId, '1:intro');
+  assert.ok(growableAtomic.plan.lines.some((line) => line.blockId === 'lead' && line.slotId === '1:intro'), 'content after a growable image must remain in the intro flow');
 
   const wrappedImageResult = createTextCompositionEngine(imageSameSlotTemplate).plan({
     flows: { main: { id: 'main', continuation: 'forbidden', blocks: [

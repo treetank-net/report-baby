@@ -43,6 +43,7 @@ export interface CompiledTemplateFlow {
   id: string;
   slots: string[];
   continuationSlots?: string[];
+  insertionSlots?: string[];
   continuation: TemplateFlowContinuation;
   repeat?: 'each-page';
   startPage?: number;
@@ -231,10 +232,19 @@ function templateFlowsAt(value: unknown, path: string, slots: Record<string, Com
     for (const slot of rawContinuationSlots ?? []) {
       if (!slots[slot]) fail(`${path}.${id}.continuation_slots`, `references unknown slot '${slot}'.`);
     }
+    const rawInsertionSlots = raw.insertion_slots;
+    if (rawInsertionSlots !== undefined && (!Array.isArray(rawInsertionSlots) || rawInsertionSlots.length === 0 || rawInsertionSlots.some((slot) => typeof slot !== 'string' || slot.length === 0))) {
+      fail(`${path}.${id}.insertion_slots`, 'must contain one or more named slots when provided.');
+    }
+    for (const slot of rawInsertionSlots ?? []) {
+      if (!slots[slot]) fail(`${path}.${id}.insertion_slots`, `references unknown slot '${slot}'.`);
+      if (!rawSlots.includes(slot)) fail(`${path}.${id}.insertion_slots`, `slot '${slot}' must also be listed in slots.`);
+      if (slots[slot]?.role !== 'quote') fail(`${path}.${id}.insertion_slots`, `slot '${slot}' must declare role 'quote'.`);
+    }
     const continuation = raw.continuation === undefined || raw.continuation === 'allowed' ? 'allowed' : raw.continuation === 'forbidden' ? 'forbidden' : fail(`${path}.${id}.continuation`, "must be 'allowed' or 'forbidden'.");
     const repeat = raw.repeat === undefined ? undefined : raw.repeat === 'each-page' ? raw.repeat : fail(`${path}.${id}.repeat`, "must be 'each-page'.");
     const startPage = optionalPositiveInteger(raw.start_page, `${path}.${id}.start_page`);
-    return [id, { id, slots: [...rawSlots], ...(rawContinuationSlots === undefined ? {} : { continuationSlots: [...rawContinuationSlots] }), continuation, ...(repeat === undefined ? {} : { repeat }), ...(startPage === undefined ? {} : { startPage }) }];
+    return [id, { id, slots: [...rawSlots], ...(rawContinuationSlots === undefined ? {} : { continuationSlots: [...rawContinuationSlots] }), ...(rawInsertionSlots === undefined ? {} : { insertionSlots: [...rawInsertionSlots] }), continuation, ...(repeat === undefined ? {} : { repeat }), ...(startPage === undefined ? {} : { startPage }) }];
   }));
 }
 

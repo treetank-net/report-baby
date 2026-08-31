@@ -565,7 +565,7 @@ function renderBatch(fixtures, workDir, concurrency, brandStore, planOnly = fals
     child.on('error', reject);
     child.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(childProcessFailure('batch CLI', { status: code, stdout, stderr })));
+      else reject(new Error(childProcessFailure(`batch CLI [${batch.map((fixture) => fixture.name).join(', ')}]`, { status: code, stdout, stderr })));
     });
     const payload = JSON.stringify(batch.map((fixture) => ({
       tool: 'render_report',

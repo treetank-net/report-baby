@@ -35,6 +35,7 @@ quality:
     background_delta_min: 12
     minimum_ink_pixels: 4
     rectangle_inset_px: 2
+    placement_tolerance_mm: 1
 assets:
   report_header_band_width_px: 640
   report_header_band_height_px: 154
@@ -68,6 +69,7 @@ pdf:
   page_size_tolerance: 0.01
   planner_max_iterations: 4
   planner_minimum_fragment_lines: 3
+  composition_geometry_tolerance: 0.01
   margin: 18
   footer_y: 285
   footer_line_width: 0.3

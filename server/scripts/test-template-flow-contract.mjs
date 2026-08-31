@@ -69,6 +69,19 @@ try {
   assert.deepEqual(compiled.flows.footer, { id: 'footer', slots: ['footer'], continuation: 'forbidden', repeat: 'each-page' });
   const pageSpecific = compileTemplateSource({ ...structuredClone(source), flows: { main: { slots: ['content'], continuation_slots: ['footer'], continuation: 'allowed' }, footer: { slots: ['footer'], continuation: 'forbidden', repeat: 'each-page' } } });
   assert.deepEqual(pageSpecific.flows.main, { id: 'main', slots: ['content'], continuationSlots: ['footer'], continuation: 'allowed' });
+  const insertionSource = structuredClone(source);
+  insertionSource.slots.quote = { type: 'text', frame: { x: 0.1, y: 0.4, width: 0.8, height: 0.1 }, role: 'quote', vertical_align: 'middle' };
+  insertionSource.flows.quotes = { slots: ['quote'], insertion_slots: ['quote'], continuation: 'allowed' };
+  const insertionCompiled = compileTemplateSource(insertionSource);
+  assert.deepEqual(insertionCompiled.flows.quotes, { id: 'quotes', slots: ['quote'], insertionSlots: ['quote'], continuation: 'allowed' });
+  assert.throws(
+    () => compileTemplateSource({ ...insertionSource, flows: { ...insertionSource.flows, quotes: { slots: ['quote'], insertion_slots: ['missing'], continuation: 'allowed' } } }),
+    /insertion_slots.*references unknown slot 'missing'/u,
+  );
+  assert.throws(
+    () => compileTemplateSource({ ...insertionSource, flows: { ...insertionSource.flows, quotes: { slots: ['quote'], insertion_slots: ['footer'], continuation: 'allowed' } } }),
+    /insertion_slots.*slot 'footer' must also be listed in slots/u,
+  );
   const defaultContinuation = compileTemplateSource({ ...structuredClone(source), flows: { main: { slots: ['content'] }, footer: { slots: ['footer'], repeat: 'each-page' } } });
   assert.equal(defaultContinuation.flows.main.continuation, 'allowed', 'main flow must continue by default');
   assert.equal(defaultContinuation.flows.footer.continuation, 'allowed', 'generic flow defaults to continuation; template repetition policy decides footer behavior');

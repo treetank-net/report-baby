@@ -19,6 +19,10 @@ function slotFor(plan: CompositionPlan, slotId: string): CompositionSlot | undef
   return plan.slots.find((slot) => slot.id === slotId);
 }
 
+function allLines(plan: CompositionPlan): CompositionPlan['lines'] {
+  return [...plan.lines, ...(plan.insertionLines ?? [])];
+}
+
 function geometryTolerance(...values: number[]): number {
   return Number.EPSILON * Math.max(1, ...values.map((value) => Math.abs(value))) * 64;
 }
@@ -51,8 +55,9 @@ function usableLinesAfter(
   line: CompositionPlan['lines'][number],
   slot: CompositionSlot,
   graphics: CompositionPlan['graphicPlacements'],
+  nextLineHeight = line.box.height,
 ): number {
-  const lineHeight = line.box.height;
+  const lineHeight = nextLineHeight;
   if (lineHeight <= 0) return 0;
   let usable = 0;
   for (let y = line.box.y + lineHeight; y + lineHeight <= slot.box.y + slot.box.height + geometryTolerance(y, slot.box.y + slot.box.height); y += lineHeight) {
@@ -65,12 +70,38 @@ function usableLinesAfter(
   return usable;
 }
 
+function plannerFoundNoUsableLine(
+  plan: CompositionPlan,
+  blockId: string,
+  slotId: string,
+  minimum: number,
+): boolean {
+  const capacityDecision = plan.decisions.find((decision) => decision.code === 'BLOCK_PUSHED_TO_NEXT_SLOT'
+    && decision.blockId === blockId
+    && decision.slotId === slotId);
+  const capacityDetails = capacityDecision?.details as { availableLines?: unknown; attemptedLines?: unknown } | undefined;
+  const availableLines = capacityDetails?.availableLines;
+  if (typeof availableLines === 'number' && availableLines < minimum) return true;
+  if (typeof capacityDetails?.attemptedLines === 'number' && capacityDetails.attemptedLines < minimum) return true;
+  if (plan.decisions.some((decision) => decision.code === 'LIST_ITEM_PUSHED_TO_NEXT_SLOT'
+    && decision.blockId === blockId
+    && decision.slotId === slotId
+    && decision.reason === 'keep-list-item-together-below-minimum-fragment')) return true;
+  return plan.decisions.some((decision) => {
+    if (decision.code !== 'FLOW_SEGMENT_ADVANCED' || decision.slotId !== slotId) return false;
+    const details = decision.details as { nextBlockId?: unknown; nextBlockAvailableLines?: unknown } | undefined;
+    return details?.nextBlockId === blockId
+      && typeof details.nextBlockAvailableLines === 'number'
+      && details.nextBlockAvailableLines < minimum;
+  });
+}
+
 function checkEarlyRouteTransitions(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
   const minimum = plan.minimumFragmentLines;
   if (minimum === undefined || !Number.isInteger(minimum) || minimum <= 0) return;
   const byFlowAndPage = new Map<string, CompositionPlan['lines']>();
   const sourceBlocks = new Map(Object.values(document.flows).flatMap((flow) => flow.blocks).map((block) => [block.id, block]));
-  for (const line of plan.lines) {
+  for (const line of allLines(plan)) {
     if (line.routeIndex === undefined) continue;
     const key = `${line.flowId}:${line.page}`;
     byFlowAndPage.set(key, [...(byFlowAndPage.get(key) ?? []), line]);
@@ -88,7 +119,9 @@ function checkEarlyRouteTransitions(document: CompositionDocument, plan: Composi
       if (!slot || slot.regionId !== 'content') continue;
       const previousBlock = sourceBlocks.get(previous.blockId);
       if (previousBlock?.role === 'intro' || previousBlock?.role === 'title' || previousBlock?.role === 'subtitle') continue;
-      const usable = usableLinesAfter(previous, slot, plan.graphicPlacements);
+      const nextLineHeight = nextLines.find((line) => line.box.height > 0)?.box.height ?? previous.box.height;
+      const usable = usableLinesAfter(previous, slot, plan.graphicPlacements, nextLineHeight);
+      if (plannerFoundNoUsableLine(plan, nextLines[0].blockId, previous.slotId, minimum)) continue;
       if (usable < minimum) continue;
       diagnostics.push(error(
         'FLOW_FRAGMENT_UNDERFILLED',
@@ -126,7 +159,7 @@ function checkEmptyAndUnderfilledSlots(document: CompositionDocument, plan: Comp
   if (!Number.isInteger(minimum) || minimum <= 0) return;
   const blockFlowIds = new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block) => [block.id, flowId] as const)));
   const items = [
-    ...plan.lines.map((line) => ({ ...line, flowId: line.flowId })),
+    ...allLines(plan).map((line) => ({ ...line, flowId: line.flowId })),
     ...plan.blockPlacements.map((placement) => ({ ...placement, flowId: blockFlowIds.get(placement.blockId) })),
     ...plan.tablePlacements.map((placement) => ({ ...placement, flowId: blockFlowIds.get(placement.blockId) })),
   ];
@@ -196,7 +229,10 @@ function checkEmptyAndUnderfilledSlots(document: CompositionDocument, plan: Comp
         }
         const last = [...slotItems].sort((left, right) => left.box.y - right.box.y).at(-1)!;
         if (!('flowId' in last) || !('box' in last) || !('startWord' in last)) continue;
-        const usable = usableLinesAfter(last as CompositionPlan['lines'][number], slot, plan.graphicPlacements);
+        const nextLineHeight = laterItems.find((item) => 'box' in item && item.box.height > 0)?.box.height
+          ?? (last as CompositionPlan['lines'][number]).box.height;
+        const usable = usableLinesAfter(last as CompositionPlan['lines'][number], slot, plan.graphicPlacements, nextLineHeight);
+        if (plannerFoundNoUsableLine(plan, nextAuthoredBlock.id, slot.id, minimum)) continue;
         if (usable < minimum) continue;
         diagnostics.push(error(
           'FLOW_SLOT_UNDERFILLED',
@@ -221,7 +257,7 @@ function checkEmptyAndUnderfilledSlots(document: CompositionDocument, plan: Comp
 
 function checkInsertionSourceOrder(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
   const placedItems = [
-    ...plan.lines,
+    ...allLines(plan),
     ...plan.blockPlacements,
     ...plan.tablePlacements,
   ];
@@ -230,7 +266,7 @@ function checkInsertionSourceOrder(document: CompositionDocument, plan: Composit
     const blockIndexes = new Map(flow.blocks.map((block, index) => [block.id, index]));
     for (const [quoteIndex, quote] of flow.blocks.entries()) {
       if (quote.role !== 'quote') continue;
-      const quoteLines = plan.lines.filter((line) => line.flowId === flowId && line.blockId === quote.id);
+      const quoteLines = allLines(plan).filter((line) => line.flowId === flowId && line.blockId === quote.id);
       if (quoteLines.length === 0) continue;
       const quoteGraphic = plan.graphicPlacements.find((graphic) => graphic.graphicId === `insertion:${quote.id}`);
       if (!quoteGraphic) continue;
@@ -252,7 +288,19 @@ function checkInsertionSourceOrder(document: CompositionDocument, plan: Composit
           { flowId, blockId: quote.id, page: quotePage, details: { predecessorBlockId: predecessorAfterQuote.blockId, predecessorPage: predecessorAfterQuote.page, predecessorY: predecessorAfterQuote.box.y, obstacleY: quoteBox.y, obstacleBottom: quoteBox.y + quoteBox.height } },
         ));
       }
-      const successorBeforeQuote = successors.find((item) => item.page < quotePage || (item.page === quotePage && item.box.y < quoteBox.y));
+      const successorBeforeQuote = successors.find((item) => {
+        if (item.page < quotePage) return true;
+        if (item.page !== quotePage || item.box.y >= quoteBox.y) return false;
+        // A full-width insertion is an overlay on the continuous route. A
+        // successor that has already entered a later physical column may
+        // legitimately occupy that column's upper area; that area is later
+        // in column reading order even though its y-coordinate is above the
+        // overlay. Only content in the first column is before the insertion.
+        const itemSlot = slotFor(plan, item.slotId);
+        const laterColumn = itemSlot?.routeIndex !== undefined
+          && item.box.x >= quoteBox.x + quoteBox.width / 2;
+        return !laterColumn;
+      });
       if (successorBeforeQuote) {
         diagnostics.push(error(
           'INSERTION_SOURCE_ORDER_VIOLATION',
@@ -278,7 +326,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     diagnostics.push({ severity: 'warning', code: 'DOCUMENT_DIAGNOSTIC', message });
   }
   const seenLines = new Set<string>();
-  for (const line of plan.lines) {
+  for (const line of allLines(plan)) {
     const slot = slotFor(plan, line.slotId);
     if (!slot) {
       diagnostics.push(error('LINE_TARGET_MISSING', `Line for '${line.blockId}' targets missing slot '${line.slotId}'.`, { blockId: line.blockId, slotId: line.slotId }));
@@ -291,16 +339,17 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
       diagnostics.push(error('LINE_OUTSIDE_SLOT', `Line for '${line.blockId}' leaves slot '${slot.id}'.`, { blockId: line.blockId, slotId: slot.id, page: line.page }));
     }
   }
-  for (let index = 0; index < plan.lines.length; index += 1) {
-    const line = plan.lines[index];
-    for (let other = index + 1; other < plan.lines.length; other += 1) {
-      const candidate = plan.lines[other];
+  const planned = allLines(plan);
+  for (let index = 0; index < planned.length; index += 1) {
+    const line = planned[index];
+    for (let other = index + 1; other < planned.length; other += 1) {
+      const candidate = planned[other];
       if (line.page === candidate.page && line.slotId === candidate.slotId && overlaps(line.box, candidate.box)) {
         diagnostics.push(error('LINE_OVERLAP', `Lines for '${line.blockId}' and '${candidate.blockId}' overlap in slot '${line.slotId}'.`, { slotId: line.slotId, page: line.page, firstBlockId: line.blockId, secondBlockId: candidate.blockId }));
       }
     }
   }
-  for (const line of plan.lines) {
+  for (const line of allLines(plan)) {
     for (const graphic of plan.graphicPlacements) {
       if (graphic.page === line.page && graphic.slotId !== line.slotId && graphic.wrap === 'around' && lineEntersGraphic(line, graphic)) {
         diagnostics.push(error('LINE_GRAPHIC_OVERLAP', `Line for '${line.blockId}' enters wrapping graphic '${graphic.graphicId}'.`, { blockId: line.blockId, graphicId: graphic.graphicId, slotId: line.slotId, page: line.page }));
@@ -329,7 +378,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     : [item.page, item.routeIndex, item.box.y, item.box.x];
   const firstVisualPlacement = (blockId: string): [number, number, number, number] | undefined => {
     const candidates = [
-      ...plan.lines.filter((line) => line.blockId === blockId),
+      ...allLines(plan).filter((line) => line.blockId === blockId),
       ...plan.blockPlacements.filter((placement) => placement.blockId === blockId),
       ...plan.tablePlacements.filter((placement) => placement.blockId === blockId),
     ].map(visualKey).filter((key): key is [number, number, number, number] => key !== undefined);
@@ -361,7 +410,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     }
     const insertionRouteIndexes = new Map<number, Set<number>>();
     for (const block of flow.blocks.filter((candidate) => candidate.role === 'quote')) {
-      for (const line of plan.lines.filter((candidate) => candidate.blockId === block.id && candidate.routeIndex !== undefined)) {
+      for (const line of allLines(plan).filter((candidate) => candidate.blockId === block.id && candidate.routeIndex !== undefined)) {
         const indexes = insertionRouteIndexes.get(line.page) ?? new Set<number>();
         indexes.add(line.routeIndex!);
         insertionRouteIndexes.set(line.page, indexes);
@@ -369,7 +418,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     }
     const flowingBlockIds = new Set(flow.blocks.filter((block) => block.kind !== 'table').map((block) => block.id));
     for (const blockId of flowingBlockIds) {
-      const fragments = plan.lines
+      const fragments = allLines(plan)
         .filter((line) => line.flowId === flow.id && line.blockId === blockId && line.routeIndex !== undefined)
         .sort((left, right) => left.startWord - right.startWord || left.page - right.page || (left.routeIndex ?? 0) - (right.routeIndex ?? 0));
       for (let index = 1; index < fragments.length; index += 1) {
@@ -441,7 +490,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     const blockIds = new Set(flow.blocks.map((block) => block.id));
     const occupiedRouteIndexes = new Map<number, Set<number>>();
     for (const item of [
-      ...plan.lines.filter((line) => blockIds.has(line.blockId)),
+      ...allLines(plan).filter((line) => blockIds.has(line.blockId)),
       ...plan.blockPlacements.filter((placement) => blockIds.has(placement.blockId)),
       ...plan.tablePlacements.filter((placement) => blockIds.has(placement.blockId)),
     ]) {
@@ -510,7 +559,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
       if (placement.startRow !== expected) diagnostics.push(error('TABLE_ROW_COVERAGE_GAP', `Table '${placement.blockId}' is not covered continuously by row fragments.`, { blockId: placement.blockId, expected, actual: { start: placement.startRow, end: placement.endRow } }));
       seenTableRows.set(placement.blockId, Math.max(expected, placement.endRow));
     }
-    for (const line of plan.lines) {
+    for (const line of allLines(plan)) {
       if (line.page === placement.page && overlaps(line.box, placement.box)) diagnostics.push(error('TABLE_TEXT_OVERLAP', `Table '${placement.blockId}' overlaps text for '${line.blockId}'.`, { blockId: placement.blockId, secondBlockId: line.blockId, page: placement.page, slotId: placement.slotId }));
     }
     for (const other of plan.blockPlacements) {
@@ -553,7 +602,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
       diagnostics.push(error('BLOCK_PLACEMENT_OUTSIDE_SLOT', `Atomic block '${placement.blockId}' leaves slot '${slot.id}'.`, { blockId: placement.blockId, slotId: slot.id, page: placement.page }));
     }
     const wrappedImage = source?.kind === 'image' && (source.image?.wrap === 'left' || source.image?.wrap === 'right');
-    for (const line of plan.lines) {
+    for (const line of allLines(plan)) {
       if (!wrappedImage && line.page === placement.page && overlaps(line.box, placement.box)) diagnostics.push(error('BLOCK_TEXT_OVERLAP', `Atomic block '${placement.blockId}' overlaps text for '${line.blockId}'.`, { blockId: placement.blockId, secondBlockId: line.blockId, page: placement.page, slotId: placement.slotId }));
     }
     for (const other of plan.blockPlacements) {
@@ -588,16 +637,16 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     for (const block of flow.blocks) {
       const wordCount = wordsOf(block.text).length;
       if (wordCount === 0) continue;
-      const ranges = plan.lines
+      const ranges = allLines(plan)
         .filter((line) => line.flowId === flowId && line.blockId === block.id)
         .map((line) => ({ start: line.startWord, end: line.endWord }))
         .sort((left, right) => left.start - right.start || left.end - right.end);
       if (repeatedFlows.has(flowId)) {
-        const pages = [...new Set(plan.lines
+        const pages = [...new Set(allLines(plan)
           .filter((line) => line.flowId === flowId && line.blockId === block.id)
           .map((line) => line.page))];
         for (const page of pages) {
-          const pageRanges = plan.lines
+          const pageRanges = allLines(plan)
             .filter((line) => line.flowId === flowId && line.blockId === block.id && line.page === page)
             .map((line) => ({ start: line.startWord, end: line.endWord }))
             .sort((left, right) => left.start - right.start || left.end - right.end);

@@ -90,10 +90,15 @@ export function createEditorialNumberedFixture() {
   const totalMainWords = state.next - 1;
   const title = numberedText(TITLE_WORDS, state, lorem);
   const tokenPrefixes = [...new Set(blocks.flatMap((block) => block.text.split(/\s+/u).map((token) => token.replace(/\d{4}$/u, ''))))];
+  const introBlocks = blocks.filter((block) => block.role === 'intro');
+  const quoteBlocks = blocks.filter((block) => block.role === 'quote');
+  const mainBlocks = blocks.filter((block) => block.role !== 'intro' && block.role !== 'quote');
   return {
     input: {
       flows: {
-        main: { continuation: 'allowed', blocks },
+        intro: { continuation: 'forbidden', blocks: introBlocks },
+        main: { continuation: 'allowed', blocks: mainBlocks },
+        quotes: { continuation: 'allowed', blocks: quoteBlocks },
         header: {
           continuation: 'forbidden',
           blocks: [
@@ -110,6 +115,8 @@ export function createEditorialNumberedFixture() {
     title,
     sourceShape: SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({ id, role, kind, sourceWords, words: countFor(kind, sourceWords) })),
     totalMainWords,
+    ordinaryWordCount: [...introBlocks, ...mainBlocks].reduce((sum, block) => sum + block.text.split(/\s+/u).length, 0),
+    quoteWordCount: quoteBlocks.reduce((sum, block) => sum + block.text.split(/\s+/u).length, 0),
     totalWordsIncludingTitle: totalMainWords + TITLE_WORDS,
     tokenPrefixes,
   };

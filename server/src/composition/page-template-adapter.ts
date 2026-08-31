@@ -153,6 +153,7 @@ function declaredTextSlotsForFlow(compiled: CompiledTemplate, flowId: string, pa
       ...(source.allowedBlockIds ? { allowedBlockIds: source.allowedBlockIds } : {}),
       ...(source.allowedBlockKinds ? { allowedBlockKinds: source.allowedBlockKinds as CompositionBlockKind[] } : {}),
       ...(source.textAlign ? { textAlign: source.textAlign } : {}),
+      ...(source.verticalAlign ? { verticalAlign: source.verticalAlign } : {}),
       ...(slotGrowth(source, pageGeometry, continuation) === undefined ? {} : { grow: slotGrowth(source, pageGeometry, continuation) }),
     }];
   });
@@ -186,6 +187,31 @@ function declaredAuxiliaryTextSlotsForFlow(compiled: CompiledTemplate, flowId: s
       ...(source.allowedBlockIds ? { allowedBlockIds: source.allowedBlockIds } : {}),
       ...(source.allowedBlockKinds ? { allowedBlockKinds: source.allowedBlockKinds as CompositionBlockKind[] } : {}),
       ...(source.textAlign ? { textAlign: source.textAlign } : {}),
+      ...(source.verticalAlign ? { verticalAlign: source.verticalAlign } : {}),
+      ...(slotGrowth(source, pageGeometry, continuation) === undefined ? {} : { grow: slotGrowth(source, pageGeometry, continuation) }),
+    }];
+  });
+}
+
+function declaredAuxiliaryBlockSlotsForFlow(compiled: CompiledTemplate, flowId: string, pageGeometry: PageGeometry, continuation = false): CompositionSlotTemplate[] {
+  return (compiled.flows[flowId]?.slots ?? []).flatMap((slotId) => {
+    const source = compiled.slots[slotId];
+    if (!source || !['image', 'metric-card', 'chart', 'table'].includes(source.kind)) return [];
+    const allowedBlockKinds: CompositionBlockKind[] = source.kind === 'image'
+      ? ['image']
+      : source.kind === 'metric-card'
+      ? ['metric']
+      : source.kind === 'chart'
+        ? ['chart', 'image']
+        : ['table'];
+    return [{
+      id: slotId,
+      regionId: source.region ?? flowId,
+      flowId,
+      kind: 'block' as const,
+      box: normalizedBox(slotFrame(source, continuation), pageGeometry),
+      ...(source.role ? { allowedRoles: [source.role as CompositionBlockRole] } : {}),
+      allowedBlockKinds,
       ...(slotGrowth(source, pageGeometry, continuation) === undefined ? {} : { grow: slotGrowth(source, pageGeometry, continuation) }),
     }];
   });
@@ -376,9 +402,9 @@ export function compositionTemplateFromPageGeometry(
   const continuationSourceIds = mainFlow.continuationSlots ?? mainFlow.slots;
   const declaredBlockSlotsFor = (pageGeometry: PageGeometry, sourceSlotIds: string[], continuation = false): CompositionSlotTemplate[] => sourceSlotIds
     .map((slotId) => [slotId, compiled.slots[slotId]] as const)
-    .filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[1]?.kind === 'metric-card' || entry[1]?.kind === 'chart' || entry[1]?.kind === 'table')
+    .filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[1]?.kind === 'image' || entry[1]?.kind === 'metric-card' || entry[1]?.kind === 'chart' || entry[1]?.kind === 'table')
     .map(([id, source]) => {
-      const allowedBlockKinds = source.kind === 'metric-card' ? ['metric' as const] : source.kind === 'chart' ? ['chart' as const, 'image' as const] : ['table' as const];
+      const allowedBlockKinds = source.kind === 'image' ? ['image' as const] : source.kind === 'metric-card' ? ['metric' as const] : source.kind === 'chart' ? ['chart' as const, 'image' as const] : ['table' as const];
       return {
         id,
         regionId: source.region ?? 'content',
@@ -438,27 +464,43 @@ export function compositionTemplateFromPageGeometry(
   const auxiliary: Array<{ flowId: string; first: CompositionSlotTemplate[]; continuation: CompositionSlotTemplate[]; reservedFirst: CompositionSlotTemplate[]; reservedContinuation: CompositionSlotTemplate[] }> = [];
   const auxiliaryFlowIds = new Set(Object.keys(compiled.flows));
   if (options.includeHeaderFlow) auxiliaryFlowIds.add('header');
+  const expandGrowthTargets = (slots: CompositionSlotTemplate[], segments: CompositionSlotTemplate[]): CompositionSlotTemplate[] => slots.map((slot) => {
+    if (!slot.grow?.pushes?.includes('content')) return slot;
+    return {
+      ...slot,
+      grow: {
+        ...slot.grow,
+        pushes: [...new Set(slot.grow.pushes.flatMap((target) => target === 'content' ? segments.map((segment) => segment.id) : [target]))],
+      },
+    };
+  });
   for (const flowId of auxiliaryFlowIds) {
     if (flowId === mainFlowId) continue;
     if (flowId === 'title') continue;
+    const declaredFirst = expandGrowthTargets(declaredAuxiliaryTextSlotsForFlow(compiled, flowId, geometry), firstSegments);
+    const declaredContinuation = expandGrowthTargets(declaredAuxiliaryTextSlotsForFlow(compiled, flowId, continuationGeometry, true), continuationFlowSegments);
+    const declaredFirstBlocks = expandGrowthTargets(declaredAuxiliaryBlockSlotsForFlow(compiled, flowId, geometry), firstSegments);
+    const declaredContinuationBlocks = expandGrowthTargets(declaredAuxiliaryBlockSlotsForFlow(compiled, flowId, continuationGeometry, true), continuationFlowSegments);
+    const declaredFirstAll = [...declaredFirst, ...declaredFirstBlocks];
+    const declaredContinuationAll = [...declaredContinuation, ...declaredContinuationBlocks];
     const firstFrame = auxiliaryFrame(flowId, compiled, geometry);
     const continuationFrame = auxiliaryFrame(flowId, compiled, continuationGeometry);
-    if (!firstFrame && !continuationFrame) {
+    if (!firstFrame && !continuationFrame && declaredFirstAll.length === 0 && declaredContinuationAll.length === 0) {
       throw new Error(`Template flow '${flowId}' needs a named page band or block frame before it can be adapted.`);
     }
     const textWidth = options.auxiliaryTextWidths?.[flowId];
-    const declaredFirst = declaredAuxiliaryTextSlotsForFlow(compiled, flowId, geometry);
-    const declaredContinuation = declaredAuxiliaryTextSlotsForFlow(compiled, flowId, continuationGeometry, true);
     const reservedFirst = declaredAuxiliaryLockupSlotsForFlow(compiled, flowId, geometry);
     const reservedContinuation = declaredAuxiliaryLockupSlotsForFlow(compiled, flowId, continuationGeometry, true);
     // A single legacy auxiliary slot historically meant "use the whole
     // named band". Preserve that behavior; multiple declared slots opt into
     // independently positioned boxes (for example header period + title).
-    const first = declaredFirst.length > 1
-      ? declaredFirst
+    const useDeclaredFirst = declaredFirstAll.length > 1 || declaredFirstAll.some((slot) => slot.kind === 'block' || (slot.allowedRoles?.length ?? 0) > 0);
+    const useDeclaredContinuation = declaredContinuationAll.length > 1 || declaredContinuationAll.some((slot) => slot.kind === 'block' || (slot.allowedRoles?.length ?? 0) > 0);
+    const first = useDeclaredFirst || !firstFrame
+      ? declaredFirstAll
       : firstFrame ? [auxiliarySlot(flowId, firstFrame, textWidth)] : [];
-    const continuation = declaredContinuation.length > 1
-      ? declaredContinuation
+    const continuation = useDeclaredContinuation || !continuationFrame
+      ? declaredContinuationAll
       : continuationFrame ? [auxiliarySlot(flowId, continuationFrame, textWidth)] : [];
     auxiliary.push({
       flowId,
@@ -553,6 +595,7 @@ export function compositionTemplateFromPageGeometry(
       layouts: [firstLayoutId, continuationLayoutId],
       slotsByLayout: { [firstLayoutId]: item.first.map((slot) => slot.id), [continuationLayoutId]: item.continuation.map((slot) => slot.id) },
       continuation: compiled.flows[item.flowId]?.continuation ?? 'forbidden',
+      ...(compiled.flows[item.flowId]?.insertionSlots === undefined ? {} : { insertionSlots: [...(compiled.flows[item.flowId]?.insertionSlots ?? [])] }),
       ...(compiled.flows[item.flowId]?.repeat === undefined ? {} : { repeat: compiled.flows[item.flowId].repeat }),
       ...(compiled.flows[item.flowId]?.startPage === undefined ? {} : { startPage: compiled.flows[item.flowId].startPage }),
     };

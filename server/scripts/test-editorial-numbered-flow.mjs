@@ -18,6 +18,10 @@ const primitivesBundle = join(temporary, 'primitives.cjs');
 const templateBundle = join(temporary, 'template.cjs');
 const geometryBundle = join(temporary, 'geometry.cjs');
 
+function plannedLines(plan) {
+  return [...plan.lines, ...(plan.insertionLines ?? [])];
+}
+
 function build(entry, output, extra = []) {
   const result = runProcess('npx', [
     'esbuild', entry, '--bundle', '--platform=node', '--target=node18', '--format=cjs', ...extra, `--outfile=${output}`,
@@ -82,7 +86,7 @@ function pixelAt(image, x, y) {
   return [image.pixels[offset], image.pixels[offset + 1], image.pixels[offset + 2]];
 }
 
-function inkPixelsInBox(image, box, pageSize, qa) {
+function inkProfileInBox(image, box, pageSize, qa) {
   const scaleX = image.width / pageSize.width;
   const scaleY = image.height / pageSize.height;
   const inset = qa.rectangle_inset_px;
@@ -92,17 +96,75 @@ function inkPixelsInBox(image, box, pageSize, qa) {
   const y1 = Math.min(image.height - 1, Math.ceil((box.y + box.height) * scaleY) - inset);
   const background = pixelAt(image, 0, 0);
   let count = 0;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  const rowInk = [];
   for (let y = y0; y <= y1; y += 1) {
+    let rowCount = 0;
+    let rowMinX = Number.POSITIVE_INFINITY;
+    let rowMaxX = Number.NEGATIVE_INFINITY;
     for (let x = x0; x <= x1; x += 1) {
       const pixel = pixelAt(image, x, y);
-      if (Math.max(
+      const isInk = Math.max(
         Math.abs(pixel[0] - background[0]),
         Math.abs(pixel[1] - background[1]),
         Math.abs(pixel[2] - background[2]),
-      ) >= qa.background_delta_min) count += 1;
+      ) >= qa.background_delta_min;
+      if (isInk) {
+        count += 1;
+        rowCount += 1;
+        rowMinX = Math.min(rowMinX, x);
+        rowMaxX = Math.max(rowMaxX, x);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
     }
+    if (rowCount > 0) rowInk.push({ y, inkPixels: rowCount, minX: rowMinX, maxX: rowMaxX });
   }
-  return count;
+  const bands = [];
+  for (const row of rowInk) {
+    const previous = bands.at(-1);
+    if (previous && row.y === previous.endY + 1) {
+      previous.endY = row.y;
+      previous.inkPixels += row.inkPixels;
+      previous.minX = Math.min(previous.minX, row.minX);
+      previous.maxX = Math.max(previous.maxX, row.maxX);
+    } else bands.push({ startY: row.y, endY: row.y, inkPixels: row.inkPixels, minX: row.minX, maxX: row.maxX });
+  }
+  const toMm = (value, scale) => value / scale;
+  const boxMm = {
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+  };
+  return {
+    status: count === 0 ? 'empty' : 'occupied',
+    inkPixels: count,
+    boxMm,
+    boundsPx: count === 0 ? null : { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 },
+    boundsMm: count === 0 ? null : {
+      x: toMm(minX, scaleX),
+      y: toMm(minY, scaleY),
+      width: toMm(maxX - minX + 1, scaleX),
+      height: toMm(maxY - minY + 1, scaleY),
+    },
+    rowBands: bands.map((band) => ({
+      x: toMm(band.minX ?? minX, scaleX),
+      y: toMm(band.startY, scaleY),
+      width: toMm((band.maxX ?? maxX) - (band.minX ?? minX) + 1, scaleX),
+      height: toMm(band.endY - band.startY + 1, scaleY),
+      inkPixels: band.inkPixels,
+    })),
+  };
+}
+
+function inkPixelsInBox(image, box, pageSize, qa) {
+  return inkProfileInBox(image, box, pageSize, qa).inkPixels;
 }
 
 async function assertRenderedInk(artifactPath, result, geometry, renderConfig, directory) {
@@ -124,18 +186,20 @@ async function assertRenderedInk(artifactPath, result, geometry, renderConfig, d
     return { page: page.page, image: decodePpm(readFileSync(path)) };
   });
   const checks = [];
-  const mainLines = result.plan.lines.filter((line) => line.flowId === 'main' && !line.blockId.startsWith('header') && !line.blockId.startsWith('footer'));
+  const mainLines = plannedLines(result.plan).filter((line) => !line.blockId.startsWith('header') && !line.blockId.startsWith('footer'));
   for (const line of mainLines) {
     const image = images.find((candidate) => candidate.page === line.page)?.image;
     assert.ok(image, `missing raster page ${line.page}`);
-    const ink = inkPixelsInBox(image, line.box, geometry, qa);
-    const check = { page: line.page, blockId: line.blockId, slotId: line.slotId, startWord: line.startWord, endWord: line.endWord, inkPixels: ink };
+    const profile = inkProfileInBox(image, line.box, geometry, qa);
+    const check = { page: line.page, blockId: line.blockId, slotId: line.slotId, startWord: line.startWord, endWord: line.endWord, ...profile };
     checks.push(check);
-    assert.ok(ink >= qa.minimum_ink_pixels, `planned line has no rendered ink: ${JSON.stringify(check)}`);
+    assert.ok(profile.boxMm && profile.boundsMm && profile.rowBands.length > 0, `planned line has no positional ink profile: ${JSON.stringify(check)}`);
+    assert.ok(profile.inkPixels >= qa.minimum_ink_pixels, `planned line has no rendered ink: ${JSON.stringify(check)}`);
   }
 
   const slotChecks = result.plan.slots
-    .filter((slot) => slot.id.includes(':segment-') || slot.id.endsWith(':intro'))
+    .filter((slot) => slot.id.includes(':segment-') || slot.id.endsWith(':intro') || slot.id.includes(':quote-'))
+    .filter((slot) => !slot.id.includes(':quote-') || result.plan.graphicPlacements.some((graphic) => graphic.slotId === slot.id && graphic.wrap === 'around') || mainLines.some((line) => line.slotId === slot.id))
     .map((slot) => {
       const lines = mainLines.filter((line) => line.slotId === slot.id);
       const image = images.find((candidate) => candidate.page === slot.page)?.image;
@@ -145,13 +209,27 @@ async function assertRenderedInk(artifactPath, result, geometry, renderConfig, d
         slotId: slot.id,
         state: slot.state,
         lineCount: lines.length,
-        inkPixels: inkPixelsInBox(image, slot.box, geometry, qa),
+        ...inkProfileInBox(image, slot.box, geometry, qa),
       };
     });
   for (const check of slotChecks.filter((item) => item.lineCount > 0)) {
+    assert.ok(check.boxMm && check.boundsMm && check.rowBands.length > 0, `planned text slot has no positional ink profile: ${JSON.stringify(check)}`);
     assert.ok(check.inkPixels >= qa.minimum_ink_pixels, `planned text slot is visually empty: ${JSON.stringify(check)}`);
   }
-  const report = { rasterDpi: qa.raster_dpi, backgroundDeltaMin: qa.background_delta_min, minimumInkPixels: qa.minimum_ink_pixels, lineChecks: checks, slotChecks };
+  const report = {
+    coordinateSystem: {
+      unit: 'mm',
+      origin: 'top-left of page',
+      pageWidth: geometry.width,
+      pageHeight: geometry.height,
+      note: 'boxMm and boundsMm are page coordinates; rowBands are occupied raster runs within boxMm',
+    },
+    rasterDpi: qa.raster_dpi,
+    backgroundDeltaMin: qa.background_delta_min,
+    minimumInkPixels: qa.minimum_ink_pixels,
+    lineChecks: checks,
+    slotChecks,
+  };
   if (directory) await writeFile(join(directory, 'ink-occupancy.json'), JSON.stringify(report, null, 2));
   return report;
 }
@@ -223,7 +301,9 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
   }, null, 2));
   for (const page of result.plan.pages) {
     const slots = result.plan.slots.filter((slot) => slot.page === page.page);
-    const lines = result.plan.lines.filter((line) => line.flowId === 'main' && line.page === page.page);
+    const flowLines = result.plan.lines.filter((line) => line.page === page.page);
+    const insertionLines = (result.plan.insertionLines ?? []).filter((line) => line.page === page.page);
+    const lines = [...flowLines, ...insertionLines];
     const layout = result.template.layouts.find((candidate) => candidate.id === page.layoutId);
     const slotInfo = slots.map((slot) => {
       const rawId = slot.id.replace(/^\d+:/u, '');
@@ -246,6 +326,8 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
       const definition = layout?.slots.find((candidate) => candidate.id === rawId);
       const quote = definition?.allowedRoles?.includes('quote');
       const slotLines = lines.filter((line) => line.slotId === slot.id);
+      const activeQuote = !quote || result.plan.graphicPlacements.some((graphic) => graphic.page === page.page && graphic.slotId === slot.id && graphic.wrap === 'around') || slotLines.length > 0;
+      if (!activeQuote) return '';
       const fill = quote ? '#fff0e8' : '#eaf3ff';
       const stroke = quote ? '#e8753d' : '#4e86b8';
       const activeObstacle = result.plan.graphicPlacements.some((graphic) => graphic.page === page.page && graphic.slotId === slot.id && graphic.wrap === 'around');
@@ -255,8 +337,8 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
       return `<rect x="${slot.box.x}" y="${slot.box.y}" width="${slot.box.width}" height="${slot.box.height}" fill="${fill}" fill-opacity="${opacity}" stroke="${stroke}" stroke-dasharray="${dash}"/><text x="${slot.box.x + 1}" y="${labelY}" font-size="2.4" fill="${stroke}">${escapeXml(`${rawId} · ${slot.state} · ${slotLines.length} lines`)}</text>`;
     }).join('');
     const lineSvg = lines.map((line) => {
-      const color = line.blockId.startsWith('quote-') ? '#e8753d' : line.blockId.startsWith('intro-') ? '#2a6ea6' : '#19334f';
-      return `<rect x="${line.box.x}" y="${line.box.y}" width="${line.box.width}" height="${line.box.height}" fill="${color}" fill-opacity="0.24"/><text x="${line.box.x}" y="${line.box.y + 3.4}" font-size="2.2" fill="#122a43">${escapeXml(`${line.blockId} · r${line.routeIndex ?? '-'} · ${line.startWord}-${line.endWord}`)}</text>`;
+      const color = line.flowId === 'quotes' ? '#e8753d' : line.flowId === 'intro' ? '#2a6ea6' : '#19334f';
+      return `<rect x="${line.box.x}" y="${line.box.y}" width="${line.box.width}" height="${line.box.height}" fill="${color}" fill-opacity="0.24"/><text x="${line.box.x}" y="${line.box.y + 3.4}" font-size="2.2" fill="#122a43">${escapeXml(`${line.flowId}:${line.blockId} · r${line.routeIndex ?? '-'} · ${line.startWord}-${line.endWord}`)}</text>`;
     }).join('');
     const obstacleSvg = result.plan.graphicPlacements
       .filter((graphic) => graphic.page === page.page && graphic.wrap === 'around')
@@ -264,9 +346,9 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
       .join('');
     const segmentSummary = slots
       .filter((slot) => slot.id.includes(':segment-'))
-      .map((slot) => `${slot.id.replace(/^\d+:/u, '')}: ${lines.filter((line) => line.slotId === slot.id).length}`)
+      .map((slot) => `${slot.id.replace(/^\d+:/u, '')}: ${flowLines.filter((line) => line.slotId === slot.id).length}`)
       .join(' · ');
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297"><rect width="210" height="297" fill="white"/><text x="17" y="7" font-size="4" font-family="sans-serif" font-weight="bold">DEBUG PAGE ${page.page} · continuous flow + obstacles</text><text x="17" y="12" font-size="2.6" font-family="sans-serif" fill="#19334f">actual main-flow lines: ${escapeXml(segmentSummary || 'none')} · pale boxes = capacity, filled strips = planned lines</text>${slotSvg}${obstacleSvg}${lineSvg}</svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297"><rect width="210" height="297" fill="white"/><text x="17" y="7" font-size="4" font-family="sans-serif" font-weight="bold">DEBUG PAGE ${page.page} · continuous flow + obstacles</text><text x="17" y="12" font-size="2.6" font-family="sans-serif" fill="#19334f">ordinary flow: ${escapeXml(segmentSummary || 'none')} · orange lines = insertion layer · pale boxes = capacity</text>${slotSvg}${obstacleSvg}${lineSvg}</svg>`;
     await writeFile(join(directory, `debug-page-${page.page}.svg`), svg);
   }
 }
@@ -289,23 +371,57 @@ try {
   const result = planReportCompositionShadow(pdf, template, geometry, fixture.input, { family: 'DejaVu', maxPages: 12 });
   const continuationLayout = result.template.layouts.find((layout) => layout.id.endsWith(':continuation'));
   const continuationRoute = result.template.routes.main.slotsByLayout?.[continuationLayout?.id ?? ''] ?? [];
-  assert.equal(continuationRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'continuous quote flow must retain one segment per column');
-  assert.deepEqual(result.template.routes.main.insertionSlots, ['quote-a', 'quote-b'], 'quotes must be declared as flow obstacles, not route segments');
+  assert.equal(continuationRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');
+  assert.equal(result.template.routes.main.insertionSlots, undefined, 'main flow must not own quote insertions');
+  assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b'], 'quotes must be declared as a separate obstacle flow');
+  assert.deepEqual(result.template.routes.intro.slots, ['intro'], 'intro Markdown image and lead must share a dedicated flow');
+  assert.equal(result.template.routes.chart, undefined, 'editorial inset template must not reserve a chart section');
   if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'plan-trace.json'), JSON.stringify(result.plan.trace ?? {}, null, 2));
   assert.notEqual(result.evaluation.status, 'rejected', JSON.stringify(result.evaluation));
   assert.equal(result.plan.residualContent.length, 0, JSON.stringify(result.plan.residualContent));
   assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_STABILIZED'), 'editorial fixture must finish with a stabilized insertion plan');
+  assert.equal(result.plan.lines.some((line) => line.layer === 'insertion'), false, 'ordinary flow must not contain insertion lines');
+  assert.equal(new Set((result.plan.insertionLines ?? []).map((line) => line.blockId)).size, 4, 'all four authored quotes must be present in the insertion layer');
+  assert.equal((result.plan.insertionLines ?? []).every((line) => line.flowId === 'quotes'), true, 'quote text must remain in the quote flow');
+  assert.equal(result.plan.lines.some((line) => line.blockId.startsWith('quote-')), false, 'quote text must never enter the main flow');
+  const tracedQuote = result.plan.trace?.blocks.find((block) => block.blockId === 'quote-market');
+  assert.ok(tracedQuote?.sourceText && tracedQuote.fragments.every((fragment) => fragment.text), 'plan trace must expose source and placed insertion text');
   const introBlockIds = new Set(fixture.sourceShape.filter((block) => block.role === 'intro').map((block) => block.id));
   const introLines = result.plan.lines.filter((line) => introBlockIds.has(line.blockId));
   assert.ok(introLines.length > 0, 'numbered fixture must place its intro content');
   assert.equal(introLines.every((line) => line.slotId.endsWith(':intro')), true, 'intro content must use the semantic intro slot instead of ordinary column flow');
-  assertExactNumberSet(numbers(numberedTokens(result.plan.lines.filter((line) => line.flowId === 'main').map((line) => line.text).join(' '), fixture.tokenPrefixes)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner must retain every numbered word exactly once');
+  const continuationRight = result.plan.slots.find((slot) => slot.id === '2:continuation:segment-2');
+  const firstDriverLine = result.plan.lines.find((line) => line.page === 2 && line.blockId === 'body-drivers-1');
+  assert.ok(continuationRight && firstDriverLine, 'fixture must create both continuation columns and place the drivers block on the continuation page');
+  assert.ok(Number.isInteger(firstDriverLine.routeIndex) && firstDriverLine.slotId.includes(':segment-'), 'the drivers block must enter through the main flow route, not by a separate block placement');
+  assertExactNumberSet(numbers(numberedTokens(plannedLines(result.plan).map((line) => line.text).join(' '), fixture.tokenPrefixes)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner must retain every numbered word exactly once');
+  const quoteTolerance = renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm;
+  const insertionGroups = new Map();
+  for (const line of result.plan.insertionLines ?? []) {
+    const group = insertionGroups.get(line.slotId) ?? [];
+    group.push(line);
+    insertionGroups.set(line.slotId, group);
+  }
+  for (const [slotId, lines] of insertionGroups) {
+    const slot = result.plan.slots.find((candidate) => candidate.id === slotId);
+    assert.ok(slot, `quote line references missing slot ${slotId}`);
+    const lineTop = Math.min(...lines.map((line) => line.box.y));
+    const lineBottom = Math.max(...lines.map((line) => line.box.y + line.box.height));
+    const lineCenter = (lineTop + lineBottom) / 2;
+    const slotCenter = slot.box.y + slot.box.height / 2;
+    assert.ok(Math.abs(lineCenter - slotCenter) <= quoteTolerance, `quote is not vertically centered: ${JSON.stringify({ slotId, lineTop, lineBottom, slot: slot.box, quoteTolerance })}`);
+  }
   assertNoInternalRouteGaps(result);
   assertNoEmptyContinuationColumn(result);
 
-  const artifact = renderComposition(result.document, result, createJsPdfTextBackend(pdf, 'DejaVu', compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
+  const artifact = renderComposition(result.document, result, createJsPdfTextBackend(pdf, 'DejaVu', compositionStylesFromRenderConfig({
+    foreground: [25, 51, 79],
+    muted: [88, 106, 131],
+    primary: [42, 110, 166],
+    quote: [232, 117, 61],
+  }), compositionPdfBackendOptionsFromRenderConfig()));
   const artifactPath = join(temporary, 'numbered-editorial.pdf');
   await writeFile(artifactPath, artifact);
   if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeDebugArtifacts(process.env.REPORT_BABY_ARTIFACT_DIR, result, fixture, artifact);
@@ -317,9 +433,23 @@ try {
   const columnBalance = inspectColumnBalance(readPdfLayout(artifactPath), renderConfig.quality.layout_diff);
   if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));
 
-  const planNumbers = numbers(numberedTokens(result.plan.lines.filter((line) => line.flowId === 'main').map((line) => line.text).join(' '), fixture.tokenPrefixes));
+  const authoredBlockOrder = new Map(fixture.sourceShape.map((block, index) => [block.id, index]));
+  const planNumbers = numbers(numberedTokens(plannedLines(result.plan)
+    .sort((left, right) => (authoredBlockOrder.get(left.blockId) ?? Number.MAX_SAFE_INTEGER) - (authoredBlockOrder.get(right.blockId) ?? Number.MAX_SAFE_INTEGER) || left.startWord - right.startWord)
+    .map((line) => line.text).join(' '), fixture.tokenPrefixes));
   assert.deepEqual(planNumbers, Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner reading order must be monotonically increasing');
-  console.log(JSON.stringify({ status: 'passed', pages: result.plan.pages.length, mainWords: fixture.totalMainWords, quotes: fixture.sourceShape.filter((block) => block.role === 'quote').length, lines: result.plan.lines.filter((line) => line.flowId === 'main').length, columnBalance, inkChecks: inkOccupancy.lineChecks.length, artifactPath }));
+  console.log(JSON.stringify({
+    status: 'passed',
+    pages: result.plan.pages.length,
+    mainWords: fixture.totalMainWords,
+    quotes: fixture.sourceShape.filter((block) => block.role === 'quote').length,
+    lines: result.plan.lines.length,
+    columnBalance,
+    inkChecks: inkOccupancy.lineChecks.length,
+    occupiedInkRegions: inkOccupancy.lineChecks.filter((check) => check.status === 'occupied').length,
+    emptyCheckedSlots: inkOccupancy.slotChecks.filter((check) => check.status === 'empty').map((check) => check.slotId),
+    artifactPath,
+  }));
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

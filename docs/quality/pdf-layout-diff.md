@@ -105,3 +105,11 @@ split by two known obstacle bands; every zone must receive text. Page 3 has the
 two final column zones. The fixture uses realistic lorem-ipsum words with an
 ordinal suffix, for example `lorem0001 ipsum0002 dolor0003`, so source
 completeness, column order, and zone occupancy are checked independently.
+
+`ink-occupancy.json` is positional, not just a counter. Every line and checked
+slot contains `boxMm`, the measured `boundsMm`, and `rowBands` with `x`, `y`,
+`width`, and `height` in page coordinates (origin at the top-left). A region
+with no measured pixels is explicitly marked `status: "empty"`. This makes it
+possible to compare planned rectangles with actual painted rows and to locate
+a gap without opening the PDF manually; the raster DPI and background threshold
+remain recorded alongside the measurements.
