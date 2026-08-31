@@ -31,10 +31,10 @@ z materializowanym pod-placementem.
    albo po spełnieniu reguły keep/minimum fragmentu.
 6. Po planowaniu powstaje pełny `flowPlacements` registry, zawierający także
    legalne, ale puste miejsca końcowe.
-7. Planner publikuje `flowBarriers`: finalne boksy kolizji przypisane do
-   konkretnego docelowego flowu. Są obecnie rejestrem diagnostycznym i są
-   rysowane w composition debug; następny krok to uczynienie ich jedynym
-   źródłem przeszkód dla cursora.
+7. Planner publikuje diagnostyczne `flowBarrierBoxCandidates`: fragmenty
+   zwykłych placementów rozcięte w punktach styku z aktualną grafiką-kolizją.
+   Nie są jeszcze używane do planowania ani przez cursor; pokazują tylko,
+   jakie boksy można byłoby później uczynić barierami.
 8. Evaluator odrzuca plan, gdy niezablokowany placement jest pusty pomiędzy
    placementem zawierającym treść wcześniej i placementem zawierającym treść
    później.

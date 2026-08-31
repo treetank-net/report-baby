@@ -11,7 +11,7 @@ import type {
   CompositionBlockMeasurement,
   CompositionBlockTrace,
   CompositionBlockPlacement,
-  CompositionFlowBarrier,
+  CompositionFlowBarrierBoxCandidate,
   CompositionFlowPlacement,
   CompositionDiagnostic,
   CompositionGraphicPlacement,
@@ -1211,7 +1211,7 @@ function createPlan(minimumFragmentLines?: number): CompositionPlan {
     blockPlacements: [],
     tablePlacements: [],
     graphicPlacements: [],
-    flowBarriers: [],
+    flowBarrierBoxCandidates: [],
     lines: [],
     insertionLines: [],
     decisions: [],
@@ -1366,24 +1366,46 @@ function registerFlowPlacements(document: CompositionDocument, plan: Composition
     .sort((left, right) => left.page - right.page || left.routeIndex - right.routeIndex || left.slotId.localeCompare(right.slotId));
 }
 
-function registerFlowBarriers(plan: CompositionPlan): CompositionFlowBarrier[] {
-  const textSlots = plan.slots.filter((slot) => slot.kind === 'text' && slot.flowId !== undefined);
-  const barriers: CompositionFlowBarrier[] = [];
-  for (const graphic of plan.graphicPlacements.filter((candidate) => candidate.wrap === 'around')) {
-    const targetFlows = new Set(textSlots
-      .filter((slot) => slot.page === graphic.page && slot.id !== graphic.slotId && rectsOverlap(slot.box, graphic.box))
-      .map((slot) => slot.flowId!));
-    for (const flowId of targetFlows) {
-      barriers.push({
-        id: `flow-barrier:${graphic.page}:${flowId}:${graphic.graphicId}`,
-        flowId,
-        sourceId: graphic.graphicId,
-        page: graphic.page,
-        box: { ...graphic.box },
+function registerFlowBarrierBoxCandidates(plan: CompositionPlan): CompositionFlowBarrierBoxCandidate[] {
+  const textPlacements = (plan.flowPlacements ?? []).filter((placement) => placement.flowId !== undefined);
+  const barriers = plan.graphicPlacements.filter((candidate) => candidate.wrap === 'around');
+  const candidates: CompositionFlowBarrierBoxCandidate[] = [];
+  for (const placement of textPlacements) {
+    const placementBottom = rectBottom(placement.box);
+    const boundaries = barriers
+      .filter((candidate) => candidate.page === placement.page && candidate.slotId !== placement.slotId && horizontalOverlap(placement.box, candidate.box) && rectsOverlap(placement.box, candidate.box))
+      .sort((left, right) => left.box.y - right.box.y || left.graphicId.localeCompare(right.graphicId));
+    if (boundaries.length === 0) continue;
+    let segmentTop = placement.box.y;
+    let previousSourceId: string | undefined;
+    for (const boundary of boundaries) {
+      const boundaryTop = Math.max(placement.box.y, Math.min(placementBottom, boundary.box.y));
+      if (boundaryTop > segmentTop) {
+        candidates.push({
+          id: `flow-barrier-box:${placement.page}:${placement.flowId}:${placement.id}:${previousSourceId ?? 'flow-start'}:${boundary.graphicId}`,
+          flowId: placement.flowId,
+          ...(previousSourceId === undefined ? {} : { previousSourceId }),
+          nextSourceId: boundary.graphicId,
+          placementId: placement.id,
+          page: placement.page,
+          box: { x: placement.box.x, y: segmentTop, width: placement.box.width, height: boundaryTop - segmentTop },
+        });
+      }
+      segmentTop = Math.max(segmentTop, Math.min(placementBottom, rectBottom(boundary.box)));
+      previousSourceId = boundary.graphicId;
+    }
+    if (placementBottom > segmentTop) {
+      candidates.push({
+        id: `flow-barrier-box:${placement.page}:${placement.flowId}:${placement.id}:${previousSourceId ?? 'flow-start'}:flow-end`,
+        flowId: placement.flowId,
+        ...(previousSourceId === undefined ? {} : { previousSourceId }),
+        placementId: placement.id,
+        page: placement.page,
+        box: { x: placement.box.x, y: segmentTop, width: placement.box.width, height: placementBottom - segmentTop },
       });
     }
   }
-  return barriers.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.flowId.localeCompare(right.flowId) || left.sourceId.localeCompare(right.sourceId));
+  return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.flowId.localeCompare(right.flowId) || left.placementId.localeCompare(right.placementId) || (left.nextSourceId ?? '').localeCompare(right.nextSourceId ?? ''));
 }
 
 function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
@@ -2118,7 +2140,7 @@ function planDocumentOnce(
   flattenPages(pages, plan, template);
   normalizePlanReadingOrder(document, plan);
   plan.flowPlacements = registerFlowPlacements(document, plan);
-  plan.flowBarriers = registerFlowBarriers(plan);
+  plan.flowBarrierBoxCandidates = registerFlowBarrierBoxCandidates(plan);
   recordPlanningPhase(plan, 'flow-placement', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { lineCount: plan.lines.length, pageCount: plan.pages.length });
   tracePlan(document, metrics, plan);
   return plan;

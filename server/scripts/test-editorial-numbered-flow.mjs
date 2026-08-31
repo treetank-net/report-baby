@@ -22,18 +22,23 @@ function plannedLines(plan) {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
-function assertFlowBarriers(result) {
-  const barriers = result.plan.flowBarriers ?? [];
-  assert.ok(barriers.length > 0, 'editorial plan must expose flow barriers');
-  for (const barrier of barriers) {
-    assert.equal(typeof barrier.flowId, 'string');
-    assert.equal(typeof barrier.sourceId, 'string');
-    assert.ok(barrier.box.width > 0 && barrier.box.height > 0, `flow barrier must have a positive box: ${JSON.stringify(barrier)}`);
-    const source = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === barrier.sourceId && graphic.page === barrier.page);
-    assert.ok(source, `flow barrier must reference an existing graphic: ${JSON.stringify(barrier)}`);
-    assert.deepEqual(barrier.box, source.box, `flow barrier must expose the current collision box: ${JSON.stringify({ barrier, source })}`);
+function assertFlowBarrierBoxCandidates(result) {
+  const candidates = result.plan.flowBarrierBoxCandidates ?? [];
+  assert.ok(candidates.length > 0, 'editorial plan must expose flow barrier box candidates');
+  for (const candidate of candidates) {
+    assert.equal(typeof candidate.flowId, 'string');
+    assert.ok(candidate.previousSourceId || candidate.nextSourceId);
+    assert.ok(candidate.box.width > 0 && candidate.box.height > 0, `flow barrier box candidate must have a positive box: ${JSON.stringify(candidate)}`);
+    for (const sourceId of [candidate.previousSourceId, candidate.nextSourceId].filter(Boolean)) {
+      const source = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === sourceId && graphic.page === candidate.page);
+      assert.ok(source, `flow barrier box candidate must reference an existing graphic: ${JSON.stringify(candidate)}`);
+    }
+    const placement = result.plan.flowPlacements.find((flowPlacement) => flowPlacement.id === candidate.placementId && flowPlacement.page === candidate.page);
+    assert.ok(placement, `flow barrier box candidate must reference an existing flow placement: ${JSON.stringify(candidate)}`);
+    assert.ok(candidate.box.x >= placement.box.x && candidate.box.x + candidate.box.width <= placement.box.x + placement.box.width);
+    assert.ok(candidate.box.y >= placement.box.y && candidate.box.y + candidate.box.height <= placement.box.y + placement.box.height);
   }
-  assert.ok(barriers.some((barrier) => barrier.flowId === 'main' && barrier.sourceId.startsWith('insertion:')), 'editorial main flow must expose at least one insertion barrier');
+  assert.ok(candidates.some((candidate) => candidate.flowId === 'main' && (candidate.previousSourceId?.startsWith('insertion:') || candidate.nextSourceId?.startsWith('insertion:'))), 'editorial main flow must expose at least one insertion candidate');
 }
 
 function build(entry, output, extra = []) {
@@ -566,7 +571,7 @@ try {
   }
   assertNoInternalRouteGaps(result);
   assertNoEmptyContinuationColumn(result);
-  assertFlowBarriers(result);
+  assertFlowBarrierBoxCandidates(result);
 
   const artifact = renderComposition(result.document, result, createJsPdfTextBackend(pdf, 'DejaVu', compositionStylesFromRenderConfig({
     foreground: [25, 51, 79],

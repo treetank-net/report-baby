@@ -12,10 +12,10 @@ list, not a promise that every item is already solved.
 - `BLOCK` — an atomic block placement, such as the full image block.
 - `IMAGE` and `CAPTION` — the measured sub-boxes owned by an image block.
 - `OBSTACLE` — a graphic or insertion boundary that excludes main-flow text.
-- `FLOW BARRIER` — the same collision box exposed with its target flow, so the
-  debug image shows which flow is expected to respect the obstacle. It is a
-  diagnostic registry for now; the cursor still uses the planner's existing
-  obstacle lookup.
+- `FLOW BARRIER BOX CANDIDATE` — a diagnostic fragment inside an ordinary
+  flow placement, bounded by the flow edge or collision-graphic contact
+  points. It is only a hypothesis about a future barrier-aware flow; it does
+  not change the planner or cursor.
 - `CHROME header band` and `CHROME footer {page}/{pages}` — page chrome, not
   editorial flow content.
 - line boxes — the concrete rectangles where a particular flow line was
@@ -68,12 +68,12 @@ dense.
     flow is the intentional `0.24 → 0.25` template separation (`2.97 mm`).
     Both are legal and explainable, but the debug view does not expose their
     ownership yet.
-11. Around graphics now produce explicit `FLOW BARRIER` records after final
-    placement. In the Trans.INFO editorial, each full-width quote is shown as
-    `FLOW BARRIER main <- insertion:quote-*`, with the exact final collision
-    box that main-flow planning had to avoid. This makes the distinction
-    between a quote placement and a main-flow placement visible in both the
-    plan JSON and the rendered PDF.
+11. Around graphics now produce explicit `FLOW BARRIER BOX CANDIDATE` fragments
+    after final placement. In the Trans.INFO editorial, each ordinary `main`
+    placement is partitioned into non-overlapping vertical segments between
+    the flow edges and quote contacts. This is deliberately observational: the
+    current planner still uses its existing obstacle lookup and the cursor is
+    not driven by these candidates.
 
 ## Follow-up tasks
 
@@ -86,10 +86,11 @@ dense.
   vertical balance with a rendered-PDF bbox assertion.
 - [x] Give report header metadata its own baseline offset and guard its glyphs
   against the planned line box.
-- [x] Register final around-graphic collision boxes as target-flow barriers
-  and draw them as labelled dashed frames in the normal composition debug PDF.
-- [ ] Make cursor obstacle consumption read from `plan.flowBarriers` and add
-  an invariant that the cursor and the barrier registry use the same box.
+- [x] Register non-overlapping candidate flow boxes split at around-graphic
+  contact points and draw them as labelled dashed frames in the normal
+  composition debug PDF.
+- [ ] Promote validated candidates to a pre-planning barrier registry and make
+  cursor obstacle consumption read from that registry as its sole source.
 - [ ] Add an explicit post-obstacle anchor to the plan trace, recording the
   first main-flow placement after each full-width insertion.
 - [ ] Extend composition-debug with visible padding and margin intervals,

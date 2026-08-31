@@ -29,7 +29,7 @@ export type {
   CompositionDiagnostic,
   CompositionEngine,
   CompositionEvaluation,
-  CompositionFlowBarrier,
+  CompositionFlowBarrierBoxCandidate,
   CompositionGraphicPlacement,
   CompositionLine,
   CompositionPagePlan,
