@@ -3,6 +3,8 @@ id: pages/editorial-inset-two-column
 kind: page
 surface: pdf-a4
 archetype: columns
+composition:
+  heading_keep_with_next_lines: 1
 canvas:
   direction: ltr
 page:

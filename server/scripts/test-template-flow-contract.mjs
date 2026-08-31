@@ -37,6 +37,7 @@ try {
     id: 'pages/flow-contract',
     kind: 'page',
     surface: 'pdf-a4',
+    composition: { heading_keep_with_next_lines: 1 },
     canvas: { direction: 'ltr' },
     page: {
       width: 210,
@@ -63,6 +64,7 @@ try {
     constraints: { inside_canvas: true, no_overlap: false },
   };
   const compiled = compileTemplateSource(source);
+  assert.equal(compiled.composition.headingKeepWithNextLines, 1, 'template composition policy must preserve the configured heading cluster size');
   assert.deepEqual(compiled.slots.lockup.gap, { value: 12, unit: 'px' }, 'lockup gap must preserve its explicit unit');
   assert.equal(compiled.slots.content.verticalAlign, 'middle', 'slot vertical alignment must survive template compilation');
   assert.deepEqual(compiled.flows.main, { id: 'main', slots: ['content'], continuation: 'allowed' });

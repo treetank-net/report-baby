@@ -404,6 +404,7 @@ try {
 
   const pdf = newPdf('portrait', [geometry.width, geometry.height]);
   const result = planReportCompositionShadow(pdf, template, geometry, fixture.input, { family: 'DejaVu', maxPages: 12 });
+  assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
   const continuationLayout = result.template.layouts.find((layout) => layout.id.endsWith(':continuation'));
   const continuationRoute = result.template.routes.main.slotsByLayout?.[continuationLayout?.id ?? ''] ?? [];
   assert.equal(continuationRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');

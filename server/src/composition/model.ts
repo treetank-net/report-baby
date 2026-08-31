@@ -90,6 +90,8 @@ export interface CompositionTemplate {
   layouts: CompositionLayoutTemplate[];
   routes: Record<string, CompositionFlowRoute>;
   maxPages: number;
+  /** Template-owned heading cluster policy; it overrides renderer defaults. */
+  headingKeepWithNextLines?: number;
 }
 
 export type CompositionBlockKind = 'heading' | 'paragraph' | 'list-item' | 'image' | 'table' | 'chart' | 'metric';

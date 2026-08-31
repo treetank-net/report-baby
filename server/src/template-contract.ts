@@ -92,6 +92,10 @@ export interface PageGeometry {
   continuation?: PageGeometry;
 }
 
+export interface CompiledTemplateComposition {
+  headingKeepWithNextLines?: number;
+}
+
 export type TemplateArchetype = 'title' | 'metrics' | 'chart' | 'table' | 'narrative' | 'conclusions' | 'columns';
 
 export interface CompiledTemplate {
@@ -108,6 +112,7 @@ export interface CompiledTemplate {
     insideCanvas: boolean;
     noOverlap: boolean;
   };
+  composition?: CompiledTemplateComposition;
   page?: PageGeometry;
   pageTitle?: boolean;
 }
@@ -172,6 +177,12 @@ function stringAt(value: unknown, path: string): string {
 function optionalPositiveInteger(value: unknown, path: string): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) fail(path, 'must be a positive integer.');
+  return value;
+}
+
+function optionalNonNegativeInteger(value: unknown, path: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) fail(path, 'must be a non-negative integer.');
   return value;
 }
 
@@ -416,6 +427,12 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
   if (kind === 'page' && !page) fail('page', 'is required for kind page templates.');
   if (kind === 'slide' && page) fail('page', 'is only allowed for kind page templates.');
   if (source.title_page !== undefined && typeof source.title_page !== 'boolean') fail('title_page', 'must be boolean.');
+  const composition = source.composition === undefined ? undefined : !isRecord(source.composition)
+    ? fail('composition', 'must be an object.')
+    : (() => {
+      const headingKeepWithNextLines = optionalNonNegativeInteger(source.composition.heading_keep_with_next_lines, 'composition.heading_keep_with_next_lines');
+      return headingKeepWithNextLines === undefined ? undefined : { headingKeepWithNextLines };
+    })();
 
   const constraints = isRecord(source.constraints) ? source.constraints : {};
   if (constraints.inside_canvas !== undefined && typeof constraints.inside_canvas !== 'boolean') fail('constraints.inside_canvas', 'must be boolean.');
@@ -445,6 +462,7 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
       insideCanvas: true,
       noOverlap: constraints.no_overlap === true,
     },
+    ...(composition === undefined ? {} : { composition }),
     page,
     ...(source.title_page === true ? { pageTitle: true } : {}),
   };

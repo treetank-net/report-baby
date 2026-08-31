@@ -615,5 +615,10 @@ export function compositionTemplateFromPageGeometry(
       };
     }
   }
-  return { layouts: [...(titleLayout ? [titleLayout] : []), firstLayout, continuationLayout], routes, maxPages: options.maxPages };
+  return {
+    layouts: [...(titleLayout ? [titleLayout] : []), firstLayout, continuationLayout],
+    routes,
+    maxPages: options.maxPages,
+    ...(compiled.composition?.headingKeepWithNextLines === undefined ? {} : { headingKeepWithNextLines: compiled.composition.headingKeepWithNextLines }),
+  };
 }

@@ -14,6 +14,7 @@ export function createTextCompositionEngine(
     minimumFragmentLines: pdf.plannerMinimumFragmentLines,
     geometryTolerance: pdf.compositionGeometryTolerance,
     ...policy,
+    ...(template.headingKeepWithNextLines === undefined ? {} : { headingKeepWithNextLines: template.headingKeepWithNextLines }),
   };
   return createCompositionEngine(createTextCompositionPlanner(template, configuredPolicy), { evaluate: evaluateCompositionPlan });
 }
