@@ -285,6 +285,35 @@ function assertNoEmptyContinuationColumn(result) {
   }
 }
 
+function assertFlowPlacementRegistryMatchesPlan(result) {
+  const registry = result.plan.flowPlacements ?? [];
+  const allPlannedLines = plannedLines(result.plan);
+  const routedTextSlots = result.plan.slots.filter((slot) => slot.kind === 'text'
+    && slot.flowId !== undefined
+    && slot.routeIndex !== undefined);
+  assert.equal(
+    new Set(registry.map((placement) => placement.id)).size,
+    registry.length,
+    'flow placement registry must not contain duplicate placement ids',
+  );
+  assert.deepEqual(
+    new Set(registry.map((placement) => placement.slotId)),
+    new Set(routedTextSlots.map((slot) => slot.id)),
+    'flow placement registry must include every routed text slot, including empty capacity',
+  );
+  for (const placement of registry) {
+    const lines = allPlannedLines.filter((line) => line.flowId === placement.flowId && line.slotId === placement.slotId);
+    const blockIds = [...new Set(lines.map((line) => line.blockId))];
+    assert.equal(placement.hasContent, lines.length > 0, `flow placement ${placement.id} hasContent must match its actual lines`);
+    assert.equal(placement.lineCount, lines.length, `flow placement ${placement.id} lineCount must match its actual lines`);
+    assert.deepEqual(placement.blockIds, blockIds, `flow placement ${placement.id} must identify its actual blocks`);
+    assert.ok(Number.isFinite(placement.box.x) && Number.isFinite(placement.box.y)
+      && placement.box.width > 0 && placement.box.height > 0,
+    `flow placement ${placement.id} must expose usable geometry`);
+    assert.ok(lines.every((line) => line.routeIndex === undefined || line.routeIndex === placement.routeIndex), `flow placement ${placement.id} must own all routed lines from its route index`);
+  }
+}
+
 function escapeXml(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
@@ -402,6 +431,7 @@ try {
     }
   }
   assert.deepEqual(illegalEmptyPlacements, [], `accepted plan must not contain an unblocked empty placement between content: ${JSON.stringify(illegalEmptyPlacements)}`);
+  assertFlowPlacementRegistryMatchesPlan(result);
   const occupiedMainPlacementIndex = mainFlowPlacements.findIndex((placement, index, placements) => placement.hasContent
     && placement.blockedBy.length === 0
     && index > 0
@@ -418,6 +448,16 @@ try {
   const invalidEvaluation = evaluateCompositionPlan(result.document, invalidPlan);
   assert.equal(invalidEvaluation.status, 'rejected', 'an empty placement between occupied placements must reject the plan');
   assert.ok(invalidEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'EMPTY_FLOW_PLACEMENT'), 'empty placement rejection must be explicit');
+  assert.throws(
+    () => renderComposition(result.document, { plan: invalidPlan, evaluation: invalidEvaluation }, createJsPdfTextBackend(pdf, 'DejaVu', compositionStylesFromRenderConfig({
+      foreground: [25, 51, 79],
+      muted: [88, 106, 131],
+      primary: [42, 110, 166],
+      quote: [232, 117, 61],
+    }), compositionPdfBackendOptionsFromRenderConfig())),
+    /rejected and cannot be rendered/u,
+    'a plan rejected for an empty placement must not reach the PDF backend',
+  );
   assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_STABILIZED'), 'editorial fixture must finish with a stabilized insertion plan');
