@@ -17,8 +17,10 @@ const argument = (name, fallback) => {
 };
 const requestPath = resolve(argument('--request', '/tmp/report-baby-transinfo-editorial-second/batch.json'));
 const outputPath = resolve(argument('--out', join(dirname(requestPath), 'composition-debug.pdf')));
+const mapOutputPath = resolve(argument('--map-out', outputPath.replace(/\.pdf$/u, '-map.pdf')));
 const scorePath = resolve(argument('--score-out', outputPath.replace(/\.pdf$/u, '.score.json')));
 const config = parse(await readFile(join(root, 'templates/composition-score-prototype.yml'), 'utf8'));
+const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
 
 function color(value) {
   return Array.isArray(value) ? value : [0, 0, 0];
@@ -125,7 +127,7 @@ function drawDebugPdf(plan, score) {
   const first = plan.pages?.[0] ?? { width: 210, height: 297 };
   const pdf = new jsPDF({ unit: 'mm', format: [first.width, first.height], compress: true });
   const lines = allLines(plan);
-  const debug = config.debug;
+  const debug = { ...config.debug, ...renderConfig.composition_debug };
   const headingBlocks = new Set((plan.trace?.blocks ?? []).filter((block) => block.kind === 'heading').map((block) => block.blockId));
   for (const page of plan.pages ?? []) {
     if (page.page !== 1) pdf.addPage([page.width, page.height]);
@@ -197,12 +199,16 @@ const raw = JSON.parse(await readFile(requestPath, 'utf8'));
 const request = Array.isArray(raw) ? raw[0]?.args : raw;
 if (!request || typeof request !== 'object') throw new Error(`Expected a render request or batch at ${requestPath}.`);
 const cli = resolve(root, 'cli-bundle.cjs');
-const rendered = spawnSync(process.execPath, [cli, '--json', 'render_report'], { cwd: root, input: JSON.stringify({ ...request, diagnostics: 'full' }), encoding: 'utf8' });
-if (rendered.status !== 0) throw new Error(`render_report failed: ${rendered.stderr || rendered.stdout}`);
+const sourcePdfPath = resolve(request.output_path ?? outputPath.replace(/\.pdf$/u, '-source.pdf'));
+if (sourcePdfPath === outputPath) throw new Error(`Debug output must differ from source PDF: ${sourcePdfPath}`);
+const renderNormal = spawnSync(process.execPath, [cli, '--json', 'render_report'], { cwd: root, input: JSON.stringify({ ...request, output_path: sourcePdfPath, composition_debug: false, diagnostics: 'full' }), encoding: 'utf8' });
+if (renderNormal.status !== 0) throw new Error(`normal render_report failed: ${renderNormal.stderr || renderNormal.stdout}`);
+const rendered = spawnSync(process.execPath, [cli, '--json', 'render_report'], { cwd: root, input: JSON.stringify({ ...request, output_path: outputPath, composition_debug: true, diagnostics: 'full' }), encoding: 'utf8' });
+if (rendered.status !== 0) throw new Error(`debug render_report failed: ${rendered.stderr || rendered.stdout}`);
 const result = JSON.parse(rendered.stdout);
 const plan = result.compositionPlan;
 if (!plan) throw new Error('render_report did not return compositionPlan; use diagnostics: full.');
 const score = scorePlan(plan, result.compositionEvaluation);
-await writeFile(outputPath, drawDebugPdf(plan, score));
-await writeFile(scorePath, JSON.stringify({ source: requestPath, output: outputPath, score, pages: plan.pages.length, lines: allLines(plan).length, flowPlacements: plan.flowPlacements ?? [] }, null, 2));
-console.log(JSON.stringify({ status: 'passed', debugPdf: outputPath, scorePath, pages: plan.pages.length, lines: allLines(plan).length, score }, null, 2));
+await writeFile(mapOutputPath, drawDebugPdf(plan, score));
+await writeFile(scorePath, JSON.stringify({ source: requestPath, sourcePdf: sourcePdfPath, output: outputPath, mapOutput: mapOutputPath, score, pages: plan.pages.length, lines: allLines(plan).length, flowPlacements: plan.flowPlacements ?? [] }, null, 2));
+console.log(JSON.stringify({ status: 'passed', debugPdf: outputPath, mapPdf: mapOutputPath, sourcePdf: sourcePdfPath, scorePath, pages: plan.pages.length, lines: allLines(plan).length, score }, null, 2));

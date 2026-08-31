@@ -214,6 +214,13 @@ pdf:
   title_eyebrow_line_height: 16
   title_line_height: 12
   title_bottom_gap: 8
+composition_debug:
+  page_padding: 8
+  label_gap: 1.2
+  label_size: 2.2
+  line_width: 0.35
+  placement_line_width: 0.55
+  obstacle_line_width: 0.8
 chart:
   width: 820
   height: 480

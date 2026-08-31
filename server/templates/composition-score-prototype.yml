@@ -17,15 +17,9 @@ score:
 
 debug:
   header_size: 4
-  label_size: 2.2
-  line_width: 0.35
-  placement_line_width: 0.55
-  obstacle_line_width: 0.8
   line_fill_opacity: 0.18
   placement_fill_opacity: 0.06
   obstacle_fill_opacity: 0.22
-  page_padding: 8
-  label_gap: 1.2
   heading_color: [126, 87, 166]
   title_color: [18, 42, 67]
   main_color: [25, 51, 79]

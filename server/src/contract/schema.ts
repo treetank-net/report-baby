@@ -307,6 +307,7 @@ export const slideDiagnosticsField = {
 
 export const reportDiagnosticsField = {
   dry_run: z.boolean().optional().default(false).describe('Resolve and validate the report layout plan without rasterizing or writing a PDF.'),
+  composition_debug: z.boolean().optional().default(false).describe('Draw the resolved composition placements, obstacles and line boxes over the normal PDF rendering.'),
   diagnostics: z
     .enum(['summary', 'full'])
     .optional()

@@ -197,7 +197,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       ...reportDiagnosticsField,
       template_ref: z.string().optional().describe('Alternative way to name the built-in A4 report template; must be one of the list_templates report names. Slide composition references such as slides/two-column are rejected here — they belong to the render_slides_* tools'),
     },
-    async ({ template, data, output_path, content_root, brand_ref, brand_source, template_ref, surface, overrides, dry_run, diagnostics }) => {
+    async ({ template, data, output_path, content_root, brand_ref, brand_source, template_ref, surface, overrides, dry_run, composition_debug, diagnostics }) => {
       const requestedTemplate = template_ref ?? template;
       if (!reportTemplateNames().includes(requestedTemplate)) {
         return { content: [{ type: 'text' as const, text: unknownReportTemplateMessage(requestedTemplate) }], isError: true };
@@ -210,7 +210,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       await mkdir(cfg.outputDir, { recursive: true });
       const out = outputPath(cfg, output_path, 'pdf');
       const renderWarnings: string[] = [];
-      const rendered = await renderReportPdfDetailed(requestedTemplate, data, context.theme, renderWarnings, context.sourceContext);
+      const rendered = await renderReportPdfDetailed(requestedTemplate, data, context.theme, renderWarnings, context.sourceContext, composition_debug);
       await writeFile(out, rendered.buffer);
       return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...brandRenderSummary(context.diagnostics, renderWarnings), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan: rendered.diagnostics.plan, drawings: rendered.diagnostics.drawings, ...(rendered.diagnostics.composition ? { composition: rendered.diagnostics.composition } : {}) }, diagnostics) } };
     },

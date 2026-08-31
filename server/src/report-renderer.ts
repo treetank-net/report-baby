@@ -147,14 +147,68 @@ function configNumber(value: unknown, key: string): number {
   return value;
 }
 
+function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionResult, theme: RenderTheme): void {
+  const debug = RENDER_CONFIG.compositionDebug;
+  const plan = composition.plan;
+  const headingBlocks = new Set((plan.trace?.blocks ?? []).filter((block) => block.kind === 'heading').map((block) => block.blockId));
+  const lines = [...(plan.lines ?? []), ...(plan.insertionLines ?? [])];
+  const drawRect = (box: CompositionBox, width: number, color: string, dashed = false): void => {
+    doc.setDrawColor(...rgb(color));
+    doc.setLineWidth(width);
+    doc.setLineDashPattern(dashed ? [2, 1] : [], 0);
+    doc.rect(box.x, box.y, box.width, box.height, 'S');
+  };
+  const drawLabel = (text: string, box: CompositionBox): void => {
+    doc.setFont(pdfFont(theme), 'normal');
+    doc.setFontSize(debug.labelSize);
+    doc.setTextColor(...rgb(theme.primary));
+    doc.text(text, box.x + debug.labelGap, box.y + debug.labelGap + debug.labelSize);
+  };
+  for (const page of plan.pages ?? []) {
+    doc.setPage(page.page);
+    doc.setFont(pdfFont(theme), 'bold');
+    doc.setFontSize(debug.labelSize);
+    doc.setTextColor(...rgb(theme.primary));
+    doc.text(`DEBUG overlay p${page.page} - ${composition.evaluation.status}`, debug.pagePadding, debug.pagePadding);
+
+    for (const placement of plan.flowPlacements ?? []) {
+      if (placement.page !== page.page) continue;
+      const empty = !placement.hasContent && (placement.blockedBy ?? []).length === 0;
+      const placementColor = empty ? theme.danger : placement.flowId === 'quotes' ? theme.secondary : theme.primary;
+      drawRect(placement.box, empty ? debug.obstacleLineWidth : debug.placementLineWidth, placementColor, true);
+      drawLabel(`${placement.flowId} r${placement.routeIndex} ${placement.hasContent ? `${placement.lineCount} lines` : 'EMPTY'}`, placement.box);
+    }
+
+    for (const graphic of plan.graphicPlacements ?? []) {
+      if (graphic.page !== page.page || !(graphic.wrap === 'around' || graphic.graphicId.startsWith('insertion:'))) continue;
+      drawRect(graphic.box, debug.obstacleLineWidth, theme.secondary);
+      drawLabel(`OBSTACLE ${graphic.graphicId}`, graphic.box);
+    }
+
+    for (const placement of [...(plan.blockPlacements ?? []), ...(plan.tablePlacements ?? [])]) {
+      if (placement.page !== page.page) continue;
+      drawRect(placement.box, debug.lineWidth, theme.primary);
+      drawLabel(`BLOCK ${placement.blockId}`, placement.box);
+    }
+
+    for (const line of lines) {
+      if (line.page !== page.page) continue;
+      const lineColor = headingBlocks.has(line.blockId) ? theme.primary : line.flowId === 'quotes' ? theme.secondary : line.flowId === 'intro' ? theme.primary : theme.foreground;
+      drawRect(line.box, debug.lineWidth, lineColor);
+      if (line.layer === 'insertion' || line.startWord === 0) drawLabel(`${line.flowId}:${line.blockId} ${line.startWord}-${line.endWord}`, line.box);
+    }
+  }
+  doc.setLineDashPattern([], 0);
+}
+
 export interface ReportRenderDiagnostics {
   plan: ResolvedReportPlan;
   drawings: ReportDrawing[];
   composition?: ReportCompositionResult;
 }
 
-export async function renderReportPdfDetailed(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
-  const planned = await renderReportCompositionPdf(name, data, theme, sourceContext);
+export async function renderReportPdfDetailed(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, compositionDebug = false): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
+  const planned = await renderReportCompositionPdf(name, data, theme, sourceContext, compositionDebug);
   for (const diagnostic of planned.composition.evaluation.diagnostics) if (diagnostic.severity === 'warning') warnings.push(diagnostic.message);
   const { geometry } = compositionGeometry(name);
   const plan = resolveReportPlan({ templateRef: name, theme, geometry, pageCount: Math.max(1, planned.composition.plan.pages.length), compositionDocument: planned.composition.document });
@@ -174,7 +228,7 @@ function footerTextWidth(doc: jsPDF, geometry: PageGeometry, maxPages: number, t
   return Math.min(...pages.map((page) => Math.max(1, page.width - page.margins.right - page.margins.left - PDF_CONFIG.footerNumberGap - labelWidth)));
 }
 
-export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
+export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
   const { template, geometry } = compositionGeometry(name);
   const fontSet = await loadRenderFontSet(theme);
   const doc = newPdf('portrait', [geometry.width, geometry.height], fontSet);
@@ -252,6 +306,7 @@ export async function renderReportCompositionPdf(name: string, data: Composition
       drawReportChrome(doc, page.page, composition.plan.pages.length, pageGeometry, theme, logo, theme.brandName, lockup?.box, page.layoutId === `${template.id}:continuation`);
     }
   }
+  if (compositionDebug) drawCompositionDebugOverlay(doc, composition, theme);
   renderComposition(composition.document, composition, createJsPdfTextBackend(doc, family, compositionStyles, { ...compositionPdfBackendOptionsFromRenderConfig(), ...(resolvedImages.size > 0 ? { imageAssets: resolvedImages } : {}), ...(combined ? { blockRenderers: combined.blockRenderers } : {}), ...(tableCapabilities ? { tableRenderer: tableCapabilities.renderer } : {}) }));
   return { buffer: Buffer.from(doc.output('arraybuffer')), composition, drawings };
 }
