@@ -13,9 +13,11 @@ list, not a promise that every item is already solved.
 - `IMAGE` and `CAPTION` — the measured sub-boxes owned by an image block.
 - `OBSTACLE` — a graphic or insertion boundary that excludes main-flow text.
 - `FLOW BARRIER BOX CANDIDATE` — a diagnostic fragment inside an ordinary
-  flow placement, bounded by the flow edge or collision-graphic contact
-  points. It is only a hypothesis about a future barrier-aware flow; it does
-  not change the planner or cursor.
+    flow placement, bounded by the flow edge or collision-graphic contact
+    points. It is drawn in yellow with a small configured inset so it remains
+    distinguishable from the placement and line-box frames. It is only a
+    hypothesis about a future barrier-aware flow; it does not change the
+    planner or cursor.
 - `CHROME header band` and `CHROME footer {page}/{pages}` — page chrome, not
   editorial flow content.
 - line boxes — the concrete rectangles where a particular flow line was

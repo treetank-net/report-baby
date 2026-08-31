@@ -224,6 +224,7 @@ composition_debug:
   line_width: 0.35
   placement_line_width: 0.55
   obstacle_line_width: 0.8
+  flow_barrier_box_inset: 0.8
 chart:
   width: 820
   height: 480

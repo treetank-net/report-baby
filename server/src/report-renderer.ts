@@ -213,8 +213,15 @@ function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionR
 
     for (const candidate of plan.flowBarrierBoxCandidates ?? []) {
       if (candidate.page !== page.page) continue;
-      drawRect(candidate.box, debug.placementLineWidth, theme.danger, true);
-      drawLabel(`FLOW BARRIER BOX CANDIDATE ${candidate.flowId} ${candidate.previousSourceId ?? 'flow-start'} -> ${candidate.nextSourceId ?? 'flow-end'}`, candidate.box, page, theme.danger, 'side');
+      const inset = Math.min(debug.flowBarrierBoxInset, candidate.box.width / 2, candidate.box.height / 2);
+      const visibleBox = {
+        x: candidate.box.x + inset,
+        y: candidate.box.y + inset,
+        width: Math.max(0, candidate.box.width - inset * 2),
+        height: Math.max(0, candidate.box.height - inset * 2),
+      };
+      drawRect(visibleBox, debug.placementLineWidth, theme.warning, true);
+      drawLabel(`FLOW BARRIER BOX CANDIDATE ${candidate.flowId} ${candidate.previousSourceId ?? 'flow-start'} -> ${candidate.nextSourceId ?? 'flow-end'}`, visibleBox, page, theme.warning, 'side');
     }
 
     for (const placement of plan.blockPlacements ?? []) {
