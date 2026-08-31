@@ -51,6 +51,7 @@ export interface RenderTheme {
     color?: string;
     size?: number;
     lineHeight?: number;
+    baselineOffset?: number;
     gap?: number;
     paddingX?: number;
     bottomGap?: number;

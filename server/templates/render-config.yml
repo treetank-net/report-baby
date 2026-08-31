@@ -36,6 +36,7 @@ quality:
     minimum_ink_pixels: 4
     rectangle_inset_px: 2
     placement_tolerance_mm: 1
+    caption_vertical_balance_tolerance_mm: 1
 assets:
   report_header_band_width_px: 640
   report_header_band_height_px: 154
@@ -77,6 +78,7 @@ pdf:
   image_caption_gap: 2.5
   image_caption_bottom_gap: 2
   image_caption_line_height: 4.2
+  image_caption_baseline_offset: 1
   image_caption_size: 8.5
   image_caption_padding_x: 1.5
   header_logo_y: 7

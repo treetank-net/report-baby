@@ -447,6 +447,7 @@ function extractTheme(brandDir: string, document: RecordValue, surface: string |
     color: resolveColor(caption.color, palette, surface),
     size: typeof caption.size === 'number' && Number.isFinite(caption.size) && caption.size > 0 ? caption.size : undefined,
     lineHeight: typeof caption.line_height === 'number' && Number.isFinite(caption.line_height) && caption.line_height > 0 ? caption.line_height : undefined,
+    baselineOffset: typeof caption.baseline_offset === 'number' && Number.isFinite(caption.baseline_offset) && caption.baseline_offset >= 0 ? caption.baseline_offset : undefined,
     gap: typeof caption.gap === 'number' && Number.isFinite(caption.gap) && caption.gap >= 0 ? caption.gap : undefined,
     paddingX: typeof caption.padding_x === 'number' && Number.isFinite(caption.padding_x) && caption.padding_x >= 0 ? caption.padding_x : undefined,
     bottomGap: typeof caption.bottom_gap === 'number' && Number.isFinite(caption.bottom_gap) && caption.bottom_gap >= 0 ? caption.bottom_gap : undefined,

@@ -49,6 +49,11 @@ dense.
    style, while the jsPDF backend classified the same block as bold `heading`.
    The shared style resolver now makes both sides use `heading`, and a PDF
    regression checks the rendered glyph bounds against the planned title box.
+8. The `AdobeStock` caption was not geometrically misplaced by the planner;
+   the PDF backend painted its baseline from the top gap instead of centering
+   the line group in the measured `captionBox`. The backend now centers one or
+   more caption lines in that box, with a configurable optical baseline offset,
+   and the image test compares actual PDF word bboxes against the box edges.
 
 ## Follow-up tasks
 
@@ -57,6 +62,8 @@ dense.
 - [x] Keep ordinary PDF rendering and debug rendering on the same jsPDF path.
 - [x] Use one shared block-to-style resolver in the planner and jsPDF backend.
 - [x] Reject the old header-style mismatch with a rendered-PDF bounds test.
+- [x] Center caption ink in its measured image `captionBox` and guard the
+  vertical balance with a rendered-PDF bbox assertion.
 - [ ] Add an explicit post-obstacle anchor to the plan trace, recording the
   first main-flow placement after each full-width insertion.
 - [ ] Add a soft score for vertical alignment of the first post-obstacle lines

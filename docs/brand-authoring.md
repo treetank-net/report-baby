@@ -80,6 +80,7 @@ layout:
     color: muted
     size: 8.5
     line_height: 4.2
+    baseline_offset: 1
     gap: 3.5
     padding_x: 1.5
     bottom_gap: 2

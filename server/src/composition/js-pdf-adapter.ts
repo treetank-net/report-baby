@@ -130,6 +130,8 @@ export interface JsPdfCompositionImageStyle {
   captionGap: number;
   captionBottomGap: number;
   captionLineHeight: number;
+  /** Optical baseline offset from the vertical center of the caption line group. */
+  captionBaselineOffset: number;
   captionSize: number;
   captionPaddingX: number;
   captionAlign?: 'left' | 'center' | 'right';
@@ -678,9 +680,12 @@ function drawCompositionImage(
   const imageBox = placement.imageBox ?? fallbackImageBox;
   pdf.addImage(asset.data, asset.format, imageBox.x, imageBox.y, imageBox.width, imageBox.height);
   if (image.chart && style.chart) drawRasterChartTextLayer(pdf, family, image.chart, imageBox, style.chart);
-  let y = imageBox.y + imageBox.height + style.captionGap + style.captionLineHeight;
+  const captionFrame = captionBox ?? placement.box;
+  let y = captionLines.length > 0
+    ? captionFrame.y + captionFrame.height / 2 + style.captionBaselineOffset
+      - ((captionLines.length - 1) * style.captionLineHeight) / 2
+    : captionFrame.y;
   captionLines.forEach((line) => {
-    const captionFrame = captionBox ?? placement.box;
     const align = style.captionAlign ?? 'left';
     const x = align === 'center'
       ? captionFrame.x + captionFrame.width / 2
@@ -698,7 +703,7 @@ export function createJsPdfImageBlockCapabilities(
   assets: ReadonlyMap<string, JsPdfCompositionImageAsset>,
   style: JsPdfCompositionImageStyle,
 ): { measureBlock: NonNullable<CompositionTextMetrics['measureBlock']>; renderer: JsPdfCompositionImageRenderer } {
-  if (![style.captionGap, style.captionBottomGap, style.captionLineHeight, style.captionSize, style.captionPaddingX].every((value) => Number.isFinite(value) && value >= 0) || style.captionLineHeight <= 0 || style.captionSize <= 0) {
+  if (![style.captionGap, style.captionBottomGap, style.captionLineHeight, style.captionBaselineOffset, style.captionSize, style.captionPaddingX].every((value) => Number.isFinite(value) && value >= 0) || style.captionLineHeight <= 0 || style.captionSize <= 0) {
     throw new Error('Image block style requires non-negative gaps and positive caption metrics.');
   }
   return {

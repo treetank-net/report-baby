@@ -298,6 +298,7 @@ export function compositionImageStyleFromRenderConfig(overrides: Partial<JsPdfCo
     captionGap: pdfNumber(pdf, 'imageCaptionGap'),
     captionBottomGap: pdfNumber(pdf, 'imageCaptionBottomGap'),
     captionLineHeight: pdfNumber(pdf, 'imageCaptionLineHeight'),
+    captionBaselineOffset: pdfNumber(pdf, 'imageCaptionBaselineOffset'),
     captionSize: pdfNumber(pdf, 'imageCaptionSize'),
     captionPaddingX: pdfNumber(pdf, 'imageCaptionPaddingX'),
     captionAlign: 'center',

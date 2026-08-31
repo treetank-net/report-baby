@@ -314,6 +314,7 @@ export async function renderReportCompositionPdf(name: string, data: Composition
     ? createJsPdfImageBlockCapabilities(doc, family, resolvedImages, compositionImageStyleFromRenderConfig({
       ...(imageCaption?.size === undefined ? {} : { captionSize: imageCaption.size }),
       ...(imageCaption?.lineHeight === undefined ? {} : { captionLineHeight: imageCaption.lineHeight }),
+      ...(imageCaption?.baselineOffset === undefined ? {} : { captionBaselineOffset: imageCaption.baselineOffset }),
       ...(imageCaption?.gap === undefined ? {} : { captionGap: imageCaption.gap }),
       ...(imageCaption?.paddingX === undefined ? {} : { captionPaddingX: imageCaption.paddingX }),
       ...(imageCaption?.bottomGap === undefined ? {} : { captionBottomGap: imageCaption.bottomGap }),

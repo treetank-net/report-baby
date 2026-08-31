@@ -101,7 +101,7 @@ try {
   assert.match(transparentBoundaryList.stdout, /image\s+no/u);
 
   const captionPdf = new jsPDF({ unit: 'mm', format: [100, 100] });
-  const captionStyle = { captionGap: 2, captionBottomGap: 2, captionLineHeight: 4, captionSize: 6, captionPaddingX: 1.5 };
+  const captionStyle = { captionGap: 2, captionBottomGap: 2, captionLineHeight: 4, captionBaselineOffset: 1, captionSize: 6, captionPaddingX: 1.5 };
   const captionCapabilities = createJsPdfImageBlockCapabilities(captionPdf, 'helvetica', new Map([['photo-1', {
     data: fixtureImage,
     format: 'PNG',

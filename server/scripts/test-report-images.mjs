@@ -35,6 +35,23 @@ function runCli(input) {
   });
 }
 
+async function pdfWords(path) {
+  const result = await execFileAsync('pdftotext', ['-bbox-layout', path, '-']);
+  const words = [];
+  let page = 0;
+  for (const pageMatch of result.stdout.matchAll(/<page\b[^>]*>([\s\S]*?)<\/page>/gu)) {
+    for (const wordMatch of pageMatch[1].matchAll(/<word\s+xMin="([\d.-]+)"\s+yMin="([\d.-]+)"\s+xMax="([\d.-]+)"\s+yMax="([\d.-]+)"[^>]*>([\s\S]*?)<\/word>/gu)) {
+      words.push({ page, xMin: Number(wordMatch[1]), yMin: Number(wordMatch[2]), xMax: Number(wordMatch[3]), yMax: Number(wordMatch[4]), text: wordMatch[5].replace(/<[^>]+>/gu, '') });
+    }
+    page += 1;
+  }
+  return words;
+}
+
+function normalizedPdfToken(value) {
+  return value.toLocaleLowerCase('und').replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
 try {
   await cp(join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png'), join(contentRoot, 'assets/map.png'), { recursive: true });
   await writeFile(join(contentRoot, 'assets/float.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240"><rect width="400" height="240" fill="#d76b4c"/></svg>');
@@ -74,6 +91,23 @@ try {
   assert.ok(introImage && introImagePlacement?.imageBox && Math.abs(introImage.y - introImagePlacement.imageBox.y) < 0.01, JSON.stringify({ introImage, introImagePlacement }));
   assert.ok(introCaption && introCaption.x > introImage.x, JSON.stringify(introContent.drawings));
   assert.ok(introCaption && introCaption.y > introImage.y + introImage.height, JSON.stringify(introContent.drawings));
+  const introCaptionBox = introImagePlacement?.captionBox;
+  assert.ok(introCaptionBox, JSON.stringify({ introImagePlacement }));
+  const pointPerMm = 72 / 25.4;
+  const captionWords = (await pdfWords(introOutput)).filter((word) => {
+    if (!['intro', 'caption'].includes(normalizedPdfToken(word.text))) return false;
+    const xMin = word.xMin / pointPerMm;
+    const yMin = word.yMin / pointPerMm;
+    const xMax = word.xMax / pointPerMm;
+    const yMax = word.yMax / pointPerMm;
+    return xMin >= introCaptionBox.x && xMax <= introCaptionBox.x + introCaptionBox.width && yMin >= introCaptionBox.y && yMax <= introCaptionBox.y + introCaptionBox.height;
+  });
+  assert.equal(captionWords.length, 2, JSON.stringify({ captionWords, introImagePlacement }));
+  const captionInkTop = Math.min(...captionWords.map((word) => word.yMin / pointPerMm));
+  const captionInkBottom = Math.max(...captionWords.map((word) => word.yMax / pointPerMm));
+  const captionTopGap = captionInkTop - introCaptionBox.y;
+  const captionBottomGap = introCaptionBox.y + introCaptionBox.height - captionInkBottom;
+  assert.ok(Math.abs(captionTopGap - captionBottomGap) <= reportImageQa.pdf_pixel_qa.caption_vertical_balance_tolerance_mm, JSON.stringify({ captionTopGap, captionBottomGap, introCaptionBox, captionWords }));
   const controlOutput = join(temporary, 'intro-control-report.pdf');
   const controlResult = await runCli({
     template: 'pages/editorial-two-column',
