@@ -808,6 +808,30 @@ try {
   assert.equal(impossibleInsertion.evaluation.status, 'rejected');
   assert.ok(impossibleInsertion.evaluation.diagnostics.some((item) => ['INSERTION_PRECEDENCE_CONFLICT', 'INSERTION_SOURCE_ORDER_VIOLATION', 'MAX_PAGES_EXCEEDED'].includes(item.code)), `planner must reject an insertion that cannot preserve source order above its obstacle: ${JSON.stringify(impossibleInsertion.evaluation)}`);
 
+  const defaultHeadingKeepTemplate = {
+    maxPages: 2,
+    layouts: [
+      { id: 'default-heading-first', width: 100, height: 100, slots: [{ id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 30 } }] },
+      { id: 'default-heading-continuation', width: 100, height: 100, slots: [{ id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 40 } }] },
+    ],
+    routes: { main: { slots: ['body'], slotsByLayout: { 'default-heading-continuation': ['body'] }, layouts: ['default-heading-first', 'default-heading-continuation'], continuation: 'allowed' } },
+  };
+  const defaultHeadingKeepDocument = {
+    flows: { main: { id: 'main', continuation: 'allowed', blocks: [
+      { id: 'default-heading-prefill', kind: 'paragraph', role: 'body', text: Array.from({ length: 12 }, (_, index) => `prefill${String(index + 1).padStart(4, '0')}`).join(' ') },
+      { id: 'default-heading', kind: 'heading', role: 'heading', text: 'Education' },
+      { id: 'default-heading-body', kind: 'paragraph', role: 'body', text: Array.from({ length: 30 }, (_, index) => `lead${String(index + 1).padStart(4, '0')}`).join(' ') },
+    ] } },
+  };
+  const defaultHeadingKeep = createTextCompositionEngine(defaultHeadingKeepTemplate, { headingKeepWithNextLines: 3 }).plan(defaultHeadingKeepDocument, metrics);
+  assert.equal(defaultHeadingKeep.evaluation.status, 'accepted', JSON.stringify(defaultHeadingKeep.evaluation));
+  const defaultHeadingLines = defaultHeadingKeep.plan.lines.filter((line) => line.blockId === 'default-heading');
+  const defaultLeadLines = defaultHeadingKeep.plan.lines.filter((line) => line.blockId === 'default-heading-body');
+  assert.ok(defaultHeadingLines.length > 0 && defaultLeadLines.length >= 3, 'default heading fixture must place heading and three lead lines');
+  assert.equal(defaultHeadingLines[0].page, defaultLeadLines[0].page, 'default heading must stay with the first three lead lines on the same page');
+  assert.equal(defaultHeadingLines[0].slotId, defaultLeadLines[0].slotId, 'default heading must stay with the first three lead lines in the same placement');
+  assert.ok(defaultHeadingKeep.plan.decisions.some((decision) => decision.code === 'KEEP_CLUSTER_PUSHED'), 'default heading policy must push the heading cluster instead of placing an orphan heading');
+
   const headingClusterTemplate = {
     maxPages: 1,
     layouts: [{ id: 'heading-cluster', width: 100, height: 100, slots: [

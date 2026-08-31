@@ -87,6 +87,10 @@ function plannerFoundNoUsableLine(
     && decision.blockId === blockId
     && decision.slotId === slotId
     && decision.reason === 'keep-list-item-together-below-minimum-fragment')) return true;
+  if (plan.decisions.some((decision) => decision.code === 'KEEP_CLUSTER_PUSHED'
+    && decision.blockId === blockId
+    && (decision.slotId === slotId || decision.from === slotId)
+    && decision.reason === 'insufficient-local-capacity')) return true;
   return plan.decisions.some((decision) => {
     if (decision.code !== 'FLOW_SEGMENT_ADVANCED' || decision.slotId !== slotId) return false;
     const details = decision.details as { nextBlockId?: unknown; nextBlockAvailableLines?: unknown } | undefined;

@@ -1775,18 +1775,28 @@ function planFlow(
         continue;
       }
     }
-    const keepRequired = keepLines > 0 && cursor.startWord === 0 ? wrapped.length + Math.min(keepLines, nextWrapped.length) : 0;
-    // Keep-with-next is a preference only after the heading itself fits. A
-    // heading must remain whole, but it must not abandon a nearly empty
-    // column merely because the following paragraph cannot join the cluster.
-    // The evaluator still rejects any genuinely underfilled route transition.
-    if (keepRequired > currentAvailableLines && wrapped.length > currentAvailableLines && usedLines > 0) {
-      plan.decisions.push({ code: 'KEEP_CLUSTER_PUSHED', flowId, blockId: block.id, from: slot.id, reason: 'insufficient-local-capacity' });
+    const keepRequired = keepLines > 0 && cursor.startWord === 0
+      ? completeWrapped.length + Math.min(keepLines, nextWrapped.length)
+      : 0;
+    // A heading's configured keep-with-next rule is hard: placing the heading
+    // alone at the bottom of a slot would create the exact orphan visible in
+    // the editorial PDF. The complete heading measurement is used here so a
+    // heading that fits by itself is still pushed when its lead does not.
+    if (isHeadingBlock && keepRequired > currentAvailableLines && usedLines > 0) {
+      plan.decisions.push({
+        code: 'KEEP_CLUSTER_PUSHED',
+        flowId,
+        blockId: block.id,
+        from: slot.id,
+        slotId: slot.id,
+        reason: 'insufficient-local-capacity',
+        details: { requiredLines: keepRequired, availableLines: currentAvailableLines },
+      });
       advanceCursor(cursor, availableRouteSlots);
       continue;
     }
-    if (keepRequired > currentAvailableLines && block.keepWithNextLines !== undefined && wrapped.length <= currentAvailableLines) {
-      plan.decisions.push({ code: 'KEEP_CLUSTER_RELAXED', flowId, blockId: block.id, from: slot.id, reason: 'whole-heading-fits-but-following-block-does-not' });
+    if (!isHeadingBlock && keepRequired > currentAvailableLines && block.keepWithNextLines !== undefined && wrapped.length <= currentAvailableLines) {
+      plan.decisions.push({ code: 'KEEP_CLUSTER_RELAXED', flowId, blockId: block.id, from: slot.id, reason: 'whole-block-fits-but-following-block-does-not' });
     }
     if (currentAvailableLines <= 0) {
       lastLegalSlotId = slot.id;
