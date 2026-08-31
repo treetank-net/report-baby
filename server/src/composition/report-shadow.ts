@@ -145,6 +145,8 @@ export function compositionStylesFromRenderConfig(colors?: CompositionTextColors
       baselineOffset: pdfNumber(pdf, 'quoteBaselineOffset'),
       fontStyle: 'normal',
       textIndent: pdfNumber(pdf, 'quoteTextIndent'),
+      paddingTop: pdfNumber(pdf, 'quotePaddingTop'),
+      paddingBottom: pdfNumber(pdf, 'quotePaddingBottom'),
       marginBefore: pdfNumber(pdf, 'quoteMarginBefore'),
       marginAfter: pdfNumber(pdf, 'quoteMarginAfter'),
       ...((colors?.quote ?? colors?.primary) === undefined ? {} : {

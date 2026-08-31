@@ -138,6 +138,8 @@ pdf:
   quote_mark_size: 16
   quote_mark_gap: 1.5
   quote_mark_baseline_offset: 4.6
+  quote_padding_top: 1.5
+  quote_padding_bottom: 1.5
   quote_margin_before: 0
   quote_margin_after: 4.2
   intro_min_lead_lines: 3

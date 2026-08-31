@@ -11,6 +11,8 @@ export interface JsPdfCompositionStyle {
   textColor?: [number, number, number];
   textTransform?: 'uppercase';
   textIndent?: number;
+  paddingTop?: number;
+  paddingBottom?: number;
   marginBefore?: number;
   marginAfter?: number;
   quoteMarks?: {
@@ -800,6 +802,11 @@ export function createJsPdfTextMetrics(
       const bounds = measuredLineInkBounds.get(style);
       if (!bounds) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return bounds;
+    },
+    textPadding(style) {
+      const selected = styles[style];
+      if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
+      return { top: selected.paddingTop ?? 0, bottom: selected.paddingBottom ?? 0 };
     },
     textIndent(style) {
       const selected = styles[style];

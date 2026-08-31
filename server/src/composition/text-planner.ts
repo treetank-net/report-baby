@@ -236,6 +236,14 @@ function lineInkBounds(metrics: CompositionTextMetrics, block: CompositionBlock,
   return bounds;
 }
 
+function textPadding(metrics: CompositionTextMetrics, block: CompositionBlock): { top: number; bottom: number } {
+  const padding = metrics.textPadding?.(styleFor(block)) ?? { top: 0, bottom: 0 };
+  if (!Number.isFinite(padding.top) || !Number.isFinite(padding.bottom) || padding.top < 0 || padding.bottom < 0) {
+    throw new Error(`Text metrics returned invalid padding for '${styleFor(block)}': ${JSON.stringify(padding)}.`);
+  }
+  return padding;
+}
+
 function mergeIntervals(intervals: Interval[]): Interval[] {
   const sorted = intervals
     .filter((interval) => interval.end > interval.start)
@@ -663,10 +671,16 @@ function placeInsertionLayer(
         continue;
       }
       const leading = lineHeight(metrics, block);
+      const padding = textPadding(metrics, block);
       const measurementBox = definition.fitContent && definition.grow?.axis === 'y'
         ? { ...slot.box, height: Math.max(slot.box.height, definition.grow.maxHeight) }
         : slot.box;
-      const lines = wrapBlock(metrics, block, 0, measurementBox, 0, rectBottom(measurementBox), [], leading);
+      const contentBox = {
+        ...measurementBox,
+        y: measurementBox.y + padding.top,
+        height: Math.max(0, measurementBox.height - padding.top - padding.bottom),
+      };
+      const lines = wrapBlock(metrics, block, 0, contentBox, 0, rectBottom(contentBox), [], leading);
       const wordCount = wordsForBlock(block).length;
       const consumed = lines.at(-1)?.endWord ?? 0;
       if (consumed < wordCount) {
@@ -677,7 +691,7 @@ function placeInsertionLayer(
       if (definition.fitContent && lines.length > 0) {
         const contentHeight = (lines.at(-1)!.lineOffset + 1) * leading;
         const maxHeight = definition.grow?.axis === 'y' ? definition.grow.maxHeight : slot.box.height;
-        const fittedHeight = Math.min(maxHeight, contentHeight);
+        const fittedHeight = Math.min(maxHeight, padding.top + contentHeight + padding.bottom);
         slot.box.height = fittedHeight;
         plan.decisions.push({
           code: 'INSERTION_SLOT_FIT_CONTENT',

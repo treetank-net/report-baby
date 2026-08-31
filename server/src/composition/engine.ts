@@ -11,6 +11,8 @@ export interface CompositionTextMetrics {
    * the same units as the composition geometry.
    */
   lineInkBounds?(styleName: string): { top: number; bottom: number };
+  /** Internal top/bottom padding for a text block, in page geometry units. */
+  textPadding?(styleName: string): { top: number; bottom: number };
   textIndent?(styleName: string): number;
   /** Width reserved after the final line for a trailing inline decoration. */
   textTrailingReserve?(styleName: string): number;
