@@ -19,7 +19,8 @@ Chcemy otrzymać stabilny, zrozumiały i możliwy do utrzymania system, w który
 - planner mierzy treść i wybiera placements przed rysowaniem;
 - grafiki i inne elementy zajmujące miejsce są uwzględniane podczas układania
   tekstu;
-- evaluator sprawdza gotowy plan przed renderowaniem;
+- evaluator odpowiada plannerowi, czy kandydat jest legalny i jaki score ma
+  jego układ;
 - zwykły PDF, debug PDF i `dry_run` opisują ten sam plan;
 - renderer wykonuje plan, ale nie podejmuje po fakcie decyzji o łamaniu tekstu;
 - dodanie edytorialu albo pomocniczego artykułu nie wymaga poznawania starego
@@ -42,7 +43,7 @@ pojęć, a nie ustanawiać nowe encje.
 | `PageGeometry` | `server/src/page-geometry.ts` | fizyczna geometria stron, kolumn, bands i przeszkód |
 | `CompositionTemplate` | `server/src/composition/model.ts`, `composition/page-template-adapter.ts` | template przekazany obecnie plannerowi |
 | planner | `server/src/composition/text-planner.ts` | pomiar, łamanie, routing, placements, obstacles, reflow i trace |
-| evaluator | `server/src/composition/evaluator.ts` | sprawdzanie planu i diagnostyka naruszeń |
+| evaluator | `server/src/composition/evaluator.ts` | sprawdzanie legalności planu, score i diagnostyka naruszeń |
 | engine | `server/src/composition/engine.ts` | połączenie planner → evaluator oraz wejście do renderera |
 | raportowa orkiestracja | `server/src/composition/report-shadow.ts` | przygotowanie dokumentu, template’u i metryk dla raportu |
 | renderer PDF | `server/src/report-renderer.ts`, `composition/js-pdf-adapter.ts` | rysowanie zaakceptowanego planu i chrome |
@@ -83,7 +84,7 @@ Najpierw musimy opisać obecne funkcje i zabezpieczyć je testami. Dopiero potem
 można przenosić istniejącą logikę do mniejszych modułów lub funkcji. Nie
 tworzymy przy tym nowych pojęć domenowych ani nie rozcinamy pliku mechanicznie.
 
-### 4. Pętla planowania i ewaluacji jest myląca
+### 4. Obecna pętla nie realizuje jeszcze celu produktu
 
 Obecny przebieg wygląda tak:
 
@@ -100,11 +101,30 @@ render_report
   → jsPDF
 ```
 
-Pętla wewnątrz planera dotyczy stabilizacji propozycji insertionów. Nie jest
-jeszcze ogólną pętlą optymalizacji, a evaluator nie wpływa na kolejny przebieg.
-Ewaluator jest obecnie wywoływany drugi raz w `planReportComposition()`, a przy
-tym dopisuje fazę do `plan.trace`. Należy to uprościć do jednego sprawdzenia
-jednego wyniku.
+Pętla wewnątrz planera dotyczy obecnie głównie stabilizacji propozycji
+insertionów. Evaluator nie przekazuje plannerowi informacji o jakości układu,
+więc planner nie może jeszcze sensownie porównywać alternatywnych pozycji
+grafik, cytatów ani kolejnych złamań tekstu. Dodatkowo evaluator jest obecnie
+wywoływany drugi raz w `planReportComposition()`, a przy tym dopisuje fazę do
+`plan.trace`.
+
+To nie jest powód, aby usuwać pętlę. To jest brak do naprawy. Docelowy przebieg
+release 1.0 ma wyglądać tak:
+
+```text
+planner tworzy kandydata
+  → evaluator sprawdza hard violations i oblicza score
+  → planner dostaje evaluation
+  → planner wybiera dozwoloną zmianę pozycji/łamania
+  → evaluator ocenia kolejnego kandydata
+  → po limicie wybierany jest najlepszy legalny plan
+```
+
+Plan z hard violation nie może wygrać dzięki dobremu score. Score służy do
+porównywania planów legalnych: na przykład do jakości łamania tekstu,
+wykorzystania grafiki, położenia cytatu, równości kolumn i niewykorzystanego
+miejsca. Jeżeli żaden kandydat nie jest legalny, wynik jest `rejected` z
+diagnostyką, a nie „najmniej złym” PDF-em.
 
 ### 5. `dry_run` nie używa tego samego planu
 
@@ -185,15 +205,29 @@ geometrię, planner, evaluator, debug i PDF.
 Gotowe, gdy nowy block kind można dodać przez istniejące capabilities, bez
 edytowania każdej gałęzi routingu i wrappingu.
 
-### Cel E — evaluator jako końcowa kontrola planu
+### Cel E — współpraca planera i ewaluatora
 
-- uruchamiać evaluator dokładnie raz dla wyniku przeznaczonego do renderu;
-- nie mutować planu podczas ewaluacji;
+- planner ma generować kolejne legalne kandydaty, a evaluator ma zwracać
+  informację zwrotną o legalności i score;
+- hard violations mają odrzucać kandydata niezależnie od score;
+- score ma porównywać legalne układy, w tym łamanie tekstu, położenie grafik i
+  cytatów, ciągłość kolumn oraz niewykorzystane miejsce;
+- zatrzymywać pętlę po stabilizacji, znalezieniu najlepszego wyniku albo limicie
+  iteracji z konfiguracji YAML;
+- zachować najlepszy legalny plan, a nie tylko ostatni wygenerowany plan;
+- evaluator nie może zmieniać planu podczas ewaluacji;
 - sprawdzać brak utraty contentu, nielegalny overlap, containment, kolejność
   flow i puste placementy pomiędzy zapełnionymi placementami;
 - weryfikować plan względem geometrii użytej do planowania, a nie wyłącznie
   względem danych zapisanych w samym planie;
 - zachować czytelne statusy accepted, accepted-with-warnings i rejected.
+
+Istniejący wynik `CompositionEvaluation` należy rozszerzyć o score i jego
+czytelne składniki, bez tworzenia nowego modelu domenowego. Dla identycznych
+danych, template’u, fontów i kolejności kandydatów wynik musi być
+deterministyczny. Evaluator może być uruchamiany wiele razy w trakcie
+rozmowy planera z ewaluatorem, ale dokładnie raz dla każdego konkretnego
+kandydata i bez dodatkowego, przypadkowego wywołania po zakończeniu pipeline’u.
 
 ### Cel F — debug i trace jako obserwacja, nie drugi system
 
@@ -248,11 +282,20 @@ edytowania każdej gałęzi routingu i wrappingu.
 
 ### Krok 4 — pętla i evaluator
 
-1. Oddzielić w dokumentacji reflow insertionów od ewaluacji gotowego planu.
-2. Usunąć drugie wywołanie `evaluateCompositionPlan()`.
+1. Oddzielić w dokumentacji i kodzie pojedynczy pass planera od pętli
+   planner–evaluator.
+2. Zostawić evaluatorowi możliwość wielokrotnej oceny kolejnych kandydatów,
+   ale usunąć drugie, nieuzasadnione wywołanie po zakończeniu pipeline’u.
 3. Przestać mutować `plan.trace` w evaluatorze.
 4. Przekazać evaluatorowi istniejący punkt odniesienia geometrii.
-5. Dodać test, który wykrywa zmianę slotu lub placementu po planowaniu.
+5. Rozszerzyć istniejący `CompositionEvaluation` o score i breakdown hard/soft
+   diagnostics.
+6. Dodać wybór najlepszego legalnego kandydata oraz deterministyczne tie-breaki.
+7. Dodać test, który wykrywa zmianę slotu lub placementu po planowaniu.
+8. Dodać test, że plan z hard violation nigdy nie wygrywa z legalnym planem
+   przez wyższy score.
+9. Dodać realny test, w którym przesunięcie grafiki lub cytatu daje legalny,
+   ale lepiej oceniony układ tekstu.
 
 ### Krok 5 — render i `dry_run`
 
@@ -270,7 +313,10 @@ edytowania każdej gałęzi routingu i wrappingu.
 3. Testy geometrii: grafiki prostokątne, elipsy, poligony, wrap i wiele
    obstacles.
 4. Testy evaluator mutation: zmiana planu nie może zostać zalegalizowana.
-5. Test pipeline: evaluator jest uruchamiany raz.
+5. Test pipeline: evaluator jest uruchamiany raz na kandydata, a nie drugi raz
+   przypadkowo dla tego samego wyniku.
+6. Test planner–evaluator: lepszy legalny kandydat zastępuje gorszego, a
+   kandydat nielegalny nigdy nie zostaje wybrany.
 6. Test parity: `dry_run`, zwykły render i debug mają tę samą sygnaturę planu.
 7. Dla realnego editorialu wygenerować zwykły PDF, debug PDF, JSON planu i
    trace oraz sprawdzić selectable text i wizualny układ.
@@ -289,7 +335,7 @@ edytowania każdej gałęzi routingu i wrappingu.
 ## Poza zakresem tego release’u
 
 - generalizacja cytatów i grafik jako miękkich insertionów;
-- scoring, ranking kandydatów i globalna optymalizacja wyglądu;
+- globalna optymalizacja całego dokumentu bez limitu i kontroli kosztu;
 - pełne wsparcie RTL/CJK i dodatkowych systemów pisma;
 - odtwarzanie starego `Cursor` i starego modelu `ReportData`;
 - masowe dzielenie `text-planner.ts` na nowe pojęcia bez wcześniejszych testów;
@@ -304,7 +350,8 @@ Release jest gotowy, gdy:
    ewaluację i renderowanie;
 3. nie ma utraty treści, nielegalnego overlapu ani pustych placement gaps;
 4. planner, evaluator, debug i renderer używają tych samych wyliczonych ram;
-5. evaluator jest wywoływany dokładnie raz i nie zmienia planu;
+5. evaluator jest wywoływany raz dla każdego kandydata, może przekazywać
+   feedback plannerowi i nie zmienia planu;
 6. `dry_run` i render opisują ten sam plan;
 7. plan jest deterministyczny dla tych samych danych, template’u i fontów;
 8. działają realne testy editorialu oraz ręczny przegląd PDF/debug PDF;
