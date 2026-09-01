@@ -265,6 +265,13 @@ function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionR
       drawRect(line.box, debug.lineWidth, lineColor);
       if (line.layer === 'insertion' || line.startWord === 0) drawLabel(`${line.flowId}:${line.blockId} ${line.startWord}-${line.endWord}`, line.box, page, lineColor, 'side');
     }
+
+    for (const glyph of plan.glyphPlacements ?? []) {
+      if (glyph.page !== page.page) continue;
+      const glyphColor = glyph.source === 'authored' ? theme.danger : theme.secondary;
+      drawRect(glyph.box, debug.lineWidth, glyphColor, true);
+      drawLabel(`GLYPH ${glyph.source} ${glyph.glyphId}`, glyph.box, page, glyphColor, 'side');
+    }
   }
   doc.setLineDashPattern([], 0);
 }
@@ -359,7 +366,7 @@ export async function renderReportCompositionPdf(name: string, data: Composition
     quote: rgb(theme.secondary),
     subtitle: reportMetadataColor,
     eyebrow: reportMetadataColor,
-  }, theme.titleCase);
+  }, theme.titleCase, theme.glyphFontFamily);
   const composition = planReportComposition(doc, template, planGeometry, data, { family, maxPages, includeTitlePage: Boolean(data.flows.title && template.pageTitle), includeHeaderFlow: Boolean(data.flows.header), auxiliaryTextWidths: { footer: footerTextWidth(doc, geometry, maxPages, theme) }, policy: { minimumWrapWidth: PDF_CONFIG.floatMinWidth }, styles: compositionStyles, ...(combined ? { measureBlock: combined.measureBlock } : {}), ...(tableCapabilities ? { measureTable: tableCapabilities.measureTable } : {}) });
   if (composition.evaluation.status === 'rejected') {
     const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');

@@ -28,6 +28,7 @@ debug:
   placement_color: [78, 134, 184]
   empty_color: [210, 38, 70]
   obstacle_color: [232, 117, 61]
+  glyph_color: [126, 34, 206]
   block_color: [126, 87, 166]
 
   # Relative vertical positions are preferences only. The plan may move an

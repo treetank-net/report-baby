@@ -352,6 +352,7 @@ try {
       },
     },
   };
+  const quoteStyles = (await import(shadowBundle)).compositionStylesFromRenderConfig({ foreground: [0, 0, 0], muted: [100, 100, 100], primary: [1, 92, 146], quote: [1, 92, 146] });
   const quotePlan = {
     pages: [{ page: 1, layoutId: 'quote-fixture', width: 210, height: 297 }],
     slots: [{ id: '1:quote', page: 1, regionId: 'main', box: { x: 17, y: 40, width: 176, height: 20 }, state: 'partial' }],
@@ -359,13 +360,42 @@ try {
     blockPlacements: [],
     tablePlacements: [],
     graphicPlacements: [],
+    glyphPlacements: [
+      {
+        id: 'glyph-placement:quote-fixture:open-quote:1',
+        glyphId: 'quote-fixture:open-quote',
+        targetType: 'block',
+        targetId: 'quote-fixture',
+        flowId: 'main',
+        page: 1,
+        slotId: '1:quote',
+        text: '“',
+        styleName: 'quote-mark',
+        anchor: 'text-start',
+        box: { x: 17, y: 40, width: 4, height: quoteStyles['quote-mark'].lineHeight },
+        baselineY: 40 + quoteStyles['quote-mark'].baselineOffset,
+      },
+      {
+        id: 'glyph-placement:quote-fixture:close-quote:1',
+        glyphId: 'quote-fixture:close-quote',
+        targetType: 'block',
+        targetId: 'quote-fixture',
+        flowId: 'main',
+        page: 1,
+        slotId: '1:quote',
+        text: '”',
+        styleName: 'quote-mark',
+        anchor: 'text-end',
+        box: { x: 185, y: 40, width: 4, height: quoteStyles['quote-mark'].lineHeight },
+        baselineY: 40 + quoteStyles['quote-mark'].baselineOffset,
+      },
+    ],
     lines: [{ blockId: 'quote-fixture', flowId: 'main', slotId: '1:quote', page: 1, routeIndex: 0, text: 'A quote keeps both marks inside its editorial frame.', box: { x: 25, y: 40, width: 168, height: 11.2 }, naturalWidth: 0, startWord: 0, endWord: 9 }],
     decisions: [],
     diagnostics: [],
     residualContent: [],
   };
   const quotePdf = newPdf();
-  const quoteStyles = (await import(shadowBundle)).compositionStylesFromRenderConfig({ foreground: [0, 0, 0], muted: [100, 100, 100], primary: [1, 92, 146], quote: [1, 92, 146] });
   const quoteArtifact = createJsPdfTextBackend(quotePdf, 'DejaVu', quoteStyles, compositionPdfBackendOptionsFromRenderConfig()).render(quoteDocument, quotePlan);
   const quotePdfPath = join(temporary, 'quote-fixture.pdf');
   await writeFile(quotePdfPath, quoteArtifact);

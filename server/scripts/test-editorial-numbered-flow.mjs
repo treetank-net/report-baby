@@ -473,12 +473,25 @@ try {
   const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
   const template = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(template);
-  const fixture = createEditorialNumberedFixture();
+  const fixture = createEditorialNumberedFixture({
+    quoteMarkGap: renderConfig.pdf.quote_mark_gap,
+    quoteMarkOffsetX: renderConfig.pdf.quote_mark_offset_x,
+    quoteMarkOffsetY: renderConfig.pdf.quote_mark_offset_y,
+  });
   assert.ok(fixture.totalMainWords >= 1000, `fixture must contain at least 1000 main-flow words, got ${fixture.totalMainWords}`);
   assert.equal(fixture.sourceShape.filter((block) => block.role === 'quote').length, 4, 'fixture must retain all four authored quote insertions');
 
   const pdf = newPdf('portrait', [geometry.width, geometry.height]);
-  const result = planReportCompositionShadow(pdf, template, geometry, fixture.input, { family: 'DejaVu', maxPages: 12 });
+  const result = planReportCompositionShadow(pdf, template, geometry, fixture.input, {
+    family: 'DejaVu',
+    maxPages: 12,
+    styles: compositionStylesFromRenderConfig({
+      foreground: [25, 51, 79],
+      muted: [88, 106, 131],
+      primary: [42, 110, 166],
+      quote: [232, 117, 61],
+    }),
+  });
   assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
   const continuationLayout = result.template.layouts.find((layout) => layout.id.endsWith(':continuation'));
   const continuationRoute = result.template.routes.main.slotsByLayout?.[continuationLayout?.id ?? ''] ?? [];
@@ -541,6 +554,11 @@ try {
   assert.equal(new Set((result.plan.insertionLines ?? []).map((line) => line.blockId)).size, 4, 'all four authored quotes must be present in the insertion layer');
   assert.equal((result.plan.insertionLines ?? []).every((line) => line.flowId === 'quotes'), true, 'quote text must remain in the quote flow');
   assert.equal(result.plan.lines.some((line) => line.blockId.startsWith('quote-')), false, 'quote text must never enter the main flow');
+  const quoteGlyphs = (result.plan.glyphPlacements ?? []).filter((glyph) => glyph.targetType === 'block' && result.document.flows.quotes.blocks.some((block) => block.id === glyph.targetId));
+  assert.equal(quoteGlyphs.length, 8, 'each of the four quote blocks must resolve its opening and closing glyph object');
+  assert.ok(quoteGlyphs.every((glyph) => glyph.source === 'authored'), 'quote marks must come from explicit authored glyph objects');
+  assert.ok(quoteGlyphs.filter((glyph) => glyph.anchor === 'text-end').every((glyph) => glyph.anchorMeasureStyleName === undefined), 'closing quote glyphs must anchor to the visible quote text width');
+  assert.ok(quoteGlyphs.every((glyph) => glyph.box.width > 0 && glyph.box.height > 0 && Number.isFinite(glyph.baselineY)), 'quote glyph objects must expose measurable geometry and baseline');
   const tracedQuote = result.plan.trace?.blocks.find((block) => block.blockId === 'quote-market');
   assert.ok(tracedQuote?.sourceText && tracedQuote.fragments.every((fragment) => fragment.text), 'plan trace must expose source and placed insertion text');
   const introBlockIds = new Set(fixture.sourceShape.filter((block) => block.role === 'intro').map((block) => block.id));

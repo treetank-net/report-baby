@@ -62,7 +62,7 @@ export interface CompositionTextColors {
   eyebrow?: [number, number, number];
 }
 
-export function compositionStylesFromRenderConfig(colors?: CompositionTextColors, titleCase: 'normal' | 'upper' = 'normal'): JsPdfCompositionStyles {
+export function compositionStylesFromRenderConfig(colors?: CompositionTextColors, titleCase: 'normal' | 'upper' = 'normal', glyphFontFamily?: string): JsPdfCompositionStyles {
   const pdf = readRenderConfig().pdf;
   const textColor = (color: [number, number, number] | undefined) => color === undefined ? {} : { textColor: color };
   const body: JsPdfCompositionStyle = {
@@ -159,6 +159,14 @@ export function compositionStylesFromRenderConfig(colors?: CompositionTextColors
           color: colors!.quote ?? colors!.primary!,
         },
       }),
+      ...textColor(colors?.quote ?? colors?.primary ?? colors?.foreground),
+    },
+    'quote-mark': {
+      fontSize: pdfNumber(pdf, 'quoteMarkSize'),
+      lineHeight: pdfNumber(pdf, 'quoteLineHeight'),
+      baselineOffset: pdfNumber(pdf, 'quoteMarkBaselineOffset'),
+      fontStyle: 'bold',
+      ...(glyphFontFamily === undefined ? {} : { fontFamily: glyphFontFamily }),
       ...textColor(colors?.quote ?? colors?.primary ?? colors?.foreground),
     },
     sidebar: {

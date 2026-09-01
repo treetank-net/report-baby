@@ -32,6 +32,26 @@ export interface CompositionGraphic {
   alt?: string;
 }
 
+export type CompositionGlyphAnchor = 'box' | 'text-start' | 'text-end';
+export type CompositionGlyphAnchorAlignment = 'start' | 'end';
+export type CompositionGlyphTargetMode = 'first-line' | 'last-line' | 'box';
+
+/** A renderer-neutral decoration attached to a planned block or graphic. */
+export interface CompositionGlyphDefinition {
+  id: string;
+  target: { kind: 'block' | 'graphic'; id: string };
+  text: string;
+  styleName: string;
+  anchor: CompositionGlyphAnchor;
+  anchorAlignment?: CompositionGlyphAnchorAlignment;
+  targetMode: CompositionGlyphTargetMode;
+  anchorMeasureStyleName?: string;
+  offsetX?: number;
+  offsetY?: number;
+  clampToTarget?: boolean;
+  opacity?: number;
+}
+
 export interface CompositionAsset {
   id: string;
   source: string;
@@ -162,6 +182,7 @@ export interface CompositionDocument {
   flows: Record<string, CompositionFlow>;
   assets?: CompositionAsset[];
   graphics?: CompositionGraphic[];
+  glyphs?: CompositionGlyphDefinition[];
   template?: CompositionTemplate;
   diagnostics?: string[];
   titlePage?: {

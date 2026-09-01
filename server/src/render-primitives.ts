@@ -26,6 +26,9 @@ export interface RenderFontSet {
   regular: Uint8Array;
   bold: Uint8Array;
   family: string;
+  glyphRegular?: Uint8Array;
+  glyphBold?: Uint8Array;
+  glyphFamily?: string;
 }
 
 let wasmReady: Promise<void> | null = null;
@@ -35,12 +38,19 @@ function ensureWasm(): Promise<void> {
   return wasmReady;
 }
 
-export async function loadRenderFontSet(theme?: Partial<Pick<RenderTheme, 'fontRegularPath' | 'fontBoldPath' | 'fontFamily'>>): Promise<RenderFontSet> {
-  const [regular, bold] = await Promise.all([
+export async function loadRenderFontSet(theme?: Partial<Pick<RenderTheme, 'fontRegularPath' | 'fontBoldPath' | 'fontFamily' | 'fontGlyphRegularPath' | 'fontGlyphBoldPath' | 'glyphFontFamily'>>): Promise<RenderFontSet> {
+  const [regular, bold, glyphRegular, glyphBold] = await Promise.all([
     theme?.fontRegularPath ? readFile(theme.fontRegularPath) : Promise.resolve(fontRegular),
     theme?.fontBoldPath ? readFile(theme.fontBoldPath) : Promise.resolve(fontBold),
+    theme?.fontGlyphRegularPath ? readFile(theme.fontGlyphRegularPath) : Promise.resolve(undefined),
+    theme?.fontGlyphBoldPath ? readFile(theme.fontGlyphBoldPath) : Promise.resolve(undefined),
   ]);
-  return { regular, bold, family: theme?.fontRegularPath ? theme.fontFamily ?? FONT_FAMILY : FONT_FAMILY };
+  return {
+    regular,
+    bold,
+    family: theme?.fontRegularPath ? theme.fontFamily ?? FONT_FAMILY : FONT_FAMILY,
+    ...(glyphRegular && glyphBold ? { glyphRegular, glyphBold, glyphFamily: theme?.glyphFontFamily } : {}),
+  };
 }
 
 export async function renderSvgToPng(svg: string, width?: number, fontSet?: RenderFontSet): Promise<Buffer> {
@@ -60,12 +70,20 @@ export async function renderSvgToPng(svg: string, width?: number, fontSet?: Rend
 }
 
 export function registerPdfFontSet(doc: jsPDF, fontSet: RenderFontSet): void {
-  if (fontSet.family === 'DejaVu Sans') return;
-  const fileStem = `Brand-${fontSet.family.replace(/[^a-z0-9]+/gi, '-')}`;
-  doc.addFileToVFS(`${fileStem}-Regular.ttf`, Buffer.from(fontSet.regular).toString('base64'));
-  doc.addFont(`${fileStem}-Regular.ttf`, fontSet.family, 'normal');
-  doc.addFileToVFS(`${fileStem}-Bold.ttf`, Buffer.from(fontSet.bold).toString('base64'));
-  doc.addFont(`${fileStem}-Bold.ttf`, fontSet.family, 'bold');
+  if (fontSet.family !== 'DejaVu Sans') {
+    const fileStem = `Brand-${fontSet.family.replace(/[^a-z0-9]+/gi, '-')}`;
+    doc.addFileToVFS(`${fileStem}-Regular.ttf`, Buffer.from(fontSet.regular).toString('base64'));
+    doc.addFont(`${fileStem}-Regular.ttf`, fontSet.family, 'normal');
+    doc.addFileToVFS(`${fileStem}-Bold.ttf`, Buffer.from(fontSet.bold).toString('base64'));
+    doc.addFont(`${fileStem}-Bold.ttf`, fontSet.family, 'bold');
+  }
+  if (fontSet.glyphRegular && fontSet.glyphBold && fontSet.glyphFamily && fontSet.glyphFamily !== fontSet.family) {
+    const glyphStem = `Brand-${fontSet.glyphFamily.replace(/[^a-z0-9]+/gi, '-')}`;
+    doc.addFileToVFS(`${glyphStem}-Regular.ttf`, Buffer.from(fontSet.glyphRegular).toString('base64'));
+    doc.addFont(`${glyphStem}-Regular.ttf`, fontSet.glyphFamily, 'normal');
+    doc.addFileToVFS(`${glyphStem}-Bold.ttf`, Buffer.from(fontSet.glyphBold).toString('base64'));
+    doc.addFont(`${glyphStem}-Bold.ttf`, fontSet.glyphFamily, 'bold');
+  }
 }
 
 export function newPdf(orientation: 'portrait' | 'landscape' = 'portrait', format: string | [number, number] = 'a4', fontSet?: RenderFontSet): jsPDF {

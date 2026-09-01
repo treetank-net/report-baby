@@ -135,8 +135,10 @@ pdf:
   quote_line_height: 5.6
   quote_baseline_offset: 4
   quote_text_indent: 8
-  quote_mark_size: 16
-  quote_mark_gap: 1.5
+  quote_mark_size: 30
+  quote_mark_gap: 5
+  quote_mark_offset_x: -2.5
+  quote_mark_offset_y: 1
   quote_mark_baseline_offset: 4.6
   quote_padding_top: 1.5
   quote_padding_bottom: 1.5
@@ -227,6 +229,7 @@ composition_debug:
   placement_line_width: 0.55
   obstacle_line_width: 0.8
   flow_barrier_box_inset: 0.8
+  glyph_line_width: 0.45
 chart:
   width: 820
   height: 480

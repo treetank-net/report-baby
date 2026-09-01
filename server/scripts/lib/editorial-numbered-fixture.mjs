@@ -77,7 +77,7 @@ function countFor(kind, sourceWords) {
   return kind === 'paragraph' ? Math.ceil(sourceWords * BODY_SCALE) : sourceWords;
 }
 
-export function createEditorialNumberedFixture() {
+export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX, quoteMarkOffsetY }) {
   const state = { next: 1 };
   const lorem = createLoremGenerator();
   const blocks = SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({
@@ -93,6 +93,30 @@ export function createEditorialNumberedFixture() {
   const introBlocks = blocks.filter((block) => block.role === 'intro');
   const quoteBlocks = blocks.filter((block) => block.role === 'quote');
   const mainBlocks = blocks.filter((block) => block.role !== 'intro' && block.role !== 'quote');
+  const glyphs = quoteBlocks.flatMap((block) => [
+    {
+      id: `${block.id}-open`,
+      target: { kind: 'block', id: block.id },
+      text: '“',
+      style: 'quote-mark',
+      anchor: 'text-start',
+      target_mode: 'first-line',
+      offset_x: -quoteMarkGap + quoteMarkOffsetX,
+      offset_y: quoteMarkOffsetY,
+      clamp_to_target: false,
+    },
+    {
+      id: `${block.id}-close`,
+      target: { kind: 'block', id: block.id },
+      text: '”',
+      style: 'quote-mark',
+      anchor: 'text-end',
+      target_mode: 'last-line',
+      offset_x: quoteMarkGap + quoteMarkOffsetX,
+      offset_y: quoteMarkOffsetY,
+      clamp_to_target: true,
+    },
+  ]);
   return {
     input: {
       flows: {
@@ -111,6 +135,7 @@ export function createEditorialNumberedFixture() {
           blocks: [{ id: 'footer', type: 'text', role: 'footer', text: 'Numbered-flow fixture' }],
         },
       },
+      glyphs,
     },
     title,
     sourceShape: SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({ id, role, kind, sourceWords, words: countFor(kind, sourceWords) })),

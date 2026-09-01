@@ -974,9 +974,23 @@ try {
 
   const graphicTemplate = structuredClone(template);
   graphicTemplate.layouts[0].slots.push({ id: 'hero-graphic', regionId: 'main', kind: 'graphic', box: { x: 20, y: 15, width: 18, height: 10 } });
-  const graphicResult = createTextCompositionEngine(graphicTemplate).plan({ ...document, graphics: [{ id: 'hero-oval', slotId: 'hero-graphic', shape: 'ellipse', wrap: 'around', page: 1 }] }, metrics);
+  const glyphDocument = {
+    ...document,
+    glyphs: [
+      { id: 'heading-decoration', target: { kind: 'block', id: 'heading' }, text: '◆', styleName: 'heading', anchor: 'text-start', anchorAlignment: 'end', targetMode: 'first-line', offsetX: 2 },
+      { id: 'graphic-decoration', target: { kind: 'graphic', id: 'hero-oval' }, text: '✦', styleName: 'body', anchor: 'box', targetMode: 'box', offsetX: 2, offsetY: 1, clampToTarget: true, opacity: 0.35 },
+    ],
+  };
+  const graphicResult = createTextCompositionEngine(graphicTemplate).plan({ ...glyphDocument, graphics: [{ id: 'hero-oval', slotId: 'hero-graphic', shape: 'ellipse', wrap: 'around', page: 1 }] }, metrics);
   assert.equal(graphicResult.evaluation.status, 'accepted', JSON.stringify(graphicResult.evaluation));
   assert.equal(graphicResult.plan.graphicPlacements.length, 1);
+  assert.equal(graphicResult.plan.glyphPlacements.length, 2, 'authored glyphs must resolve against both block and graphic targets');
+  assert.ok(graphicResult.plan.glyphPlacements.some((glyph) => glyph.source === 'authored' && glyph.targetType === 'block' && glyph.targetId === 'heading' && glyph.anchor === 'text-start'), 'a glyph may attach to the first line of a text block');
+  const headingGlyph = graphicResult.plan.glyphPlacements.find((glyph) => glyph.glyphId === 'heading-decoration');
+  const headingLine = graphicResult.plan.lines.find((line) => line.blockId === 'heading');
+  assert.ok(headingGlyph && headingLine && Math.abs(headingGlyph.box.x + headingGlyph.box.width + 2 - headingLine.box.x) < 0.001, 'an end-aligned glyph must sit before the text-start anchor with its configured gap');
+  const graphicGlyph = graphicResult.plan.glyphPlacements.find((glyph) => glyph.targetType === 'graphic');
+  assert.ok(graphicGlyph && graphicGlyph.box.x >= 20 && graphicGlyph.box.y >= 16 && graphicGlyph.opacity === 0.35, 'a glyph may attach to a graphic box with offsets and opacity');
   assert.equal(graphicResult.evaluation.diagnostics.some((item) => item.code === 'LINE_GRAPHIC_OVERLAP'), false);
   const linesBesideGraphic = graphicResult.plan.lines.filter((line) => line.page === 1 && line.box.y < 25 && line.box.y + line.box.height > 15);
   assert.ok(linesBesideGraphic.some((line) => line.box.x + line.box.width <= 20 || line.box.x >= 38), 'text beside the graphic must use a non-overlapping interval');

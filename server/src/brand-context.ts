@@ -292,7 +292,7 @@ function assetPath(brandDir: string, document: RecordValue, key: string, brandSo
 
 function assetWarnings(brandDir: string, document: RecordValue, brandSourceRoots: string[]): string[] {
   const assets = isRecord(document.assets) ? document.assets : {};
-  const requested = ['logo', 'logo_white', 'logo_mark', 'logo_white_mark', 'background_image', 'cover_image', 'report_header_image', 'font_regular', 'font_bold'];
+  const requested = ['logo', 'logo_white', 'logo_mark', 'logo_white_mark', 'background_image', 'cover_image', 'report_header_image', 'font_regular', 'font_bold', 'font_glyph_regular', 'font_glyph_bold'];
   return requested.flatMap((key) => {
     if (!asString(assets[key])) return [];
     return assetPath(brandDir, document, key, brandSourceRoots) ? [] : [`Brand asset '${key}' was not found.`];
@@ -388,6 +388,7 @@ function extractTheme(brandDir: string, document: RecordValue, surface: string |
   const fonts = Array.isArray(typography.fonts) ? typography.fonts : [];
   const baseFont = stringFromTypography(typography.base) ?? (isRecord(fonts[0]) ? asString(fonts[0].family) : undefined) ?? DEFAULT_THEME.fontFamily;
   const headingFont = stringFromTypography(typography.headings) ?? baseFont;
+  const glyphFont = stringFromTypography(typography.glyphs);
   const namedColors = Object.values(palette).map((item) => resolveColor(item, palette, surface)).filter((item): item is string => Boolean(item));
   const series = Array.isArray(color.series)
     ? color.series.map((item) => resolveColor(item, palette, surface)).filter((item): item is string => Boolean(item))
@@ -397,6 +398,12 @@ function extractTheme(brandDir: string, document: RecordValue, surface: string |
   if (document.schema_version === undefined) warnings.push('Brand document has no schema_version; treated as legacy v1.');
   const fontRegularPath = assetPath(brandDir, document, 'font_regular', brandSourceRoots);
   const fontBoldPath = assetPath(brandDir, document, 'font_bold', brandSourceRoots);
+  const fontGlyphRegularPath = assetPath(brandDir, document, 'font_glyph_regular', brandSourceRoots);
+  const fontGlyphBoldPath = assetPath(brandDir, document, 'font_glyph_bold', brandSourceRoots);
+  // A glyph family may be a built-in PDF family (for example Courier) and
+  // therefore does not need brand TTF assets. When assets are supplied, the
+  // same family is registered as an embedded font by the PDF primitives.
+  const glyphFontFamily = glyphFont ?? (fontGlyphRegularPath && fontGlyphBoldPath ? headingFont : baseFont);
   if (baseFont !== DEFAULT_THEME.fontFamily || headingFont !== DEFAULT_THEME.headingFontFamily) {
     warnings.push(fontRegularPath
       ? `Font '${baseFont}'/'${headingFont}' is loaded from brand assets for PDF, PNG and editable outputs.`
@@ -520,6 +527,9 @@ function extractTheme(brandDir: string, document: RecordValue, surface: string |
       reportImageCaption,
       fontRegularPath,
       fontBoldPath,
+      glyphFontFamily,
+      fontGlyphRegularPath,
+      fontGlyphBoldPath,
     },
   };
 }

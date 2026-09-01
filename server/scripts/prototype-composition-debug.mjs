@@ -178,6 +178,20 @@ function drawDebugPdf(plan, score) {
       pdf.text(`BLOCK · ${placement.blockId}`, placement.box.x + debug.label_gap, placement.box.y + debug.label_gap + debug.label_size);
     }
 
+    for (const glyph of plan.glyphPlacements ?? []) {
+      if (glyph.page !== page.page) continue;
+      const glyphColor = glyph.source === 'authored' ? debug.empty_color : debug.glyph_color;
+      setColor(pdf, 'setDrawColor', glyphColor);
+      pdf.setLineWidth(debug.glyph_line_width);
+      pdf.setLineDashPattern([1, 1], 0);
+      pdf.rect(glyph.box.x, glyph.box.y, glyph.box.width, glyph.box.height, 'S');
+      pdf.setLineDashPattern([], 0);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(debug.label_size);
+      const labelY = Math.max(debug.page_padding + debug.header_size + debug.label_gap, glyph.box.y - debug.label_gap);
+      pdf.text(`GLYPH · ${glyph.source} · ${glyph.glyphId} · ${glyph.anchor}`, glyph.box.x, labelY);
+    }
+
     for (const line of lines.filter((candidate) => candidate.page === page.page)) {
       const lineColor = headingBlocks.has(line.blockId) ? debug.heading_color : line.flowId === 'quotes' ? debug.quote_color : line.flowId === 'intro' ? debug.intro_color : debug.main_color;
       setColor(pdf, 'setDrawColor', lineColor);
@@ -210,5 +224,5 @@ const plan = result.compositionPlan;
 if (!plan) throw new Error('render_report did not return compositionPlan; use diagnostics: full.');
 const score = scorePlan(plan, result.compositionEvaluation);
 await writeFile(mapOutputPath, drawDebugPdf(plan, score));
-await writeFile(scorePath, JSON.stringify({ source: requestPath, sourcePdf: sourcePdfPath, output: outputPath, mapOutput: mapOutputPath, score, pages: plan.pages.length, lines: allLines(plan).length, flowPlacements: plan.flowPlacements ?? [] }, null, 2));
+await writeFile(scorePath, JSON.stringify({ source: requestPath, sourcePdf: sourcePdfPath, output: outputPath, mapOutput: mapOutputPath, score, pages: plan.pages.length, lines: allLines(plan).length, glyphPlacements: plan.glyphPlacements ?? [], flowPlacements: plan.flowPlacements ?? [] }, null, 2));
 console.log(JSON.stringify({ status: 'passed', debugPdf: outputPath, mapPdf: mapOutputPath, sourcePdf: sourcePdfPath, scorePath, pages: plan.pages.length, lines: allLines(plan).length, score }, null, 2));

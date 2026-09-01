@@ -58,4 +58,8 @@ export interface RenderTheme {
   };
   fontRegularPath?: string;
   fontBoldPath?: string;
+  /** Optional font family used by decorative glyph objects. */
+  glyphFontFamily?: string;
+  fontGlyphRegularPath?: string;
+  fontGlyphBoldPath?: string;
 }

@@ -188,6 +188,22 @@ export function compositionDocumentFromInput(input: CompositionInput): Compositi
   return {
     flows,
     ...(assets.length > 0 ? { assets } : {}),
+    ...(input.glyphs && input.glyphs.length > 0 ? {
+      glyphs: input.glyphs.map((glyph) => ({
+        id: glyph.id,
+        target: glyph.target,
+        text: glyph.text,
+        styleName: glyph.style,
+        anchor: glyph.anchor,
+        ...(glyph.anchor_alignment === undefined ? {} : { anchorAlignment: glyph.anchor_alignment }),
+        targetMode: glyph.target_mode,
+        ...(glyph.anchor_measure_style === undefined ? {} : { anchorMeasureStyleName: glyph.anchor_measure_style }),
+        ...(glyph.offset_x === undefined ? {} : { offsetX: glyph.offset_x }),
+        ...(glyph.offset_y === undefined ? {} : { offsetY: glyph.offset_y }),
+        ...(glyph.clamp_to_target === undefined ? {} : { clampToTarget: glyph.clamp_to_target }),
+        ...(glyph.opacity === undefined ? {} : { opacity: glyph.opacity }),
+      })),
+    } : {}),
     diagnostics: Object.values(flows).flatMap((flow) => flow.blocks.flatMap((block) => block.diagnostics ?? [])),
   };
 }

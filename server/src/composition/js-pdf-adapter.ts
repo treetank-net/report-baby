@@ -8,6 +8,7 @@ export interface JsPdfCompositionStyle {
   lineHeight: number;
   baselineOffset: number;
   fontStyle: 'normal' | 'bold';
+  fontFamily?: string;
   textColor?: [number, number, number];
   textTransform?: 'uppercase';
   textIndent?: number;
@@ -216,7 +217,7 @@ function styleFor(styles: JsPdfCompositionStyles, block: CompositionBlock): JsPd
 }
 
 function applyStyle(doc: jsPDF, family: string, style: JsPdfCompositionStyle): void {
-  doc.setFont(family, style.fontStyle);
+  doc.setFont(style.fontFamily ?? family, style.fontStyle);
   doc.setFontSize(style.fontSize);
   if (style.textColor) doc.setTextColor(...style.textColor);
 }
@@ -251,6 +252,27 @@ function measureLineInkBounds(doc: jsPDF, family: string, style: JsPdfCompositio
     top: style.baselineOffset - (ascender / 1000) * fontSizeMm,
     bottom: style.baselineOffset + (Math.abs(decender) / 1000) * fontSizeMm,
   };
+}
+
+function measureGlyphInkBounds(doc: jsPDF, family: string, text: string, style: JsPdfCompositionStyle): { top: number; bottom: number } {
+  applyStyle(doc, family, style);
+  const internal = doc.internal as unknown as { getFont?: () => { metadata?: JsPdfFontMetricsMetadata } };
+  const metadata = internal.getFont?.()?.metadata;
+  const ascender = metadata?.ascender;
+  const decender = metadata?.decender;
+  if (Number.isFinite(ascender) && Number.isFinite(decender) && ascender !== undefined && decender !== undefined && ascender > 0 && decender < 0) {
+    const fontSizeMm = style.fontSize * 25.4 / 72;
+    return {
+      top: style.baselineOffset - (ascender / 1000) * fontSizeMm,
+      bottom: style.baselineOffset + (Math.abs(decender) / 1000) * fontSizeMm,
+    };
+  }
+  // Standard PDF fonts do not expose ascender/descender metadata. Their
+  // getTextDimensions height is still tied to the selected font size; use a
+  // conservative baseline-to-top box so a large glyph cannot escape its
+  // debug frame.
+  const height = doc.getTextDimensions(textForStyle(text, style)).h;
+  return { top: style.baselineOffset - height, bottom: style.baselineOffset };
 }
 
 function textForStyle(value: string, style: JsPdfCompositionStyle): string {
@@ -803,10 +825,20 @@ export function createJsPdfTextMetrics(
       if (!bounds) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return bounds;
     },
+    glyphInkBounds(text, style) {
+      const selected = styles[style];
+      if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
+      return measureGlyphInkBounds(doc, family, text, selected);
+    },
     textPadding(style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return { top: selected.paddingTop ?? 0, bottom: selected.paddingBottom ?? 0 };
+    },
+    glyphBaselineOffset(style) {
+      const selected = styles[style];
+      if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
+      return selected.baselineOffset;
     },
     textIndent(style) {
       const selected = styles[style];
@@ -818,7 +850,7 @@ export function createJsPdfTextMetrics(
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       if (!selected.quoteMarks) return 0;
       applyStyle(doc, family, selected);
-      doc.setFont(family, 'bold');
+      doc.setFont(selected.fontFamily ?? family, 'bold');
       doc.setFontSize(selected.quoteMarks.size);
       return doc.getTextWidth(selected.quoteMarks.close) + selected.quoteMarks.gap;
     },
@@ -888,39 +920,27 @@ export function createJsPdfTextBackend(
           : line.textAlign === 'center'
             ? line.box.x + line.box.width / 2
             : line.box.x;
-        if (style.quoteMarks && line.startWord === 0) {
-          const marks = style.quoteMarks;
-          doc.setFont(family, 'bold');
-          doc.setFontSize(marks.size);
-          doc.setTextColor(...marks.color);
-          const openingX = line.box.x - (style.textIndent ?? 0);
-          doc.text(marks.open, openingX, line.box.y + marks.baselineOffset);
-        }
         if (style.marker && line.startWord === 0) {
           doc.setFillColor(...style.marker.color);
           doc.circle(line.box.x - (style.textIndent ?? 0) + style.marker.x, line.box.y + style.baselineOffset - style.marker.y, style.marker.radius, 'F');
         }
         applyStyle(doc, family, style);
         doc.text(renderedText, textX, line.box.y + style.baselineOffset, line.textAlign ? { align: line.textAlign } : undefined);
-        if (style.quoteMarks && line.endWord >= (block.text?.trim().split(/\s+/u).filter(Boolean).length ?? 0)) {
-          const marks = style.quoteMarks;
-          doc.setFont(family, 'bold');
-          doc.setFontSize(marks.size);
-          doc.setTextColor(...marks.color);
-          const renderedWidth = doc.getTextWidth(renderedText);
-          const markWidth = doc.getTextWidth(marks.close);
-          const rightBound = line.box.x + line.box.width - markWidth;
-          const closingX = Math.min(textX + renderedWidth + marks.gap, rightBound);
-          if (closingX >= line.box.x - marks.gap) {
-            doc.text(marks.close, closingX, line.box.y + marks.baselineOffset);
-          }
-        }
       };
       for (const line of plan.lines.filter((candidate) => candidate.layer !== 'insertion')) renderLine(line);
       // Insertions are painted after the ordinary flow. Their geometry was
       // already reserved as an obstacle, but their content is a separate
       // layer and must not masquerade as another main-flow route fragment.
       for (const line of plan.insertionLines ?? plan.lines.filter((candidate) => candidate.layer === 'insertion')) renderLine(line);
+      for (const glyph of plan.glyphPlacements ?? []) {
+        const style = styles[glyph.styleName];
+        if (!style) throw new Error(`No jsPDF composition style was provided for glyph '${glyph.glyphId}' style '${glyph.styleName}'.`);
+        doc.setPage(glyph.page);
+        applyStyle(doc, family, style);
+        if (glyph.opacity !== undefined) doc.setGState(doc.GState({ opacity: glyph.opacity }));
+        doc.text(glyph.text, glyph.box.x, glyph.baselineY);
+        if (glyph.opacity !== undefined) doc.setGState(doc.GState({ opacity: 1 }));
+      }
       return Buffer.from(doc.output('arraybuffer'));
     },
   };

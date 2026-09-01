@@ -63,6 +63,21 @@ const compositionRoleSchema = z.enum([
   'quote', 'footer', 'title', 'subtitle', 'eyebrow',
 ]);
 
+const compositionGlyphSchema = z.object({
+  id: z.string(),
+  target: z.object({ kind: z.enum(['block', 'graphic']), id: z.string() }).strict(),
+  text: z.string().min(1),
+  style: z.string(),
+  anchor: z.enum(['box', 'text-start', 'text-end']),
+  anchor_alignment: z.enum(['start', 'end']).optional(),
+  target_mode: z.enum(['first-line', 'last-line', 'box']).default('box'),
+  anchor_measure_style: z.string().min(1).optional(),
+  offset_x: z.number().optional(),
+  offset_y: z.number().optional(),
+  clamp_to_target: z.boolean().optional().default(false),
+  opacity: z.number().min(0).max(1).optional(),
+}).strict();
+
 const compositionBlockBase = {
   id: z.string().optional(),
   role: compositionRoleSchema.optional(),
@@ -142,6 +157,7 @@ const compositionInputCoreSchema = z.object({
     fit: z.literal('contain').optional().default('contain'),
     keep_with_caption: z.boolean().optional().default(true),
   }).strict()).optional(),
+  glyphs: z.array(compositionGlyphSchema).optional(),
 }).strict().superRefine((input, context) => {
   for (const [flowId, flow] of Object.entries(input.flows)) {
     flow.blocks.forEach((block, index) => {

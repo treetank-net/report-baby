@@ -1,4 +1,4 @@
-import type { CompositionBlock, CompositionBlockKind, CompositionBlockRole, CompositionDocument, CompositionGraphicShape, CompositionSlotKind } from './model.js';
+import type { CompositionBlock, CompositionBlockKind, CompositionBlockRole, CompositionDocument, CompositionGlyphAnchor, CompositionGlyphAnchorAlignment, CompositionGlyphTargetMode, CompositionGraphicShape, CompositionSlotKind } from './model.js';
 
 export interface CompositionTextMetrics {
   units: string;
@@ -11,8 +11,12 @@ export interface CompositionTextMetrics {
    * the same units as the composition geometry.
    */
   lineInkBounds?(styleName: string): { top: number; bottom: number };
+  /** Actual painted bounds for one decorative glyph, relative to its line box. */
+  glyphInkBounds?(text: string, styleName: string): { top: number; bottom: number };
   /** Internal top/bottom padding for a text block, in page geometry units. */
   textPadding?(styleName: string): { top: number; bottom: number };
+  glyphs?(styleName: string): CompositionGlyphSpec[];
+  glyphBaselineOffset?(styleName: string): number;
   textIndent?(styleName: string): number;
   /** Width reserved after the final line for a trailing inline decoration. */
   textTrailingReserve?(styleName: string): number;
@@ -127,6 +131,39 @@ export interface CompositionGraphicPlacement {
   points?: Array<{ x: number; y: number }>;
   vertexCount?: number;
   innerRatio?: number;
+}
+
+export interface CompositionGlyphSpec {
+  id: string;
+  text: string;
+  styleName: string;
+  anchor: CompositionGlyphAnchor;
+  anchorAlignment?: CompositionGlyphAnchorAlignment;
+  targetMode: CompositionGlyphTargetMode;
+  anchorMeasureStyleName?: string;
+  offsetX?: number;
+  offsetY?: number;
+  clampToTarget?: boolean;
+  opacity?: number;
+}
+
+export interface CompositionGlyphPlacement {
+  id: string;
+  glyphId: string;
+  targetType: 'block' | 'graphic';
+  targetId: string;
+  flowId?: string;
+  page: number;
+  slotId?: string;
+  text: string;
+  styleName: string;
+  anchor: CompositionGlyphAnchor;
+  anchorAlignment?: CompositionGlyphAnchorAlignment;
+  anchorMeasureStyleName?: string;
+  source: 'generated' | 'authored';
+  box: CompositionBox;
+  baselineY: number;
+  opacity?: number;
 }
 
 /** A possible text-flow fragment split by a collision boundary. */
@@ -275,6 +312,8 @@ export interface CompositionPlan {
   blockPlacements: CompositionBlockPlacement[];
   tablePlacements: CompositionTablePlacement[];
   graphicPlacements: CompositionGraphicPlacement[];
+  /** Decorative glyph objects resolved against final text/graphic geometry. */
+  glyphPlacements?: CompositionGlyphPlacement[];
   /** Candidate boxes split around collision graphics and consumed by ordinary flow wrapping. */
   flowBarrierBoxCandidates?: CompositionFlowBarrierBoxCandidate[];
   /** Ordinary flowing text only. Insertions are exposed separately below. */
