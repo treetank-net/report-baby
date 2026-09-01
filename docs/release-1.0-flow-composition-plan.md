@@ -57,9 +57,25 @@ ujednolicić i domknąć przed 1.0.
 
 Sol potwierdził kierunek flow i wskazał dwa realne ryzyka:
 
-1. Geometria jest częściowo rekonstruowana równolegle przez compiler template’u
-   oraz `page-template-adapter`. Przed 1.0 trzeba ustalić jedną canonical
-   representation geometrii.
+1. W pipeline istnieje kilka reprezentacji geometrii, ale nie wszystkie są
+   problemem. Prawidłowe są osobne etapy:
+
+   ```text
+   raw YAML
+     → CompiledTemplate       (zwalidowany i znormalizowany template)
+     → PageGeometry           (instancje geometrii na konkretnych stronach)
+     → CompositionTemplate    (geometry-facing input dla planera)
+     → CompositionPlan        (wybrane placementy i finalne obstacles)
+   ```
+
+   Problemem jest częściowe powielanie odpowiedzialności między compilerem,
+   `page-geometry.ts` i `page-template-adapter.ts`: reguła może zostać
+   znormalizowana w jednym miejscu, a następnie zinterpretowana ponownie w
+   innym. Dodatkowo `report-renderer.ts` tworzy później
+   `ResolvedReportPlan`, który może wyglądać jak drugi plan layoutu. Przed 1.0
+   trzeba zachować różne typy dla różnych etapów, ale wyznaczyć jednego
+   właściciela każdej reguły i jedną canonical geometry dla planera, debuggera,
+   ewaluatora i backendu renderującego.
 2. `text-planner.ts` jest zbyt płytkim modułem z bardzo dużym interfejsem
    pośrednim: łączy wrapping, routing, growth, tabele, graphics, cytaty,
    iteracje i trace. Trzeba go rozciąć na wewnętrzne seams, nie powielając
@@ -72,6 +88,101 @@ Sol wskazał również, czego nie robić:
 - nie wprowadzać `kind: quote` jako specjalnego modelu soft insertion;
 - nie oddawać decyzji layoutowych rendererowi;
 - nie rozwijać soft placement przed ustabilizowaniem kanonicznego kontraktu.
+
+### Druga konsultacja: obserwowalność i rzeczywisty przebieg pipeline’u
+
+To, że kod działa, nie oznacza jeszcze, że jego architektura jest dostępna dla
+człowieka utrzymującego projekt. Obecnie znalezienie planera wymaga przejścia
+przez kilka plików, a nazwa `report-shadow.ts` sugeruje prototyp, mimo że jest
+to produkcyjny adapter ścieżki raportowej. Ten brak discoverability jest
+aktywnym problemem release 1.0, nie kwestią kosmetyczną.
+
+Rzeczywisty przebieg jest obecnie następujący:
+
+```text
+renderReportPdfDetailed()
+  → renderReportCompositionPdf()
+    → planReportComposition()                 report-shadow.ts
+      → compositionDocumentFromInput()        model/input adapter
+      → compositionTemplateFromPageGeometry() page-template-adapter.ts
+      → createJsPdfTextMetrics()              jsPDF measurement adapter
+      → createTextCompositionEngine().plan()  text-engine.ts
+        → planner.plan()                      engine.ts seam
+          → createTextCompositionPlanner()    text-planner.ts
+            → planDocumentOnce()
+              → reserve obstacles
+              → place insertions
+              → plan ordinary flows
+              → register placements/barriers/glyphs
+            → optional insertion-proposal reflow
+        → evaluator.evaluate()                engine.ts seam
+          → evaluateCompositionPlan()         evaluator.ts
+    → renderComposition()                     engine.ts
+      → jsPDF backend                         js-pdf-adapter.ts
+```
+
+Istotne rozróżnienie, które musi być jawnie opisane w dokumentacji:
+
+- pętla w `createTextCompositionPlanner()` nie jest pętlą
+  planner–evaluator–optimizer; powtarza planowanie, aby ustabilizować
+  propozycje insertionów i ich sygnaturę;
+- `createCompositionEngine()` uruchamia ewaluatora po zakończeniu planowania;
+- `planReportComposition()` obecnie wywołuje `evaluateCompositionPlan()` raz
+  jeszcze po wyniku engine’u. To jest zbędna podwójna ewaluacja i powinno
+  zostać usunięte przez przekazanie istniejącego `result.evaluation`;
+- wynik ewaluatora nie wraca obecnie do wyboru kandydata ani do optymalizacji
+  score. To będzie osobny etap po ustabilizowaniu kontraktu, trace i geometrii.
+
+Brakującym elementem jest jeden krótki dokument źródła prawdy z mapą kodu,
+call graphem i definicją terminów `flow`, `placement`, `obstacle`, `barrier`,
+`candidate`, `planner`, `evaluator`, `backend` oraz `trace`. Bez niego nowy
+autor może pomylić:
+
+- `flowPlacements` — faktyczne przypisania treści do nurtu;
+- `flowBarrierBoxCandidates` — możliwe segmenty nurtu wynikające z kolizji;
+- `graphicPlacements` — finalnie wybrane grafiki i przeszkody;
+- insertion proposals — propozycje pozycji wtrąceń przed kolejnym przebiegiem;
+- evaluator diagnostics — raport położenia, a nie mechanizm wyboru pozycji.
+
+Minimalna mapa kodu, która ma trafić później do dokumentu źródła prawdy:
+
+| Odpowiedzialność | Moduł |
+| --- | --- |
+| canonical blocks, flows, slots, placements | `server/src/composition/model.ts` |
+| walidacja i normalizacja template’u | `server/src/template-contract.ts` |
+| fizyczne instancje stron i przeszkód | `server/src/page-geometry.ts` |
+| przejściowe mapowanie do template’u planera | `server/src/composition/page-template-adapter.ts` |
+| publiczny seam planner → evaluator | `server/src/composition/engine.ts` |
+| konfiguracja metryk i złożenie text engine’u | `server/src/composition/text-engine.ts` |
+| planowanie bloków, flow i reflow | `server/src/composition/text-planner.ts` |
+| niezależne sprawdzanie planu | `server/src/composition/evaluator.ts` |
+| adapter raportu do composition pipeline’u | `server/src/composition/report-shadow.ts` |
+| orkiestracja PDF i backend jsPDF | `server/src/report-renderer.ts`, `server/src/composition/js-pdf-adapter.ts` |
+
+Druga konsultacja wykazała jeszcze trzy konkretne braki:
+
+- istnieją dwa typy nazwane `PageGeometry`: jeden w kontrakcie kompilowanego
+  template’u, z częściowo znormalizowanymi ramami, oraz drugi w
+  `page-geometry.ts`, z fizycznymi instancjami stron; to utrudnia ocenę, czy
+  patrzymy na dane wejściowe, czy na geometrię po odjęciu przeszkód;
+- renderer nadal równolegle korzysta z `PageGeometry` do chrome, footerów i
+  fallbacków, podczas gdy planner dostaje `CompositionTemplate`; każda taka
+  równoległa ścieżka może rozjechać debug, evaluator i faktyczny render;
+- `dry_run` korzysta z `resolveReportPlanOnly()` i nie przechodzi przez
+  produkcyjny planner/evaluator, a odpowiedź może eksponować stary
+  `reportPlan` obok `compositionPlan`. To łamie zasadę, że planowanie i
+  renderowanie są tym samym pipeline’em.
+
+Evaluator wymaga też niezależniejszego wejścia. Dziś przyjmuje
+`(document, plan)` i weryfikuje sloty z samego planu. Docelowo powinien dostać
+również canonical `CompositionTemplate`, aby móc sprawdzić, czy placement lub
+slot nie został sztucznie powiększony przez wcześniejszy etap. W przeciwnym
+razie część geometrii jest zaufanym wynikiem planera, a nie niezależnym
+warunkiem poprawności.
+
+Nie wolno rozwiązać tego przez samą zmianę nazw. Potrzebne są: jeden opisany
+publiczny seam pipeline’u, małe interfejsy modułów wewnętrznych, trace faz oraz
+testy sprawdzające, że każdy etap korzysta z właściwej reprezentacji.
 
 ## Zakres 1.0
 
@@ -141,11 +252,77 @@ Compiler powinien być jedynym miejscem, które:
 - rozstrzyga layout opening/continuation;
 - tworzy regiony, sloty, bands i flow obstacles.
 
-`page-template-adapter` może pozostać adapterem do istniejącego publicznego
-modelu, ale nie może po cichu ponownie wymyślać reguł geometrii.
+`page-template-adapter` może pozostać przejściowym adapterem do istniejącego
+publicznego modelu, ale nie może po cichu ponownie wymyślać reguł geometrii.
+Docelowo jego odpowiedzialność należy ograniczyć do mechanicznego mapowania
+albo zastąpić go `composition/template-compiler.ts`, który zwraca bezpośrednio
+planner-facing `CompositionTemplate`.
+
+`PageGeometry` z `template-contract.ts` i `PageGeometry` z
+`page-geometry.ts` należy rozdzielić nazwami (np. `CompiledTemplateGeometry`
+i `PageLayoutGeometry`) albo usunąć dublujący typ. Musi być jasne, gdzie
+kończą się ramy znormalizowane, gdzie zaczynają fizyczne ramy strony i gdzie
+powstaje finalna geometria planera. `maxPages` pozostaje policy planera, nie
+częścią geometrii template’u.
+
+Usunąć równoległe źródła planu: `dry_run` musi wywoływać ten sam planner i
+evaluator co render, a raportowa diagnostyka może być widokiem
+`CompositionPlan`, nie drugim layout engine’em. Jeśli `ResolvedReportPlan`
+zostanie tymczasowo zachowany, powinien być jawnie oznaczonym read-only
+adapterem bez własnych reguł rozmieszczania.
 
 **Kryterium ukończenia:** dla tego samego template’u istnieje jedna struktura
 canonical geometry używana przez planner, debug, evaluator i renderer.
+
+### P0 — jakość kodu i discoverability pipeline’u
+
+Przed dalszym rozszerzaniem planera trzeba sprawić, aby osoba znająca tylko
+model flow mogła szybko odpowiedzieć na pytania: gdzie jest planner, gdzie jest
+evaluator, kto tworzy geometrię, kiedy powstają obstacles i gdzie kończy się
+planowanie, a zaczyna renderowanie.
+
+Wprowadzić:
+
+- `docs/composition-model.md` jako normatywne źródło prawdy dla terminów,
+  lifecycle’u i mapy modułów; obecne research notes mają zostać materiałem do
+  audytu, a nie równoległą dokumentacją kontraktu;
+- jeden nazwany publiczny seam dla raportowego pipeline’u, zamiast eksponowania
+  prototypowo brzmiącego `planReportCompositionShadow`;
+- JSDoc przy seamach `createCompositionEngine`,
+  `createTextCompositionEngine`, `evaluateCompositionPlan`,
+  `compositionTemplateFromPageGeometry`, `planReportComposition` i
+  `renderComposition`, z informacją o wejściu, wyjściu i fazie pipeline’u;
+- jawny typ wyniku pipeline’u zawierający co najmniej `plan`, `evaluation` i
+  `trace`, aby caller nie musiał zgadywać, które dane są diagnostyką, a które
+  wykonywalnym planem;
+- jednoznaczne nazwy dla modułu raportowego: albo zmiana
+  `report-shadow.ts` na produkcyjną nazwę, albo wyraźne udokumentowanie, że
+  „shadow” jest historycznym aliasem, nie alternatywnym rendererem;
+- trace faz planowania: preflight, materializacja grafik, rezerwacja
+  obstacles, insertion placement, ordinary-flow placement, flattening,
+  barriers/glyphs i evaluation;
+- test architektoniczny, że planner nie importuje backendu PDF, renderer nie
+  podejmuje decyzji o kolejności flow, a `ResolvedReportPlan` nie uruchamia
+  drugiego layout engine’u;
+- test z podmienionym ewaluatorem, który dowodzi, że dla jednego wyniku engine’u
+  ewaluacja jest wykonana dokładnie raz. Obecne ponowne wywołanie w
+  `planReportComposition()` usunąć.
+
+Rozdzielić również testy według seamów:
+
+- model i schema — czy input jest kanoniczny;
+- adapter template’u — czy z `CompiledTemplate` i `PageGeometry` powstaje
+  właściwy `CompositionTemplate`;
+- planner — czy powstają placementy, fragmenty, obstacles i barriers;
+- evaluator — czy wykrywa naruszenia planu bez zmieniania planu;
+- backend — czy wiernie rysuje zaakceptowany plan;
+- pipeline integration — czy fazy są wywołane w prawidłowej kolejności.
+
+**Kryterium ukończenia:** mapa z dokumentu prowadzi do planera i ewaluatora
+bez czytania całego repozytorium; test integracyjny pokazuje pełną sekwencję
+od `CompositionInput` do backendu; istnieje dokładnie jeden evaluator result
+przekazywany dalej; nazwy „shadow”, „legacy” i „prototype” nie opisują
+produkcyjnej ścieżki bez wyraźnego komentarza kompatybilności.
 
 ### P0 — głęboki planner flow
 
@@ -403,7 +580,11 @@ Release jest możliwy, gdy:
 7. plan jest deterministyczny dla tych samych danych, template’u i fontów;
 8. named flows obejmują main, title, header, footer oraz pomocnicze flow;
 9. istnieje realny editorial smoke test i ręczny przegląd PDF/debug PDF;
-10. dokumentacja normatywna nie przeczy implementacji.
+10. `dry_run` i render używają tego samego planner/evaluator pipeline’u;
+11. evaluator może niezależnie porównać plan z canonical template geometry;
+12. trace zachowuje identyfikatory passów, reflow i końcowej ewaluacji;
+13. dokumentacja normatywna nie przeczy implementacji i pozwala znaleźć każdy
+    główny seam bez czytania całego repozytorium.
 
 ## Plan redukcji dokumentacji
 
@@ -502,6 +683,17 @@ sprawdzi, że publiczny przykład README przechodzi walidację schema.
 - wydzielić internal seams bez zmiany zachowania;
 - utrzymać istniejące flow barrier tests;
 - utrzymać debug PDF jako obserwację tego samego planu.
+
+### Etap 2a — pipeline i discoverability
+
+- usunąć podwójną ewaluację w `planReportComposition()`;
+- wprowadzić jeden publiczny seam composition pipeline’u i usunąć produkcyjne
+  aliasy `shadow`;
+- przenieść `dry_run` na ten sam planner/evaluator co zwykły render;
+- przekazywać canonical template do ewaluatora i dodać testy mutacji geometrii;
+- utrwalać trace wszystkich passów, zamiast zastępować wcześniejszy plan
+  ostatnim `latestPlan`;
+- dodać `docs/composition-model.md`, mapę kodu i test kolejności faz.
 
 ### Etap 3 — block capabilities
 
