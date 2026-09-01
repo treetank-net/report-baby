@@ -62,10 +62,9 @@ Sol potwierdził kierunek flow i wskazał dwa realne ryzyka:
 
    ```text
    raw YAML
-     → CompiledTemplate       (zwalidowany i znormalizowany template)
-     → PageGeometry           (instancje geometrii na konkretnych stronach)
-     → CompositionTemplate    (geometry-facing input dla planera)
-     → CompositionPlan        (wybrane placementy i finalne obstacles)
+     → CompiledCompositionTemplate  (legalne warianty, sloty, routes, chrome)
+     → PageLayoutInstance[]          (fizyczne instancje konkretnych stron)
+     → CompositionPlan               (wybrane placementy i finalne obstacles)
    ```
 
    Problemem jest częściowe powielanie odpowiedzialności między compilerem,
@@ -74,11 +73,12 @@ Sol potwierdził kierunek flow i wskazał dwa realne ryzyka:
    innym. Dodatkowo `report-renderer.ts` tworzy później
    `ResolvedReportPlan`, który może wyglądać jak drugi plan layoutu. Przed 1.0
    trzeba zachować różne typy dla różnych etapów, ale wyznaczyć jednego
-   właściciela każdej reguły i jedną canonical geometry dla planera, debuggera,
-   ewaluatora i backendu renderującego.
+   writera każdego kanonicznego artefaktu i jedną jawną proweniencję między
+   etapami.
 2. `text-planner.ts` jest zbyt płytkim modułem z bardzo dużym interfejsem
    pośrednim: łączy wrapping, routing, growth, tabele, graphics, cytaty,
-   iteracje i trace. Trzeba go rozciąć na wewnętrzne seams, nie powielając
+   iteracje i trace. Trzeba wydzielić internal seams oraz jednego `PlanBuilder`
+   jako writera planu, bez mechanicznego rozcinania pliku i bez powielania
    decyzji w callerach.
 
 Sol wskazał również, czego nie robić:
@@ -144,7 +144,8 @@ autor może pomylić:
 - insertion proposals — propozycje pozycji wtrąceń przed kolejnym przebiegiem;
 - evaluator diagnostics — raport położenia, a nie mechanizm wyboru pozycji.
 
-Minimalna mapa kodu, która ma trafić później do dokumentu źródła prawdy:
+Mapa obecnego kodu, potrzebna do audytu przed refaktoryzacją (nie jest jeszcze
+docelowym podziałem odpowiedzialności):
 
 | Odpowiedzialność | Moduł |
 | --- | --- |
@@ -175,14 +176,33 @@ Druga konsultacja wykazała jeszcze trzy konkretne braki:
 
 Evaluator wymaga też niezależniejszego wejścia. Dziś przyjmuje
 `(document, plan)` i weryfikuje sloty z samego planu. Docelowo powinien dostać
-również canonical `CompositionTemplate`, aby móc sprawdzić, czy placement lub
-slot nie został sztucznie powiększony przez wcześniejszy etap. W przeciwnym
-razie część geometrii jest zaufanym wynikiem planera, a nie niezależnym
-warunkiem poprawności.
+`(document, compiledTemplate, pageInstances, plan)`, aby móc sprawdzić, czy
+placement lub slot nie został sztucznie powiększony przez wcześniejszy etap.
+W przeciwnym razie część geometrii jest zaufanym wynikiem planera, a nie
+niezależnym warunkiem poprawności.
 
 Nie wolno rozwiązać tego przez samą zmianę nazw. Potrzebne są: jeden opisany
 publiczny seam pipeline’u, małe interfejsy modułów wewnętrznych, trace faz oraz
 testy sprawdzające, że każdy etap korzysta z właściwej reprezentacji.
+
+Konkretny audyt stanu obecnego wskazuje ponadto, że:
+
+- `CompositionTemplate` przechowuje `maxPages`, choć jest to policy planera,
+  a nie fakt geometrii;
+- `page-geometry.ts` nie tylko materializuje jednostki, ale przesuwa
+  `blockFrames` względem bands i wcześniejszych ramek, więc faktycznie posiada
+  regułę rozmieszczania;
+- `page-template-adapter.ts` podejmuje decyzje o kolejności slotów,
+  quote-specific routingu, rozcinaniu segmentów, `pushes`, fallbackach i
+  powtarzaniu headera, więc nie jest obecnie mechanicznym adapterem;
+- obstacles są kodowane jako `graphicPlacements`, zamiast mieć osobny
+  renderer-neutral `FlowObstacle[]` i jednego writera registry;
+- `composition/index.ts` eksportuje wiele internal seams, co pozwala callerom
+  omijać właściwy pipeline;
+- block kinds są zadeklarowane osobno w schema i modelu, a ręczne mapowanie w
+  `input.ts` nie ma jeszcze wyczerpującego gate’u;
+- renderer ma własne fallbacki geometrii chrome, a `ResolvedReportPlan` i
+  `dry_run` tworzą konkurencyjną ścieżkę względem composition planu.
 
 ## Zakres 1.0
 
@@ -240,8 +260,8 @@ się odpowiedzialności. Trzeba ustalić jedną granicę:
 ```text
 raw YAML
   → template compiler
-  → canonical CompositionTemplate
-  → page geometry / layout instances
+  → CompiledCompositionTemplate
+  → PageLayoutInstance[]
   → planner
 ```
 
@@ -271,8 +291,10 @@ evaluator co render, a raportowa diagnostyka może być widokiem
 zostanie tymczasowo zachowany, powinien być jawnie oznaczonym read-only
 adapterem bez własnych reguł rozmieszczania.
 
-**Kryterium ukończenia:** dla tego samego template’u istnieje jedna struktura
-canonical geometry używana przez planner, debug, evaluator i renderer.
+**Kryterium ukończenia:** dla tego samego template’u istnieje jeden
+`CompiledCompositionTemplate` i jedna lista `PageLayoutInstance[]`; planner,
+debug, evaluator i renderer odwołują się do tych samych instancji, a żaden z
+nich nie rekonstruuje geometrii niezależnie.
 
 ### P0 — jakość kodu i discoverability pipeline’u
 
@@ -318,6 +340,105 @@ Rozdzielić również testy według seamów:
 - backend — czy wiernie rysuje zaakceptowany plan;
 - pipeline integration — czy fazy są wywołane w prawidłowej kolejności.
 
+#### Mapa odpowiedzialności, a nie mapa plików
+
+Single source of truth nie oznacza jednego ogromnego modułu. Oznacza jednego
+właściciela każdej decyzji oraz jednokierunkowe reprezentacje pochodne. Tabela
+jest docelowym kontraktem architektonicznym; ścieżki plików opisują stan obecny
+i mogą się zmienić podczas refaktoryzacji.
+
+| Decyzja | Jeden właściciel w 1.0 | Pochodny wynik | Czego nie wolno robić poza właścicielem |
+| --- | --- | --- | --- |
+| Publiczny kształt `CompositionInput` i polityka aliasów | docelowo `contract/composition-input.ts` jako executable contract, przejściowo `contract/schema.ts` | zwalidowany input przekazany do adaptera | utrzymywać drugi ręczny schema albo rekonstruować treść w rendererze |
+| Znormalizowany `CompositionDocument`, named flows i vocabulary bloków | `composition/model.ts` + `composition/input.ts` jako jeden domain seam | `CompositionDocument` | pozwalać callerom omijać adapter albo zmieniać znaczenie bloku w rendererze |
+| Reguły template’u, sloty, route’y, constraints, chrome i jednostki | docelowo `composition/template-compiler.ts`, przejściowo `template-contract.ts` | immutable `CompiledCompositionTemplate` | wymyślać reguły YAML w rendererze lub plannerze |
+| Instancja geometrii na konkretnej stronie | docelowo `composition/page-instantiator.ts`, przejściowo `page-geometry.ts` | immutable `PageLayoutInstance[]` | zmieniać semantykę flow albo ponownie rozstrzygać sloty |
+| Mapowanie template → page instances | jeden przejściowy adapter, docelowo mechaniczna materializacja | `PageLayoutInstance[]` | dodawać heurystyki quote/legacy i tworzyć trzecią równoległą geometrię |
+| Fonty, line height, ink bounds i pomiary | `js-pdf-adapter.ts` przez `CompositionTextMetrics` | capabilities pomiarowe | mierzyć tekst inaczej w plannerze i backendzie |
+| Kolejność flow, wybór slotu i fragmentowanie bloków | głęboki moduł `composition/planner/index.ts` | `CompositionPlan` | przenosić decyzje layoutowe do report renderera |
+| Interwały i finalne przeszkody | prywatny `composition/planner/obstacle-index.ts` | frozen `FlowObstacle[]` i zapytania o interwały | kodować obstacle jako `graphicPlacement` albo traktować candidate jako finalny obstacle |
+| Faktyczne przypisania treści | plannerowy `PlanBuilder` | `placements`, `lines`, `flowPlacements` | tworzyć placementy dopiero w rendererze albo zapisywać je z kilku miejsc |
+| Kandydaci wynikający z kolizji | `obstacle-index` / line-layout jako internal seam | `flowBarrierBoxCandidates` | udawać, że candidate jest wybraną pozycją |
+| Niezależna poprawność planu | `composition/evaluator.ts` | `CompositionEvaluation` | ufać slotom zmutowanym w planie; zmieniać plan lub trace podczas oceny |
+| Renderowanie zaakceptowanego planu | `composition/renderer.ts` + backend adapter | PDF | ponownie zawijać, przesuwać lub wybierać treść |
+| Przebieg faz i wyjaśnienia decyzji | `composition/trace.ts` | append-only `CompositionTrace` | nadpisywać historię wcześniejszego passu lub mieszać trace z layoutem |
+| Publiczne ostrzeżenia i błędy | `composition/diagnostics.ts` + evaluator status | diagnostyka zwrócona callerowi | produkować konkurencyjny `reportPlan` poza composition pipeline’em |
+| Publiczny interfejs composition | jeden moduł orchestration, eksportowany przez `composition/index.ts` | stabilny wynik pipeline’u | wystawiać każdy internal seam jako równorzędną ścieżkę dla callerów |
+
+W tej tabeli „właściciel” nie oznacza, że moduł musi zawierać całą
+implementację. Może mieć prywatne internal seams i adaptery. Oznacza, że tylko
+on definiuje regułę, a pozostałe moduły konsumują jego wynik. To jest punkt,
+którego brakowało w samej wcześniejszej mapie plików.
+
+Docelowy przepływ artefaktów należy zamrozić jako dwa równoległe, ale
+jednokierunkowe łańcuchy:
+
+```text
+raw input → CompositionInput → CompositionDocument
+
+raw YAML → CompiledCompositionTemplate → PageLayoutInstance[]
+                                               ↓
+                         planner → CompositionPlan + FlowObstacle[]
+                                               ↓
+                                    evaluator (raz)
+                                               ↓
+                         CompositionResult { document, pages, plan,
+                                             evaluation, trace, diagnostics }
+                              ↙ dry_run       ↓ render       ↘ debug
+```
+
+Obecne `CompositionTemplate` powinno zostać świadomie zmapowane do tego
+modelu: albo stanie się nazwą kanonicznego template’u kompilowanego, albo
+zostanie wchłonięte przez `CompiledCompositionTemplate`. Nie może pozostać
+trzecią, równorzędną geometrią obok `CompiledTemplate` i `PageGeometry`.
+
+`CompositionResult` powinien być jedynym wynikiem publicznego pipeline’u:
+
+```ts
+interface CompositionResult {
+  document: CompositionDocument;
+  pageInstances: readonly PageLayoutInstance[];
+  plan: Readonly<CompositionPlan>;
+  evaluation: CompositionEvaluation;
+  trace: CompositionTrace;
+  diagnostics: readonly CompositionDiagnostic[];
+}
+```
+
+`dry_run`, zwykły render i debug mają konsumować ten sam wynik. Różnią się
+wyłącznie końcowym adapterem: odpowiednio serializatorem, backendem PDF lub
+debug overlayem.
+
+#### Jak mapa wykrywa rozbieżność
+
+Do każdego wiersza należy dopisać test lub assertion:
+
+- schema mutation test: input spoza canonical contractu odpada przed
+  `CompositionDocument`;
+- geometry identity test: ten sam template ma zgodną sygnaturę w plannerze,
+  debug PDF i backendzie;
+- adapter one-way test: zmiana fizycznego layoutu zmienia wynik adaptera, ale
+  adapter nie zmienia źródłowego `CompiledTemplate` ani nie tworzy nowych reguł;
+- metrics parity test: planowanie i rysowanie używają tych samych fontów,
+  line-height i ink bounds;
+- planner/evaluator mutation test: sztuczne powiększenie slotu, przesunięcie
+  placementu albo usunięcie fragmentu musi zostać wykryte niezależnie od
+  trace’u planera;
+- backend fidelity test: backend rysuje dokładnie boxy z planu i nie tworzy
+  nowych placementów;
+- dry-run/render parity test: oba tryby zwracają ten sam `CompositionPlan`
+  oraz `CompositionEvaluation` dla tych samych danych, template’u i fontów;
+- trace determinism test: powtórzenie planowania daje ten sam trace, a
+  kolejne passy nie usuwają historii poprzednich prób;
+- architectural import test: moduł nie może importować zależności z warstwy,
+  której decyzje ma konsumować, np. planner nie importuje backendu PDF.
+- public-export test: `composition/index.ts` eksponuje tylko stabilny seam
+  pipeline’u, typy domenowe i jawne adaptery; prywatne etapy planera nie są
+  przypadkowo alternatywnym publicznym wejściem.
+
+Jeżeli dwa moduły muszą niezależnie odtworzyć tę samą regułę, mapa ma oznaczyć
+to jako naruszenie single source of truth, a nie jako „częściową zgodność”.
+
 **Kryterium ukończenia:** mapa z dokumentu prowadzi do planera i ewaluatora
 bez czytania całego repozytorium; test integracyjny pokazuje pełną sekwencję
 od `CompositionInput` do backendu; istnieje dokładnie jeden evaluator result
@@ -329,18 +450,30 @@ produkcyjnej ścieżki bez wyraźnego komentarza kompatybilności.
 Zachować publiczny seam planera jako jeden główny moduł:
 
 ```ts
-planComposition(document, template, capabilities, policy): CompositionPlan
+compose(document, pageInstances, capabilities, policy): CompositionResult
+```
+
+Wewnątrz jednego publicznego seamu pozostaje głęboki planner:
+
+```ts
+planComposition(document, pageInstances, capabilities, policy): CompositionPlan
 ```
 
 Wewnątrz wydzielić prywatne moduły/seams:
 
 - `flow-router` — kolejność flow, route index, przejścia stron i slotów;
 - `line-layout` — line height, font bounds, wrapping i przyszłe hyphenation;
-- `obstacle-index` — finalne obstacles i zapytania o interwały linii;
-- `barrier-segments` — wyliczanie i konsumowanie flow barrier candidates;
+- `obstacle-index` — jeden registry finalnych obstacles i zapytania o interwały
+  linii;
 - `block-layout` — pomiar i fragmentowanie typów bloków;
-- `insertion-planner` — wybór boxów dla elementów poza zwykłym nurtem;
+- `plan-builder` — jedyny writer placementów, linii, residuals i wyników passu;
 - `plan-trace` — zapis decyzji i wyjaśnień bez wpływania na layout.
+
+`barrier-segments` pozostaje wewnętrzną częścią `obstacle-index` lub
+`line-layout`, dopóki nie będzie miał własnego głębokiego interfejsu.
+Quote-specific `insertion-planner` pozostaje P1; w P0 izolujemy istniejącą
+ścieżkę, ale nie generalizujemy jej przed ustabilizowaniem podstawowego
+pipeline’u. Nie dzielimy mechanicznie dużego pliku na wiele płytkich modułów.
 
 Nie chodzi o mechaniczne rozbicie pliku na wiele cienkich funkcji. Każdy moduł
 ma dostać mały interfejs i ukryć znaczną część implementacji. Planner główny
@@ -352,19 +485,26 @@ obstacle nie wymaga edycji wszystkich ścieżek wrappingu i routingu.
 ### P0 — wspólny model bloków i adapterów
 
 Istniejące capabilities `measureBlock`, `measureTable` i `blockRenderers` są
-dobrym seamem. Ustabilizować go jako interfejs adapterów:
+dobrym materiałem na seamy, ale pomiar/layout i malowanie nie powinny tworzyć
+jednego szerokiego interfejsu. Ustabilizować je jako osobne porty:
 
 ```ts
-interface CompositionBlockAdapter {
+interface CompositionBlockMeasurementAdapter {
   supports(kind: CompositionBlockKind): boolean;
   measure(input: MeasureBlockInput): BlockMeasure;
   layout(input: LayoutBlockInput): BlockLayout;
+}
+
+interface CompositionBlockPainter {
+  supports(kind: CompositionBlockKind): boolean;
   paint(input: PaintBlockInput): void;
 }
 ```
 
-Adaptery dla `text`, `image`, `metric`, `chart` i `table` mają być wymienne.
-Planner nie zna szczegółów rysowania KPI, PNG wykresu ani captionu.
+`measure/layout` i `paint` są osobnymi portami. Jeden adapter jsPDF może
+implementować oba, ale planner otrzymuje wyłącznie port pomiaru i layoutu, a
+nie painter. Adaptery dla `text`, `image`, `metric`, `chart` i `table` mają być
+wymienne. Planner nie zna szczegółów rysowania KPI, PNG wykresu ani captionu.
 
 Tabela może być fragmentowana na wierszach. Obraz, KPI i wykres powinny być
 atomiczne, chyba że konkretny adapter jawnie deklaruje fragmentowanie.
@@ -573,7 +713,8 @@ Release jest możliwy, gdy:
 
 1. istnieje jeden canonical input contract;
 2. nie ma produkcyjnego legacy translatora;
-3. planner, evaluator, debug i renderer korzystają z jednej geometrii;
+3. planner, evaluator, debug i renderer korzystają z tych samych
+   `PageLayoutInstance[]`; żaden nie rekonstruuje geometrii niezależnie;
 4. każdy wspierany block kind ma adapter i test artefaktowy;
 5. wszystkie hard violations kończą plan statusem rejected;
 6. nie ma utraty treści, nielegalnego overlapu ani pustych placement gaps;
@@ -583,7 +724,9 @@ Release jest możliwy, gdy:
 10. `dry_run` i render używają tego samego planner/evaluator pipeline’u;
 11. evaluator może niezależnie porównać plan z canonical template geometry;
 12. trace zachowuje identyfikatory passów, reflow i końcowej ewaluacji;
-13. dokumentacja normatywna nie przeczy implementacji i pozwala znaleźć każdy
+13. każdy kanoniczny artefakt ma jednego writera, a architektura ma test
+    single-writer;
+14. dokumentacja normatywna nie przeczy implementacji i pozwala znaleźć każdy
     główny seam bez czytania całego repozytorium.
 
 ## Plan redukcji dokumentacji
@@ -675,12 +818,19 @@ sprawdzi, że publiczny przykład README przechodzi walidację schema.
 
 - uporządkować schema;
 - usunąć publiczny legacy translator;
-- ujednolicić compiler/template adapter;
-- dodać canonical geometry assertions.
+- wprowadzić `CompiledCompositionTemplate` i `PageLayoutInstance[]` jako
+  jawne artefakty etapów;
+- ograniczyć page-template adapter do mapowania, a heurystyki przenieść do
+  jednego właściciela albo usunąć;
+- dodać canonical geometry provenance i assertions;
+- wyprowadzić `maxPages` z template’u do policy planera.
 
 ### Etap 2 — głębienie planera
 
 - wydzielić internal seams bez zmiany zachowania;
+- wprowadzić `PlanBuilder` jako jedynego writera placementów i linii;
+- wprowadzić `ObstacleIndex` oraz `FlowObstacle[]` zamiast używać
+  `graphicPlacements` jako ukrytego registry;
 - utrzymać istniejące flow barrier tests;
 - utrzymać debug PDF jako obserwację tego samego planu.
 
@@ -691,6 +841,9 @@ sprawdzi, że publiczny przykład README przechodzi walidację schema.
   aliasy `shadow`;
 - przenieść `dry_run` na ten sam planner/evaluator co zwykły render;
 - przekazywać canonical template do ewaluatora i dodać testy mutacji geometrii;
+- rozdzielić porty `measure/layout` od `paint`;
+- zamknąć internal seams w `composition/index.ts`, pozostawiając jeden publiczny
+  composition pipeline;
 - utrwalać trace wszystkich passów, zamiast zastępować wcześniejszy plan
   ostatnim `latestPlan`;
 - dodać `docs/composition-model.md`, mapę kodu i test kolejności faz.
