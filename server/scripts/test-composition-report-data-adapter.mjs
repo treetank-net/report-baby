@@ -7,19 +7,20 @@ import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composi
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-data-'));
-const bundle = join(temporary, 'composition.mjs');
+const bundle = join(temporary, 'composition.cjs');
 const build = runProcess('npx', [
   'esbuild',
   'src/composition/index.ts',
   '--bundle',
   '--platform=node',
-  '--format=esm',
+  '--format=cjs',
   `--outfile=${bundle}`,
 ], { cwd: root, timeout: 30_000 });
 if (build.status !== 0) throw new Error(`composition adapter test bundle failed: ${build.stderr || build.stdout}`);
 
 try {
-  const { compositionDocumentFromInput } = await import(bundle);
+  const composition = await import(bundle);
+  const { compositionDocumentFromInput } = composition.default ?? composition;
   const legacyFixture = {
     title: 'A semantic report',
     subtitle: 'The public input remains compact.',
@@ -49,6 +50,19 @@ try {
     'highlights-heading',
     'highlight-1',
     'highlight-2',
+  ]);
+  assert.deepEqual(document.flows.main.blocks.map((block) => block.kind), [
+    'paragraph',
+    'metric',
+    'chart',
+    'heading',
+    'paragraph',
+    'image',
+    'heading',
+    'table',
+    'heading',
+    'list-item',
+    'list-item',
   ]);
   assert.equal(document.flows.main.blocks[0].kind, 'paragraph');
   assert.match(document.flows.main.blocks[0].text, /Lead text with an inline image/);

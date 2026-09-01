@@ -6,19 +6,20 @@ import { runProcess } from './lib/process.mjs';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-engine-'));
-const bundle = join(temporary, 'composition-engine.mjs');
+const bundle = join(temporary, 'composition-engine.cjs');
 const build = runProcess('npx', [
   'esbuild',
   'src/composition/index.ts',
   '--bundle',
   '--platform=node',
-  '--format=esm',
+  '--format=cjs',
   `--outfile=${bundle}`,
 ], { cwd: root, timeout: 30_000 });
 if (build.status !== 0) throw new Error(`composition engine contract bundle failed: ${build.stderr || build.stdout}`);
 
 try {
-  const { combineJsPdfCompositionBlockCapabilities, createCompositionEngine, renderComposition } = await import(bundle);
+  const composition = await import(bundle);
+  const { combineJsPdfCompositionBlockCapabilities, createCompositionEngine, renderComposition } = composition.default ?? composition;
   const document = { flows: { main: { id: 'main', blocks: [], continuation: 'allowed' } } };
   const plan = {
     pages: [],
@@ -33,6 +34,7 @@ try {
     residualContent: [],
   };
   let metricsSeen;
+  let evaluationCalls = 0;
   const engine = createCompositionEngine(
     {
       plan(input, metrics) {
@@ -43,6 +45,7 @@ try {
     },
     {
       evaluate(input, planned) {
+        evaluationCalls += 1;
         assert.equal(input, document);
         assert.equal(planned, plan);
         return { status: 'accepted', diagnostics: [], residualContent: [] };
@@ -54,6 +57,7 @@ try {
   assert.equal(metricsSeen, metrics);
   assert.equal(result.plan, plan);
   assert.equal(result.evaluation.status, 'accepted');
+  assert.equal(evaluationCalls, 1, 'the composition engine must evaluate one plan exactly once');
   const capabilityCalls = [];
   const capabilities = combineJsPdfCompositionBlockCapabilities({
     image: {

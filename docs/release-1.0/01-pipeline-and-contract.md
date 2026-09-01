@@ -1,6 +1,16 @@
 # Plan 01 — pipeline i kontrakt
 
-Status: można rozpocząć od razu
+Status: częściowo wykonany; pozostał audyt publicznego kontraktu
+
+## Wykonane w pierwszym przebiegu
+
+- usunięto drugą ewaluację z `planReportComposition()`;
+- wrapper zwraca teraz `result.evaluation` z engine’u;
+- test shadow potwierdza jedną fazę `evaluation` w wyniku;
+- contract test potwierdza jedno wywołanie evaluatora dla jednego planu;
+- bundlowanie testów composition używa CommonJS, dzięki czemu testy dochodzą
+  do asercji zamiast kończyć się na `Dynamic require of "process"`;
+- adapter input ma asercję pełnego mapowania obecnych block kinds.
 
 ## Cel
 
@@ -38,10 +48,13 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
 3. Dodać do contract testu licznik wywołań evaluatora i asercję, że jeden
    konkretny plan jest oceniony raz.
 4. Naprawić sposób budowania tymczasowego bundla contract testu. Nie zmieniać
-   asercji tylko po to, aby ominąć błąd runtime.
+   asercji tylko po to, aby ominąć błąd runtime. **Wykonane:** contract test i
+   adapter test używają CommonJS oraz przechodzą do asercji.
 5. Opisać, które dane są publicznym `CompositionInput`, a które są
    wewnętrznym etapem przygotowania composition.
 6. Sprawdzić pełne mapowanie obecnych block kinds od schema do renderera.
+   **Częściowo wykonane:** adapter input ma test wszystkich obecnych rodzajów;
+   pozostaje potwierdzenie ich wspólnej ścieżki aż do renderera.
 7. Zdecydować na podstawie użycia, które eksporty z `composition/index.ts` są
    publicznym seamem, a które powinny zostać wewnętrzne.
 
@@ -54,6 +67,16 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
   rozwiązywania legalności;
 - nie ma produkcyjnego translatora starego `ReportData` ani `Cursor`;
 - nieznany block kind kończy się czytelnym błędem.
+
+## Pozostały zakres po pierwszym przebiegu
+
+- przeprowadzić audyt użycia eksportów `composition/index.ts`;
+- zdecydować, które aliasy wejściowe są jeszcze potrzebne i przygotować ich
+  usunięcie jako świadomy breaking change, jeżeli nie ma już call site’ów;
+- podłączyć `dry_run` do tego samego wyniku planowania — to zależy od planu 05,
+  ale jest odnotowanym brakiem tego etapu;
+- potwierdzić wspólną ścieżkę block kinds od schema do backendu, nie tylko
+  normalizację do `CompositionDocument`.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 

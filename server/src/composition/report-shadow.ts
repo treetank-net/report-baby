@@ -5,7 +5,6 @@ import type { CompositionInput } from '../contract/schema.js';
 import type { CompiledTemplate } from '../template-contract.js';
 import type { CompositionTemplate } from './model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './engine.js';
-import { evaluateCompositionPlan } from './evaluator.js';
 import { compositionDocumentFromInput } from './input.js';
 import { compositionTemplateFromPageGeometry } from './page-template-adapter.js';
 import {
@@ -356,7 +355,7 @@ export function planReportComposition(
     ...options.policy,
   };
   const result = createTextCompositionEngine(template, policy).plan(document, metrics);
-  return { document, template, metrics, plan: result.plan, evaluation: evaluateCompositionPlan(document, result.plan) };
+  return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };
 }
 
 /** Compatibility names retained for the prototype harness. */

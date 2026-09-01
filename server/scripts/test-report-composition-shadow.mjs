@@ -89,6 +89,7 @@ try {
     footer: 'Prepared for the editorial team.',
   }), { family: 'DejaVu', maxPages: 3 });
   assert.notEqual(result.evaluation.status, 'rejected', JSON.stringify(result.evaluation));
+  assert.equal(result.plan.trace?.phases.filter((phase) => phase.name === 'evaluation').length, 1, 'the report composition result must contain one evaluation phase');
   assert.ok(result.plan.pages.length >= 2, 'semantic flow input should continue onto a second page');
   assert.ok(result.plan.lines.some((line) => line.blockId === 'intro' && line.slotId === '1:block:intro'));
   assert.ok(result.plan.lines.some((line) => line.blockId === 'section-1-heading'));
