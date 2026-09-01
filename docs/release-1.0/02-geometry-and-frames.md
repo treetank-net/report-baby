@@ -1,0 +1,74 @@
+# Plan 02 — geometria i wspólne ramy
+
+Status: fundament dla score i pętli
+
+## Cel
+
+Planner, evaluator, debug i backend mają odnosić się do tych samych obliczonych
+ram: slotów, segmentów, placements, obstacles, flow barriers, block frames,
+grafik i chrome.
+
+Nie dodajemy kolejnego modelu geometrii. Ustalamy odpowiedzialność istniejących
+reprezentacji i usuwamy powtórne interpretacje.
+
+## Stan obecny
+
+Geometria przechodzi przez kilka etapów:
+
+1. `template-contract.ts` waliduje i normalizuje template;
+2. `page-geometry.ts` wylicza fizyczną geometrię stron, segmenty, bands,
+   obstacles i continuation;
+3. `page-template-adapter.ts` buduje z niej `CompositionTemplate`, slots,
+   routes i część reguł insertionów;
+4. planner tworzy faktyczne `flowPlacements` oraz wynikające z kolizji
+   `flowBarrierBoxCandidates`;
+5. renderer i debug rysują wynik w osobnych miejscach.
+
+Źródła: [`template-contract.ts`](../../server/src/template-contract.ts),
+[`page-geometry.ts`](../../server/src/page-geometry.ts),
+[`page-template-adapter.ts`](../../server/src/composition/page-template-adapter.ts).
+
+## Kroki
+
+1. Narysować tabelę wejście → wyjście dla każdej funkcji geometrycznej:
+   template, strona, flow, slot, segment, obstacle, placement.
+2. Ustalić, w którym miejscu powstają:
+   - granice całego flow;
+   - kolizje wewnątrz flow;
+   - faktyczne miejsca z treścią;
+   - puste miejsca niedostępne dla treści;
+   - kandydaci wynikający z punktu styku z obstacle.
+3. Dla każdego wyliczenia wskazać właściciela i zakazać jego rekonstrukcji w
+   evaluatorze, debug overlayu albo backendzie.
+4. Sprawdzić szczególnie przesuwanie `blockFrames`, rozcinanie segmentów,
+   insertion routes, growth i chrome.
+5. Dodać testy geometrii dla grafik prostokątnych, elips, poligonów, wielu
+   obstacles i przejścia między stronami.
+6. Dodać test porównujący ramę kandydata z faktycznym pierwszym i ostatnim
+   `flowPlacement` po obu stronach obstacle.
+7. Ujawnić w trace, z jakiej geometrii powstał dany placement i kandydat.
+
+## Kryteria ukończenia
+
+- zmiana w template przechodzi przez geometry, planner, evaluator, debug i
+  backend bez zmiany znaczenia;
+- evaluator może wykryć placement poza ramą niezależnie od tego, co placement
+  sam deklaruje jako swój slot;
+- box kandydata nie jest rysowany jako faktyczna bariera, dopóki nie zostanie
+  użyty przez planner;
+- debug pokazuje rozróżnienie: flow, obstacle, faktyczny placement i kandydat;
+- test potwierdza zgodność obliczonych i narysowanych współrzędnych.
+
+## Wymaga uzupełnienia po wykonaniu punktu X
+
+- Ostateczne miejsce reguły przesuwania `blockFrames` wymaga uzupełnienia po
+  punkcie 1 i 2. Nie należy przenosić tej reguły wcześniej.
+- Zakres chrome, który musi ograniczać flow, wymaga uzupełnienia po planie 05,
+  gdy zostanie porównany z faktycznym renderem.
+- Czy `flowBarrierBoxCandidates` powinny stać się wejściem dla pierwszej pętli
+  wymaga uzupełnienia po testach z planu 04. Na tym etapie są tylko danymi
+  diagnostycznymi i potencjalnymi punktami decyzji.
+
+## Poza zakresem
+
+Nie budujemy ogólnego solvera geometrii ani pełnej semantyki CSS floatów.

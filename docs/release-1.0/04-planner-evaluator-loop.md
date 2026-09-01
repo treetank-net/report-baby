@@ -1,0 +1,93 @@
+# Plan 04 — pętla planner–evaluator
+
+Status: główny krok wartości produktowej; zależy od planów 01–03
+
+## Cel
+
+Planner i evaluator mają współpracować przy wyborze układu:
+
+```text
+planner przygotowuje wariant
+  → plan jednego przebiegu
+  → evaluator ocenia go raz
+  → feedback wskazuje legalność i jakość
+  → planner przygotowuje ograniczoną zmianę
+  → wybór najlepszego legalnego planu
+```
+
+To nie wymaga rozmowy z LLM-em. „Rozmowa” oznacza deterministyczne przekazanie
+wyniku ewaluacji do kolejnego kroku planera.
+
+## Stan obecny
+
+Planner ma pętlę w `createTextCompositionPlanner`, ale stabilizuje ona głównie
+sygnaturę insertion proposals. `planDocumentOnce()` buduje pełny plan, a
+engine wywołuje evaluator dopiero po zakończeniu pracy planera.
+
+Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
+
+- insertion proposals;
+- route i sloty;
+- flow barriers i `flowBarrierBoxCandidates`;
+- istniejące breakpoints tekstu;
+- growth/defer dla elementów, które już mają takie reguły.
+
+## Minimalny wariant implementacji
+
+1. Pozostawić `planDocumentOnce()` jako wykonanie jednego wariantu.
+2. Rozszerzyć planner o możliwość otrzymania poprzedniej ewaluacji albo
+   ograniczonej decyzji wynikającej z poprzedniej ewaluacji.
+3. Generować tylko deterministyczne warianty istniejących decyzji. Na pierwszy
+   eksperyment wybrać jeden przypadek, rekomendacyjnie:
+   - przesunięcie grafiki/cytatu względem istniejących flow barriers; albo
+   - wybór breakpointu, gdy kolejna linia trafia w obstacle.
+4. Ograniczyć liczbę wariantów i iteracji wartościami z YAML.
+5. Deduplikować warianty po istniejącej sygnaturze placementów/proposals.
+6. Oceniać każdy wariant dokładnie raz.
+7. Odrzucać hard violations przed porównaniem score.
+8. Zachować najlepszy legalny plan, a nie ostatni plan.
+9. Jeżeli nie ma legalnego planu, zwrócić `rejected` z agregatem diagnostyki.
+10. W trace zapisać kolejność prób, wynik, score i powód kolejnej zmiany.
+
+## Pseudoprzebieg
+
+```text
+wariant początkowy
+  → planDocumentOnce
+  → evaluate
+  → zapisz wynik
+  → wygeneruj następną dozwoloną zmianę
+  → powtarzaj do braku zmiany, stabilizacji albo limitu
+  → zwróć najlepszy legalny plan
+```
+
+Nie należy na początku zmieniać jednocześnie pozycji grafik, cytatów,
+breakpointów, growth i routingu na całym dokumencie. Wtedy nie będzie wiadomo,
+która decyzja poprawiła lub zepsuła układ.
+
+## Testy i kryteria ukończenia
+
+- dwa legalne warianty wybierają wariant z wyższym score;
+- wariant nielegalny nie wygrywa przez wysoki score;
+- limit iteracji jest respektowany;
+- kolejność wariantów jest deterministyczna;
+- jeden wariant ma dokładnie jedną ewaluację;
+- trace pokazuje wszystkie próby;
+- realny editorial pokazuje widoczną, uzasadnioną zmianę układu;
+- koszt pełnego planowania jest mierzony i ma konfigurowalny limit.
+
+## Wymaga uzupełnienia po wykonaniu punktu X
+
+- Pierwszy rodzaj decyzji wymaga uzupełnienia po pomiarze przypadków z planu
+  02 i score z planu 03. Nie zakładamy, że jednoczesna optymalizacja cytatu i
+  grafiki będzie dobrym pierwszym przypadkiem.
+- Dokładny feedback dla planera wymaga uzupełnienia po pierwszym teście
+  dwóch wariantów. Wtedy zobaczymy, czy wystarczą kody diagnostyczne i score,
+  czy potrzebna jest bardziej szczegółowa informacja o kolizji.
+- Limit kosztu wymaga uzupełnienia po benchmarku realnego editorialu, nie na
+  podstawie samego limitu `planner_max_iterations`.
+
+## Poza zakresem
+
+Nie budujemy globalnego solvera, losowego searchu ani nie pozwalamy, aby
+nielegalny plan był fallbackiem „najmniej złym”.
