@@ -12,6 +12,21 @@ Status: częściowo wykonany; pozostał audyt publicznego kontraktu
   do asercji zamiast kończyć się na `Dynamic require of "process"`;
 - adapter input ma asercję pełnego mapowania obecnych block kinds.
 
+## Wynik audytu ścieżek publicznych
+
+- Nie znaleziono wewnętrznych importów z `composition/index.ts`; moduł jest
+  używany jako publiczny seam bundlowany przez testy i potencjalnych callerów.
+  Dlatego nie zawężam eksportów automatycznie — wymaga to osobnej decyzji
+  breaking-change opartej na publicznym użyciu.
+- Aliasy `main`, `header`, `footer`, `title`, `headerContent` i ich warianty
+  są obsługiwane w `compositionInputSchema`, ale nie znaleziono ich użycia w
+  wewnętrznym rendererze poza samym parserem. Nie usuwam ich w ciemno: trzeba
+  potwierdzić, czy są częścią wspieranego wejścia zewnętrznego, czy tylko
+  pozostałością migracji.
+- Testowe fixture’y starego kształtu są przepisywane przez testowy helper do
+  canonical `flows`; nie są dowodem, że produkcja potrzebuje starego
+  `ReportData`.
+
 ## Cel
 
 Uczynić jeden przebieg composition wiarygodnym i widocznym:
