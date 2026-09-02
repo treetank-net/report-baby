@@ -65,6 +65,8 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
 - evaluator sprawdza rejestr `flowPlacements` niezależnie od deklarowanego
   `hasContent`: porównuje metadane z faktycznymi liniami oraz odrzuca placement
   poza jego slotem; regresja jest w `test-editorial-numbered-flow`.
+- evaluator sprawdza także kandydatów barier: ich dodatnią geometrię, przynależność
+  do placementu i referencje do istniejących obstacle’ów z `wrap: around`.
 
 ## Kroki
 

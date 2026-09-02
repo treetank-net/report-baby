@@ -561,6 +561,15 @@ try {
   const invalidPlacementGeometryEvaluation = evaluateCompositionPlan(result.document, invalidPlacementGeometryPlan);
   assert.equal(invalidPlacementGeometryEvaluation.status, 'rejected', 'a flow placement outside its slot must reject the plan');
   assert.ok(invalidPlacementGeometryEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'FLOW_PLACEMENT_OUTSIDE_SLOT'), 'out-of-slot flow placement must be explicit');
+  const invalidBarrierCandidatePlan = structuredClone(result.plan);
+  const invalidBarrierCandidate = invalidBarrierCandidatePlan.flowBarrierBoxCandidates.find((candidate) => candidate.flowId === 'main');
+  assert.ok(invalidBarrierCandidate, 'fixture must expose a main-flow barrier candidate for geometry validation');
+  const invalidBarrierPlacement = invalidBarrierCandidatePlan.flowPlacements.find((placement) => placement.id === invalidBarrierCandidate.placementId && placement.page === invalidBarrierCandidate.page);
+  assert.ok(invalidBarrierPlacement, 'barrier candidate must reference a placement for geometry validation');
+  invalidBarrierCandidate.box.y = invalidBarrierPlacement.box.y + invalidBarrierPlacement.box.height + 1;
+  const invalidBarrierCandidateEvaluation = evaluateCompositionPlan(result.document, invalidBarrierCandidatePlan);
+  assert.equal(invalidBarrierCandidateEvaluation.status, 'rejected', 'a barrier candidate outside its flow placement must reject the plan');
+  assert.ok(invalidBarrierCandidateEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'FLOW_BARRIER_CANDIDATE_OUTSIDE_PLACEMENT'), 'out-of-placement barrier candidate must be explicit');
   assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_STABILIZED'), 'editorial fixture must finish with a stabilized insertion plan');

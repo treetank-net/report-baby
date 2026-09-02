@@ -193,6 +193,49 @@ function checkEmptyFlowPlacements(document: CompositionDocument, plan: Compositi
   }
 }
 
+function checkFlowBarrierBoxCandidates(plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
+  for (const candidate of plan.flowBarrierBoxCandidates ?? []) {
+    if (candidate.box.width <= 0 || candidate.box.height <= 0) {
+      diagnostics.push(error(
+        'FLOW_BARRIER_CANDIDATE_INVALID',
+        `Flow barrier candidate '${candidate.id}' has no usable geometry.`,
+        { flowId: candidate.flowId, page: candidate.page, slotId: candidate.placementId },
+      ));
+      continue;
+    }
+    const placement = plan.flowPlacements?.find((item) => item.id === candidate.placementId && item.page === candidate.page);
+    if (!placement) {
+      diagnostics.push(error(
+        'FLOW_BARRIER_CANDIDATE_PLACEMENT_MISSING',
+        `Flow barrier candidate '${candidate.id}' references missing placement '${candidate.placementId}'.`,
+        { flowId: candidate.flowId, page: candidate.page, slotId: candidate.placementId },
+      ));
+    } else if (!fitsInside(candidate.box, placement.box)) {
+      diagnostics.push(error(
+        'FLOW_BARRIER_CANDIDATE_OUTSIDE_PLACEMENT',
+        `Flow barrier candidate '${candidate.id}' leaves flow placement '${placement.id}'.`,
+        { flowId: candidate.flowId, page: candidate.page, slotId: placement.slotId },
+      ));
+    }
+    for (const sourceId of [candidate.previousSourceId, candidate.nextSourceId].filter((value): value is string => value !== undefined)) {
+      const source = plan.graphicPlacements.find((graphic) => graphic.page === candidate.page && (graphic.graphicId === sourceId || graphic.id === sourceId));
+      if (!source) {
+        diagnostics.push(error(
+          'FLOW_BARRIER_CANDIDATE_SOURCE_MISSING',
+          `Flow barrier candidate '${candidate.id}' references missing obstacle '${sourceId}'.`,
+          { flowId: candidate.flowId, page: candidate.page, slotId: candidate.placementId, details: { sourceId } },
+        ));
+      } else if (source.wrap !== 'around') {
+        diagnostics.push(error(
+          'FLOW_BARRIER_CANDIDATE_SOURCE_NOT_WRAPPING',
+          `Flow barrier candidate '${candidate.id}' references non-wrapping obstacle '${sourceId}'.`,
+          { flowId: candidate.flowId, page: candidate.page, slotId: candidate.placementId, details: { sourceId } },
+        ));
+      }
+    }
+  }
+}
+
 function checkEarlyRouteTransitions(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
   const minimum = plan.minimumFragmentLines;
   if (minimum === undefined || !Number.isInteger(minimum) || minimum <= 0) return;
@@ -416,6 +459,7 @@ function checkInsertionSourceOrder(document: CompositionDocument, plan: Composit
 export function evaluateCompositionPlan(document: CompositionDocument, plan: CompositionPlan): CompositionEvaluation {
   const diagnostics = [...plan.diagnostics];
   checkEmptyFlowPlacements(document, plan, diagnostics);
+  checkFlowBarrierBoxCandidates(plan, diagnostics);
   checkEmptyAndUnderfilledSlots(document, plan, diagnostics);
   checkEarlyRouteTransitions(document, plan, diagnostics);
   checkInsertionSourceOrder(document, plan, diagnostics);
