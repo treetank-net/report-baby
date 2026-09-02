@@ -1,6 +1,6 @@
 # Plan 02 — geometria i wspólne ramy
 
-Status: chrome ma wspólną geometrię planu; pozostała obserwowalność wszystkich ram
+Status: geometria chrome, placementów i kandydatów jest współdzielona i walidowana; pozostały pełne testy wszystkich ram
 
 ## Cel
 

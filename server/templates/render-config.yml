@@ -37,6 +37,11 @@ quality:
     rectangle_inset_px: 2
     placement_tolerance_mm: 1
     caption_vertical_balance_tolerance_mm: 1
+composition_score:
+  base: 100
+  column_balance_weight: 12
+  column_count: 2
+  heading_following_line_bonus: 4
 assets:
   report_header_band_width_px: 640
   report_header_band_height_px: 154

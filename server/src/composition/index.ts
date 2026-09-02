@@ -44,13 +44,14 @@ export type {
   CompositionSlotTrace,
   CompositionTraceDecision,
   CompositionPlanResult,
+  CompositionScoreComponent,
   CompositionPlanner,
   CompositionResidualContent,
   CompositionSlot,
   CompositionTextMetrics,
   CompositionWordRange,
 } from './engine.js';
-export { createCompositionEngine, renderComposition } from './engine.js';
+export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './engine.js';
 export { evaluateCompositionPlan } from './evaluator.js';
 export { compositionDocumentFromInput } from './input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './page-template-adapter.js';

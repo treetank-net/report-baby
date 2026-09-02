@@ -16,6 +16,7 @@ export interface BuiltinSlideTemplateDocument {
 export interface RenderConfig {
   canvas: { width: number; height: number; pptxWidth: number; pptxHeight: number; pdfWidthMm: number; pdfHeightMm: number; pointsPerInch: number };
   quality: { pptxTextRegionMaxChangedPixelRatio: number };
+  compositionScore: Record<string, number>;
   assets: Record<string, number>;
   sources: { zipMaxEntries: number; zipMaxFileBytes: number; zipMaxTotalBytes: number; zipMaxCompressionRatio: number; zipMaxNestedArchives: number };
   images: { maxAssetBytes: number; maxDecodedPixels: number; maxDimensionPx: number; maxPerDocument: number; remoteTimeoutMs: number; remoteMaxRedirects: number };
@@ -163,6 +164,7 @@ export function readRenderConfig(): RenderConfig {
   return {
     canvas: { width: get(canvas, 'width'), height: get(canvas, 'height'), pptxWidth: get(canvas, 'pptx_width'), pptxHeight: get(canvas, 'pptx_height'), pdfWidthMm: get(canvas, 'pdf_width_mm'), pdfHeightMm: get(canvas, 'pdf_height_mm'), pointsPerInch: get(canvas, 'points_per_inch') },
     quality: { pptxTextRegionMaxChangedPixelRatio: get(quality, 'pptx_text_region_max_changed_pixel_ratio') },
+    compositionScore: camelDictionary('composition_score'),
     assets: camelDictionary('assets'),
     sources: { zipMaxEntries: get(sources, 'zip_max_entries'), zipMaxFileBytes: get(sources, 'zip_max_file_bytes'), zipMaxTotalBytes: get(sources, 'zip_max_total_bytes'), zipMaxCompressionRatio: get(sources, 'zip_max_compression_ratio'), zipMaxNestedArchives: get(sources, 'zip_max_nested_archives') },
     images: { maxAssetBytes: get(images, 'max_asset_bytes'), maxDecodedPixels: get(images, 'max_decoded_pixels'), maxDimensionPx: get(images, 'max_dimension_px'), maxPerDocument: get(images, 'max_per_document'), remoteTimeoutMs: get(images, 'remote_timeout_ms'), remoteMaxRedirects: get(images, 'remote_max_redirects') },

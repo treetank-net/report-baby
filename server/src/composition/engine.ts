@@ -345,7 +345,31 @@ export interface CompositionPlan {
 export interface CompositionEvaluation {
   status: 'accepted' | 'accepted-with-warnings' | 'rejected';
   diagnostics: CompositionDiagnostic[];
+  hardViolations: CompositionDiagnostic[];
+  score: number;
+  scoreBreakdown: CompositionScoreComponent[];
   residualContent: CompositionResidualContent[];
+}
+
+export interface CompositionScoreComponent {
+  code: string;
+  value: number;
+  points: number;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Orders two evaluated plans for a deterministic candidate-selection step.
+ * A legal plan always wins over an illegal one; among legal plans, the higher
+ * score wins. Equal evaluations intentionally remain a tie so the caller can
+ * apply a stable candidate-order tie-break without hiding it here.
+ */
+export function compareCompositionEvaluations(left: CompositionEvaluation, right: CompositionEvaluation): number {
+  const leftLegal = left.status !== 'rejected' && left.hardViolations.length === 0 && left.residualContent.length === 0;
+  const rightLegal = right.status !== 'rejected' && right.hardViolations.length === 0 && right.residualContent.length === 0;
+  if (leftLegal !== rightLegal) return leftLegal ? -1 : 1;
+  if (left.score !== right.score) return left.score > right.score ? -1 : 1;
+  return 0;
 }
 
 export interface CompositionPlanner {
@@ -389,7 +413,16 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
   return {
     plan(document, metrics) {
       const plan = planner.plan(document, metrics);
-      return { plan, evaluation: evaluator.evaluate(document, plan) };
+      const evaluation = evaluator.evaluate(document, plan);
+      plan.trace?.phases.push({
+        name: 'evaluation',
+        status: evaluation.status === 'rejected' ? 'failed' : 'completed',
+        details: {
+          diagnosticCount: evaluation.diagnostics.length,
+          errorCount: evaluation.diagnostics.filter((item) => item.severity === 'error').length,
+        },
+      });
+      return { plan, evaluation };
     },
   };
 }

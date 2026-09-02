@@ -53,7 +53,8 @@ async function render(templateRoot, outputRoot) {
   });
   if (result.error || result.status !== 0) fail(`render failed: ${result.error?.message ?? result.stderr ?? result.stdout}`);
   const pdf = await readFile(join(outputRoot, 'report.pdf'));
-  return pdfContentHash(pdf);
+  const manifest = JSON.parse(await readFile(join(outputRoot, 'manifest.json'), 'utf8'));
+  return { hash: pdfContentHash(pdf), score: manifest.compositionEvaluation?.score };
 }
 
 const workRoot = await mkdtemp(join(tmpdir(), 'report-baby-config-reach-'));
@@ -69,11 +70,22 @@ try {
     const outputRoot = join(workRoot, `${name}-output`);
     await cp(sourceTemplateRoot, variantRoot, { recursive: true });
     await writeFile(join(variantRoot, pageTemplate), mutate(source));
-    const hash = await render(variantRoot, outputRoot);
-    if (hash === baseline) fail(`geometry field '${name}' did not change the rendered PDF (${createHash('sha256').update(hash).digest('hex')})`);
+    const rendered = await render(variantRoot, outputRoot);
+    if (rendered.hash === baseline.hash) fail(`geometry field '${name}' did not change the rendered PDF (${createHash('sha256').update(rendered.hash).digest('hex')})`);
     changed.push(name);
   }
-  console.log(`config reach PASS: ${changed.length} page geometry mutations changed the normalized PDF`);
+  const scoreRoot = join(workRoot, 'score-config-templates');
+  const scoreOut = join(workRoot, 'score-config-output');
+  await cp(sourceTemplateRoot, scoreRoot, { recursive: true });
+  const scoreConfigPath = join(scoreRoot, 'render-config.yml');
+  const scoreConfig = await readFile(scoreConfigPath, 'utf8');
+  await writeFile(scoreConfigPath, scoreConfig.replace('composition_score:\n  base: 100', 'composition_score:\n  base: 321'));
+  const changedScore = await render(scoreRoot, scoreOut);
+  if (changedScore.hash !== baseline.hash) fail('changing composition score configuration unexpectedly changed the PDF artifact');
+  if (!Number.isFinite(baseline.score) || !Number.isFinite(changedScore.score) || changedScore.score === baseline.score) {
+    fail(`composition score configuration did not reach the evaluator (${JSON.stringify({ baseline: baseline.score, changed: changedScore.score })})`);
+  }
+  console.log(`config reach PASS: ${changed.length} page geometry mutations changed the normalized PDF and score configuration changed only evaluation score`);
 } finally {
   await rm(workRoot, { recursive: true, force: true });
 }

@@ -1,9 +1,11 @@
-import type { CompositionDocument } from './model.js';
+import { readRenderConfig } from '../builtin-template-source.js';
+import type { CompositionBlock, CompositionDocument } from './model.js';
 import type {
   CompositionDiagnostic,
   CompositionEvaluation,
   CompositionPlan,
   CompositionSlot,
+  CompositionScoreComponent,
 } from './engine.js';
 import { graphicIntervalsForLine } from './graphic-geometry.js';
 
@@ -21,6 +23,12 @@ function slotFor(plan: CompositionPlan, slotId: string): CompositionSlot | undef
 
 function allLines(plan: CompositionPlan): CompositionPlan['lines'] {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
+}
+
+function scoreConfigNumber(key: string): number {
+  const value = readRenderConfig().compositionScore[key];
+  if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite composition_score.${key}.`);
+  return value;
 }
 
 function geometryTolerance(...values: number[]): number {
@@ -234,6 +242,65 @@ function checkFlowBarrierBoxCandidates(plan: CompositionPlan, diagnostics: Compo
       }
     }
   }
+}
+
+function scoreColumnBalance(plan: CompositionPlan): CompositionScoreComponent {
+  const columnCount = Math.max(1, Math.floor(scoreConfigNumber('columnCount')));
+  const lineCounts = new Map<string, number>();
+  for (const line of allLines(plan)) {
+    if (line.routeIndex === undefined) continue;
+    const key = `${line.flowId}:${line.page}:${line.routeIndex}`;
+    lineCounts.set(key, (lineCounts.get(key) ?? 0) + 1);
+  }
+  const routesByFlowPage = new Map<string, Set<number>>();
+  for (const placement of plan.flowPlacements ?? []) {
+    if (placement.routeIndex >= columnCount) continue;
+    const key = `${placement.flowId}:${placement.page}`;
+    const routes = routesByFlowPage.get(key) ?? new Set<number>();
+    routes.add(placement.routeIndex);
+    routesByFlowPage.set(key, routes);
+  }
+  const pageBalances = [...routesByFlowPage.entries()].flatMap(([key, routes]) => {
+    if (routes.size < 2) return [];
+    const counts = [...routes].sort((left, right) => left - right).map((routeIndex) => lineCounts.get(`${key}:${routeIndex}`) ?? 0);
+    const maximum = Math.max(...counts);
+    return maximum > 0 ? [{ page: key, balance: Math.min(...counts) / maximum, counts }] : [];
+  });
+  const value = pageBalances.length > 0
+    ? pageBalances.reduce((sum, page) => sum + page.balance, 0) / pageBalances.length
+    : 0;
+  return {
+    code: 'column-balance',
+    value,
+    points: value * scoreConfigNumber('columnBalanceWeight'),
+    details: { pages: pageBalances },
+  };
+}
+
+function scoreHeadingFollowingLine(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
+  const headingIds = new Set(Object.values(document.flows).flatMap((flow) => flow.blocks.filter((block: CompositionBlock) => block.kind === 'heading').map((block) => block.id)));
+  const headings = allLines(plan).filter((line) => headingIds.has(line.blockId));
+  const kept = new Set(headings
+    .filter((heading) => allLines(plan).some((line) => line.blockId !== heading.blockId
+      && line.flowId === heading.flowId
+      && line.page === heading.page
+      && line.slotId === heading.slotId
+      && line.box.y >= heading.box.y + heading.box.height))
+    .map((heading) => heading.blockId));
+  return {
+    code: 'heading-following-line',
+    value: kept.size,
+    points: kept.size * scoreConfigNumber('headingFollowingLineBonus'),
+    details: { headingCount: new Set(headings.map((heading) => heading.blockId)).size, keptHeadingIds: [...kept].sort() },
+  };
+}
+
+function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan): { score: number; breakdown: CompositionScoreComponent[] } {
+  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan)];
+  return {
+    score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
+    breakdown,
+  };
 }
 
 function checkEarlyRouteTransitions(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -822,10 +889,14 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     }
   }
   const hasErrors = diagnostics.some((item) => item.severity === 'error');
-  plan.trace?.phases.push({ name: 'evaluation', status: hasErrors ? 'failed' : 'completed', details: { diagnosticCount: diagnostics.length, errorCount: diagnostics.filter((item) => item.severity === 'error').length } });
+  const hardViolations = diagnostics.filter((item) => item.severity === 'error');
+  const scored = hasErrors ? { score: Number.NEGATIVE_INFINITY, breakdown: [] } : scoreLegalPlan(document, plan);
   return {
     status: hasErrors ? 'rejected' : diagnostics.length > 0 ? 'accepted-with-warnings' : 'accepted',
     diagnostics,
+    hardViolations,
+    score: scored.score,
+    scoreBreakdown: scored.breakdown,
     residualContent: plan.residualContent,
   };
 }

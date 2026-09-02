@@ -464,7 +464,7 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
 
 try {
   const { planReportCompositionShadow, compositionStylesFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig } = await import(shadowBundle);
-  const { evaluateCompositionPlan } = await import(backendBundle);
+  const { compareCompositionEvaluations, evaluateCompositionPlan } = await import(backendBundle);
   const { createJsPdfTextBackend, renderComposition } = await import(backendBundle);
   const { newPdf } = await import(primitivesBundle);
   const { compileTemplateSource } = await import(templateBundle);
@@ -503,6 +503,15 @@ try {
   if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'plan-trace.json'), JSON.stringify(result.plan.trace ?? {}, null, 2));
   assert.equal(result.evaluation.status, 'accepted', JSON.stringify(result.evaluation));
   assert.equal(result.plan.residualContent.length, 0, JSON.stringify(result.plan.residualContent));
+  assert.deepEqual(result.evaluation.hardViolations, [], 'accepted editorial must expose no hard violations');
+  assert.ok(Number.isFinite(result.evaluation.score), 'accepted editorial must expose a finite score');
+  assert.ok(result.evaluation.scoreBreakdown.some((component) => component.code === 'column-balance'), 'editorial score must explain column balance');
+  assert.ok(result.evaluation.scoreBreakdown.some((component) => component.code === 'heading-following-line'), 'editorial score must explain heading following text');
+  const traceBeforeReevaluation = structuredClone(result.plan.trace);
+  const firstReevaluation = evaluateCompositionPlan(result.document, result.plan);
+  const secondReevaluation = evaluateCompositionPlan(result.document, result.plan);
+  assert.deepEqual(secondReevaluation, firstReevaluation, 'evaluating the same plan twice must be deterministic');
+  assert.deepEqual(result.plan.trace, traceBeforeReevaluation, 'evaluation must not mutate the plan trace');
   const incompleteTraceBlocks = (result.plan.trace?.blocks ?? []).filter((block) => block.status !== 'placed');
   assert.deepEqual(incompleteTraceBlocks, [], `every authored block must be present in the final plan: ${JSON.stringify(incompleteTraceBlocks)}`);
   const mainFlowPlacements = (result.plan.flowPlacements ?? []).filter((placement) => placement.flowId === 'main');
@@ -554,6 +563,14 @@ try {
   const fakeContentEvaluation = evaluateCompositionPlan(result.document, fakeContentPlan);
   assert.equal(fakeContentEvaluation.status, 'rejected', 'a placement marked as occupied without content must reject the plan');
   assert.ok(fakeContentEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'FLOW_PLACEMENT_CONTENT_MISMATCH'), 'fake placement occupancy must be explicit');
+  assert.ok(fakeContentEvaluation.hardViolations.some((diagnostic) => diagnostic.code === 'FLOW_PLACEMENT_CONTENT_MISMATCH'), 'hard violations must include fake placement occupancy');
+  assert.equal(fakeContentEvaluation.score, Number.NEGATIVE_INFINITY, 'an illegal plan must never win through its quality score');
+  const legalLowScore = { status: 'accepted', hardViolations: [], score: 101, residualContent: [] };
+  const legalHighScore = { status: 'accepted', hardViolations: [], score: 102, residualContent: [] };
+  const illegalHighScore = { status: 'rejected', hardViolations: [{ code: 'synthetic', severity: 'error' }], score: 999, residualContent: [] };
+  assert.ok(compareCompositionEvaluations(legalHighScore, legalLowScore) < 0, 'a legal higher-score plan must be preferred');
+  assert.ok(compareCompositionEvaluations(legalLowScore, illegalHighScore) < 0, 'a legal plan must beat an illegal plan regardless of score');
+  assert.equal(compareCompositionEvaluations(legalLowScore, { ...legalLowScore }), 0, 'equal evaluations must tie deterministically');
   const invalidPlacementGeometryPlan = structuredClone(result.plan);
   const invalidPlacementGeometry = invalidPlacementGeometryPlan.flowPlacements.find((placement) => placement.hasContent);
   assert.ok(invalidPlacementGeometry, 'fixture must expose an occupied flow placement for geometry validation');

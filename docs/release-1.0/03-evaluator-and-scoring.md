@@ -1,6 +1,6 @@
 # Plan 03 — evaluator i score
 
-Status: można przygotować po ustabilizowaniu kontraktu z planu 01
+Status: hard gate i pierwszy konfigurowalny score są zaimplementowane; pozostały kolejne miary jakości i wybór wariantu
 
 ## Cel
 
@@ -15,10 +15,11 @@ ramą.
 
 ## Stan obecny
 
-`CompositionEvaluation` zawiera obecnie `status`, `diagnostics` i
-`residualContent`. Evaluator sprawdza już containment, overlap, kolejność,
-coverage, grafiki, tabele, atomic blocks i residual content, ale nie zwraca
-score ani jawnej listy hard violations.
+`CompositionEvaluation` zawiera `status`, `diagnostics`, `hardViolations`,
+`score`, `scoreBreakdown` i `residualContent`. Evaluator sprawdza containment,
+overlap, kolejność, coverage, grafiki, tabele, atomic blocks i residual content.
+Score korzysta wyłącznie z danych planu i konfiguracji `composition_score` w
+`render-config.yml`.
 
 Istnieje prototyp score w
 [`prototype-composition-debug.mjs`](../../server/scripts/prototype-composition-debug.mjs),
@@ -70,7 +71,11 @@ kontrakt Report Baby, więc wagi muszą być jawne, wersjonowane i konfigurowaln
 
 ## Testy i kryteria ukończenia
 
-- evaluator nie modyfikuje planu ani trace;
+- evaluator nie modyfikuje planu ani trace; wpis fazy `evaluation` składa engine;
+- legalność i score są rozdzielone: hard violation daje `-Infinity`,
+  niezależnie od potencjalnych punktów jakości;
+- comparator preferuje legalny plan, następnie wyższy score, a równy wynik
+  pozostawia do stabilnego tie-breaku wyżej;
 - legalny plan z niższym score przegrywa z legalnym planem z wyższym score;
 - nielegalny plan z wysokim score zawsze przegrywa z legalnym;
 - remis jest deterministyczny;
