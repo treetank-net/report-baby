@@ -50,6 +50,7 @@ reports a bug that does not exist.
 | Tier | Scope | Where | Provenance |
 | --- | --- | --- | --- |
 | A | 8 format cases → 8 PDF, 4 PPTX, 28 PNG, ~2 min without Office | `docs/quality/corpus-tier-a.json` and `docs/quality/baseline.json` | reproducible by anyone from `examples/brand-showcase/` |
+| Editorial | neutral 6-page lorem editorial → 1 PDF, with four quotes and one measured illustration | `server/scripts/test-editorial-parity.mjs` and `docs/quality/editorial-baseline.json` | reproducible from the tracked fixture, with no customer copy or trademarks |
 | B | 5 editorial reports | `$REPORT_BABY_DATA/regression/`, never in git | machine-local |
 
 **Tier B goldens must never be committed.** The fixture tree and the editorial
@@ -95,6 +96,22 @@ cd server
 npm run baseline:record   # writes per-artifact hashes for Tier A
 npm run baseline:verify   # recomputes and diffs; exit 1 on any difference
 ```
+
+The editorial composition has its own focused parity command because it calls
+the composition renderer directly and carries assertions that the general
+showcase corpus cannot express:
+
+```bash
+cd server
+npm run test:editorial-parity
+```
+
+Its fixture preserves the editorial shape rather than the source wording:
+the same heading, paragraph, quote and illustration dimensions are represented
+with numbered lorem tokens, the template is `pages/editorial-inset-two-column`,
+and the brand is the neutral `Editorial QA` theme. The test checks accepted
+planning, complete quote/glyph and barrier output, measured image geometry and
+the normalized PDF content hash.
 
 Keep it to that. A parity harness that grows a configuration surface has become
 the project instead of protecting it.

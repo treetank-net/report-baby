@@ -77,7 +77,7 @@ function countFor(kind, sourceWords) {
   return kind === 'paragraph' ? Math.ceil(sourceWords * BODY_SCALE) : sourceWords;
 }
 
-export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX, quoteMarkOffsetY }) {
+export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX, quoteMarkOffsetY, illustration }) {
   const state = { next: 1 };
   const lorem = createLoremGenerator();
   const blocks = SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({
@@ -93,6 +93,20 @@ export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX,
   const introBlocks = blocks.filter((block) => block.role === 'intro');
   const quoteBlocks = blocks.filter((block) => block.role === 'quote');
   const mainBlocks = blocks.filter((block) => block.role !== 'intro' && block.role !== 'quote');
+  const introDocumentBlocks = illustration
+    ? [introBlocks[0], {
+      id: illustration.blockId,
+      type: 'image',
+      role: 'intro',
+      atomic: true,
+      asset_id: illustration.assetId,
+      src: illustration.asset.source,
+      alt: illustration.asset.alt,
+      width: illustration.width,
+      fit: 'contain',
+      keep_with_caption: false,
+    }, ...introBlocks.slice(1)]
+    : introBlocks;
   const glyphs = quoteBlocks.flatMap((block) => [
     {
       id: `${block.id}-open`,
@@ -120,7 +134,7 @@ export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX,
   return {
     input: {
       flows: {
-        intro: { continuation: 'forbidden', blocks: introBlocks },
+        intro: { continuation: 'forbidden', blocks: introDocumentBlocks },
         main: { continuation: 'allowed', blocks: mainBlocks },
         quotes: { continuation: 'allowed', blocks: quoteBlocks },
         header: {
@@ -135,6 +149,7 @@ export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX,
           blocks: [{ id: 'footer', type: 'text', role: 'footer', text: 'Numbered-flow fixture' }],
         },
       },
+      ...(illustration ? { assets: [illustration.asset] } : {}),
       glyphs,
     },
     title,
@@ -144,5 +159,12 @@ export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX,
     quoteWordCount: quoteBlocks.reduce((sum, block) => sum + block.text.split(/\s+/u).length, 0),
     totalWordsIncludingTitle: totalMainWords + TITLE_WORDS,
     tokenPrefixes,
+    illustration: illustration ? {
+      blockId: illustration.blockId,
+      assetId: illustration.assetId,
+      width: illustration.width,
+      sourceWidthPx: illustration.sourceWidthPx,
+      sourceHeightPx: illustration.sourceHeightPx,
+    } : undefined,
   };
 }

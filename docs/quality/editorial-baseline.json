@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "template": "pages/editorial-inset-two-column",
+  "brand": "Editorial QA",
+  "fixture": {
+    "mainWords": 1242,
+    "quoteWords": 94,
+    "headings": [
+      {
+        "id": "section-market",
+        "words": 7
+      },
+      {
+        "id": "section-drivers",
+        "words": 6
+      },
+      {
+        "id": "section-costs",
+        "words": 4
+      },
+      {
+        "id": "section-diesel",
+        "words": 6
+      },
+      {
+        "id": "section-adblue",
+        "words": 6
+      },
+      {
+        "id": "section-outlook",
+        "words": 6
+      },
+      {
+        "id": "section-autumn",
+        "words": 9
+      }
+    ],
+    "paragraphs": [
+      {
+        "id": "intro-1",
+        "words": 3
+      },
+      {
+        "id": "intro-2",
+        "words": 105
+      },
+      {
+        "id": "intro-3",
+        "words": 31
+      },
+      {
+        "id": "body-market-1",
+        "words": 54
+      },
+      {
+        "id": "body-market-2",
+        "words": 24
+      },
+      {
+        "id": "body-market-3",
+        "words": 48
+      },
+      {
+        "id": "body-market-4",
+        "words": 26
+      },
+      {
+        "id": "body-drivers-1",
+        "words": 33
+      },
+      {
+        "id": "body-drivers-2",
+        "words": 19
+      },
+      {
+        "id": "body-drivers-3",
+        "words": 38
+      },
+      {
+        "id": "body-drivers-4",
+        "words": 47
+      },
+      {
+        "id": "body-costs-1",
+        "words": 13
+      },
+      {
+        "id": "body-costs-2",
+        "words": 90
+      },
+      {
+        "id": "body-costs-3",
+        "words": 63
+      },
+      {
+        "id": "body-diesel-1",
+        "words": 10
+      },
+      {
+        "id": "body-diesel-2",
+        "words": 45
+      },
+      {
+        "id": "body-diesel-3",
+        "words": 33
+      },
+      {
+        "id": "body-diesel-4",
+        "words": 35
+      },
+      {
+        "id": "body-adblue-1",
+        "words": 16
+      },
+      {
+        "id": "body-adblue-2",
+        "words": 31
+      },
+      {
+        "id": "body-adblue-3",
+        "words": 45
+      },
+      {
+        "id": "body-outlook-1",
+        "words": 47
+      },
+      {
+        "id": "body-outlook-2",
+        "words": 26
+      },
+      {
+        "id": "body-outlook-3",
+        "words": 54
+      },
+      {
+        "id": "body-autumn-1",
+        "words": 40
+      },
+      {
+        "id": "body-autumn-2",
+        "words": 44
+      },
+      {
+        "id": "body-autumn-3",
+        "words": 44
+      },
+      {
+        "id": "body-autumn-4",
+        "words": 40
+      }
+    ],
+    "quotes": [
+      {
+        "id": "quote-market",
+        "words": 24
+      },
+      {
+        "id": "quote-drivers",
+        "words": 20
+      },
+      {
+        "id": "quote-diesel",
+        "words": 24
+      },
+      {
+        "id": "quote-autumn",
+        "words": 26
+      }
+    ],
+    "illustration": {
+      "blockId": "intro-illustration",
+      "assetId": "editorial-neutral-illustration",
+      "width": "80%",
+      "sourceWidthPx": 1600,
+      "sourceHeightPx": 900
+    }
+  },
+  "pages": 6,
+  "pdf": {
+    "normalization": "pdf-content",
+    "hash": "b0707357f012c419c71b27ef69d2ef4519132155ad01b2c0b2da75f912d31eda"
+  }
+}
