@@ -78,6 +78,8 @@ która decyzja poprawiła lub zepsuła układ.
 - dwa legalne warianty wybierają wariant z wyższym score;
 - wariant nielegalny nie wygrywa przez wysoki score;
 - realne przebiegi insertion reflow są wystawione jako kandydaci;
+- trace raportuje koszt `reflowPasses` osobno dla każdego kandydata, aby można
+  było mierzyć koszt selekcji przed optymalizacją;
 - limit iteracji jest respektowany;
 - kolejność wariantów jest deterministyczna;
 - jeden wariant ma dokładnie jedną ewaluację;

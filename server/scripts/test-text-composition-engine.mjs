@@ -302,6 +302,43 @@ try {
   assert.ok(result.plan.trace?.slots.some((slot) => slot.slotId === '1:main-a' && slot.lineCount > 0), 'plan trace must expose slot occupancy');
   assert.equal(result.plan.residualContent.length, 0);
   assert.equal(result.evaluation.diagnostics.some((item) => item.code === 'LINE_OVERLAP'), false);
+  const spacingReflowPhases = result.plan.trace?.phases.filter((phase) => phase.name === 'reflow') ?? [];
+  const spacingEvaluationPhase = result.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
+  assert.equal(spacingReflowPhases.length, 1, 'a plan without insertions needs one stability check, not a second full reflow');
+  assert.equal(spacingEvaluationPhase?.details?.candidates?.length, 1, 'a stable plan without insertions must produce one candidate');
+
+  const boundaryReflowTemplate = {
+    maxPages: 1,
+    layouts: [{ id: 'boundary-reflow', width: 100, height: 100, slots: [
+      { id: 'body-before', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 40 }, allowedRoles: ['body'] },
+      { id: 'quote-a', regionId: 'main', kind: 'text', box: { x: 5, y: 20, width: 90, height: 10 }, allowedRoles: ['quote'] },
+      { id: 'quote-b', regionId: 'main', kind: 'text', box: { x: 5, y: 60, width: 90, height: 10 }, allowedRoles: ['quote'] },
+      { id: 'body-after', regionId: 'main', kind: 'text', box: { x: 5, y: 75, width: 90, height: 20 }, allowedRoles: ['body'] },
+    ] }],
+    routes: {
+      main: {
+        slots: ['body-before', 'quote-a', 'body-after', 'quote-b'],
+        insertionSlots: ['quote-a', 'quote-b'],
+        layouts: ['boundary-reflow'],
+        continuation: 'forbidden',
+      },
+    },
+  };
+  const boundaryReflow = createTextCompositionEngine(boundaryReflowTemplate, { maxPlanningIterations: 2 }).plan({
+    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
+      { id: 'boundary-before', kind: 'paragraph', role: 'body', text: Array.from({ length: 20 }, (_, index) => `before${index}`).join(' ') },
+      { id: 'boundary-quote', kind: 'paragraph', role: 'quote', text: 'The quote must move below the preceding content.' },
+      { id: 'boundary-after', kind: 'paragraph', role: 'body', text: 'Content after the moved quote.' },
+    ] } },
+  }, metrics);
+  assert.equal(boundaryReflow.evaluation.status, 'accepted', JSON.stringify(boundaryReflow.evaluation));
+  const boundaryQuotePlacement = boundaryReflow.plan.insertionLines?.find((line) => line.blockId === 'boundary-quote');
+  assert.ok(boundaryQuotePlacement?.slotId.endsWith(':quote-b'), `boundary quote must move to the later insertion slot: ${JSON.stringify(boundaryQuotePlacement)}`);
+  const boundaryReflowPhases = boundaryReflow.plan.trace?.phases.filter((phase) => phase.name === 'reflow') ?? [];
+  const boundaryEvaluationPhase = boundaryReflow.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
+  assert.equal(boundaryReflowPhases.length, 1, 'the selected stabilized candidate must expose its own reflow pass');
+  assert.equal(boundaryEvaluationPhase?.details?.candidates?.length, 2, 'a proposal change must expose both full plans to the evaluator');
+  assert.deepEqual(boundaryEvaluationPhase.details.candidates.map((candidate) => candidate.reflowPasses), [1, 1], 'each full candidate must expose its reflow cost');
 
   const spacingTemplate = {
     maxPages: 1,

@@ -434,6 +434,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
             status: candidateEvaluation.status,
             score: candidateEvaluation.score,
             hardViolationCount: candidateEvaluation.hardViolations.length,
+            reflowPasses: candidates[index].trace?.phases.filter((phase) => phase.name === 'reflow').length ?? 0,
           })),
           selectedCandidate,
         },

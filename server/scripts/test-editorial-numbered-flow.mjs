@@ -702,6 +702,8 @@ try {
     mainWords: fixture.totalMainWords,
     quotes: fixture.sourceShape.filter((block) => block.role === 'quote').length,
     lines: result.plan.lines.length,
+    reflowCandidates: evaluationPhase?.details?.candidates?.map((candidate) => ({ index: candidate.index, reflowPasses: candidate.reflowPasses })) ?? [],
+    totalReflowPasses: (evaluationPhase?.details?.candidates ?? []).reduce((sum, candidate) => sum + candidate.reflowPasses, 0),
     columnBalance,
     inkChecks: inkOccupancy.lineChecks.length,
     occupiedInkRegions: inkOccupancy.lineChecks.filter((check) => check.status === 'occupied').length,
