@@ -26,7 +26,10 @@ deterministyczne `planCandidates`. Engine ewaluje każdy kandydat raz i wybiera
 legalny plan z najwyższym score; przy równym wyniku zachowuje wcześniejszego
 kandydata. Jednoplanowa ścieżka pozostaje kompatybilna dla innych plannerów.
 Feedback evaluatora nie zmienia jeszcze kolejnego przebiegu planera — to jest
-następny, osobny krok.
+następny, osobny krok. Reflow jest obecnie heurystyką stabilizacji propozycji:
+planner może najpierw ułożyć wcześniejszy blok pod insertionem, a evaluator
+odrzuca taki plan przez `INSERTION_SOURCE_ORDER_VIOLATION`; kolejny przebieg
+może przenieść insertion i dopiero wtedy uzyskać plan legalny.
 
 Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 
@@ -80,6 +83,8 @@ która decyzja poprawiła lub zepsuła układ.
 - realne przebiegi insertion reflow są wystawione jako kandydaci;
 - trace raportuje koszt `reflowPasses` osobno dla każdego kandydata, aby można
   było mierzyć koszt selekcji przed optymalizacją;
+- test graniczny rozróżnia pierwszy odrzucony plan source-order i drugi plan
+  zaakceptowany po przeniesieniu insertionu;
 - limit iteracji jest respektowany;
 - kolejność wariantów jest deterministyczna;
 - jeden wariant ma dokładnie jedną ewaluację;

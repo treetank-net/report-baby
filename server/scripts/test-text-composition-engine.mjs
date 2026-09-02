@@ -338,6 +338,7 @@ try {
   const boundaryEvaluationPhase = boundaryReflow.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
   assert.equal(boundaryReflowPhases.length, 1, 'the selected stabilized candidate must expose its own reflow pass');
   assert.equal(boundaryEvaluationPhase?.details?.candidates?.length, 2, 'a proposal change must expose both full plans to the evaluator');
+  assert.deepEqual(boundaryEvaluationPhase.details.candidates.map((candidate) => candidate.status), ['rejected', 'accepted'], 'the first boundary plan must fail source-order evaluation before the moved quote is accepted');
   assert.deepEqual(boundaryEvaluationPhase.details.candidates.map((candidate) => candidate.reflowPasses), [1, 1], 'each full candidate must expose its reflow cost');
 
   const spacingTemplate = {
