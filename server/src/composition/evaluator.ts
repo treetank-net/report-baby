@@ -3,6 +3,7 @@ import type { CompositionBlock, CompositionDocument } from './model.js';
 import type {
   CompositionDiagnostic,
   CompositionEvaluation,
+  CompositionLine,
   CompositionPlan,
   CompositionSlot,
   CompositionScoreComponent,
@@ -318,8 +319,76 @@ function scoreParagraphFragmentation(document: CompositionDocument, plan: Compos
   };
 }
 
+function horizontalOverlap(first: { x: number; width: number }, second: { x: number; width: number }): boolean {
+  return Math.min(first.x + first.width, second.x + second.width) > Math.max(first.x, second.x);
+}
+
+function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreComponent {
+  const insertions = new Map<string, CompositionLine[]>();
+  for (const line of plan.insertionLines ?? []) {
+    const key = `${line.blockId}:${line.page}:${line.slotId}`;
+    insertions.set(key, [...(insertions.get(key) ?? []), line]);
+  }
+  const ordinaryLines = plan.lines.filter((line) => line.layer !== 'insertion');
+  const details = [...insertions.values()].flatMap((lines) => {
+    const firstLine = lines[0];
+    const obstacle = plan.graphicPlacements.find((graphic) => graphic.graphicId === `insertion:${firstLine.blockId}` && graphic.page === firstLine.page);
+    if (!obstacle) return [];
+    const contentTop = Math.min(...lines.map((line) => line.box.y));
+    const contentBottom = Math.max(...lines.map((line) => line.box.y + line.box.height));
+    const internalTop = contentTop - obstacle.box.y;
+    const internalBottom = obstacle.box.y + obstacle.box.height - contentBottom;
+    const overlappingSlots = plan.slots.filter((slot) => slot.page === obstacle.page
+      && slot.id !== obstacle.slotId
+      && slot.kind === 'text'
+      && horizontalOverlap(slot.box, obstacle.box));
+    const streamGaps = overlappingSlots.flatMap((slot) => {
+      const linesInSlot = ordinaryLines.filter((line) => line.page === obstacle.page && line.slotId === slot.id);
+      const previous = linesInSlot
+        .filter((line) => line.box.y + line.box.height <= obstacle.box.y)
+        .sort((left, right) => (right.box.y + right.box.height) - (left.box.y + left.box.height))[0];
+      const next = linesInSlot
+        .filter((line) => line.box.y >= obstacle.box.y + obstacle.box.height)
+        .sort((left, right) => left.box.y - right.box.y)[0];
+      if (!previous || !next) return [];
+      const before = obstacle.box.y - (previous.box.y + previous.box.height);
+      const after = next.box.y - (obstacle.box.y + obstacle.box.height);
+      return [{ slotId: slot.id, before, after, imbalance: Math.abs(before - after) }];
+    });
+    const externalImbalance = streamGaps.length > 0
+      ? streamGaps.reduce((sum, gap) => sum + gap.imbalance, 0) / streamGaps.length
+      : 0;
+    const beforeGaps = streamGaps.map((gap) => gap.before);
+    const afterGaps = streamGaps.map((gap) => gap.after);
+    const spread = (values: number[]) => values.length > 1 ? Math.max(...values) - Math.min(...values) : 0;
+    const crossStreamSpread = (spread(beforeGaps) + spread(afterGaps)) / 2;
+    return [{
+      blockId: firstLine.blockId,
+      page: obstacle.page,
+      obstacle: { ...obstacle.box },
+      content: { top: contentTop, bottom: contentBottom },
+      internal: { top: internalTop, bottom: internalBottom, imbalance: Math.abs(internalTop - internalBottom) },
+      streams: streamGaps,
+      externalImbalance,
+      crossStreamSpread,
+    }];
+  });
+  const internalImbalance = details.reduce((sum, insertion) => sum + insertion.internal.imbalance, 0);
+  const externalImbalance = details.reduce((sum, insertion) => sum + insertion.externalImbalance, 0);
+  const crossStreamSpread = details.reduce((sum, insertion) => sum + insertion.crossStreamSpread, 0);
+  const points = -internalImbalance * scoreConfigNumber('insertionInternalSpacingPenalty')
+    - externalImbalance * scoreConfigNumber('insertionExternalSpacingPenalty')
+    - crossStreamSpread * scoreConfigNumber('insertionCrossStreamSpacingPenalty');
+  return {
+    code: 'insertion-spacing',
+    value: internalImbalance + externalImbalance + crossStreamSpread,
+    points,
+    details: { insertions: details },
+  };
+}
+
 function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan): { score: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan)];
+  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreInsertionSpacing(plan)];
   return {
     score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
     breakdown,

@@ -389,6 +389,10 @@ export interface CompositionPlanner {
   plan(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan;
   /** Optional deterministic candidate set for planner/evaluator selection. */
   planCandidates?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan[];
+  /** Number of score-guided local candidate refinement rounds available. */
+  candidateRefinementRounds?: number;
+  /** Generate a local candidate neighborhood around the selected plan. */
+  planRefinedCandidates?(document: CompositionDocument, metrics: CompositionTextMetrics, selected: CompositionPlan, round: number): CompositionPlan[];
 }
 
 export interface CompositionEvaluator {
@@ -429,10 +433,24 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
     plan(document, metrics) {
       const candidates = planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)];
       if (candidates.length === 0) throw new Error('Composition planner returned no candidates.');
+      const candidateRounds = candidates.map(() => 0);
       const evaluations = candidates.map((candidate) => evaluator.evaluate(document, candidate));
       let selectedCandidate = 0;
       for (let index = 1; index < evaluations.length; index += 1) {
         if (compareCompositionEvaluations(evaluations[index], evaluations[selectedCandidate]) < 0) selectedCandidate = index;
+      }
+      const refinementRounds = planner.candidateRefinementRounds ?? 0;
+      for (let round = 1; round <= refinementRounds; round += 1) {
+        const refined = planner.planRefinedCandidates?.(document, metrics, candidates[selectedCandidate], round) ?? [];
+        if (refined.length === 0) break;
+        const refinedEvaluations = refined.map((candidate) => evaluator.evaluate(document, candidate));
+        for (let index = 0; index < refined.length; index += 1) {
+          candidates.push(refined[index]);
+          evaluations.push(refinedEvaluations[index]);
+          candidateRounds.push(round);
+          const candidateIndex = evaluations.length - 1;
+          if (compareCompositionEvaluations(evaluations[candidateIndex], evaluations[selectedCandidate]) < 0) selectedCandidate = candidateIndex;
+        }
       }
       const plan = candidates[selectedCandidate];
       const evaluation = evaluations[selectedCandidate];
@@ -448,6 +466,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
             score: candidateEvaluation.score,
             hardViolationCount: candidateEvaluation.hardViolations.length,
             reflowPasses: candidates[index].trace?.phases.filter((phase) => phase.name === 'reflow').length ?? 0,
+            refinementRound: candidateRounds[index],
           })),
           selectedCandidate,
         },

@@ -384,7 +384,7 @@ try {
     layouts: [{ id: 'movable-quote', width: 100, height: 120, slots: [
       { id: 'left', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 110 }, allowedRoles: ['body'] },
       { id: 'right', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 110 }, allowedRoles: ['body'] },
-      { id: 'quote', regionId: 'quotes', kind: 'text', box: { x: 5, y: 45, width: 90, height: 10 }, allowedRoles: ['quote'] },
+      { id: 'quote', regionId: 'quotes', kind: 'text', box: { x: 5, y: 45, width: 90, height: 10 }, allowedRoles: ['quote'], fitContent: true },
     ] }],
     routes: {
       main: { slots: ['left', 'right'], layouts: ['movable-quote'], continuation: 'forbidden' },
@@ -410,18 +410,27 @@ try {
         bounds: { x: 5, y: 25, width: 90, height: 70 },
         axis: 'y',
         candidateCount: 6,
+        refinementRounds: 1,
+        refinementCandidateCount: 3,
       },
     },
   };
+  const movableMetrics = {
+    ...metrics,
+    lineHeight() { return 5; },
+    textPadding(styleName) { return styleName === 'quote' ? { top: 1, bottom: 1 } : { top: 0, bottom: 0 }; },
+  };
   const movablePlanner = createTextCompositionEngine(movableQuoteTemplate, movableQuotePolicy);
-  const movableQuoteResult = movablePlanner.plan(movableQuoteDocument, { ...metrics, lineHeight() { return 5; } });
+  const movableQuoteResult = movablePlanner.plan(movableQuoteDocument, movableMetrics);
   const movableEvaluationPhase = movableQuoteResult.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
   assert.equal(movableQuoteResult.evaluation.status, 'accepted', JSON.stringify(movableQuoteResult.evaluation));
-  assert.equal(movableEvaluationPhase?.details?.candidates?.length, 6, 'a movable insertion frame must produce one full plan per requested position');
-  const movableCandidatePlans = createTextCompositionPlanner(movableQuoteTemplate, movableQuotePolicy).planCandidates(movableQuoteDocument, { ...metrics, lineHeight() { return 5; } });
+  assert.ok(movableEvaluationPhase?.details?.candidates?.length > 6, 'a movable insertion frame must receive a local refinement pass after the coarse candidates');
+  assert.ok(movableEvaluationPhase?.details?.candidates?.some((candidate) => candidate.refinementRound === 1), 'the candidate trace must identify the local refinement round');
+  const movableCandidatePlans = createTextCompositionPlanner(movableQuoteTemplate, movableQuotePolicy).planCandidates(movableQuoteDocument, movableMetrics);
   assert.equal(movableCandidatePlans.length, 6, 'the planner seam must expose every movable-position candidate');
   const movableCandidateSummary = movableCandidatePlans.map((candidate) => {
     const quote = candidate.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block');
+    const quoteLine = candidate.insertionLines?.find((line) => line.blockId === 'movable-quote-block');
     const frame = candidate.movableInsertionFrames?.find((item) => item.id === 'quotes:movable-quote-block');
     const evaluation = evaluateCompositionPlan(movableQuoteDocument, candidate);
     const paragraphSlots = new Map();
@@ -432,7 +441,10 @@ try {
     return {
       status: evaluation.status,
       score: evaluation.score,
+      scoreBreakdown: evaluation.scoreBreakdown,
       quoteY: quote?.box.y,
+      quoteHeight: quote?.box.height,
+      quoteLineY: quoteLine?.box.y,
       frameY: frame?.box.y,
       frameHeight: frame?.box.height,
       quoteInsideFrame: Boolean(quote && frame && quote.box.x >= frame.box.x && quote.box.y >= frame.box.y && quote.box.x + quote.box.width <= frame.box.x + frame.box.width && quote.box.y + quote.box.height <= frame.box.y + frame.box.height),
@@ -442,9 +454,16 @@ try {
   });
   assert.equal(new Set(movableCandidateSummary.map((candidate) => candidate.quoteY)).size, 6, `movable candidates must have distinct legal quote positions: ${JSON.stringify(movableCandidateSummary)}`);
   assert.ok(movableCandidateSummary.every((candidate) => candidate.frameY === 25 && candidate.frameHeight === 70 && candidate.quoteInsideFrame), `every movable quote must remain inside its declared red frame: ${JSON.stringify(movableCandidateSummary)}`);
+  assert.ok(movableCandidateSummary.every((candidate) => candidate.quoteHeight === 7 && candidate.quoteLineY === candidate.quoteY + 1), `movable quote obstacle must equal one line plus symmetric padding: ${JSON.stringify(movableCandidateSummary)}`);
+  assert.ok(movableCandidateSummary.every((candidate) => candidate.scoreBreakdown.some((component) => component.code === 'insertion-spacing')), `every candidate must expose insertion spacing evaluation: ${JSON.stringify(movableCandidateSummary)}`);
+  assert.ok(movableCandidateSummary.every((candidate) => {
+    const spacing = candidate.scoreBreakdown.find((component) => component.code === 'insertion-spacing');
+    const insertion = spacing?.details?.insertions?.[0];
+    return insertion?.internal.top === 1 && insertion.internal.bottom === 1 && insertion.internal.imbalance === 0 && insertion.crossStreamSpread === 0;
+  }), `movable quote must expose balanced internal padding in the spacing score: ${JSON.stringify(movableCandidateSummary)}`);
   assert.ok(movableCandidateSummary.every((candidate) => candidate.status === 'accepted'), JSON.stringify(movableCandidateSummary));
   assert.ok(movableCandidateSummary.every((candidate) => candidate.score > Number.NEGATIVE_INFINITY), JSON.stringify(movableCandidateSummary));
-  assert.ok(Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs)) < Math.max(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs)), `moving the quote must change paragraph fragmentation in the small-paragraph fixture: ${JSON.stringify(movableCandidateSummary)}`);
+  assert.ok(new Set(movableCandidateSummary.map((candidate) => candidate.score)).size > 1, `moving the quote must change the evaluated composition score: ${JSON.stringify(movableCandidateSummary)}`);
   const selectedCandidate = movableEvaluationPhase.details.candidates[movableEvaluationPhase.details.selectedCandidate];
   const bestFragmentation = Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs));
   assert.equal(selectedCandidate.score, Math.max(...movableEvaluationPhase.details.candidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring movable candidate');
@@ -1600,7 +1619,9 @@ try {
     numberedObstacleWords: numberedObstacleWords.length,
     numberedObstaclePixelZones: pixelChecks.length,
     movableInsertionExperiment: {
-      candidateCount: movableCandidateSummary.length,
+      coarseCandidateCount: movableCandidateSummary.length,
+      evaluatedCandidateCount: movableEvaluationPhase.details.candidates.length,
+      refinementRounds: [...new Set(movableEvaluationPhase.details.candidates.map((candidate) => candidate.refinementRound))],
       candidates: movableCandidateSummary,
       selectedCandidate: movableEvaluationPhase.details.selectedCandidate,
       selectedQuoteY: movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y,

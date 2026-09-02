@@ -43,6 +43,9 @@ composition_score:
   column_count: 2
   heading_following_line_bonus: 4
   paragraph_fragmentation_penalty: 3
+  insertion_internal_spacing_penalty: 1
+  insertion_external_spacing_penalty: 1
+  insertion_cross_stream_spacing_penalty: 1
 assets:
   report_header_band_width_px: 640
   report_header_band_height_px: 154
