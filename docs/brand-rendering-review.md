@@ -100,7 +100,7 @@ drifted:
   through MCP and works only through the `example.ts` CLI.
 - `title_page` is part of `ReportData` and handled by `renderTitlePage`, and it
   is documented in `skills/report-authoring/SKILL.md` and used by
-  `scripts/test-brand-contract.js`, but it is absent from `reportDataSchema`,
+  `server/scripts/test-brand-contract.mjs`, but it is absent from `reportDataSchema`,
   so MCP callers cannot send it.
 
 One of the two definitions should be generated from the other.

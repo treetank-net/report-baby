@@ -665,7 +665,7 @@ akceptowane tylko wtedy, gdy template deklaruje właściwy block slot i caller
 przekazuje capability pomiaru oraz renderera. Dzięki
 temu backend nie dostaje artefaktu, który wygląda na sukces, choć zgubił część
 wejścia. Ten gate jest włączony do `npm test` przez
-`npm run test:composition-gate`.
+`npm test -- --suite composition`.
 
 Świeża krytyka Sola potwierdziła: pierwszy planner path jest dobrym krokiem
 migracji, ale podmiana renderera całego raportu nadal ma status NO-GO. Następne blokery to parytet z

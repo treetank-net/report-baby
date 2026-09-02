@@ -185,7 +185,7 @@ Normalisation is per format and not optional — see [BASELINE.md](BASELINE.md).
 | `server/scripts/visual-qa.mjs` | reads `slidePlans`, `slotBoxes`, `slideThemes` for 13 gates |
 | `scripts/audit-brand-showcase.js` | **runs no bundle** — the manifest is the product |
 | `scripts/inspect-brand-showcase.js` | **runs no bundle** |
-| `scripts/test-brand-contract.js` | brand contract assertions |
+| `server/scripts/test-brand-contract.mjs` | brand contract assertions |
 
 Two consumers execute no renderer, so a change can be byte-perfect on every PDF
 and still break them.
@@ -257,7 +257,7 @@ dependency inversion.
 | Core modules reaching config through a global | 1 — `brand.ts:289` → `getBrandSourceRoots()` |
 
 The indirect one matters most: the asset allow-list is a security boundary, and
-reading it from ambient state is why `test-brand-contract.js` must spawn a process
+reading it from ambient state is why `server/scripts/test-brand-contract.mjs` must spawn a process
 with a modified environment to test it.
 
 ### Duplicated mechanisms

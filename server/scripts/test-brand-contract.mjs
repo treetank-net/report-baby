@@ -4,10 +4,10 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { brandContractDeck } from '../server/scripts/lib/fixtures.mjs';
-import { runProcess } from '../server/scripts/lib/process.mjs';
+import { brandContractDeck } from './lib/fixtures.mjs';
+import { runProcess } from './lib/process.mjs';
 
-const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const temp = await mkdtemp('/tmp/report-baby-brand-contract-');
 const input = join(temp, 'deck.json');
 const output = join(temp, 'rendered');
@@ -81,7 +81,7 @@ async function digest(path) {
 
 const rendered = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://orbit/primary', '--input', input, '--out', output, '--formats', 'png,pptx']);
 if (rendered.status !== 0) throw new Error(`fit/per-slide contract render failed: ${rendered.stderr || rendered.stdout}`);
-const manifest = JSON.parse(await readFile(join(output, 'manifest.json'), 'utf8'));
+const manifest = JSON.parse(await readFile(join(output, 'manifest.json')));
 if (manifest.schema_version !== 1) throw new Error('contract manifest has no schema_version=1');
 if (manifest.slideThemes?.length !== 2) throw new Error('contract render did not resolve both slide themes');
 if (manifest.slideThemes[0].fontFamily === manifest.slideThemes[1].fontFamily && manifest.slideThemes[0].primary === manifest.slideThemes[1].primary) throw new Error('per-slide brand_ref did not change the resolved theme');
@@ -96,7 +96,7 @@ await writeFile(ownedTemplateInput, JSON.stringify({
 }, null, 2));
 const ownedTemplate = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://flux/primary', '--input', ownedTemplateInput, '--out', join(temp, 'owned-template'), '--formats', 'png,pptx']);
 if (ownedTemplate.status !== 0) throw new Error(`brand-owned template render failed: ${ownedTemplate.stderr || ownedTemplate.stdout}`);
-const ownedManifest = JSON.parse(await readFile(join(temp, 'owned-template', 'manifest.json'), 'utf8'));
+const ownedManifest = JSON.parse(await readFile(join(temp, 'owned-template', 'manifest.json')));
 const ownedPlan = ownedManifest.slidePlans?.[0];
 if (ownedPlan?.sourceTemplate?.id !== 'slides/title' || ownedPlan?.templateRef !== 'slides/title') throw new Error(`brand-owned template was not compiled: ${JSON.stringify(ownedPlan)}`);
 if (ownedPlan.titleLayout?.titleBaselineY === 390) throw new Error('brand-owned template did not change the extracted title geometry');
@@ -147,7 +147,7 @@ await writeFile(metricsInput, JSON.stringify({
 const metricsBaseOutput = join(temp, 'metrics-template');
 const metricsBase = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://flux/primary', '--input', metricsInput, '--out', metricsBaseOutput, '--formats', 'png,pptx']);
 if (metricsBase.status !== 0) throw new Error(`brand-owned metrics template render failed: ${metricsBase.stderr || metricsBase.stdout}`);
-const metricsManifest = JSON.parse(await readFile(join(metricsBaseOutput, 'manifest.json'), 'utf8'));
+const metricsManifest = JSON.parse(await readFile(join(metricsBaseOutput, 'manifest.json')));
 const metricsPlan = metricsManifest.slidePlans?.[0];
 if (metricsPlan?.sourceTemplate?.archetype !== 'metrics' || metricsPlan?.templateRef !== 'slides/metrics-3') throw new Error(`metrics template was not compiled: ${JSON.stringify(metricsPlan)}`);
 for (const slot of ['metric-1', 'metric-2', 'metric-3', 'body', 'callout']) if (!metricsPlan.slotBoxes?.[slot]) throw new Error(`metrics plan is missing rendered slot '${slot}'`);
@@ -232,7 +232,7 @@ const changedSource = (await readFile(snapshotTemplatePath, 'utf8')).replace('y:
 await writeFile(snapshotTemplatePath, changedSource);
 const snapshotRender = run(['--kind', 'deck', '--brand-root', snapshotStore, '--brand', 'brand://flux/primary', '--input', ownedTemplateInput, '--out', join(temp, 'snapshot-render'), '--formats', 'png']);
 if (snapshotRender.status !== 0) throw new Error(`snapshot render failed: ${snapshotRender.stderr || snapshotRender.stdout}`);
-const snapshotManifest = JSON.parse(await readFile(join(temp, 'snapshot-render', 'manifest.json'), 'utf8'));
+const snapshotManifest = JSON.parse(await readFile(join(temp, 'snapshot-render', 'manifest.json')));
 if ((snapshotManifest.slidePlans?.[0]?.titleLayout?.titleBaselineY ?? 0) < 300) throw new Error('published snapshot was affected by a later working-tree template change');
 
 const rtlInput = join(temp, 'rtl.json');
@@ -250,7 +250,7 @@ await writeFile(rtlInput, JSON.stringify({
 }, null, 2));
 const rtl = run(['--kind', 'deck', '--brand-root', 'examples/brand-showcase/brands', '--brand', 'brand://orbit/primary', '--input', rtlInput, '--out', join(temp, 'rtl'), '--formats', 'png,pptx']);
 if (rtl.status !== 0) throw new Error(`RTL/template contract render failed: ${rtl.stderr || rtl.stdout}`);
-const rtlManifest = JSON.parse(await readFile(join(temp, 'rtl', 'manifest.json'), 'utf8'));
+const rtlManifest = JSON.parse(await readFile(join(temp, 'rtl', 'manifest.json')));
 const rtlPlan = rtlManifest.slidePlans?.[0];
 if (rtlPlan?.templateRef !== 'slides/centered-title' || rtlPlan.direction !== 'rtl' || rtlPlan.lockup?.physicalSide !== 'left' || rtlPlan.lockup?.spacing !== 'compact') throw new Error(`RTL/template plan was not resolved: ${JSON.stringify(rtlPlan)}`);
 if (rtlManifest.slidePlans?.some((plan) => plan?.direction !== 'rtl' || plan.lockup?.physicalSide !== 'left')) throw new Error('RTL direction was not applied to every slide plan');
@@ -326,7 +326,7 @@ await mkdir(join(relativeAssetRoot, 'guarded', 'assets', 'fonts'), { recursive: 
 await cp(embeddedFont, join(relativeAssetRoot, 'guarded', 'assets', 'fonts', 'body.ttf'));
 const relativeAssets = renderBoundary(relativeAssetRoot, 'brand://guarded', 'relative-source-root');
 if (relativeAssets.status !== 0) throw new Error(`a relative assets.source_root was rejected: ${relativeAssets.stderr || relativeAssets.stdout}`);
-const relativeManifest = JSON.parse(await readFile(join(relativeAssets.out, 'manifest.json'), 'utf8'));
+const relativeManifest = JSON.parse(await readFile(join(relativeAssets.out, 'manifest.json')));
 if (relativeManifest.theme?.hasFontAssets !== true) throw new Error('a relative assets.source_root did not resolve its font asset');
 
 const externalAssetRoot = join(temp, 'external-assets');
@@ -338,7 +338,7 @@ if (unlistedSourceRoot.status === 0) throw new Error('an absolute assets.source_
 if (!`${unlistedSourceRoot.stderr}${unlistedSourceRoot.stdout}`.includes('not allow-listed')) throw new Error(`an unlisted absolute source_root was rejected without an explanatory error: ${unlistedSourceRoot.stderr || unlistedSourceRoot.stdout}`);
 const allowedSourceRoot = renderBoundary(externalBrandRoot, 'brand://guarded', 'allowed-source-root', { REPORT_BABY_BRAND_SOURCE_ROOTS: externalAssetRoot });
 if (allowedSourceRoot.status !== 0) throw new Error(`an allow-listed absolute assets.source_root was rejected: ${allowedSourceRoot.stderr || allowedSourceRoot.stdout}`);
-const allowedManifest = JSON.parse(await readFile(join(allowedSourceRoot.out, 'manifest.json'), 'utf8'));
+const allowedManifest = JSON.parse(await readFile(join(allowedSourceRoot.out, 'manifest.json')));
 if (allowedManifest.theme?.hasFontAssets !== true) throw new Error('an allow-listed absolute assets.source_root did not resolve its font asset');
 
 const leakedFontDir = join(temp, 'leaked-assets');

@@ -7,7 +7,7 @@ const ROOT = resolve(new URL('../..', import.meta.url).pathname);
 const CHECK = process.argv.includes('--check');
 const SCRIPT_ROOTS = [join(ROOT, 'scripts'), join(ROOT, 'server', 'scripts')];
 const FIXTURE_CONSUMERS = [
-  'scripts/test-brand-contract.js',
+  'server/scripts/test-brand-contract.mjs',
   'server/scripts/test-public-behavior.mjs',
   'server/scripts/visual-qa.mjs',
 ];

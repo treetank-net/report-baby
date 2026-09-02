@@ -2,6 +2,28 @@
 
 Status: częściowo wykonany; pozostał audyt publicznego kontraktu
 
+## Uruchamianie testów
+
+W repozytorium istnieje jeden kanoniczny runner testów: `server/scripts/test-harness.mjs`.
+Pojedyncze pliki `test-*.mjs` są jego wewnętrznymi przypadkami, a nie osobnymi
+komendami produktu ani elementami bundla runtime.
+
+Z katalogu `server/`:
+
+- `npm test` przebudowuje aktualne bundla i uruchamia release gate dla
+  composition oraz końcowych artefaktów;
+- `npm test -- --suite composition` uruchamia kontrakty planera;
+- `npm test -- --suite artifacts` uruchamia testy PDF/PNG/PPTX, chrome,
+  editorial i kontrakt brandów;
+- `npm test -- --suite quality --no-build` uruchamia rozszerzone kontrole
+  utrzymaniowe, poza podstawowym gate’em release;
+- `npm run baseline:verify` pozostaje osobną kontrolą corpus, ponieważ
+  porównuje zapisane artefakty i może wymagać świadomej aktualizacji baseline.
+
+Runner buduje bundla przed domyślnym testem, aby testy nie użyły przypadkiem
+starego `cli-bundle.cjs` lub `bundle.cjs`. `--no-build` służy tylko do szybkiego
+powtarzania wcześniej zbudowanego przebiegu.
+
 ## Wykonane w pierwszym przebiegu
 
 - usunięto drugą ewaluację z `planReportComposition()`;
