@@ -653,7 +653,13 @@ function pdfContentStreams(buffer) {
 function decodePdfObjectStream(objectBody) {
   const match = /stream\r?\n([\s\S]*?)endstream/.exec(objectBody);
   if (!match) return null;
-  const compressed = Buffer.from(match[1], 'latin1');
+  const raw = match[1];
+  // PDF content streams may be stored verbatim. Composition currently emits
+  // some large streams without /Filter, so treating every stream as deflate
+  // makes the visual gates observe zero text runs.
+  if (!/\/Filter\b/.test(objectBody)) return raw;
+
+  const compressed = Buffer.from(raw, 'latin1');
   for (const decode of [inflateSync, inflateRawSync]) {
     try {
       return decode(compressed).toString('latin1');
@@ -930,6 +936,14 @@ function gatePageGeometry(item, rendered, checks) {
       const insideColumn = columns.some((column) => text.x >= column.x - 2 && text.x <= column.x + column.width + 2);
       if (text.x < left - 2 || text.x > right + 2 || !insideColumn) violations.push(`text start x=${text.x.toFixed(1)} is outside a configured column`);
     }
+  }
+  if (starts.length === 0) {
+    checks.push({
+      gate: 'page-layout',
+      name: 'flow text is measurable',
+      status: 'fail',
+      message: 'no flow text runs could be decoded from the PDF content streams',
+    });
   }
   checks.push({
     gate: 'page-layout',

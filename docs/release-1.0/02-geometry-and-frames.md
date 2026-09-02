@@ -47,6 +47,14 @@ Geometria przechodzi przez kilka etapów:
 6. Dodać test porównujący ramę kandydata z faktycznym pierwszym i ostatnim
    `flowPlacement` po obu stronach obstacle.
 7. Ujawnić w trace, z jakiej geometrii powstał dany placement i kandydat.
+8. Ustalić źródło geometrii dla pomiarów visual QA. Gate strony nie może
+   rekonstruować kolumn z osobnego YAML-a, jeśli CompositionPlan ma już
+   rozstrzygnięte flow i placements. Test `page-layout-editorial-two-column`
+   ma porównać rzeczywiste początki przebiegów tekstu z tym planem.
+9. Dla `page-fill-table` rozdzielić w pomiarze obszar treści od headera,
+   footera i innych elementów chrome. Następnie zapisać, które placementy
+   tabeli trafiły na każdą stronę, aby rozróżnić prawidłowy podział od zbyt
+   rzadkiej strony końcowej.
 
 ## Kryteria ukończenia
 

@@ -92,6 +92,9 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
   ale jest odnotowanym brakiem tego etapu;
 - potwierdzić wspólną ścieżkę block kinds od schema do backendu, nie tylko
   normalizację do `CompositionDocument`.
+- Dodać do testów kontraktu przypadki regresyjne z visual QA jako opisane
+  wejścia composition, a nie tylko jako snapshoty PDF-a. Szczególnie trzeba
+  zachować sprawdzenie pełnego mapowania tekstu, tabeli, listy i glyphów.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 

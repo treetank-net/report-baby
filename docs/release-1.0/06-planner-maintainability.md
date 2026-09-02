@@ -37,6 +37,10 @@ odpowiedzialności i stanu mutable w jednym przebiegu.
    rozmiarów funkcji.
 7. Dodać krótką mapę modułów do dokumentacji normatywnej, wskazującą właściciela
    każdej reguły.
+8. Zabezpieczyć osobny, mały seam pomiaru artefaktu: parser PDF i gate nie
+   powinny być splecione z regułami planera. Test błędnego dekodowania ma
+   jednoznacznie odróżniać „brak treści w dokumencie” od „nie umiem odczytać
+   treści z PDF-a”.
 
 ## Kryteria ukończenia
 

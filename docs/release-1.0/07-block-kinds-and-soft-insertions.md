@@ -48,6 +48,11 @@ nie jako drugie źródło prawdy.
 6. Dodać KPI i wykres dopiero po przejściu grafiki przez pełną ścieżkę.
 7. Utrzymać glyphy jako elementy renderowania zależne od właściciela, bez
    mieszania ich z boxem tekstu, chyba że faktycznie uczestniczą w kolizji.
+8. Domknąć regresję `inline-markup-report`: zachować strukturę runs podczas
+   mapowania do composition dla akapitów, list i komórek tabeli; określić,
+   które glyphy wymagają fallbacku oraz jakie ostrzeżenie ma powstać, gdy
+   fallbacku nie ma. Test ma wykazać zarówno wygląd bold/italic, jak i brak
+   utraty znaków w warstwie tekstowej.
 
 ## Kryteria ukończenia
 

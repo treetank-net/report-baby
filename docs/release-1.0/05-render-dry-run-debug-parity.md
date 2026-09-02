@@ -41,6 +41,17 @@ wyliczania geometrii.
 6. Zostawić ramki pod tekstem, jeśli poprawia to czytelność, ale nie zmieniać
    przez to geometrii renderowania.
 7. Sprawdzić PDF text layer, PDF bbox i raster dla realnego editorialu.
+8. Utrzymać parser PDF w harnessie dla obu poprawnych form strumienia: z
+   `/Filter` oraz niekompresowanej. Jeżeli nie da się odczytać żadnego
+   przebiegu tekstu, gate ma zakończyć się jednoznacznym `fail`, a nie
+   przejściem pustego pomiaru.
+9. Traktować cztery przypadki z audytu jako regresje o różnych kontraktach:
+   układ kolumn, fill tabeli, inline markup/glyph fallback oraz zachowanie
+   przy rzadkiej stronie. Oczekiwania mają wynikać z aktualnego kontraktu
+   composition, nie z warningów usuniętego renderera.
+10. Dla każdej regresji zachować trzy warstwy dowodu: wynik planu/manifestu,
+    selectable text w PDF-ie oraz raster do przeglądu wizualnego. Brak jednej
+    warstwy ma być odnotowany jako brak danych, nie jako sukces.
 
 ## Kryteria ukończenia
 
@@ -50,6 +61,11 @@ wyliczania geometrii.
 - `dry_run` wskazuje ten sam plan, który trafia do PDF-a;
 - debug overlay nie przesuwa ani nie przycina tekstu;
 - realny PDF zachowuje selectable text i poprawne strony.
+- niekompresowany strumień PDF nie jest pomijany przez żaden gate;
+- `page-layout-editorial-two-column` przechodzi dzięki zmierzonym przebiegom,
+  a nie dlatego, że lista pomiarów jest pusta;
+- `inline-markup-report` i `page-fill-gap-tightening` pozostają czerwone lub
+  zostają przepisane dopiero po świadomej zmianie kontraktu.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 

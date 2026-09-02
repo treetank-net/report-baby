@@ -48,6 +48,10 @@ Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 8. Zachować najlepszy legalny plan, a nie ostatni plan.
 9. Jeżeli nie ma legalnego planu, zwrócić `rejected` z agregatem diagnostyki.
 10. W trace zapisać kolejność prób, wynik, score i powód kolejnej zmiany.
+11. Użyć `page-fill-table` jako pierwszego kontrolowanego przykładu feedbacku:
+    warianty mają zmieniać tylko dozwolony breakpoint lub pozycję fragmentu
+    tabeli, a evaluator ma wskazać legalność i koszt rzadkiej strony końcowej.
+    Nie optymalizować jednocześnie tabeli, cytatów i wszystkich flow.
 
 ## Pseudoprzebieg
 
@@ -75,6 +79,8 @@ która decyzja poprawiła lub zepsuła układ.
 - trace pokazuje wszystkie próby;
 - realny editorial pokazuje widoczną, uzasadnioną zmianę układu;
 - koszt pełnego planowania jest mierzony i ma konfigurowalny limit.
+- test pokazuje, że różnica pomiędzy dwoma legalnymi wariantami wynika z
+  jawnego feedbacku evaluatora, a nie z przypadkowej kolejności rysowania.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 

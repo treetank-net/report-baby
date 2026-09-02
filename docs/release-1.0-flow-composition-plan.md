@@ -51,6 +51,23 @@ Szczegóły, zależności, testy i miejsca wymagające doprecyzowania są w:
 6. [Utrzymywalność planera](release-1.0/06-planner-maintainability.md)
 7. [Block kinds i miękkie insertiony](release-1.0/07-block-kinds-and-soft-insertions.md)
 
+## Regresje z audytu composition
+
+Te przypadki pozostają w harnessie jako regresje. Nie nagrywamy nowej baseline,
+aby ukryć czerwony wynik. Każdy przypadek ma osobny status: naprawiony błąd
+testu, niezaimplementowana zdolność composition albo realny sygnał jakości.
+
+| Przypadek | Co obecnie sprawdza | Wynik audytu | Zadanie |
+|---|---|---|---|
+| `page-layout-editorial-two-column` | odczyt tekstu flow z PDF-a i obecność obu kolumn | test był fałszywie pusty, bo parser odrzucał niekompresowane strumienie; parser naprawiony, przypadek przechodzi | utrzymać test parsera i fail-closed, a docelowo porównywać pomiar z planem composition |
+| `page-fill-table` | liczba stron i minimalne wypełnienie stron | parser naprawiony; aktualnie 57 przebiegów na stronie 1 i 9 na stronie 2, przy czym druga strona jest wizualnie rzadka | zdefiniować w planie jako test rozkładu treści/tabeli, wyłączyć chrome z pomiaru i dodać ocenę końcowego fragmentu |
+| `inline-markup-report` | bold, italic, glyph fallback i markup w tabeli/listach | PDF jest czytelny, ale composition gubi styl runs, drukuje część markdownu dosłownie i gubi `U+2713`; to brak funkcji, nie zepsuty assertion | przenieść inline AST/runs przez composition, zdefiniować fallback glyphów i politykę tabel, dopiero potem przywrócić zielone oczekiwania |
+| `page-fill-gap-tightening` | reakcję na zbyt rzadką ostatnią stronę | oczekiwanie warningu `A4 report gaps tightened by factor` pochodzi ze starego, dwuprzebiegowego renderera; obecny composition robi jeden przebieg, a fixture mieści się na jednej stronie | zastąpić warning asercją composition-native na legalność, fill i score albo świadomie dodać drugą iterację w planie 04 |
+
+Szybka poprawka harnessu jest częścią planu 05. Pozostałe trzy przypadki są
+celowo zachowane jako zadania regresyjne i nie wolno ich „naprawiać” przez
+obniżenie oczekiwań bez zmiany kontraktu renderer’a.
+
 ## Zależności
 
 ```text

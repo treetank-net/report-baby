@@ -46,6 +46,14 @@ ale nie jest produkcyjnym kontraktem.
 6. Nie dodawać wag bez testu pokazującego, jaki układ dana waga zmienia.
 7. Zdefiniować, czy residual content jest zawsze hard violation. Rekomendacja:
    tak dla release 1.0.
+8. Dodać regresyjne przypadki jakościowe, w których plan jest legalny, ale
+   wynik może być niekorzystny: rzadka końcowa strona tabeli, nierówny lokalny
+   odstęp po insertionie oraz niepotrzebne rozdzielenie headingu od pierwszej
+   linii. Nie zamieniać ich automatycznie w hard violation.
+9. Dla każdego składnika score dopisać obserwowalną miarę i przykład z
+   `page-fill-table` albo realnego editorialu. Jeżeli miary nie da się jeszcze
+   wiarygodnie wyznaczyć z planu, oznaczyć punkt jako wymagający uzupełnienia,
+   zamiast oceniać go z rastrowego domysłu.
 
 ## Minimalny kontrakt wyboru
 
