@@ -312,6 +312,7 @@ export interface CompositionPlanTrace {
   blocks: CompositionBlockTrace[];
   slots: CompositionSlotTrace[];
   flowPlacements?: CompositionFlowPlacement[];
+  flowBarrierBoxCandidates?: CompositionFlowBarrierBoxCandidate[];
 }
 
 export interface CompositionPlan {

@@ -68,7 +68,13 @@ try {
   assert.equal(composition.plan.lines.some((line) => line.flowId === 'quotes'), false, 'quotes must remain outside the ordinary flow');
   assert.equal(new Set((composition.plan.insertionLines ?? []).map((line) => line.blockId)).size, 4, 'all authored quotes must be retained');
   assert.equal((composition.plan.glyphPlacements ?? []).filter((glyph) => glyph.source === 'authored').length, 8, 'all authored quote glyphs must be retained');
-  assert.ok(composition.plan.flowBarrierBoxCandidates?.some((candidate) => candidate.flowId === 'main'), 'editorial must expose main-flow barrier candidates');
+  const barrierCandidates = composition.plan.flowBarrierBoxCandidates ?? [];
+  assert.ok(barrierCandidates.some((candidate) => candidate.flowId === 'main'), 'editorial must expose main-flow barrier candidates');
+  assert.deepEqual(
+    composition.plan.trace?.flowBarrierBoxCandidates?.map((candidate) => candidate.id),
+    barrierCandidates.map((candidate) => candidate.id),
+    'plan trace must expose the same flow-barrier candidates as the executable plan',
+  );
   const illustrationPlacement = composition.plan.blockPlacements.find((placement) => placement.blockId === 'intro-illustration');
   assert.ok(illustrationPlacement, 'editorial illustration must have a planned block placement');
   const illustrationDrawing = result.drawings.find((drawing) => drawing.kind === 'image');

@@ -60,6 +60,8 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
   reguły nagłówka, reguły footera, numeru strony i lockupu.
 - zwykły renderer oraz debug overlay używają tych samych ramek chrome; test
   `test-report-chrome` sprawdza ich zgodność z narysowanym PDF-em.
+- trace przechowuje tę samą listę `flowBarrierBoxCandidates` co wykonywalny
+  plan; test editorial parity sprawdza identyfikatory i kolejność.
 
 ## Kroki
 

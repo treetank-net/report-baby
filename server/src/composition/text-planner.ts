@@ -1491,6 +1491,7 @@ function tracePlan(document: CompositionDocument, metrics: CompositionTextMetric
     blocks,
     slots,
     ...(plan.flowPlacements ? { flowPlacements: plan.flowPlacements } : {}),
+    ...(plan.flowBarrierBoxCandidates ? { flowBarrierBoxCandidates: plan.flowBarrierBoxCandidates } : {}),
   } satisfies CompositionPlanTrace;
 }
 
