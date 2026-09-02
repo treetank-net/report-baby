@@ -1,6 +1,6 @@
 # Plan 05 — render, dry_run i debug
 
-Status: zależy od planów 01–04
+Status: punkt 1 wykonany; punkty 2–10 pozostają do domknięcia
 
 ## Cel
 
@@ -18,7 +18,9 @@ wyliczania geometrii.
 
 - zwykły render korzysta z composition planner/evaluator i backendu jsPDF;
 - `drawCompositionDebugOverlay()` rysuje ramki na faktycznym PDF-ie;
-- `dry_run` nadal przechodzi starszą ścieżką `resolveReportPlanOnly()`;
+- `dry_run` planuje przez ten sam etap `prepareReportComposition()` co zwykły
+  render; `resolveReportPlanOnly()` pozostaje tylko legacy planem w odpowiedzi
+  diagnostycznej;
 - część chrome jest rysowana w `report-renderer.ts` poza composition planem;
 - overlay pokazuje już m.in. placements, obstacles, flow barriers, padding i
   margin, ale wymaga dalszej kontroli czy ramy pochodzą bezpośrednio z planu.
@@ -68,6 +70,17 @@ wyliczania geometrii.
   a nie dlatego, że lista pomiarów jest pusta;
 - `inline-markup-report` i `page-fill-gap-tightening` pozostają czerwone lub
   zostają przepisane dopiero po świadomej zmianie kontraktu.
+
+## Wykonane
+
+- `prepareReportComposition()` jest wspólnym etapem planowania renderu i
+  `dry_run`; tworzy jeden zestaw metryk jsPDF, capabilities i `CompositionPlan`.
+- `dry_run` zwraca `compositionPlan` oraz `compositionEvaluation`, a dla planu
+  odrzuconego nie produkuje PDF-a i nie kończy procesu błędem — odrzucenie jest
+  danymi do inspekcji.
+- Test CLI porównuje pełny `compositionPlan` z `dry_run` i pełnego renderu dla
+  tego samego fixture’u.
+- Regresja `test:editorial-flow` przechodzi dla 506 fixture’ów po tej zmianie.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 

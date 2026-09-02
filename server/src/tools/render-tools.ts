@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { listBrandTemplates, resolveBrandContext, type BrandOverrides } from '../brand-context.js';
 import type { ReportConfig } from '../config.js';
 import type { RenderTheme } from '../core/model/render-theme.js';
-import { listTemplates, renderReportPdfDetailed, resolveReportPlanOnly } from '../report-renderer.js';
+import { listTemplates, renderReportPdfDetailed, resolveReportCompositionOnly, resolveReportPlanOnly } from '../report-renderer.js';
 import { renderChart, metricCards, type ChartType } from '../svg.js';
 import { loadRenderFontSet, renderSvgToPng } from '../render-primitives.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx } from '../slides.js';
@@ -204,8 +204,9 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       }
       const context = await resolveBrandContext(cfg.brandDir, { brandRef: brand_ref, brandSource: brand_source, contentRoot: content_root, templateRef: template_ref ?? template, surface: surface ?? 'pdf-a4', overrides: overrides as BrandOverrides | undefined, brandSourceRoots: cfg.brandSourceRoots });
       if (dry_run) {
+        const composition = await resolveReportCompositionOnly(requestedTemplate, data, context.theme, context.sourceContext);
         const plan = resolveReportPlanOnly(requestedTemplate, data, context.theme);
-        return { content: [{ type: 'text' as const, text: 'Report plan resolved without rendering.' }], structuredContent: { ...brandRenderSummary(context.diagnostics), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan, drawings: [] }, 'full'), dryRun: true } };
+        return { content: [{ type: 'text' as const, text: 'Report composition plan resolved without rendering.' }], structuredContent: { ...brandRenderSummary(context.diagnostics), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan, drawings: [], composition }, 'full'), dryRun: true } };
       }
       await mkdir(cfg.outputDir, { recursive: true });
       const out = outputPath(cfg, output_path, 'pdf');

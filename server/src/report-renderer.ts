@@ -303,7 +303,16 @@ function footerTextWidth(doc: jsPDF, geometry: PageGeometry, maxPages: number, t
   return Math.min(...pages.map((page) => Math.max(1, page.width - page.margins.right - page.margins.left - PDF_CONFIG.footerNumberGap - labelWidth)));
 }
 
-export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
+interface PreparedReportComposition {
+  doc: jsPDF;
+  geometry: PageGeometry;
+  template: CompiledTemplate;
+  composition: ReportCompositionResult;
+  drawings: ReportDrawing[];
+  render: () => void;
+}
+
+async function prepareReportComposition(name: string, data: CompositionInput, theme: RenderTheme, sourceContext?: SourceContext, rejectOnEvaluation = true): Promise<PreparedReportComposition> {
   const { template, geometry } = compositionGeometry(name);
   const fontSet = await loadRenderFontSet(theme);
   const doc = newPdf('portrait', [geometry.width, geometry.height], fontSet);
@@ -368,10 +377,19 @@ export async function renderReportCompositionPdf(name: string, data: Composition
     eyebrow: reportMetadataColor,
   }, theme.titleCase, theme.glyphFontFamily);
   const composition = planReportComposition(doc, template, planGeometry, data, { family, maxPages, includeTitlePage: Boolean(data.flows.title && template.pageTitle), includeHeaderFlow: Boolean(data.flows.header), auxiliaryTextWidths: { footer: footerTextWidth(doc, geometry, maxPages, theme) }, policy: { minimumWrapWidth: PDF_CONFIG.floatMinWidth }, styles: compositionStyles, ...(combined ? { measureBlock: combined.measureBlock } : {}), ...(tableCapabilities ? { measureTable: tableCapabilities.measureTable } : {}) });
-  if (composition.evaluation.status === 'rejected') {
+  if (rejectOnEvaluation && composition.evaluation.status === 'rejected') {
     const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');
     throw new Error(`Composition plan rejected for '${name}': ${details}`);
   }
+  const render = (): void => {
+    renderComposition(composition.document, composition, createJsPdfTextBackend(doc, family, compositionStyles, { ...compositionPdfBackendOptionsFromRenderConfig(), ...(resolvedImages.size > 0 ? { imageAssets: resolvedImages } : {}), ...(combined ? { blockRenderers: combined.blockRenderers } : {}), ...(tableCapabilities ? { tableRenderer: tableCapabilities.renderer } : {}) }));
+  };
+  return { doc, geometry, template, composition, drawings, render };
+}
+
+export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
+  const prepared = await prepareReportComposition(name, data, theme, sourceContext);
+  const { doc, geometry, template, composition, drawings } = prepared;
   const logo = await reportLogo(theme, sourceContext);
   for (const page of composition.plan.pages) {
     if (doc.getNumberOfPages() < page.page) doc.addPage([page.width, page.height]);
@@ -383,7 +401,7 @@ export async function renderReportCompositionPdf(name: string, data: Composition
     }
   }
   if (compositionDebug) drawCompositionDebugOverlay(doc, composition, theme, geometry);
-  renderComposition(composition.document, composition, createJsPdfTextBackend(doc, family, compositionStyles, { ...compositionPdfBackendOptionsFromRenderConfig(), ...(resolvedImages.size > 0 ? { imageAssets: resolvedImages } : {}), ...(combined ? { blockRenderers: combined.blockRenderers } : {}), ...(tableCapabilities ? { tableRenderer: tableCapabilities.renderer } : {}) }));
+  prepared.render();
   return { buffer: Buffer.from(doc.output('arraybuffer')), composition, drawings };
 }
 
@@ -397,4 +415,14 @@ export function resolveReportPlanOnly(name: string, data: CompositionInput, them
   const plan = resolveReportPlan({ templateRef: name, theme, geometry, pageCount: 1, compositionDocument: compositionDocumentFromInput(data) });
   assertReportPlan(plan, { requireCoverage: geometry.dynamicFlow, maxCoverageGap: PDF_CONFIG.planCoverageMaxGap });
   return plan;
+}
+
+/**
+ * Plan the same composition used by renderReportCompositionPdf, without
+ * drawing content or producing a PDF buffer. This is the dry-run seam: the
+ * jsPDF instance exists only to provide the real font metrics used by the
+ * planner.
+ */
+export async function resolveReportCompositionOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext): Promise<ReportCompositionResult> {
+  return (await prepareReportComposition(name, data, theme, sourceContext, false)).composition;
 }

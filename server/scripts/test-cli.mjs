@@ -53,6 +53,31 @@ try {
   const planResult = JSON.parse(planOnly.stdout);
   assert.equal(planResult.dryRun, true);
   assert.ok(Array.isArray(planResult.reportPlan?.pages));
+  assert.ok(Array.isArray(planResult.compositionPlan?.flowPlacements));
+  assert.ok(Array.isArray(planResult.compositionPlan?.lines));
+
+  const parityPath = join(outputDir, 'plan-parity-report.pdf');
+  const renderedForParity = await run(['--json', 'render_report'], JSON.stringify({
+    template: 'pages/editorial-two-column',
+    output_path: parityPath,
+    diagnostics: 'full',
+    data: { title: 'Plan only', sections: [{ heading: 'Works', body: 'The layout plan resolves without producing a PDF.' }] },
+  }));
+  assert.equal(renderedForParity.code, 0, renderedForParity.stderr);
+  const renderedParityResult = JSON.parse(renderedForParity.stdout);
+  assert.deepEqual(renderedParityResult.compositionPlan, planResult.compositionPlan, 'dry_run and render used different composition plans');
+
+  const debugPath = join(outputDir, 'plan-parity-debug-report.pdf');
+  const renderedWithDebug = await run(['--json', 'render_report'], JSON.stringify({
+    template: 'pages/editorial-two-column',
+    output_path: debugPath,
+    diagnostics: 'full',
+    composition_debug: true,
+    data: { title: 'Plan only', sections: [{ heading: 'Works', body: 'The layout plan resolves without producing a PDF.' }] },
+  }));
+  assert.equal(renderedWithDebug.code, 0, renderedWithDebug.stderr);
+  const debugResult = JSON.parse(renderedWithDebug.stdout);
+  assert.deepEqual(debugResult.compositionPlan, planResult.compositionPlan, 'debug overlay changed the composition plan');
 
   const brandedPath = join(outputDir, 'branded-report.pdf');
   const branded = await run([
