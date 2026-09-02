@@ -216,6 +216,44 @@ async function writeNumberedPixelArtifacts(directory, result, document, artifact
   if (document.graphics?.length === 0) throw new Error('numbered obstacle debug artifact lost its obstacle graphics');
 }
 
+async function writeMovableCandidateArtifacts(directory, candidates, document, createBackend, newPdf, renderComposition, evaluateCompositionPlan, renderConfig) {
+  if (!directory) return;
+  await mkdir(directory, { recursive: true });
+  const styles = {
+    body: { fontSize: 10, lineHeight: 5, baselineOffset: 3.8, fontStyle: 'normal', textColor: [38, 71, 108] },
+    quote: { fontSize: 10, lineHeight: 5, baselineOffset: 3.8, fontStyle: 'normal', textColor: [38, 71, 108] },
+  };
+  const entries = [];
+  for (const [index, candidate] of candidates.entries()) {
+    const pdf = newPdf('portrait', [100, 120]);
+    const artifact = renderComposition(document, { plan: candidate, evaluation: evaluateCompositionPlan(document, candidate) }, createBackend(pdf, 'helvetica', styles, {
+      pageSizeTolerance: renderConfig.pdf.page_size_tolerance,
+      graphicStyle: { fillColor: [255, 255, 255], drawColor: [38, 71, 108], lineWidth: 0.2 },
+    }));
+    const frame = candidate.movableInsertionFrames?.[0];
+    if (!frame) throw new Error(`movable candidate ${index} has no debug frame`);
+    const quote = candidate.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block');
+    if (!quote) throw new Error(`movable candidate ${index} has no quote obstacle`);
+    pdf.setDrawColor(255, 0, 0);
+    pdf.setLineWidth(0.6);
+    pdf.setLineDashPattern([2, 1], 0);
+    pdf.rect(frame.box.x, frame.box.y, frame.box.width, frame.box.height, 'S');
+    pdf.setLineDashPattern([], 0);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(3);
+    pdf.setTextColor(255, 0, 0);
+    pdf.text(`RED FRAME · candidate ${index} · quote y=${quote.box.y}`, frame.box.x, Math.max(3, frame.box.y - 1));
+    const pdfPath = join(directory, `movable-quote-candidate-${index}.pdf`);
+    const pngPrefix = join(directory, `movable-quote-candidate-${index}`);
+    await writeFile(pdfPath, Buffer.from(pdf.output('arraybuffer')));
+    const rasterized = runProcess('pdftoppm', ['-singlefile', '-png', '-r', String(renderConfig.quality.pdf_pixel_qa.raster_dpi), pdfPath, pngPrefix], { cwd: root, timeout: 30_000 });
+    if (rasterized.status !== 0) throw new Error(`movable candidate ${index} rasterization failed: ${rasterized.stderr || rasterized.stdout}`);
+    await writeFile(join(directory, `movable-quote-candidate-${index}.plan.json`), JSON.stringify(candidate, null, 2));
+    entries.push({ index, pdf: pdfPath, png: `${pngPrefix}.png`, frameY: frame.box.y, frameHeight: frame.box.height, quoteY: quote.box.y });
+  }
+  await writeFile(join(directory, 'movable-quote-candidates.json'), JSON.stringify(entries, null, 2));
+}
+
 try {
   const { createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, createTextCompositionPlanner, evaluateCompositionPlan, renderComposition } = await import(bundle);
   const { newPdf } = await import(primitivesBundle);
@@ -411,6 +449,7 @@ try {
   const bestFragmentation = Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs));
   assert.equal(selectedCandidate.score, Math.max(...movableEvaluationPhase.details.candidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring movable candidate');
   assert.equal(movableCandidateSummary.find((candidate) => candidate.quoteY === movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y)?.fragmentedParagraphs, bestFragmentation, 'the selected quote position must have the least paragraph fragmentation');
+  await writeMovableCandidateArtifacts(process.env.REPORT_BABY_ARTIFACT_DIR ? join(process.env.REPORT_BABY_ARTIFACT_DIR, 'movable-quote-candidates') : undefined, movableCandidatePlans, movableQuoteDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8')));
   const invalidMovableQuote = createTextCompositionEngine(movableQuoteTemplate, {
     movableInsertionBounds: {
       'quotes:movable-quote-block': { bounds: { x: 5, y: 25, width: 20, height: 5 }, axis: 'y', candidateCount: 2 },
