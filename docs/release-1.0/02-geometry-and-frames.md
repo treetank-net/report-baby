@@ -1,6 +1,6 @@
 # Plan 02 — geometria i wspólne ramy
 
-Status: fundament dla score i pętli
+Status: pierwszy seam zabezpieczony testem; pozostała obserwowalność planu
 
 ## Cel
 
@@ -27,6 +27,24 @@ Geometria przechodzi przez kilka etapów:
 Źródła: [`template-contract.ts`](../../server/src/template-contract.ts),
 [`page-geometry.ts`](../../server/src/page-geometry.ts),
 [`page-template-adapter.ts`](../../server/src/composition/page-template-adapter.ts).
+
+## Mapa odpowiedzialności
+
+| Etap | Właściciel | Wejście | Wynik używany dalej |
+|---|---|---|---|
+| kompilacja template’u | `compileTemplateSource` w `template-contract.ts` | YAML/obiekt template’u | zwalidowany `CompiledTemplate` z normalnymi ramami, flow i slotami |
+| fizyczna geometria strony | `pageGeometryFromTemplate` w `page-geometry.ts` | `CompiledTemplate.page` | `PageGeometry`: margins, content, bands, obstacles, segments i block frames |
+| adaptacja do composition | `compositionTemplateFromPageGeometry` w `composition/page-template-adapter.ts` | `CompiledTemplate` + `PageGeometry` | layouts, slots i routes dla pierwszej oraz kolejnych stron |
+| rezerwacja insertionów | `placeInsertionLayer` w `composition/text-planner.ts` | flows, propozycje, slots i pomiary | placements insertionów oraz grafiki będące obstacle dla zwykłego flow |
+| układanie flow | `planFlow` w `composition/text-planner.ts` | route, slots, obstacle i metryki tekstu | linie tekstu, placements i decyzje planera |
+| rejestr miejsc flow | `registerFlowPlacements` w `composition/text-planner.ts` | slots i faktyczne placements | uporządkowany rejestr także pustych miejsc |
+| rozcięcie przy kolizjach | `registerFlowBarrierBoxCandidates` w `composition/text-planner.ts` | flow placements + graphic placements | kandydaci segmentów pomiędzy krawędziami flow i obstacle |
+| legalność | `evaluateCompositionPlan` w `composition/evaluator.ts` | kompletny plan | accepted/rejected i diagnostyka |
+| obserwacja PDF | `drawCompositionDebugOverlay` oraz `renderReportPdfDetailed` w `report-renderer.ts` | wynik planu | zwykły PDF, debug overlay i artefakt do QA |
+
+Ta mapa opisuje istniejące funkcje, nie wprowadza nowych encji. Jeżeli kolejny
+etap potrzebuje tej samej informacji, powinien rozszerzyć wynik właściciela,
+a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
 
 ## Kroki
 
@@ -66,6 +84,9 @@ Geometria przechodzi przez kilka etapów:
   użyty przez planner;
 - debug pokazuje rozróżnienie: flow, obstacle, faktyczny placement i kandydat;
 - test potwierdza zgodność obliczonych i narysowanych współrzędnych.
+- test adaptera potwierdza przejście template → `PageGeometry` oraz rozcięcie
+  segmentów przez obstacle; obecnie jest to
+  [`test-page-template-adapter.mjs`](../../server/scripts/test-page-template-adapter.mjs).
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 

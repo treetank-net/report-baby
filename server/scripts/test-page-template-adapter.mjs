@@ -56,6 +56,31 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const compiled = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(compiled);
   const template = compositionTemplateFromPageGeometry(compiled, geometry, { maxPages: 3 });
+  assert.deepEqual(geometry.content, {
+    x: compiled.page.margins.left,
+    top: compiled.page.margins.top,
+    width: compiled.page.width - compiled.page.margins.left - compiled.page.margins.right,
+    bottom: compiled.page.height - compiled.page.margins.bottom,
+  }, 'page geometry must expose the physical content frame from the template margins');
+  assert.equal(geometry.segments.length, compiled.page.columns.count, 'reserved header/footer bands at page boundaries must leave one continuous segment per column');
+  assert.ok(geometry.segments.every((segment) => segment.x >= geometry.content.x
+    && segment.x + segment.width <= geometry.content.x + geometry.content.width
+    && segment.top >= geometry.content.top
+    && segment.bottom <= geometry.content.bottom), 'flow segments must stay inside the content frame');
+
+  const obstacleSource = structuredClone(source);
+  obstacleSource.id = 'pages/editorial-geometry-obstacle';
+  obstacleSource.page.flow_obstacles = [{
+    id: 'mid-page-obstacle',
+    frame: { x: 0.081, y: 0.45, width: 0.838, height: 0.10 },
+  }];
+  const obstacleCompiled = compileTemplateSource(obstacleSource);
+  const obstacleGeometry = pageGeometryFromTemplate(obstacleCompiled);
+  const obstacle = obstacleGeometry.flowObstacles.find((candidate) => candidate.id === 'mid-page-obstacle');
+  assert.ok(obstacle, 'template flow obstacle must be present in physical page geometry');
+  assert.ok(obstacleGeometry.segments.some((segment) => segment.bottom <= obstacle.frame.top), 'obstacle must leave an upper flow segment');
+  assert.ok(obstacleGeometry.segments.some((segment) => segment.top >= obstacle.frame.bottom), 'obstacle must leave a lower flow segment');
+  assert.ok(obstacleGeometry.segments.every((segment) => segment.bottom <= obstacle.frame.top || segment.top >= obstacle.frame.bottom), 'flow segments must not overlap the physical obstacle');
   assert.equal(template.layouts.length, 2);
   const introSlot = template.layouts[0].slots.find((slot) => slot.id === 'block:intro');
   assert.deepEqual(introSlot?.allowedBlockIds, ['intro']);
