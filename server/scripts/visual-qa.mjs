@@ -347,7 +347,7 @@ function buildCases() {
       data: { flows: {
         header: { continuation: 'forbidden', blocks: [{ type: 'heading', role: 'header', text: 'Configured page layout' }] },
         main: { continuation: 'allowed', blocks: [
-          { type: 'text', role: 'intro', text: 'The introduction occupies its declared frame before the narrative flow begins.', keep_with_next_lines: 2 },
+          { type: 'text', id: 'intro', role: 'intro', text: 'The introduction occupies its declared frame before the narrative flow begins.', keep_with_next_lines: 2 },
           { type: 'heading', role: 'heading', text: 'Two-column flow', level: 2, keep_with_next_lines: 1 },
           { type: 'text', role: 'body', text: 'This paragraph is deliberately long enough to cross the first column and continue in the second. '.repeat(80) },
           { type: 'list-item', role: 'body', text: 'Both configured columns carry content.' },

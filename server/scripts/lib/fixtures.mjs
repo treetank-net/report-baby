@@ -210,7 +210,7 @@ export function compositionEditorialRegressionReport(variant) {
     footer: { continuation: 'forbidden', blocks: [{ type: 'text', role: 'footer', text: `Regression ${variant}` }] },
   } } };
   if (variant === 'A') {
-    blocks.push({ type: 'text', role: 'intro', text: 'Krótki wstęp do raportu.', keep_with_next_lines: 2 });
+    blocks.push({ type: 'text', id: 'intro', role: 'intro', text: 'Krótki wstęp do raportu.', keep_with_next_lines: 2 });
     sectionCount = 2;
   }
   if (variant === 'B') { sectionCount = 4; sectionBody = `${prose} ${prose}`; }
@@ -223,7 +223,7 @@ export function compositionEditorialRegressionReport(variant) {
     sectionBody = `${prose} ${prose} ${prose}`;
   }
   if (variant === 'E') {
-    blocks.push({ type: 'text', role: 'intro', text: `${prose} ${prose} ${prose}`, keep_with_next_lines: 2 });
+    blocks.push({ type: 'text', id: 'intro', role: 'intro', text: `${prose} ${prose} ${prose}`, keep_with_next_lines: 2 });
     sectionCount = 6;
     sectionBody = `${prose} ${prose}`;
   }
