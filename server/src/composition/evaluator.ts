@@ -295,8 +295,31 @@ function scoreHeadingFollowingLine(document: CompositionDocument, plan: Composit
   };
 }
 
+function scoreParagraphFragmentation(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
+  const paragraphIds = new Set(Object.values(document.flows).flatMap((flow) => flow.blocks
+    .filter((block: CompositionBlock) => block.kind === 'paragraph')
+    .map((block) => block.id)));
+  const locations = new Map<string, Set<string>>();
+  for (const line of plan.lines) {
+    if (!paragraphIds.has(line.blockId)) continue;
+    const blockLocations = locations.get(line.blockId) ?? new Set<string>();
+    blockLocations.add(`${line.page}:${line.slotId}`);
+    locations.set(line.blockId, blockLocations);
+  }
+  const fragmentedIds = [...locations.entries()]
+    .filter(([, blockLocations]) => blockLocations.size > 1)
+    .map(([blockId]) => blockId)
+    .sort();
+  return {
+    code: 'paragraph-fragmentation',
+    value: fragmentedIds.length,
+    points: -fragmentedIds.length * scoreConfigNumber('paragraphFragmentationPenalty'),
+    details: { fragmentedBlockIds: fragmentedIds },
+  };
+}
+
 function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan): { score: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan)];
+  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan)];
   return {
     score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
     breakdown,

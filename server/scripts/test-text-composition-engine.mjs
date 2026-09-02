@@ -217,7 +217,7 @@ async function writeNumberedPixelArtifacts(directory, result, document, artifact
 }
 
 try {
-  const { createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, evaluateCompositionPlan, renderComposition } = await import(bundle);
+  const { createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, createTextCompositionPlanner, evaluateCompositionPlan, renderComposition } = await import(bundle);
   const { newPdf } = await import(primitivesBundle);
   let randomState = 0x5eed;
   const random = () => {
@@ -340,6 +340,84 @@ try {
   assert.equal(boundaryEvaluationPhase?.details?.candidates?.length, 2, 'a proposal change must expose both full plans to the evaluator');
   assert.deepEqual(boundaryEvaluationPhase.details.candidates.map((candidate) => candidate.status), ['rejected', 'accepted'], 'the first boundary plan must fail source-order evaluation before the moved quote is accepted');
   assert.deepEqual(boundaryEvaluationPhase.details.candidates.map((candidate) => candidate.reflowPasses), [1, 1], 'each full candidate must expose its reflow cost');
+
+  const movableQuoteTemplate = {
+    maxPages: 1,
+    layouts: [{ id: 'movable-quote', width: 100, height: 120, slots: [
+      { id: 'left', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 110 }, allowedRoles: ['body'] },
+      { id: 'right', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 110 }, allowedRoles: ['body'] },
+      { id: 'quote', regionId: 'quotes', kind: 'text', box: { x: 5, y: 45, width: 90, height: 10 }, allowedRoles: ['quote'] },
+    ] }],
+    routes: {
+      main: { slots: ['left', 'right'], layouts: ['movable-quote'], continuation: 'forbidden' },
+      quotes: { slots: ['quote'], insertionSlots: ['quote'], layouts: ['movable-quote'], continuation: 'forbidden' },
+    },
+  };
+  const movableParagraphs = Array.from({ length: 18 }, (_, index) => ({
+    id: `movable-paragraph-${index + 1}`,
+    kind: 'paragraph',
+    role: 'body',
+    text: `Paragraph ${index + 1} keeps a small independent thought for the composition experiment.`,
+  }));
+  const movableQuoteDocument = {
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: movableParagraphs },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'movable-quote-block', kind: 'paragraph', role: 'quote', text: 'A movable quote should let the planner choose a cleaner interruption.' }] },
+    },
+  };
+  const movableQuotePolicy = {
+    maxPlanningIterations: 2,
+    movableInsertionBounds: {
+      'quotes:movable-quote-block': {
+        bounds: { x: 5, y: 25, width: 90, height: 70 },
+        axis: 'y',
+        candidateCount: 6,
+      },
+    },
+  };
+  const movablePlanner = createTextCompositionEngine(movableQuoteTemplate, movableQuotePolicy);
+  const movableQuoteResult = movablePlanner.plan(movableQuoteDocument, { ...metrics, lineHeight() { return 5; } });
+  const movableEvaluationPhase = movableQuoteResult.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
+  assert.equal(movableQuoteResult.evaluation.status, 'accepted', JSON.stringify(movableQuoteResult.evaluation));
+  assert.equal(movableEvaluationPhase?.details?.candidates?.length, 6, 'a movable insertion frame must produce one full plan per requested position');
+  const movableCandidatePlans = createTextCompositionPlanner(movableQuoteTemplate, movableQuotePolicy).planCandidates(movableQuoteDocument, { ...metrics, lineHeight() { return 5; } });
+  assert.equal(movableCandidatePlans.length, 6, 'the planner seam must expose every movable-position candidate');
+  const movableCandidateSummary = movableCandidatePlans.map((candidate) => {
+    const quote = candidate.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block');
+    const frame = candidate.movableInsertionFrames?.find((item) => item.id === 'quotes:movable-quote-block');
+    const evaluation = evaluateCompositionPlan(movableQuoteDocument, candidate);
+    const paragraphSlots = new Map();
+    for (const line of candidate.lines.filter((line) => line.flowId === 'main')) {
+      paragraphSlots.set(line.blockId, new Set([...(paragraphSlots.get(line.blockId) ?? []), line.slotId]));
+    }
+    const fragmentedParagraphs = [...paragraphSlots.values()].filter((slots) => slots.size > 1).length;
+    return {
+      status: evaluation.status,
+      score: evaluation.score,
+      quoteY: quote?.box.y,
+      frameY: frame?.box.y,
+      frameHeight: frame?.box.height,
+      quoteInsideFrame: Boolean(quote && frame && quote.box.x >= frame.box.x && quote.box.y >= frame.box.y && quote.box.x + quote.box.width <= frame.box.x + frame.box.width && quote.box.y + quote.box.height <= frame.box.y + frame.box.height),
+      fragmentedParagraphs,
+      lineCount: candidate.lines.filter((line) => line.flowId === 'main').length,
+    };
+  });
+  assert.equal(new Set(movableCandidateSummary.map((candidate) => candidate.quoteY)).size, 6, `movable candidates must have distinct legal quote positions: ${JSON.stringify(movableCandidateSummary)}`);
+  assert.ok(movableCandidateSummary.every((candidate) => candidate.frameY === 25 && candidate.frameHeight === 70 && candidate.quoteInsideFrame), `every movable quote must remain inside its declared red frame: ${JSON.stringify(movableCandidateSummary)}`);
+  assert.ok(movableCandidateSummary.every((candidate) => candidate.status === 'accepted'), JSON.stringify(movableCandidateSummary));
+  assert.ok(movableCandidateSummary.every((candidate) => candidate.score > Number.NEGATIVE_INFINITY), JSON.stringify(movableCandidateSummary));
+  assert.ok(Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs)) < Math.max(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs)), `moving the quote must change paragraph fragmentation in the small-paragraph fixture: ${JSON.stringify(movableCandidateSummary)}`);
+  const selectedCandidate = movableEvaluationPhase.details.candidates[movableEvaluationPhase.details.selectedCandidate];
+  const bestFragmentation = Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs));
+  assert.equal(selectedCandidate.score, Math.max(...movableEvaluationPhase.details.candidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring movable candidate');
+  assert.equal(movableCandidateSummary.find((candidate) => candidate.quoteY === movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y)?.fragmentedParagraphs, bestFragmentation, 'the selected quote position must have the least paragraph fragmentation');
+  const invalidMovableQuote = createTextCompositionEngine(movableQuoteTemplate, {
+    movableInsertionBounds: {
+      'quotes:movable-quote-block': { bounds: { x: 5, y: 25, width: 20, height: 5 }, axis: 'y', candidateCount: 2 },
+    },
+  }).plan(movableQuoteDocument, { ...metrics, lineHeight() { return 5; } });
+  assert.equal(invalidMovableQuote.evaluation.status, 'rejected');
+  assert.ok(invalidMovableQuote.evaluation.diagnostics.some((item) => item.code === 'MOVABLE_INSERTION_BOUNDS_INVALID'), 'an insertion frame that cannot contain the measured quote must be rejected');
 
   const spacingTemplate = {
     maxPages: 1,
@@ -1482,6 +1560,14 @@ try {
     numberedObstaclePages: numberedObstacle.plan.pages.length,
     numberedObstacleWords: numberedObstacleWords.length,
     numberedObstaclePixelZones: pixelChecks.length,
+    movableInsertionExperiment: {
+      candidateCount: movableCandidateSummary.length,
+      candidates: movableCandidateSummary,
+      selectedCandidate: movableEvaluationPhase.details.selectedCandidate,
+      selectedQuoteY: movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y,
+      selectedScore: movableEvaluationPhase.details.candidates[movableEvaluationPhase.details.selectedCandidate]?.score,
+      reflowPasses: movableEvaluationPhase.details.candidates.map((candidate) => candidate.reflowPasses),
+    },
     numberedObstacleArtifact: process.env.REPORT_BABY_ARTIFACT_DIR ? join(process.env.REPORT_BABY_ARTIFACT_DIR, 'numbered-obstacle-pixel-qa.pdf') : undefined,
   }, null, 2));
 } finally {

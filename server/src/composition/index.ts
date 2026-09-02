@@ -30,6 +30,7 @@ export type {
   CompositionEngine,
   CompositionEvaluation,
   CompositionFlowBarrierBoxCandidate,
+  CompositionMovableInsertionFrame,
   CompositionGraphicPlacement,
   CompositionLine,
   CompositionPagePlan,

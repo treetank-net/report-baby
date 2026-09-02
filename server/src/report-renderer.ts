@@ -212,6 +212,12 @@ function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionR
       drawLabel(`OBSTACLE ${graphic.graphicId}`, graphic.box, page, theme.secondary);
     }
 
+    for (const frame of plan.movableInsertionFrames ?? []) {
+      if (frame.page !== page.page) continue;
+      drawRect(frame.box, debug.obstacleLineWidth, theme.danger, true);
+      drawLabel(`MOVABLE INSERTION FRAME ${frame.id} · ${frame.candidateCount} ${frame.axis}-positions`, frame.box, page, theme.danger, 'side');
+    }
+
     for (const candidate of plan.flowBarrierBoxCandidates ?? []) {
       if (candidate.page !== page.page) continue;
       const inset = Math.min(debug.flowBarrierBoxInset, candidate.box.width / 2, candidate.box.height / 2);

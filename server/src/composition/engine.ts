@@ -186,6 +186,17 @@ export interface CompositionFlowBarrierBoxCandidate {
   box: CompositionBox;
 }
 
+/** A legal movement frame exposed for composition-debug overlays. */
+export interface CompositionMovableInsertionFrame {
+  id: string;
+  flowId: string;
+  blockId: string;
+  page: number;
+  box: CompositionBox;
+  axis: 'x' | 'y';
+  candidateCount: number;
+}
+
 export interface CompositionLine {
   blockId: string;
   flowId: string;
@@ -326,6 +337,8 @@ export interface CompositionPlan {
   glyphPlacements?: CompositionGlyphPlacement[];
   /** Candidate boxes split around collision graphics and consumed by ordinary flow wrapping. */
   flowBarrierBoxCandidates?: CompositionFlowBarrierBoxCandidate[];
+  /** Legal frame used to generate movable insertion candidates. */
+  movableInsertionFrames?: CompositionMovableInsertionFrame[];
   /** Ordinary flowing text only. Insertions are exposed separately below. */
   lines: CompositionLine[];
   /** Text painted into fixed insertion/obstacle boxes, outside the main route. */

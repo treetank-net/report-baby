@@ -13,6 +13,7 @@ import type {
   CompositionBlockTrace,
   CompositionBlockPlacement,
   CompositionFlowBarrierBoxCandidate,
+  CompositionMovableInsertionFrame,
   CompositionFlowPlacement,
   CompositionDiagnostic,
   CompositionGraphicPlacement,
@@ -47,6 +48,19 @@ export interface TextCompositionPlannerPolicy {
   minimumFragmentLines?: number;
   /** Tolerance for renderer-neutral geometry comparisons, in planner units. */
   geometryTolerance?: number;
+  /**
+   * Optional legal frame for an insertion. The key is the existing
+   * `flow:block` insertion key; every generated position is planned and
+   * evaluated as a complete candidate.
+   */
+  movableInsertionBounds?: Record<string, MovableInsertionBounds>;
+}
+
+export interface MovableInsertionBounds {
+  bounds: CompositionRect;
+  axis?: 'x' | 'y';
+  preferred?: { x?: number; y?: number };
+  candidateCount: number;
 }
 
 interface WrappedLine {
@@ -550,6 +564,82 @@ function insertionProposalSignature(proposals: Map<string, PlannedInsertion>): s
     .sort((left, right) => insertionKey(left.flowId, left.blockId).localeCompare(insertionKey(right.flowId, right.blockId)))
     .map((proposal) => `${insertionKey(proposal.flowId, proposal.blockId)}@${proposal.page}:${proposal.slotId}:${proposal.box.x},${proposal.box.y},${proposal.box.width},${proposal.box.height}`)
     .join('|');
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+/**
+ * Expand a seeded insertion proposal into legal positions inside its frame.
+ * The proposal's measured width/height remain the occupied rectangle; the
+ * frame describes where that rectangle may move. The first experiment moves
+ * one axis at evenly spaced positions so candidate count and geometry remain
+ * deterministic and inspectable.
+ */
+function movableInsertionBoxes(proposal: PlannedInsertion, policy: MovableInsertionBounds): CompositionRect[] {
+  const { bounds } = policy;
+  const minimumX = bounds.x;
+  const maximumX = bounds.x + bounds.width - proposal.box.width;
+  const minimumY = bounds.y;
+  const maximumY = bounds.y + bounds.height - proposal.box.height;
+  const axis = policy.axis ?? 'y';
+  const minimum = axis === 'x' ? minimumX : minimumY;
+  const maximum = axis === 'x' ? maximumX : maximumY;
+  if (minimum > maximum || !Number.isInteger(policy.candidateCount) || policy.candidateCount < 1) return [];
+  const preferredX = clamp(policy.preferred?.x ?? proposal.box.x, minimumX, maximumX);
+  const preferredY = clamp(policy.preferred?.y ?? proposal.box.y, minimumY, maximumY);
+  return Array.from({ length: policy.candidateCount }, (_, index) => {
+    const fraction = policy.candidateCount === 1 ? 0.5 : index / (policy.candidateCount - 1);
+    const coordinate = minimum + (maximum - minimum) * fraction;
+    return {
+      ...proposal.box,
+      x: axis === 'x' ? coordinate : preferredX,
+      y: axis === 'y' ? coordinate : preferredY,
+    };
+  });
+}
+
+function movableInsertionProposalCandidates(
+  seed: Map<string, PlannedInsertion>,
+  policy: TextCompositionPlannerPolicy,
+): Map<string, PlannedInsertion>[] {
+  const movableEntries = Object.entries(policy.movableInsertionBounds ?? {})
+    .filter(([key]) => seed.has(key));
+  if (movableEntries.length === 0) return [seed];
+  let variants: Map<string, PlannedInsertion>[] = [seed];
+  for (const [key, bounds] of movableEntries) {
+    const proposal = seed.get(key)!;
+    const boxes = movableInsertionBoxes(proposal, bounds);
+    if (boxes.length === 0) continue;
+    variants = variants.flatMap((variant) => boxes.map((box) => {
+      const next = new Map(variant);
+      next.set(key, { ...proposal, box: { ...box } });
+      return next;
+    }));
+  }
+  return variants;
+}
+
+function validateMovableInsertionBounds(
+  insertionProposals: Map<string, PlannedInsertion>,
+  policy: TextCompositionPlannerPolicy,
+  plan: CompositionPlan,
+): void {
+  for (const [key, movable] of Object.entries(policy.movableInsertionBounds ?? {})) {
+    const proposal = insertionProposals.get(key);
+    if (!proposal) {
+      plan.diagnostics.push(diagnostic('error', 'MOVABLE_INSERTION_TARGET_NOT_FOUND', `Movable insertion policy '${key}' does not match a planned insertion.`, { details: { key } }));
+      continue;
+    }
+    const { bounds } = movable;
+    const validNumbers = [bounds?.x, bounds?.y, bounds?.width, bounds?.height].every(Number.isFinite);
+    const validShape = Boolean(bounds && bounds.width > 0 && bounds.height > 0);
+    const containsMeasuredBox = Boolean(bounds && proposal.box.width <= bounds.width && proposal.box.height <= bounds.height);
+    if (!validNumbers || !validShape || !containsMeasuredBox || !Number.isInteger(movable.candidateCount) || movable.candidateCount < 1) {
+      plan.diagnostics.push(diagnostic('error', 'MOVABLE_INSERTION_BOUNDS_INVALID', `Movable insertion frame '${key}' cannot contain its measured insertion box or candidate count.`, { details: { key, bounds, measuredBox: proposal.box, candidateCount: movable.candidateCount } }));
+    }
+  }
 }
 
 /**
@@ -2328,6 +2418,20 @@ function planDocumentOnce(
   insertionProposals: Map<string, PlannedInsertion>,
 ): CompositionPlan {
   const plan = createPlan(policy.minimumFragmentLines);
+  plan.movableInsertionFrames = Object.entries(policy.movableInsertionBounds ?? {}).flatMap(([key, movable]) => {
+    const proposal = insertionProposals.get(key);
+    if (!proposal) return [];
+    return [{
+      id: key,
+      flowId: proposal.flowId,
+      blockId: proposal.blockId,
+      page: proposal.page,
+      box: { ...movable.bounds },
+      axis: movable.axis ?? 'y',
+      candidateCount: movable.candidateCount,
+    } satisfies CompositionMovableInsertionFrame];
+  });
+  validateMovableInsertionBounds(insertionProposals, policy, plan);
   validateGrowthPolicies(template, plan);
   recordPlanningPhase(plan, 'preflight', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { layoutCount: template.layouts.length, flowCount: Object.keys(document.flows).length });
   const pages: PageState[] = [];
@@ -2392,7 +2496,12 @@ export function createTextCompositionPlanner(
       return [plan];
     }
     const candidates: CompositionPlan[] = [];
-    let proposals = seedInsertionProposals(document, template);
+    const seededProposals = seedInsertionProposals(document, template);
+    const movableCandidates = movableInsertionProposalCandidates(seededProposals, policy);
+    if (movableCandidates.length > 1) {
+      return movableCandidates.map((proposalSet) => planDocumentOnce(document, metrics, template, policy, proposalSet));
+    }
+    let proposals = seededProposals;
     let previousSignature: string | undefined;
     let latestPlan = planDocumentOnce(document, metrics, template, policy, proposals);
     for (let iteration = 1; iteration <= maxIterations; iteration += 1) {

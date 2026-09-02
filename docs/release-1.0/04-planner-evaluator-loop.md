@@ -31,6 +31,43 @@ planner może najpierw ułożyć wcześniejszy blok pod insertionem, a evaluator
 odrzuca taki plan przez `INSERTION_SOURCE_ORDER_VIOLATION`; kolejny przebieg
 może przenieść insertion i dopiero wtedy uzyskać plan legalny.
 
+## Wnioski z analizy obecnego mechanizmu
+
+- Stałe sloty `A/B/C` nie tworzą jeszcze sensownej przestrzeni optymalizacji.
+  Przy zachowanej kolejności cytatów wybór jest w praktyce zachłanny i
+  deterministyczny.
+- Obecne „kandydaty” są przebiegami stabilizacyjnymi tego samego mechanizmu,
+  a nie niezależnymi alternatywami pozycji. W realnym editorialu dwa przebiegi
+  miały ten sam score i nie zmieniły widocznego układu.
+- Reflow jest potrzebny tylko wtedy, gdy pozycja insertionu zależy od
+  położenia wcześniejszej treści albo innej przeszkody. Jeżeli box ma już
+  ustaloną, legalną pozycję, wystarczy jedno pełne planowanie i ewaluacja.
+- Rzeczywisty eksperyment optymalizacyjny powinien opisywać w istniejącej
+  propozycji placementu: pozycję preferowaną, dozwolone bounds, zmierzony
+  rozmiar i sposób wyrównania. Planner może wtedy wygenerować skończony zbiór
+  pozycji w bounds, najlepiej wyrównanych do siatki linii, usunąć duplikaty i
+  ocenić każdy kompletny plan.
+- Reflow pozostaje wewnętrznym etapem przygotowania pojedynczego kandydata,
+  jeśli kandydat ma anchor zależny od tekstu. Nie powinien być sam w sobie
+  traktowany jako alternatywa jakościowa.
+- Pierwszy eksperyment ograniczamy do jednego ruchomego cytatu oraz fixture’u
+  z wieloma małymi akapitami. Mierzymy liczbę unikalnych kandydatów, legalność,
+  liczbę przebiegów reflow, score i miarę łamania tekstu. Dopiero po tym można
+  rozważać wiele jednocześnie ruchomych insertionów.
+
+Eksperymentalny seam w plannerze to `movableInsertionBounds`, kluczowany tym
+samym `flow:block`, który już identyfikuje insertion. Każda definicja zawiera
+`bounds`, opcjonalną preferowaną pozycję, oś (`x` lub `y`) i `candidateCount`.
+Rama jest obszarem legalnym, a nie rozmiarem cytatu: planner zachowuje zmierzony
+rozmiar cytatu i przesuwa jego prostokąt tak, aby w całości mieścił się w ramie.
+Każdy wygenerowany prostokąt dostaje osobny pełny plan. Wybrany plan zachowuje
+ramę w `movableInsertionFrames`, dzięki czemu zwykły composition debug może
+wyrysować ją na czerwono. W pierwszym eksperymencie wszystkie sześć pozycji
+było legalnych, pozycje `y` wyniosły `25, 37, 49, 61, 73, 85`, a przebieg reflow
+wyniósł `0` dla każdego kandydata, ponieważ rama nie była zależna od tekstu.
+W fixtureze z osiemnastoma małymi akapitami liczba dzielonych akapitów wyniosła
+`0, 1, 1, 1, 1, 0`; silnik wybrał pierwszego kandydata z najlepszym wynikiem.
+
 Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 
 - insertion proposals;

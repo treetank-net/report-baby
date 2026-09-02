@@ -42,6 +42,7 @@ composition_score:
   column_balance_weight: 12
   column_count: 2
   heading_following_line_bonus: 4
+  paragraph_fragmentation_penalty: 3
 assets:
   report_header_band_width_px: 640
   report_header_band_height_px: 154
