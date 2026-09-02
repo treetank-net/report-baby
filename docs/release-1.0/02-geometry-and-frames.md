@@ -62,6 +62,9 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
   `test-report-chrome` sprawdza ich zgodność z narysowanym PDF-em.
 - trace przechowuje tę samą listę `flowBarrierBoxCandidates` co wykonywalny
   plan; test editorial parity sprawdza identyfikatory i kolejność.
+- evaluator sprawdza rejestr `flowPlacements` niezależnie od deklarowanego
+  `hasContent`: porównuje metadane z faktycznymi liniami oraz odrzuca placement
+  poza jego slotem; regresja jest w `test-editorial-numbered-flow`.
 
 ## Kroki
 

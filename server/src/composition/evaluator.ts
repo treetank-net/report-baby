@@ -108,6 +108,49 @@ function checkEmptyFlowPlacements(document: CompositionDocument, plan: Compositi
     const flowId = 'flowId' in placement ? placement.flowId : blockFlowIds.get(placement.blockId);
     if (flowId) fallbackContent.add(`${flowId}:${placement.slotId}`);
   }
+  if (plan.flowPlacements) {
+    for (const placement of plan.flowPlacements) {
+      const slot = slotFor(plan, placement.slotId);
+      if (!slot) {
+        diagnostics.push(error(
+          'FLOW_PLACEMENT_TARGET_MISSING',
+          `Flow placement '${placement.id}' targets missing slot '${placement.slotId}'.`,
+          { flowId: placement.flowId, page: placement.page, slotId: placement.slotId },
+        ));
+      } else if (placement.page !== slot.page || !fitsInside(placement.box, slot.box)) {
+        diagnostics.push(error(
+          'FLOW_PLACEMENT_OUTSIDE_SLOT',
+          `Flow placement '${placement.id}' leaves slot '${slot.id}'.`,
+          { flowId: placement.flowId, page: placement.page, slotId: placement.slotId },
+        ));
+      }
+      const lines = allLines(plan).filter((line) => line.flowId === placement.flowId && line.slotId === placement.slotId);
+      const actualBlockIds = new Set(lines.map((line) => line.blockId));
+      for (const item of [...plan.placements, ...plan.blockPlacements, ...plan.tablePlacements]) {
+        const flowId = 'flowId' in item ? item.flowId : blockFlowIds.get(item.blockId);
+        if (flowId === placement.flowId && item.slotId === placement.slotId) actualBlockIds.add(item.blockId);
+      }
+      const expectedBlockIds = [...actualBlockIds].sort();
+      const declaredBlockIds = [...new Set(placement.blockIds)].sort();
+      if (placement.hasContent !== (expectedBlockIds.length > 0)
+        || placement.lineCount !== lines.length
+        || JSON.stringify(declaredBlockIds) !== JSON.stringify(expectedBlockIds)) {
+        diagnostics.push(error(
+          'FLOW_PLACEMENT_CONTENT_MISMATCH',
+          `Flow placement '${placement.id}' does not match the content actually assigned to its slot.`,
+          {
+            flowId: placement.flowId,
+            page: placement.page,
+            slotId: placement.slotId,
+            details: {
+              declared: { hasContent: placement.hasContent, lineCount: placement.lineCount, blockIds: declaredBlockIds },
+              actual: { hasContent: expectedBlockIds.length > 0, lineCount: lines.length, blockIds: expectedBlockIds },
+            },
+          },
+        ));
+      }
+    }
+  }
   const registry = plan.flowPlacements ?? plan.slots
     .filter((slot): slot is CompositionSlot & { flowId: string; routeIndex: number } => slot.flowId !== undefined && slot.routeIndex !== undefined && slot.kind === 'text')
     .map((slot) => ({

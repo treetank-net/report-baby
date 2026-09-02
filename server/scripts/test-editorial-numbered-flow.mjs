@@ -547,6 +547,20 @@ try {
     /rejected and cannot be rendered/u,
     'a plan rejected for an empty placement must not reach the PDF backend',
   );
+  const fakeContentPlan = structuredClone(result.plan);
+  const fakeContentPlacement = fakeContentPlan.flowPlacements.find((placement) => !placement.hasContent);
+  assert.ok(fakeContentPlacement, 'fixture must expose an empty flow placement for metadata validation');
+  fakeContentPlacement.hasContent = true;
+  const fakeContentEvaluation = evaluateCompositionPlan(result.document, fakeContentPlan);
+  assert.equal(fakeContentEvaluation.status, 'rejected', 'a placement marked as occupied without content must reject the plan');
+  assert.ok(fakeContentEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'FLOW_PLACEMENT_CONTENT_MISMATCH'), 'fake placement occupancy must be explicit');
+  const invalidPlacementGeometryPlan = structuredClone(result.plan);
+  const invalidPlacementGeometry = invalidPlacementGeometryPlan.flowPlacements.find((placement) => placement.hasContent);
+  assert.ok(invalidPlacementGeometry, 'fixture must expose an occupied flow placement for geometry validation');
+  invalidPlacementGeometry.box.x += invalidPlacementGeometry.box.width + 1;
+  const invalidPlacementGeometryEvaluation = evaluateCompositionPlan(result.document, invalidPlacementGeometryPlan);
+  assert.equal(invalidPlacementGeometryEvaluation.status, 'rejected', 'a flow placement outside its slot must reject the plan');
+  assert.ok(invalidPlacementGeometryEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'FLOW_PLACEMENT_OUTSIDE_SLOT'), 'out-of-slot flow placement must be explicit');
   assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_STABILIZED'), 'editorial fixture must finish with a stabilized insertion plan');
