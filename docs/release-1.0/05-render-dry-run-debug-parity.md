@@ -22,6 +22,8 @@ wyliczania geometrii.
 - część chrome jest rysowana w `report-renderer.ts` poza composition planem;
 - overlay pokazuje już m.in. placements, obstacles, flow barriers, padding i
   margin, ale wymaga dalszej kontroli czy ramy pochodzą bezpośrednio z planu.
+- manifest raportu przekazuje `compositionPlan` i `compositionEvaluation`, a
+  page-layout gate korzysta z planu zamiast odtwarzać kolumny z template’u.
 
 ## Kroki
 

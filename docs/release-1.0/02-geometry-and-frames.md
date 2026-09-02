@@ -46,6 +46,17 @@ Ta mapa opisuje istniejące funkcje, nie wprowadza nowych encji. Jeżeli kolejny
 etap potrzebuje tej samej informacji, powinien rozszerzyć wynik właściciela,
 a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
 
+## Wykonane w tym przebiegu
+
+- CLI raportu zapisuje `compositionPlan` i `compositionEvaluation` użyte przy
+  renderowaniu w manifeście.
+- `page-layout-editorial-two-column` pobiera `main` `flowPlacements` z tego
+  planu; nie czyta już osobno `editorial-two-column/template.yml`.
+- Gate przelicza jednostki planu (mm) na jednostki odczytu PDF (pt) dopiero na
+  granicy pomiaru artefaktu. Sam plan pozostaje w jednostkach geometrii
+  composition.
+- Test adaptera geometrii oraz pełny composition gate przechodzą.
+
 ## Kroki
 
 1. Narysować tabelę wejście → wyjście dla każdej funkcji geometrycznej:

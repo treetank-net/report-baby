@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { readBrandShowcase, resolveBrandContext, type BrandOverrides } from './brand-context.js';
 import { getBrandDir, getBrandSourceRoots } from './config.js';
-import { renderReportPdf } from './report-renderer.js';
+import { renderReportPdfDetailed } from './report-renderer.js';
 import type { RenderTheme } from './core/model/render-theme.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnostics } from './slides.js';
 import { resolveSlideDeck } from './slide-context.js';
@@ -152,15 +152,19 @@ async function renderReportInput(args: CliArgs, input: any): Promise<Record<stri
   const data = compositionInputSchema.parse(inputData);
   const outputs: Record<string, string> = {};
   const renderWarnings: string[] = [];
+  let composition: Awaited<ReturnType<typeof renderReportPdfDetailed>>['diagnostics']['composition'];
   if (args.formats.includes('pdf')) {
     const path = join(args.out, 'report.pdf');
-    await writeFile(path, await renderReportPdf(template, data, context.theme, renderWarnings, context.sourceContext));
+    const rendered = await renderReportPdfDetailed(template, data, context.theme, renderWarnings, context.sourceContext);
+    await writeFile(path, rendered.buffer);
+    composition = rendered.diagnostics.composition;
     outputs.pdf = manifestPath(args.out, path);
   }
   return {
     outputs,
     diagnostics: { ...context.diagnostics, warnings: [...context.diagnostics.warnings, ...renderWarnings] },
     theme: themeSummary(context.theme),
+    ...(composition ? { compositionPlan: composition.plan, compositionEvaluation: composition.evaluation } : {}),
   };
 }
 

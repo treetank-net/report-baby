@@ -911,30 +911,48 @@ function gatePageGeometry(item, rendered, checks) {
   const path = join(rendered.outputDir, 'report.pdf');
   const buffer = readIfExists(path);
   if (!buffer) return;
-  const source = parseYaml(readFileSync(join(REPO_ROOT, 'server/templates/pages/editorial-two-column/template.yml'), 'utf8'));
-  const page = source.page;
-  const width = page.width * MM_TO_PT;
-  const height = page.height * MM_TO_PT;
-  const left = page.margins.left * MM_TO_PT;
-  const right = width - page.margins.right * MM_TO_PT;
-  const columns = [];
-  let x = left;
-  for (const columnWidth of page.columns.widths) {
-    columns.push({ x, width: columnWidth * MM_TO_PT });
-    x += (columnWidth + page.columns.gutter) * MM_TO_PT;
+  const plan = rendered.manifest?.compositionPlan;
+  if (!plan || !Array.isArray(plan.pages) || !Array.isArray(plan.flowPlacements)) {
+    checks.push({ gate: 'page-layout', name: 'composition plan is available', status: 'fail', message: 'the report manifest does not expose the plan used to render the PDF' });
+    return;
   }
-  const flowTop = Math.max(page.margins.top * MM_TO_PT, (page.reserved_bands.header.y + page.reserved_bands.header.height) * height);
-  const flowBottom = Math.min(height - page.margins.bottom * MM_TO_PT, page.reserved_bands.footer.y * height);
-  const inFlow = (value) => (value >= flowTop - 2 && value <= flowBottom + 2) || (value >= height - flowBottom - 2 && value <= height - flowTop + 2);
   const streams = pdfPageContentStreams(buffer);
   const starts = [];
   const violations = [];
-  for (const stream of streams) {
+  const tolerance = 2;
+  const within = (value, start, end) => value >= start - tolerance && value <= end + tolerance;
+  const yInBox = (value, placement, height) => within(value, placement.box.y, placement.box.y + placement.box.height)
+    || within(height - value, placement.box.y, placement.box.y + placement.box.height);
+  const mainPlacementsByPage = new Map();
+  for (const placement of plan.flowPlacements.filter((candidate) => candidate.flowId === 'main')) {
+    const pagePlacements = mainPlacementsByPage.get(placement.page) ?? [];
+    pagePlacements.push({
+      ...placement,
+      box: {
+        x: placement.box.x * MM_TO_PT,
+        y: placement.box.y * MM_TO_PT,
+        width: placement.box.width * MM_TO_PT,
+        height: placement.box.height * MM_TO_PT,
+      },
+    });
+    mainPlacementsByPage.set(placement.page, pagePlacements);
+  }
+  if (mainPlacementsByPage.size === 0) {
+    checks.push({ gate: 'page-layout', name: 'main flow placements are available', status: 'fail', message: 'the composition plan contains no main-flow placements' });
+    return;
+  }
+  for (const [pageIndex, stream] of streams.entries()) {
+    const pageNumber = pageIndex + 1;
+    const page = plan.pages.find((candidate) => candidate.page === pageNumber);
+    const placements = mainPlacementsByPage.get(pageNumber) ?? [];
+    if (!page || placements.length === 0) continue;
+    const pageHeight = page.height * MM_TO_PT;
     for (const text of pdfTextOnFill(stream).drawn) {
-      if (!inFlow(text.y)) continue;
+      if (!placements.some((placement) => yInBox(text.y, placement, pageHeight))) continue;
       starts.push(text.x);
-      const insideColumn = columns.some((column) => text.x >= column.x - 2 && text.x <= column.x + column.width + 2);
-      if (text.x < left - 2 || text.x > right + 2 || !insideColumn) violations.push(`text start x=${text.x.toFixed(1)} is outside a configured column`);
+      const insidePlacement = placements.some((placement) => yInBox(text.y, placement, pageHeight)
+        && within(text.x, placement.box.x, placement.box.x + placement.box.width));
+      if (!insidePlacement) violations.push(`text start x=${text.x.toFixed(1)} is outside a planned main-flow placement on page ${pageNumber}`);
     }
   }
   if (starts.length === 0) {
@@ -951,7 +969,9 @@ function gatePageGeometry(item, rendered, checks) {
     status: violations.length === 0 ? 'pass' : 'fail',
     message: violations.length === 0 ? `${starts.length} flow text run(s) stayed inside the configured page columns` : violations.slice(0, 3).join('; '),
   });
-  const seenColumns = columns.filter((column) => starts.some((start) => Math.abs(start - column.x) <= 2)).length;
+  const columns = [...new Map([...mainPlacementsByPage.values()].flat()
+    .map((placement) => [`${placement.box.x.toFixed(3)}:${placement.box.width.toFixed(3)}`, { x: placement.box.x, width: placement.box.width }])).values()];
+  const seenColumns = columns.filter((column) => starts.some((start) => Math.abs(start - column.x) <= tolerance)).length;
   checks.push({
     gate: 'page-layout',
     name: 'both columns receive flow',

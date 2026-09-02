@@ -119,6 +119,8 @@ const reportPayloadSchema = z.object({
   outputs: outputSchema,
   diagnostics: diagnosticsSchema,
   theme: themeSchema,
+  compositionPlan: z.record(z.unknown()).optional(),
+  compositionEvaluation: z.record(z.unknown()).optional(),
 }).strict();
 
 const deckPayloadSchema = z.object({
