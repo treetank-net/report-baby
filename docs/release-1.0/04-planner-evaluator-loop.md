@@ -1,6 +1,7 @@
 # Plan 04 — pętla planner–evaluator
 
-Status: główny krok wartości produktowej; zależy od planów 01–03
+Status: seam selekcji kandydatów jest zaimplementowany; feedback-driven rewrites i
+kontrolowany wybór pierwszej decyzji layoutowej pozostają do wykonania
 
 ## Cel
 
@@ -20,9 +21,12 @@ wyniku ewaluacji do kolejnego kroku planera.
 
 ## Stan obecny
 
-Planner ma pętlę w `createTextCompositionPlanner`, ale stabilizuje ona głównie
-sygnaturę insertion proposals. `planDocumentOnce()` buduje pełny plan, a
-engine wywołuje evaluator dopiero po zakończeniu pracy planera.
+`createTextCompositionPlanner` udostępnia teraz istniejące przebiegi reflow jako
+deterministyczne `planCandidates`. Engine ewaluje każdy kandydat raz i wybiera
+legalny plan z najwyższym score; przy równym wyniku zachowuje wcześniejszego
+kandydata. Jednoplanowa ścieżka pozostaje kompatybilna dla innych plannerów.
+Feedback evaluatora nie zmienia jeszcze kolejnego przebiegu planera — to jest
+następny, osobny krok.
 
 Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 
@@ -73,6 +77,7 @@ która decyzja poprawiła lub zepsuła układ.
 
 - dwa legalne warianty wybierają wariant z wyższym score;
 - wariant nielegalny nie wygrywa przez wysoki score;
+- realne przebiegi insertion reflow są wystawione jako kandydaci;
 - limit iteracji jest respektowany;
 - kolejność wariantów jest deterministyczna;
 - jeden wariant ma dokładnie jedną ewaluację;

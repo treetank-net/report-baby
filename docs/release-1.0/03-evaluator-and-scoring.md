@@ -1,6 +1,7 @@
 # Plan 03 — evaluator i score
 
-Status: hard gate i pierwszy konfigurowalny score są zaimplementowane; pozostały kolejne miary jakości i wybór wariantu
+Status: hard gate, pierwszy konfigurowalny score i porównanie kandydatów są
+zaimplementowane; pozostały kolejne miary jakości
 
 ## Cel
 

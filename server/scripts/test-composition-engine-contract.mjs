@@ -19,7 +19,7 @@ if (build.status !== 0) throw new Error(`composition engine contract bundle fail
 
 try {
   const composition = await import(bundle);
-  const { combineJsPdfCompositionBlockCapabilities, createCompositionEngine, renderComposition } = composition.default ?? composition;
+  const { combineJsPdfCompositionBlockCapabilities, compareCompositionEvaluations, createCompositionEngine, renderComposition } = composition.default ?? composition;
   const document = { flows: { main: { id: 'main', blocks: [], continuation: 'allowed' } } };
   const plan = {
     pages: [],
@@ -58,6 +58,51 @@ try {
   assert.equal(result.plan, plan);
   assert.equal(result.evaluation.status, 'accepted');
   assert.equal(evaluationCalls, 1, 'the composition engine must evaluate one plan exactly once');
+  const candidatePlans = [
+    { ...plan, trace: { phases: [] } },
+    { ...plan, trace: { phases: [] } },
+    { ...plan, trace: { phases: [] } },
+  ];
+  const candidateEvaluations = [
+    { status: 'rejected', diagnostics: [{ code: 'synthetic', severity: 'error' }], hardViolations: [{ code: 'synthetic', severity: 'error' }], score: 999, scoreBreakdown: [], residualContent: [] },
+    { status: 'accepted', diagnostics: [], hardViolations: [], score: 101, scoreBreakdown: [], residualContent: [] },
+    { status: 'accepted', diagnostics: [], hardViolations: [], score: 102, scoreBreakdown: [], residualContent: [] },
+  ];
+  let candidateEvaluationCalls = 0;
+  const candidateEngine = createCompositionEngine(
+    {
+      plan() { throw new Error('candidate planner must use planCandidates'); },
+      planCandidates() { return candidatePlans; },
+    },
+    {
+      evaluate(input, planned) {
+        assert.equal(input, document);
+        const index = candidatePlans.indexOf(planned);
+        assert.notEqual(index, -1);
+        candidateEvaluationCalls += 1;
+        return candidateEvaluations[index];
+      },
+    },
+  );
+  const candidateResult = candidateEngine.plan(document, metrics);
+  assert.equal(candidateResult.plan, candidatePlans[2], 'candidate engine must choose the highest-scoring legal plan');
+  assert.equal(candidateResult.evaluation, candidateEvaluations[2]);
+  assert.equal(candidateEvaluationCalls, candidatePlans.length, 'each candidate must be evaluated exactly once');
+  assert.ok(compareCompositionEvaluations(candidateEvaluations[2], candidateEvaluations[0]) < 0);
+  assert.deepEqual(candidateResult.plan.trace.phases.at(-1), {
+    name: 'evaluation',
+    status: 'completed',
+    details: {
+      diagnosticCount: 0,
+      errorCount: 0,
+      candidates: [
+        { index: 0, status: 'rejected', score: 999, hardViolationCount: 1 },
+        { index: 1, status: 'accepted', score: 101, hardViolationCount: 0 },
+        { index: 2, status: 'accepted', score: 102, hardViolationCount: 0 },
+      ],
+      selectedCandidate: 2,
+    },
+  });
   const capabilityCalls = [];
   const capabilities = combineJsPdfCompositionBlockCapabilities({
     image: {

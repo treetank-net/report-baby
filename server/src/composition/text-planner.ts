@@ -2384,36 +2384,43 @@ export function createTextCompositionPlanner(
   template: CompositionTemplate,
   policy: TextCompositionPlannerPolicy = {},
 ): CompositionPlanner {
+  function planCandidates(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan[] {
+    const maxIterations = policy.maxPlanningIterations ?? 1;
+    if (!Number.isInteger(maxIterations) || maxIterations < 1) {
+      const plan = createPlan(policy.minimumFragmentLines);
+      plan.diagnostics.push(diagnostic('error', 'PLANNER_ITERATION_POLICY_INVALID', 'Planner iteration count must be a positive integer.', { details: { maxIterations } }));
+      return [plan];
+    }
+    const candidates: CompositionPlan[] = [];
+    let proposals = seedInsertionProposals(document, template);
+    let previousSignature: string | undefined;
+    let latestPlan = planDocumentOnce(document, metrics, template, policy, proposals);
+    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+      candidates.push(latestPlan);
+      const nextProposals = insertionProposalsFromPlan(document, template, latestPlan);
+      const signature = insertionProposalSignature(nextProposals);
+      latestPlan.decisions.push({ code: 'PLANNER_PASS_COMPLETED', iteration, insertionCount: nextProposals.size, signature });
+      recordPlanningPhase(latestPlan, 'reflow', 'completed', { insertionCount: nextProposals.size, signature }, iteration);
+      if (signature === previousSignature || (iteration === 1 && nextProposals.size === 0)) {
+        latestPlan.decisions.push({ code: 'PLANNER_STABILIZED', iteration, insertionCount: nextProposals.size });
+        return candidates;
+      }
+      if (iteration === maxIterations) {
+        recordPlanningPhase(latestPlan, 'reflow', 'failed', { insertionCount: nextProposals.size, signature, iterations: maxIterations }, iteration);
+        latestPlan.diagnostics.push(diagnostic('error', 'PLANNER_DID_NOT_STABILIZE', `Planner did not stabilize after ${maxIterations} pass(es).`, { details: { iterations: maxIterations, insertionCount: nextProposals.size } }));
+        return candidates;
+      }
+      proposals = nextProposals;
+      previousSignature = signature;
+      latestPlan = planDocumentOnce(document, metrics, template, policy, proposals);
+    }
+    return candidates;
+  }
+
   return {
     plan(document, metrics) {
-      const maxIterations = policy.maxPlanningIterations ?? 1;
-      if (!Number.isInteger(maxIterations) || maxIterations < 1) {
-        const plan = createPlan(policy.minimumFragmentLines);
-        plan.diagnostics.push(diagnostic('error', 'PLANNER_ITERATION_POLICY_INVALID', 'Planner iteration count must be a positive integer.', { details: { maxIterations } }));
-        return plan;
-      }
-      let proposals = seedInsertionProposals(document, template);
-      let previousSignature: string | undefined;
-      let latestPlan = planDocumentOnce(document, metrics, template, policy, proposals);
-      for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-        const nextProposals = insertionProposalsFromPlan(document, template, latestPlan);
-        const signature = insertionProposalSignature(nextProposals);
-        latestPlan.decisions.push({ code: 'PLANNER_PASS_COMPLETED', iteration, insertionCount: nextProposals.size, signature });
-        recordPlanningPhase(latestPlan, 'reflow', 'completed', { insertionCount: nextProposals.size, signature }, iteration);
-        if (signature === previousSignature || (iteration === 1 && nextProposals.size === 0)) {
-          latestPlan.decisions.push({ code: 'PLANNER_STABILIZED', iteration, insertionCount: nextProposals.size });
-          return latestPlan;
-        }
-        if (iteration === maxIterations) {
-          recordPlanningPhase(latestPlan, 'reflow', 'failed', { insertionCount: nextProposals.size, signature, iterations: maxIterations }, iteration);
-          latestPlan.diagnostics.push(diagnostic('error', 'PLANNER_DID_NOT_STABILIZE', `Planner did not stabilize after ${maxIterations} pass(es).`, { details: { iterations: maxIterations, insertionCount: nextProposals.size } }));
-          return latestPlan;
-        }
-        proposals = nextProposals;
-        previousSignature = signature;
-        latestPlan = planDocumentOnce(document, metrics, template, policy, proposals);
-      }
-      return latestPlan;
+      return planCandidates(document, metrics).at(-1)!;
     },
+    planCandidates,
   };
 }

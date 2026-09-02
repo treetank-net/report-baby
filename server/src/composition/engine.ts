@@ -374,6 +374,8 @@ export function compareCompositionEvaluations(left: CompositionEvaluation, right
 
 export interface CompositionPlanner {
   plan(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan;
+  /** Optional deterministic candidate set for planner/evaluator selection. */
+  planCandidates?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan[];
 }
 
 export interface CompositionEvaluator {
@@ -412,14 +414,28 @@ export function renderComposition<Artifact>(
 export function createCompositionEngine(planner: CompositionPlanner, evaluator: CompositionEvaluator): CompositionEngine {
   return {
     plan(document, metrics) {
-      const plan = planner.plan(document, metrics);
-      const evaluation = evaluator.evaluate(document, plan);
+      const candidates = planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)];
+      if (candidates.length === 0) throw new Error('Composition planner returned no candidates.');
+      const evaluations = candidates.map((candidate) => evaluator.evaluate(document, candidate));
+      let selectedCandidate = 0;
+      for (let index = 1; index < evaluations.length; index += 1) {
+        if (compareCompositionEvaluations(evaluations[index], evaluations[selectedCandidate]) < 0) selectedCandidate = index;
+      }
+      const plan = candidates[selectedCandidate];
+      const evaluation = evaluations[selectedCandidate];
       plan.trace?.phases.push({
         name: 'evaluation',
         status: evaluation.status === 'rejected' ? 'failed' : 'completed',
         details: {
           diagnosticCount: evaluation.diagnostics.length,
           errorCount: evaluation.diagnostics.filter((item) => item.severity === 'error').length,
+          candidates: evaluations.map((candidateEvaluation, index) => ({
+            index,
+            status: candidateEvaluation.status,
+            score: candidateEvaluation.score,
+            hardViolationCount: candidateEvaluation.hardViolations.length,
+          })),
+          selectedCandidate,
         },
       });
       return { plan, evaluation };

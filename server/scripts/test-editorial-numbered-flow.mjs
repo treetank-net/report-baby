@@ -589,7 +589,8 @@ try {
   assert.ok(invalidBarrierCandidateEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'FLOW_BARRIER_CANDIDATE_OUTSIDE_PLACEMENT'), 'out-of-placement barrier candidate must be explicit');
   assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
-  assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_STABILIZED'), 'editorial fixture must finish with a stabilized insertion plan');
+  const evaluationPhase = result.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
+  assert.ok(evaluationPhase?.details?.candidates?.length >= 1, 'editorial fixture must record evaluated planner candidates');
   assert.equal(result.plan.lines.some((line) => line.layer === 'insertion'), false, 'ordinary flow must not contain insertion lines');
   assert.equal(new Set((result.plan.insertionLines ?? []).map((line) => line.blockId)).size, 4, 'all four authored quotes must be present in the insertion layer');
   assert.equal((result.plan.insertionLines ?? []).every((line) => line.flowId === 'quotes'), true, 'quote text must remain in the quote flow');
