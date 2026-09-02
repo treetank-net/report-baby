@@ -56,11 +56,20 @@ export interface CompositionBox {
   height: number;
 }
 
+export interface CompositionPageChrome {
+  headerBand: CompositionBox;
+  headerRule?: CompositionBox;
+  footerRule: CompositionBox;
+  pageNumber: CompositionBox;
+  lockup?: CompositionBox;
+}
+
 export interface CompositionPagePlan {
   page: number;
   layoutId: string;
   width: number;
   height: number;
+  chrome?: CompositionPageChrome;
 }
 
 export interface CompositionSlot {

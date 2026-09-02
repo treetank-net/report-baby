@@ -120,6 +120,10 @@ try {
   assertWordInPlacement(rendered.pages[0], 'CHROME_HEADER_SUBTITLE', header, 'header');
 
   for (const page of rendered.pages) {
+    const pagePlan = plan.pages[page.page - 1];
+    assert.ok(pagePlan?.chrome, `composition plan must expose chrome geometry on page ${page.page}`);
+    assert.ok(pagePlan.chrome.footerRule, `composition plan must expose footer rule geometry on page ${page.page}`);
+    assert.ok(pagePlan.chrome.pageNumber, `composition plan must expose page number geometry on page ${page.page}`);
     const footer = placement(plan, 'footer', page.page);
     assert.ok(footer, `footer flow must have a planned placement on page ${page.page}`);
     assertWordInPlacement(page, 'CHROME_FOOTER_ANCHOR', footer, 'footer');
@@ -127,9 +131,10 @@ try {
     const pageWidthMm = plan.pages[page.page - 1].width;
 
     const footerLine = rendered.result.drawings.find((drawing) => drawing.page === page.page && drawing.kind === 'line'
-      && Math.abs(drawing.y - footer.box.y) <= tolerance
+      && Math.abs(drawing.x - pagePlan.chrome.footerRule.x) <= tolerance
+      && Math.abs(drawing.y - pagePlan.chrome.footerRule.y) <= tolerance
       && drawing.width > pageWidthMm * 0.7);
-    assert.ok(footerLine, `footer rule must align with planned footer on page ${page.page}: ${JSON.stringify({ footer: footer.box, lines: rendered.result.drawings.filter((drawing) => drawing.page === page.page && drawing.kind === 'line' && drawing.width > pageWidthMm * 0.7) })}`);
+    assert.ok(footerLine, `footer rule must align with planned chrome on page ${page.page}: ${JSON.stringify({ chrome: pagePlan.chrome, lines: rendered.result.drawings.filter((drawing) => drawing.page === page.page && drawing.kind === 'line' && drawing.width > pageWidthMm * 0.7) })}`);
     assert.ok(Math.abs(footerLine.x - config.pdf.margin) <= tolerance, `footer rule starts outside configured margin on page ${page.page}`);
     assert.ok(Math.abs((footerLine.x + footerLine.width) - (pageWidthMm - config.pdf.margin)) <= tolerance, `footer rule ends outside configured margin on page ${page.page}: ${JSON.stringify(footerLine)}`);
   }

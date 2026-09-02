@@ -1,6 +1,6 @@
 # Plan 02 — geometria i wspólne ramy
 
-Status: pierwszy seam zabezpieczony testem; pozostała obserwowalność planu
+Status: chrome ma wspólną geometrię planu; pozostała obserwowalność wszystkich ram
 
 ## Cel
 
@@ -56,6 +56,10 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
   granicy pomiaru artefaktu. Sam plan pozostaje w jednostkach geometrii
   composition.
 - Test adaptera geometrii oraz pełny composition gate przechodzą.
+- `CompositionPagePlan.chrome` zawiera obliczone ramy header band, opcjonalnej
+  reguły nagłówka, reguły footera, numeru strony i lockupu.
+- zwykły renderer oraz debug overlay używają tych samych ramek chrome; test
+  `test-report-chrome` sprawdza ich zgodność z narysowanym PDF-em.
 
 ## Kroki
 
@@ -104,7 +108,8 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
 - Ostateczne miejsce reguły przesuwania `blockFrames` wymaga uzupełnienia po
   punkcie 1 i 2. Nie należy przenosić tej reguły wcześniej.
 - Zakres chrome, który musi ograniczać flow, wymaga uzupełnienia po planie 05,
-  gdy zostanie porównany z faktycznym renderem.
+  gdy zostanie porównany z faktycznym renderem. Obecny krok opisuje i współdzieli
+  geometrię chrome, ale jeszcze nie dodaje jej jako obstacle dla flow.
 - Czy `flowBarrierBoxCandidates` powinny stać się wejściem dla pierwszej pętli
   wymaga uzupełnienia po testach z planu 04. Na tym etapie są tylko danymi
   diagnostycznymi i potencjalnymi punktami decyzji.

@@ -29,7 +29,7 @@ import {
 import type { CompositionBlockKind } from './composition/model.js';
 import type { JsPdfCompositionBlockCapability } from './composition/js-pdf-adapter.js';
 import { renderComposition } from './composition/engine.js';
-import type { CompositionBox, CompositionPlan } from './composition/engine.js';
+import type { CompositionBox, CompositionPageChrome, CompositionPlan } from './composition/engine.js';
 import { assertReportPlan } from './report-plan-assertions.js';
 import { installReportDrawingRecorder, type ReportDrawing } from './report-drawing-recorder.js';
 import { loadRenderFontSet, newPdf, pdfFont, readableTextColor } from './render-primitives.js';
@@ -100,19 +100,19 @@ function drawContainedImage(doc: jsPDF, asset: Awaited<ReturnType<typeof resolve
   return rendered;
 }
 
-function drawReportChrome(doc: jsPDF, page: number, pageCount: number, geometry: PageGeometry, theme: RenderTheme, logo: Awaited<ReturnType<typeof resolveImageAsset>> | undefined, brand: string | undefined, lockupBox?: CompositionBox, continuation = false): void {
+function drawReportChrome(doc: jsPDF, page: number, pageCount: number, geometry: PageGeometry, theme: RenderTheme, logo: Awaited<ReturnType<typeof resolveImageAsset>> | undefined, brand: string | undefined, chrome: CompositionPageChrome, continuation = false): void {
   doc.setFillColor(...rgb(theme.background));
   doc.rect(0, 0, geometry.width, geometry.height, 'F');
-  const headerBandHeight = geometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight;
+  const headerBandHeight = chrome.headerBand.height;
   const band = theme.reportHeaderStyle === 'accent-band' ? theme.primary : theme.reportHeaderStyle === 'dark-band' ? theme.background : undefined;
   if (band) {
     doc.setFillColor(...rgb(band));
-    doc.rect(0, 0, geometry.width, headerBandHeight, 'F');
+    doc.rect(chrome.headerBand.x, chrome.headerBand.y, chrome.headerBand.width, chrome.headerBand.height, 'F');
   }
   const lockup = continuation ? REPORT_LOCKUP.continuation : REPORT_LOCKUP.standard;
   const logoWidth = theme.logoMarkPath || theme.logoWhiteMarkPath ? lockup.markWidthMm : lockup.fullLogoWidthMm;
-  const logoX = lockupBox?.x ?? PDF_CONFIG.margin;
-  const logoY = continuation ? PDF_CONFIG.headerRepeatLogoY : lockupBox?.y ?? PDF_CONFIG.headerLogoY;
+  const logoX = chrome.lockup?.x ?? PDF_CONFIG.margin;
+  const logoY = continuation ? PDF_CONFIG.headerRepeatLogoY : chrome.lockup?.y ?? PDF_CONFIG.headerLogoY;
   const logoHeight = lockup.maxHeightMm;
   const renderedLogo = drawContainedImage(doc, logo, logoX, logoY, logoWidth, logoHeight) ?? { x: logoX, y: logoY, width: logoWidth, height: logoHeight };
   if (brand && theme.showReportBrandName) {
@@ -129,17 +129,17 @@ function drawReportChrome(doc: jsPDF, page: number, pageCount: number, geometry:
   if (!band && theme.reportHeaderStyle !== 'image-band') {
     doc.setDrawColor(...rgb(theme.primary));
     doc.setLineWidth(continuation ? PDF_CONFIG.headerRepeatRuleWidth : PDF_CONFIG.headerRuleWidth);
-    const ruleY = headerBandHeight - PDF_CONFIG.headerBottomGap;
-    doc.line(PDF_CONFIG.margin, ruleY, geometry.width - PDF_CONFIG.margin, ruleY);
+    const rule = chrome.headerRule;
+    if (rule) doc.line(rule.x, rule.y, rule.x + rule.width, rule.y);
   }
-  const footerTop = geometry.bands.footer?.top ?? PDF_CONFIG.footerY - PDF_CONFIG.footerFontSize;
   doc.setDrawColor(...rgb(theme.line));
   doc.setLineWidth(PDF_CONFIG.footerLineWidth);
-  doc.line(PDF_CONFIG.margin, footerTop, geometry.width - PDF_CONFIG.margin, footerTop);
+  doc.line(chrome.footerRule.x, chrome.footerRule.y, chrome.footerRule.x + chrome.footerRule.width, chrome.footerRule.y);
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.footerFontSize);
   doc.setTextColor(...rgb(theme.muted));
-  doc.text(`${page} / ${pageCount}`, geometry.width - PDF_CONFIG.margin, footerTop + PDF_CONFIG.footerBaselineOffset, { align: 'right' });
+  const pageNumber = `${page} / ${pageCount}`;
+  doc.text(pageNumber, chrome.pageNumber.x + chrome.pageNumber.width, chrome.pageNumber.y + chrome.pageNumber.height, { align: 'right' });
 }
 
 function configNumber(value: unknown, key: string): number {
@@ -187,9 +187,10 @@ function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionR
     doc.setTextColor(...rgb(theme.primary));
     doc.text(`DEBUG overlay p${page.page} - ${composition.evaluation.status}`, debug.pagePadding / 2, debug.pagePadding);
 
-    const headerBandBottom = pageGeometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight;
-    drawRect({ x: 0, y: 0, width: page.width, height: headerBandBottom }, debug.lineWidth, theme.muted, true);
-    drawLabel('CHROME header band', { x: 0, y: 0, width: page.width, height: headerBandBottom }, page, theme.muted, 'side');
+    const chrome = page.chrome;
+    const headerBand = chrome?.headerBand ?? { x: 0, y: 0, width: page.width, height: pageGeometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight };
+    drawRect(headerBand, debug.lineWidth, theme.muted, true);
+    drawLabel('CHROME header band', headerBand, page, theme.muted, 'side');
 
     for (const placement of plan.flowPlacements ?? []) {
       if (placement.page !== page.page) continue;
@@ -244,20 +245,11 @@ function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionR
       drawLabel(`TABLE ${placement.blockId}`, placement.box, page, theme.primary);
     }
 
-    const footerSlot = plan.slots.find((slot) => slot.page === page.page && slot.id.endsWith(':flow:footer'));
-    const footerTop = footerSlot?.box.y ?? PDF_CONFIG.footerY - PDF_CONFIG.footerFontSize;
-    doc.setFont(pdfFont(theme), 'normal');
-    doc.setFontSize(PDF_CONFIG.footerFontSize);
-    const pageNumber = `${page.page} / ${plan.pages.length}`;
-    const pageNumberWidth = doc.getTextWidth(pageNumber);
-    const pageNumberBox: CompositionBox = {
-      x: page.width - PDF_CONFIG.margin - pageNumberWidth,
-      y: footerTop,
-      width: pageNumberWidth,
-      height: doc.getTextDimensions(pageNumber).h,
-    };
-    drawRect(pageNumberBox, debug.lineWidth, theme.muted);
-    drawLabel('CHROME footer {page}/{pages}', pageNumberBox, page, theme.muted, 'side');
+    const pageNumberBox = chrome?.pageNumber;
+    if (pageNumberBox) {
+      drawRect(pageNumberBox, debug.lineWidth, theme.muted);
+      drawLabel('CHROME footer {page}/{pages}', pageNumberBox, page, theme.muted, 'side');
+    }
 
     for (const line of lines) {
       if (line.page !== page.page) continue;
@@ -310,6 +302,38 @@ interface PreparedReportComposition {
   composition: ReportCompositionResult;
   drawings: ReportDrawing[];
   render: () => void;
+}
+
+function pageChrome(doc: jsPDF, page: CompositionPlan['pages'][number], pageCount: number, geometry: PageGeometry, theme: RenderTheme, lockup?: CompositionBox): CompositionPageChrome {
+  const headerBandHeight = geometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight;
+  const headerBand: CompositionBox = { x: 0, y: 0, width: page.width, height: headerBandHeight };
+  const headerRuleY = headerBandHeight - PDF_CONFIG.headerBottomGap;
+  const headerRule = theme.reportHeaderStyle === 'accent-band' || theme.reportHeaderStyle === 'dark-band' || theme.reportHeaderStyle === 'image-band'
+    ? undefined
+    : { x: PDF_CONFIG.margin, y: headerRuleY, width: page.width - PDF_CONFIG.margin * 2, height: PDF_CONFIG.headerRuleWidth };
+  const footerTop = geometry.bands.footer?.top ?? PDF_CONFIG.footerY - PDF_CONFIG.footerFontSize;
+  const footerRule: CompositionBox = { x: PDF_CONFIG.margin, y: footerTop, width: page.width - PDF_CONFIG.margin * 2, height: PDF_CONFIG.footerLineWidth };
+  doc.setFont(pdfFont(theme), 'normal');
+  doc.setFontSize(PDF_CONFIG.footerFontSize);
+  const pageNumberText = `${page.page} / ${pageCount}`;
+  const pageNumberWidth = doc.getTextWidth(pageNumberText);
+  const pageNumberHeight = doc.getTextDimensions(pageNumberText).h;
+  const pageNumberBaseline = footerTop + PDF_CONFIG.footerBaselineOffset;
+  const pageNumber: CompositionBox = {
+    x: page.width - PDF_CONFIG.margin - pageNumberWidth,
+    y: pageNumberBaseline - pageNumberHeight,
+    width: pageNumberWidth,
+    height: pageNumberHeight,
+  };
+  return { headerBand, ...(headerRule ? { headerRule } : {}), footerRule, pageNumber, ...(lockup ? { lockup } : {}) };
+}
+
+function attachPageChrome(doc: jsPDF, composition: ReportCompositionResult, geometry: PageGeometry, theme: RenderTheme): void {
+  for (const page of composition.plan.pages) {
+    const pageGeometry = page.layoutId.endsWith(':continuation') ? geometry.continuation ?? geometry : geometry;
+    const lockup = composition.plan.slots.find((slot) => slot.page === page.page && slot.id === `${page.page}:header-lockup`);
+    page.chrome = pageChrome(doc, page, composition.plan.pages.length, pageGeometry, theme, lockup?.box);
+  }
 }
 
 async function prepareReportComposition(name: string, data: CompositionInput, theme: RenderTheme, sourceContext?: SourceContext, rejectOnEvaluation = true): Promise<PreparedReportComposition> {
@@ -377,6 +401,7 @@ async function prepareReportComposition(name: string, data: CompositionInput, th
     eyebrow: reportMetadataColor,
   }, theme.titleCase, theme.glyphFontFamily);
   const composition = planReportComposition(doc, template, planGeometry, data, { family, maxPages, includeTitlePage: Boolean(data.flows.title && template.pageTitle), includeHeaderFlow: Boolean(data.flows.header), auxiliaryTextWidths: { footer: footerTextWidth(doc, geometry, maxPages, theme) }, policy: { minimumWrapWidth: PDF_CONFIG.floatMinWidth }, styles: compositionStyles, ...(combined ? { measureBlock: combined.measureBlock } : {}), ...(tableCapabilities ? { measureTable: tableCapabilities.measureTable } : {}) });
+  attachPageChrome(doc, composition, planGeometry, theme);
   if (rejectOnEvaluation && composition.evaluation.status === 'rejected') {
     const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');
     throw new Error(`Composition plan rejected for '${name}': ${details}`);
@@ -396,8 +421,9 @@ export async function renderReportCompositionPdf(name: string, data: Composition
     doc.setPage(page.page);
     const pageGeometry = page.layoutId === `${template.id}:continuation` ? geometry.continuation ?? geometry : geometry;
     if (!(template.pageTitle && page.page === 1)) {
-      const lockup = composition.plan.slots.find((slot) => slot.page === page.page && slot.id === `${page.page}:header-lockup`);
-      drawReportChrome(doc, page.page, composition.plan.pages.length, pageGeometry, theme, logo, theme.brandName, lockup?.box, page.layoutId === `${template.id}:continuation`);
+      const chrome = composition.plan.pages[page.page - 1].chrome;
+      if (!chrome) throw new Error(`Composition plan has no chrome geometry for page ${page.page}.`);
+      drawReportChrome(doc, page.page, composition.plan.pages.length, pageGeometry, theme, logo, theme.brandName, chrome, page.layoutId === `${template.id}:continuation`);
     }
   }
   if (compositionDebug) drawCompositionDebugOverlay(doc, composition, theme, geometry);
