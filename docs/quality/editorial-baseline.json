@@ -176,6 +176,12 @@
     }
   },
   "pages": 6,
+  "ink": {
+    "rasterDpi": 110,
+    "lineChecks": 344,
+    "occupiedLines": 344,
+    "slotChecks": 14
+  },
   "pdf": {
     "normalization": "pdf-content",
     "hash": "b0707357f012c419c71b27ef69d2ef4519132155ad01b2c0b2da75f912d31eda"

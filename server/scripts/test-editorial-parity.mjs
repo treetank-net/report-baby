@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { parse } from 'yaml';
 import { pdfContentHash } from './lib/artifact-inspect.mjs';
 import { createEditorialNumberedFixture } from './lib/editorial-numbered-fixture.mjs';
+import { inspectPdfInk } from './lib/pdf-ink-occupancy.mjs';
 import { runProcess } from './lib/process.mjs';
 
 const root = process.cwd();
@@ -76,6 +77,24 @@ try {
   assert.equal(fixture.illustration?.sourceWidthPx, 1600);
   assert.equal(fixture.illustration?.sourceHeightPx, 900);
 
+  const artifactPath = join(temporary, 'editorial.pdf');
+  await writeFile(artifactPath, result.buffer);
+  const plannedLines = [...(composition.plan.lines ?? []), ...(composition.plan.insertionLines ?? [])]
+    .filter((line) => !line.blockId.startsWith('header') && !line.blockId.startsWith('footer'));
+  const plannedSlots = composition.plan.slots.filter((slot) => plannedLines.some((line) => line.slotId === slot.id));
+  const pageSize = { width: composition.plan.pages[0].width, height: composition.plan.pages[0].height };
+  const inkOccupancy = await inspectPdfInk({
+    artifactPath,
+    pages: composition.plan.pages,
+    lines: plannedLines.map((line) => ({ page: line.page, id: line.blockId, slotId: line.slotId, box: line.box })),
+    slots: plannedSlots.map((slot) => ({ page: slot.page, id: slot.id, box: slot.box })),
+    pageSize,
+    qa: renderConfig.quality.pdf_pixel_qa,
+  });
+  assert.ok(inkOccupancy.lineChecks.length > 0, 'editorial must expose raster line checks');
+  assert.ok(inkOccupancy.lineChecks.every((check) => check.status === 'occupied' && check.inkPixels >= inkOccupancy.minimumInkPixels), 'every planned editorial line must contain rendered ink');
+  assert.ok(inkOccupancy.slotChecks.every((check) => check.status === 'occupied' && check.inkPixels >= inkOccupancy.minimumInkPixels), 'every planned editorial slot must contain rendered ink');
+
   const artifactHash = pdfContentHash(result.buffer);
   const summary = {
     schemaVersion: 1,
@@ -90,6 +109,7 @@ try {
       illustration: fixture.illustration,
     },
     pages: composition.plan.pages.length,
+    ink: { rasterDpi: inkOccupancy.rasterDpi, lineChecks: inkOccupancy.lineChecks.length, occupiedLines: inkOccupancy.lineChecks.filter((check) => check.status === 'occupied').length, slotChecks: inkOccupancy.slotChecks.length },
     pdf: { normalization: 'pdf-content', hash: artifactHash },
   };
   const serialized = `${JSON.stringify(summary, null, 2)}\n`;
@@ -102,6 +122,7 @@ try {
     await mkdir(process.env.REPORT_BABY_ARTIFACT_DIR, { recursive: true });
     await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'editorial.pdf'), result.buffer);
     await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'editorial-summary.json'), serialized);
+    await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'ink-occupancy.json'), JSON.stringify(inkOccupancy, null, 2));
   }
   console.log(JSON.stringify({
     status: 'passed',
