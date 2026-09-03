@@ -28,6 +28,11 @@ Istnieje prototyp score w
 ale nie jest produkcyjnym kontraktem. Produkcyjny evaluator czyta wyłącznie
 `composition_score` z `render-config.yml`.
 
+Planner-originated `severity: error` diagnostics są częścią tego samego hard
+gate’u, ponieważ evaluator przenosi `plan.diagnostics` do wyniku i odrzuca plan
+z dowolnym błędem. Test dokumentacji sprawdza zarówno kody z evaluatora, jak i
+kody `diagnostic('error', ...)` z planera.
+
 ## Decyzja po eksperymencie 1: skąd jest score
 
 Nie jest to standard CSS, funkcja z W3C, model statystyczny ani wynik
@@ -101,6 +106,10 @@ wymagają korpusu przypadków i porównania z oceną wizualną.
    `page-fill-table` albo realnego editorialu. Jeżeli miary nie da się jeszcze
    wiarygodnie wyznaczyć z planu, oznaczyć punkt jako wymagający uzupełnienia,
    zamiast oceniać go z rastrowego domysłu.
+10. Utrzymać audyt seamu konfiguracji: `composition_score` należy do
+    evaluatora, policy fragmentów i tolerancji należy do adaptera planera w
+    grupie `pdf`, a `quality` należy do kontroli artefaktów. Każde nowe pole
+    musi mieć jednego właściciela i opis interakcji.
 
 ## Minimalny kontrakt wyboru
 
@@ -128,6 +137,8 @@ kontrakt Report Baby, więc wagi muszą być jawne, wersjonowane i konfigurowaln
 - breakdown wyjaśnia, skąd wzięła się punktacja;
 - dokumentacja evaluatora wymienia wszystkie aktywne hard rules, ich progi i
   powód odrzucenia;
+- test dokumentacji wykrywa zarówno hard rules evaluatora, jak i hard rules
+  generowane przez planner;
 - score obecnego editorialu można odczytać z JSON/trace/debug;
 - powtórna ewaluacja tego samego planu daje ten sam wynik bez nowych wpisów
   w trace.
@@ -139,6 +150,9 @@ kontrakt Report Baby, więc wagi muszą być jawne, wersjonowane i konfigurowaln
   referencyjną.
 - Lista hard violations wymaga uzupełnienia po testach punktu 5: każdy kod
   musi mieć przypadek testowy i jasne rozstrzygnięcie, czy jest blokujący.
+- Wymaga uzupełnienia macierz źródło konfiguracji → właściciel reguły dla
+  pozostałych pól `pdf`, które wpływają na geometrię planu pośrednio przez
+  style i capability adaptery.
 - Składniki jakości dla cytatów, grafik i wykresów wymagają uzupełnienia po
   planie 07; nie zakładamy ich przed zdefiniowaniem wspólnych placements.
 - Detektor orphanów wymaga dalszych przypadków granicznych: naturalnego końca

@@ -86,6 +86,14 @@ Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 - istniejące breakpoints tekstu;
 - growth/defer dla elementów, które już mają takie reguły.
 
+### Konfiguracja wyszukiwania
+
+`composition_search` opisuje obecnie wartości używane przez testy i
+eksperymenty do zbudowania `movableInsertionBounds`. Produkcyjny planner nie
+czyta tej grupy z YAML; przyjmuje policy przez swój interfejs. To jest
+świadoma, ale niedomknięta decyzja seamu, a nie powód, aby planner importował
+`render-config.yml`.
+
 ## Minimalny wariant implementacji
 
 1. Pozostawić `planDocumentOnce()` jako wykonanie jednego wariantu.
@@ -104,8 +112,13 @@ Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 9. Jeżeli nie ma legalnego planu, zwrócić `rejected` z agregatem diagnostyki.
 10. W trace zapisać kolejność prób, wynik, score i powód kolejnej zmiany.
 11. Utrzymać `page-fill-table` jako przyszły kontrolowany przypadek dla innych
-    insertionów. Nie optymalizować jednocześnie tabeli, cytatów i wszystkich
-    flow.
+   insertionów. Nie optymalizować jednocześnie tabeli, cytatów i wszystkich
+   flow.
+12. Rozstrzygnąć źródło `composition_search` dla runtime’u. Jeśli ma sterować
+    produkcyjnym wyszukiwaniem, dodać ją do typed render-config seamu i
+    przekazać przez adapter do policy planera. Jeśli pozostaje eksperymentem,
+    usunąć ją z produkcyjnego `render-config.yml` albo jawnie oznaczyć jako
+    test-only, aby konfiguracja nie obiecywała nieistniejącego zachowania.
 
 ## Pseudoprzebieg
 
@@ -140,6 +153,8 @@ która decyzja poprawiła lub zepsuła układ.
 - koszt pełnego planowania jest mierzony i ma konfigurowalny limit.
 - test pokazuje, że różnica pomiędzy dwoma legalnymi wariantami wynika z
   jawnego feedbacku evaluatora, a nie z przypadkowej kolejności rysowania.
+- źródło policy `composition_search` jest jednoznaczne i przetestowane;
+  runtime nie ma konfiguracji, której faktycznie nie używa.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 
@@ -150,6 +165,9 @@ która decyzja poprawiła lub zepsuła układ.
   obecnie wystarczają score breakdown, placementy i trace.
 - Limit kosztu wymaga uzupełnienia po benchmarku realnego editorialu, nie na
   podstawie samego limitu `planner_max_iterations`.
+- Decyzja o runtime’owym seamie `composition_search` wymaga uzupełnienia po
+  porównaniu kosztu konfiguracji globalnej z konfiguracją konkretnego
+  insertionu/template’u.
 
 ## Poza zakresem
 

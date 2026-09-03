@@ -17,6 +17,13 @@ reflow i diagnostykę.
 To nie oznacza, że każdą funkcję trzeba skrócić. Problemem jest skupienie wielu
 odpowiedzialności i stanu mutable w jednym przebiegu.
 
+`server/src/composition/report-shadow.ts` ma inną klasę problemu: nie jest
+drugim plannerem ani rendererem, tylko adapterem produkcyjnej ścieżki, który
+łączy przygotowanie danych, konfigurację PDF, metryki jsPDF, capability
+renderera i wywołanie composition engine. Historyczna nazwa utrudnia
+znalezienie właściciela, ale mechaniczne dzielenie pliku przed mapą call
+site’ów mogłoby tylko rozproszyć seam.
+
 ## Kroki
 
 1. Zabezpieczyć obecne zachowanie testami przez istniejące publiczne seamy.
@@ -41,6 +48,14 @@ odpowiedzialności i stanu mutable w jednym przebiegu.
    powinny być splecione z regułami planera. Test błędnego dekodowania ma
    jednoznacznie odróżniać „brak treści w dokumencie” od „nie umiem odczytać
    treści z PDF-a”.
+9. Po audycie call site’ów nazwać `report-shadow.ts` zgodnie z jego rolą
+   adaptera albo zachować nazwę tylko jako świadomie tymczasowy alias. Usunąć
+   `renderReportCompositionShadowPdf`, gdy nie będzie już publicznym call
+   site’em; nie utrzymywać dwóch nazw dla dwóch rzekomo różnych rendererów.
+10. Dodać mapę własności konfiguracji do dokumentacji modułów: evaluator,
+    planner policy adapter, jsPDF capability adapter i visual-QA muszą mieć
+    osobne źródła ustawień oraz test przeciwko przypadkowemu odczytowi z
+    niewłaściwej grupy.
 
 ## Kryteria ukończenia
 
@@ -50,6 +65,10 @@ odpowiedzialności i stanu mutable w jednym przebiegu.
   regułę jednocześnie;
 - planowanie pozostaje niezależne od jsPDF poza capability seamem;
 - composition gate i realny editorial są zielone po refaktoryzacji.
+- `report-shadow` ma jedną udokumentowaną rolę i nie tworzy równoległej
+  ścieżki planowania/renderowania;
+- każdy konfigurowalny próg ma jednego właściciela i nie jest kopiowany do
+  innego modułu jako literal.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 
@@ -58,6 +77,8 @@ odpowiedzialności i stanu mutable w jednym przebiegu.
 - Zakres refaktoryzacji `planFlow` wymaga uzupełnienia po planie 04. Pętla może
   ujawnić, że pierwszym seamem powinno być generowanie wariantów, a nie routing.
 - Kryteria wydajności wymagają uzupełnienia po benchmarku z planu 04.
+- Docelowa nazwa i podział `report-shadow` wymagają uzupełnienia po audycie
+  publicznych eksportów i call site’ów z planu 01.
 
 ## Poza zakresem
 

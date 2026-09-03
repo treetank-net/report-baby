@@ -22,6 +22,9 @@ wyliczania geometrii.
   render; `resolveReportPlanOnly()` pozostaje tylko legacy planem w odpowiedzi
   diagnostycznej;
 - część chrome jest rysowana w `report-renderer.ts` poza composition planem;
+- `report-shadow.ts` jest aktualnie nazwą produkcyjnego adaptera composition,
+  nie alternatywnym rendererem; pozostawiony alias ma znaczenie tylko dla
+  kompatybilności harnessu;
 - overlay pokazuje już m.in. placements, obstacles, flow barriers, padding i
   margin, ale wymaga dalszej kontroli czy ramy pochodzą bezpośrednio z planu.
 - manifest raportu przekazuje `compositionPlan` i `compositionEvaluation`, a
@@ -56,6 +59,10 @@ wyliczania geometrii.
 10. Dla każdej regresji zachować trzy warstwy dowodu: wynik planu/manifestu,
     selectable text w PDF-ie oraz raster do przeglądu wizualnego. Brak jednej
     warstwy ma być odnotowany jako brak danych, nie jako sukces.
+11. Po zamknięciu migracji potwierdzić, czy `report-shadow.ts` można
+    przemianować na nazwę roli adaptera i usunąć alias kompatybilności. Nie
+    usuwać go ani nie tworzyć drugiej ścieżki tylko z powodu historycznej
+    nazwy.
 
 ## Kryteria ukończenia
 
@@ -70,6 +77,8 @@ wyliczania geometrii.
   a nie dlatego, że lista pomiarów jest pusta;
 - `inline-markup-report` i `page-fill-gap-tightening` pozostają czerwone lub
   zostają przepisane dopiero po świadomej zmianie kontraktu.
+- nazwa i eksporty produkcyjnego adaptera nie sugerują istnienia drugiego
+  renderera, a ewentualny alias jest pokryty testem publicznego użycia.
 
 ## Wykonane
 

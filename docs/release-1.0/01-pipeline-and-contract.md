@@ -74,6 +74,10 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
   [`report-shadow.ts`](../../server/src/composition/report-shadow.ts#L329-L359).
 - `dry_run` korzysta z `resolveReportPlanOnly()`, a zwykły render z
   `planReportComposition()`: [`render-tools.ts`](../../server/src/tools/render-tools.ts#L188-L216).
+- `report-shadow.ts` nie jest obecnie drugim rendererem: jest produkcyjnym
+  adapterem, który składa input, metryki jsPDF, policy planera i capability
+  renderera. Nazwa jest historyczna i myląca, a alias
+  `renderReportCompositionShadowPdf` pozostaje dla harnessu.
 - Osobny contract test nie dochodzi obecnie do asercji z powodu błędu
   tymczasowego bundla ESM: `Dynamic require of "process" is not supported`.
 
@@ -94,6 +98,14 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
    pozostaje potwierdzenie ich wspólnej ścieżki aż do renderera.
 7. Zdecydować na podstawie użycia, które eksporty z `composition/index.ts` są
    publicznym seamem, a które powinny zostać wewnętrzne.
+8. Zmapować wszystkie call site’y `report-shadow.ts` i aliasu
+   `renderReportCompositionShadowPdf`. Po potwierdzeniu, że nie ma już
+   równoległej implementacji renderera, zmienić nazwę modułu na opisującą jego
+   rolę adaptera i usunąć alias, jeśli nie jest publicznym kontraktem.
+9. Utrzymać zasadę własności konfiguracji: evaluator może czytać tylko
+   `composition_score`, planner nie czyta YAML, a adapter przekazuje mu policy
+   z właściwego seamu `pdf`. `quality` i visual-QA nie mogą stać się zgodą na
+   nielegalny plan.
 
 ## Testy i kryteria ukończenia
 
@@ -102,6 +114,11 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
 - normalny render nie zmienia zachowania istniejącego corpus;
 - `CompositionPlanResult` jest przekazywany do renderera bez ponownego
   rozwiązywania legalności;
+- `report-shadow` nie ukrywa drugiej ścieżki renderowania; po migracji ma nazwę
+  zgodną z rolą albo pozostaje wyłącznie jawnie oznaczonym aliasem
+  kompatybilności;
+- konfiguracja nie jest pobierana przez moduł z niewłaściwej grupy ani przez
+  rdzeń planera bezpośrednio z YAML;
 - nie ma produkcyjnego translatora starego `ReportData` ani `Cursor`;
 - nieznany block kind kończy się czytelnym błędem.
 
@@ -114,6 +131,10 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
   ale jest odnotowanym brakiem tego etapu;
 - potwierdzić wspólną ścieżkę block kinds od schema do backendu, nie tylko
   normalizację do `CompositionDocument`.
+- doprecyzować wynik audytu `report-shadow`: rename, pozostawienie jako
+  adaptera albo usunięcie aliasu po sprawdzeniu publicznych call site’ów;
+- rozstrzygnąć, czy `composition_search` jest konfiguracją runtime planera,
+  czy tylko konfiguracją testów i eksperymentów.
 - Dodać do testów kontraktu przypadki regresyjne z visual QA jako opisane
   wejścia composition, a nie tylko jako snapshoty PDF-a. Szczególnie trzeba
   zachować sprawdzenie pełnego mapowania tekstu, tabeli, listy i glyphów.
