@@ -1,7 +1,8 @@
 # Plan 04 — pętla planner–evaluator
 
-Status: seam selekcji kandydatów jest zaimplementowany; feedback-driven rewrites i
-kontrolowany wybór pierwszej decyzji layoutowej pozostają do wykonania
+Status: ograniczona pętla selekcji kandydatów jest zaimplementowana i
+zweryfikowana dla ruchomego cytatu; globalne feedback-driven rewrites pozostają
+poza zakresem eksperymentu 1
 
 ## Cel
 
@@ -21,24 +22,29 @@ wyniku ewaluacji do kolejnego kroku planera.
 
 ## Stan obecny
 
-`createTextCompositionPlanner` udostępnia teraz istniejące przebiegi reflow jako
-deterministyczne `planCandidates`. Engine ewaluje każdy kandydat raz i wybiera
-legalny plan z najwyższym score; przy równym wyniku zachowuje wcześniejszego
-kandydata. Jednoplanowa ścieżka pozostaje kompatybilna dla innych plannerów.
-Feedback evaluatora nie zmienia jeszcze kolejnego przebiegu planera — to jest
-następny, osobny krok. Reflow jest obecnie heurystyką stabilizacji propozycji:
-planner może najpierw ułożyć wcześniejszy blok pod insertionem, a evaluator
-odrzuca taki plan przez `INSERTION_SOURCE_ORDER_VIOLATION`; kolejny przebieg
-może przenieść insertion i dopiero wtedy uzyskać plan legalny.
+`createTextCompositionPlanner` udostępnia deterministyczne kandydaty dla
+istniejącej propozycji insertionu. Engine ewaluje każdy kandydat raz, odrzuca
+nielegalne warianty, wybiera legalny plan z najwyższym score, a przy remisie
+zachowuje wcześniejszy wariant. Po wyborze planner może wykonać ograniczoną
+lokalną rundę refinementu wokół najlepszego kandydata i engine ponownie ocenia
+tylko tę skończoną listę. Jednoplanowa ścieżka pozostaje kompatybilna dla
+innych plannerów.
+
+To jest feedback evaluatora w kontrolowanej postaci: evaluator zwraca
+legalność, score i breakdown, a planner używa wybranego placementu jako środka
+lokalnego zakresu. Nie jest to jeszcze globalny rewrite wszystkich decyzji
+layoutowych. Reflow pozostaje osobnym kosztem przygotowania pojedynczego
+kandydata i jest raportowany oddzielnie w `reflowPasses`.
 
 ## Wnioski z analizy obecnego mechanizmu
 
 - Stałe sloty `A/B/C` nie tworzą jeszcze sensownej przestrzeni optymalizacji.
   Przy zachowanej kolejności cytatów wybór jest w praktyce zachłanny i
   deterministyczny.
-- Obecne „kandydaty” są przebiegami stabilizacyjnymi tego samego mechanizmu,
-  a nie niezależnymi alternatywami pozycji. W realnym editorialu dwa przebiegi
-  miały ten sam score i nie zmieniły widocznego układu.
+- Kandydaty dla ruchomego insertionu są niezależnymi alternatywami jego pozycji
+  w jawnych bounds. Nie są już tylko przebiegami stabilizacyjnymi. Dla
+  przypadków bez `movableInsertionBounds` nadal pozostaje ścieżka jednego planu
+  albo stabilizacyjnych reflow.
 - Reflow jest potrzebny tylko wtedy, gdy pozycja insertionu zależy od
   położenia wcześniejszej treści albo innej przeszkody. Jeżeli box ma już
   ustaloną, legalną pozycję, wystarczy jedno pełne planowanie i ewaluacja.
@@ -65,8 +71,12 @@ ramę w `movableInsertionFrames`, dzięki czemu zwykły composition debug może
 wyrysować ją na czerwono. W pierwszym eksperymencie wszystkie sześć pozycji
 było legalnych, pozycje `y` wyniosły `25, 37, 49, 61, 73, 85`, a przebieg reflow
 wyniósł `0` dla każdego kandydata, ponieważ rama nie była zależna od tekstu.
-W fixtureze z osiemnastoma małymi akapitami liczba dzielonych akapitów wyniosła
-`0, 1, 1, 1, 1, 0`; silnik wybrał pierwszego kandydata z najlepszym wynikiem.
+W kontrolowanym fixture ruchomego insertionu silnik wygenerował pięć
+kandydatów coarse oraz trzy kandydatury refinementu. Wszystkie były legalne,
+a ich score różnił się przez balans, spacing i fragmentację tekstu. W realnym
+editorialu zmiana pozycji cytatu usuwała wykryte orphan lines i poprawiała
+wynik względem stałej pozycji; szczegóły są w trace oraz w teście
+`test-editorial-numbered-flow.mjs`.
 
 Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 
@@ -79,8 +89,9 @@ Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 ## Minimalny wariant implementacji
 
 1. Pozostawić `planDocumentOnce()` jako wykonanie jednego wariantu.
-2. Rozszerzyć planner o możliwość otrzymania poprzedniej ewaluacji albo
-   ograniczonej decyzji wynikającej z poprzedniej ewaluacji.
+2. Utrzymywać ograniczony feedback: wybrany kandydat i numer rundy są jedyną
+   informacją zwrotną do lokalnego refinementu. Nie przekazywać evaluatorowi
+   odpowiedzialności za mutowanie planu.
 3. Generować tylko deterministyczne warianty istniejących decyzji. Na pierwszy
    eksperyment wybrać jeden przypadek, rekomendacyjnie:
    - przesunięcie grafiki/cytatu względem istniejących flow barriers; albo
@@ -92,10 +103,9 @@ Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
 8. Zachować najlepszy legalny plan, a nie ostatni plan.
 9. Jeżeli nie ma legalnego planu, zwrócić `rejected` z agregatem diagnostyki.
 10. W trace zapisać kolejność prób, wynik, score i powód kolejnej zmiany.
-11. Użyć `page-fill-table` jako pierwszego kontrolowanego przykładu feedbacku:
-    warianty mają zmieniać tylko dozwolony breakpoint lub pozycję fragmentu
-    tabeli, a evaluator ma wskazać legalność i koszt rzadkiej strony końcowej.
-    Nie optymalizować jednocześnie tabeli, cytatów i wszystkich flow.
+11. Utrzymać `page-fill-table` jako przyszły kontrolowany przypadek dla innych
+    insertionów. Nie optymalizować jednocześnie tabeli, cytatów i wszystkich
+    flow.
 
 ## Pseudoprzebieg
 
@@ -117,7 +127,7 @@ która decyzja poprawiła lub zepsuła układ.
 
 - dwa legalne warianty wybierają wariant z wyższym score;
 - wariant nielegalny nie wygrywa przez wysoki score;
-- realne przebiegi insertion reflow są wystawione jako kandydaci;
+- realne przebiegi insertion reflow i ruchome pozycje są obserwowalne osobno;
 - trace raportuje koszt `reflowPasses` osobno dla każdego kandydata, aby można
   było mierzyć koszt selekcji przed optymalizacją;
 - test graniczny rozróżnia pierwszy odrzucony plan source-order i drugi plan
@@ -133,12 +143,11 @@ która decyzja poprawiła lub zepsuła układ.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 
-- Pierwszy rodzaj decyzji wymaga uzupełnienia po pomiarze przypadków z planu
-  02 i score z planu 03. Nie zakładamy, że jednoczesna optymalizacja cytatu i
-  grafiki będzie dobrym pierwszym przypadkiem.
-- Dokładny feedback dla planera wymaga uzupełnienia po pierwszym teście
-  dwóch wariantów. Wtedy zobaczymy, czy wystarczą kody diagnostyczne i score,
-  czy potrzebna jest bardziej szczegółowa informacja o kolizji.
+- Globalny zakres feedbacku wymaga uzupełnienia po benchmarku wielu
+  jednocześnie ruchomych insertionów. Eksperyment 1 świadomie ogranicza się do
+  jednego cytatu.
+- Dokładne mapowanie składników score na decyzje planera wymaga dalszych testów;
+  obecnie wystarczają score breakdown, placementy i trace.
 - Limit kosztu wymaga uzupełnienia po benchmarku realnego editorialu, nie na
   podstawie samego limitu `planner_max_iterations`.
 

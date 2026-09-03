@@ -61,7 +61,8 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
 - zwykły renderer oraz debug overlay używają tych samych ramek chrome; test
   `test-report-chrome` sprawdza ich zgodność z narysowanym PDF-em.
 - trace przechowuje tę samą listę `flowBarrierBoxCandidates` co wykonywalny
-  plan; test editorial parity sprawdza identyfikatory i kolejność.
+  plan; planner używa ich do wyznaczania dostępnego miejsca dla zwykłego flow,
+  a test editorial parity sprawdza identyfikatory i kolejność.
 - evaluator sprawdza rejestr `flowPlacements` niezależnie od deklarowanego
   `hasContent`: porównuje metadane z faktycznymi liniami oraz odrzuca placement
   poza jego slotem; regresja jest w `test-editorial-numbered-flow`.
@@ -102,8 +103,9 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
   backend bez zmiany znaczenia;
 - evaluator może wykryć placement poza ramą niezależnie od tego, co placement
   sam deklaruje jako swój slot;
-- box kandydata nie jest rysowany jako faktyczna bariera, dopóki nie zostanie
-  użyty przez planner;
+- box kandydata jest wizualizowany jako geometria diagnostyczna, ale nie staje
+  się obstacle dla tekstu tylko dlatego, że został narysowany; faktyczną
+  barierą jest wyłącznie placement obstacle’u użyty przez planner;
 - debug pokazuje rozróżnienie: flow, obstacle, faktyczny placement i kandydat;
 - test potwierdza zgodność obliczonych i narysowanych współrzędnych.
 - test adaptera potwierdza przejście template → `PageGeometry` oraz rozcięcie
@@ -117,9 +119,10 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
 - Zakres chrome, który musi ograniczać flow, wymaga uzupełnienia po planie 05,
   gdy zostanie porównany z faktycznym renderem. Obecny krok opisuje i współdzieli
   geometrię chrome, ale jeszcze nie dodaje jej jako obstacle dla flow.
-- Czy `flowBarrierBoxCandidates` powinny stać się wejściem dla pierwszej pętli
-  wymaga uzupełnienia po testach z planu 04. Na tym etapie są tylko danymi
-  diagnostycznymi i potencjalnymi punktami decyzji.
+- Zakres użycia `flowBarrierBoxCandidates` w optymalizacji pozycji insertionów
+  wymaga dalszych testów z planu 04. Są już wejściem do wyznaczania miejsc,
+  w których może kontynuować zwykły flow; nie są jeszcze globalnym solverem
+  pozycji wszystkich elementów.
 
 ## Poza zakresem
 
