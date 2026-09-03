@@ -126,6 +126,8 @@ kontrakt Report Baby, więc wagi muszą być jawne, wersjonowane i konfigurowaln
 - nielegalny plan z wysokim score zawsze przegrywa z legalnym;
 - remis jest deterministyczny;
 - breakdown wyjaśnia, skąd wzięła się punktacja;
+- dokumentacja evaluatora wymienia wszystkie aktywne hard rules, ich progi i
+  powód odrzucenia;
 - score obecnego editorialu można odczytać z JSON/trace/debug;
 - powtórna ewaluacja tego samego planu daje ten sam wynik bez nowych wpisów
   w trace.
