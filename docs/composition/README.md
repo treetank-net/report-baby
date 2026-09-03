@@ -1,37 +1,36 @@
-# Composition — dokumentacja kanoniczna
+# Composition — canonical documentation
 
-Ten katalog opisuje aktualny produkcyjny model composition. Jest źródłem
-prawdy dla odpowiedzialności modułów, przebiegu planowania, ewaluacji i
-uzasadnienia decyzji. Plany release opisują kolejność prac; research opisuje
-badania historyczne i nie zastępuje tych dokumentów.
+This directory describes the current production composition model. It is the
+source of truth for module responsibilities, planning, evaluation, and the
+reasons behind decisions. Release plans describe work sequencing; research
+describes historical investigations and does not replace these documents.
 
-## Przebieg
+## Pipeline
 
 ```text
 CompositionInput → flows → planner → CompositionPlan → evaluator → renderer
 ```
 
-Planner wylicza kompletny plan przed rysowaniem. Evaluator sprawdza legalność,
-a następnie jakość legalnych wariantów. Renderer wykonuje wybrany plan i nie
-decyduje po fakcie o łamaniu tekstu.
+The planner computes a complete plan before drawing. The evaluator checks
+legality and then the quality of legal variants. The renderer executes the
+selected plan and does not make after-the-fact text-flow decisions.
 
-## Dokumenty
+## Documents
 
-- [Planner](planner.md) — wejście, etapy planowania, flow barriers, insertiony,
-  kandydaci i refinement.
-- [Evaluator](evaluator.md) — hard gate, score, składniki, konfiguracja i
-  obserwowalność wyniku.
-- [Decyzje](decisions.md) — dlaczego system ma taki podział odpowiedzialności
-  i jakie kompromisy zostały przyjęte.
+- [Planner](planner.md) — inputs, planning stages, flow barriers, insertions,
+  candidates, and refinement.
+- [Evaluator](evaluator.md) — the hard gate, scoring, configuration, and
+  result observability.
+- [Decisions](decisions.md) — why the system has this division of
+  responsibilities and which trade-offs were accepted.
 
-## Zasada aktualizacji
+## Update rule
 
-Zmiana kontraktu, kolejności etapów, sposobu liczenia score’u, reguły legalności
-albo źródła geometrii wymaga jednoczesnej aktualizacji właściwego dokumentu w
-tym katalogu oraz planu wykonawczego, który tę zmianę realizuje. Test i komentarz
-w kodzie mogą doprecyzować zachowanie, ale nie są jedynym miejscem opisującym
-regułę.
+Changing a contract, stage order, scoring method, legality rule, or geometry
+source requires updating the relevant document in this directory and the
+implementation plan that delivers the change. A test and a code comment may
+clarify behavior, but they must not be the only place where a rule is described.
 
-Każdy nowy block kind lub typ insertionu musi zostać dopisany do mapy wejście →
-pomiar → placement → kolizje → ewaluacja → renderowanie przed uznaniem obsługi
-za stabilną.
+Every new block kind or insertion type must be added to the input → measurement
+→ placement → collision → evaluation → rendering map before its support is
+considered stable.

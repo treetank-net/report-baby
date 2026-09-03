@@ -1,77 +1,76 @@
 # Composition evaluator
 
-## Odpowiedzialność
+## Responsibility
 
-Evaluator przyjmuje kompletny `CompositionDocument` i `CompositionPlan`, po czym
-zwraca `CompositionEvaluation`. Nie zmienia planu ani trace i nie renderuje
-artefaktu.
+The evaluator accepts a complete `CompositionDocument` and `CompositionPlan`,
+then returns a `CompositionEvaluation`. It does not change the plan or trace and
+does not render an artifact.
 
-Kod znajduje się w
-[`composition/evaluator.ts`](../../server/src/composition/evaluator.ts), a
-interfejs wyniku w
+The implementation is in
+[`composition/evaluator.ts`](../../server/src/composition/evaluator.ts), and the
+result interface is in
 [`composition/engine.ts`](../../server/src/composition/engine.ts).
 
-## Dwa niezależne pytania
+## Two independent questions
 
-1. Czy plan jest legalny?
-2. Jeżeli jest legalny, który wariant wygląda lepiej?
+1. Is the plan legal?
+2. If it is legal, which variant looks better?
 
-Diagnostyka o severity `error` tworzy `hardViolations`. Plan z hard violation
-albo residual content dostaje `-Infinity` i nie może wygrać przez wysoki score.
-Dopiero plan bez takiego błędu otrzymuje score jakości.
+Diagnostics with severity `error` become `hardViolations`. A plan with a hard
+violation or residual content receives `-Infinity` and cannot win through a high
+score. Only a plan without such an error receives a quality score.
 
-Comparator stosuje kolejność:
-
-```text
-legalny plan > nielegalny plan
-wyższy score > niższy score
-remis → stabilna kolejność kandydatów
-```
-
-## Obecny score
-
-Score jest deterministyczną heurystyką produktu Report Baby. Nie jest
-standardem CSS/W3C, modelem statystycznym ani wynikiem kalibracji
-psychowizualnej. Służy do uporządkowania legalnych alternatyw w ramach tego
-samego template’u i konfiguracji.
+The comparator uses this order:
 
 ```text
-score = composition_score.base + suma(points składników)
+legal plan > illegal plan
+higher score > lower score
+tie → stable candidate order
 ```
 
-Wszystkie wartości pochodzą z
-[`render-config.yml`](../../server/templates/render-config.yml), a wszystkie
-miary są liczone z geometrii planu:
+## Current score
 
-| Kod | Co mierzy | Punktacja |
+The score is a deterministic Report Baby product heuristic. It is not a CSS/W3C
+standard, a statistical model, or the result of psychovisual calibration. It is
+used to rank legal alternatives within the same template and configuration.
+
+```text
+score = composition_score.base + sum(component points)
+```
+
+All values come from
+[`render-config.yml`](../../server/templates/render-config.yml), and all
+measurements are computed from plan geometry:
+
+| Code | Measurement | Scoring |
 |---|---|---|
-| `column-balance` | Średnią `min(lineCount) / max(lineCount)` na stronach z co najmniej dwiema kolumnami | dodatnia: `value * column_balance_weight` |
-| `heading-following-line` | Nagłówki, po których w tym samym page/slot występuje tekst | dodatnia: liczba * `heading_following_line_bonus` |
-| `paragraph-fragmentation` | Akapity rozdzielone między różne page/slot | ujemna: liczba * `paragraph_fragmentation_penalty` |
-| `orphan-lines` | Jedno-liniowe fragmenty akapitu oddzielone przerwą co najmniej `orphan_min_gap_mm`, gdy przerwę wywołuje obstacle | ujemna: liczba * `orphan_penalty` |
-| `insertion-spacing` | Nierówność paddingu wewnątrz insertionu, przerw przed/po oraz rozrzut przerw między strumieniami | ujemna: suma miar * odpowiednie wagi |
+| `column-balance` | Average `min(lineCount) / max(lineCount)` on pages with at least two columns | positive: `value * column_balance_weight` |
+| `heading-following-line` | Headings followed by text in the same page/slot | positive: count * `heading_following_line_bonus` |
+| `paragraph-fragmentation` | Paragraphs split across different pages/slots | negative: count * `paragraph_fragmentation_penalty` |
+| `orphan-lines` | One-line paragraph fragments separated by at least `orphan_min_gap_mm` when an obstacle causes the gap | negative: count * `orphan_penalty` |
+| `insertion-spacing` | Uneven insertion padding, gaps before/after it, and spread between streams | negative: sum of measurements * the relevant weights |
 
-Przerwa może być legalna i wynikać z nieruszalnego obiektu, ale nadal jest
-estetycznie niekorzystna. Jej przyczyna pozostaje w szczegółach ewaluacji i
-decyzjach planera; nie zwalnia to z kary jakościowej.
+A gap may be legal and caused by an immovable object, while still being
+aesthetically unfavorable. Its cause remains in the evaluation details and
+planner decisions; it does not waive the quality penalty.
 
-## Pochodzenie wag
+## Origin of the weights
 
-Pierwsza heurystyka powstała w prototypie debugowego composition score. Wagi
-produkcyjne zostały następnie przeniesione do `render-config.yml` i rozszerzone
-w kolejnych eksperymentach o fragmentację, spacing i orphan lines. Obecny zakres
-`base: 100`, `column_balance_weight: 12`, bonus `4`, kary `3` i `4` oraz wagi
-spacingu `1/1/1` jest ręcznie dobranym zakresem roboczym.
+The first heuristic was created in the debug composition-score prototype. The
+production weights were then moved to `render-config.yml` and extended in
+later experiments with fragmentation, spacing, and orphan lines. The current
+range — `base: 100`, `column_balance_weight: 12`, bonus `4`, penalties `3` and
+`4`, and spacing weights `1/1/1` — is a manually selected working range.
 
-Testy pokazują, że składniki wpływają na wybór kandydatów, ale nie dowodzą
-jeszcze, że proporcje są właściwe dla każdego artykułu. Kalibracja wymaga
-większego korpusu i porównania z oceną człowieka. Nie należy zmieniać wagi bez
-testu pokazującego, jaki wariant przez to wygrywa.
+Tests show that the components affect candidate selection, but do not yet prove
+that the proportions are right for every article. Calibration requires a larger
+corpus and comparison with human ratings. Do not change a weight without a test
+showing which variant wins because of it.
 
-## Obserwowalność
+## Observability
 
-`CompositionEvaluation.scoreBreakdown` zawiera wartość, punkty i szczegóły
-każdego składnika. Trace engine’a zapisuje to dla każdego kandydata wraz z
-placementami insertionów, statusem, liczbą hard violations i `reflowPasses`.
-Rasterowy PDF/PNG jest osobnym testem artefaktu; evaluator nie wyciąga score’u
-z obrazu.
+`CompositionEvaluation.scoreBreakdown` contains the value, points, and details
+for every component. The engine trace records this for every candidate together
+with insertion placements, status, hard-violation count, and `reflowPasses`.
+Raster PDF/PNG is a separate artifact test; the evaluator does not derive score
+from the image.

@@ -1,65 +1,67 @@
-# Decyzje composition i ich uzasadnienie
+# Composition decisions and rationale
 
-Ten dokument odpowiada na pytanie „dlaczego system robi to w ten sposób”.
-Reguła obowiązuje, dopóki nie zostanie zmieniona tutaj, w planie wykonawczym,
-w kodzie i w teście.
+This document answers “why does the system work this way?”. A rule remains in
+force until it is changed here, in the implementation plan, in code, and in a
+test.
 
-## Jeden model flow
+## One flow model
 
-Treść jest przekazywana jako named flows i uporządkowane blocks. Planner
-decyduje o routingu i geometrii, evaluator o legalności i jakości, a renderer
-wykonuje plan. Nie wracamy do starego płaskiego `ReportData`/`Cursor`, ponieważ
-nie opisywały wspólnie multiline planningu, kolizji i kontrolowanego reflow.
+Content is passed as named flows and ordered blocks. The planner decides routing
+and geometry, the evaluator decides legality and quality, and the renderer
+executes the plan. We do not return to the old flat `ReportData`/`Cursor`,
+because they did not describe multiline planning, collisions, and controlled
+reflow together.
 
-## Hard gate przed jakością
+## Hard gate before quality
 
-Nielegalny overlap, utrata treści, zły porządek albo placement poza ramą nie
-może wygrać tylko dlatego, że inne części strony wyglądają dobrze. Dlatego hard
-violations są rozstrzygane przed score, a nie jako bardzo duże kary ujemne.
+Illegal overlap, lost content, wrong order, or a placement outside its frame
+must not win merely because other parts of the page look good. Hard violations
+are therefore decided before scoring, rather than represented as very large
+negative penalties.
 
-## Obstacle poza zwykłym flow
+## Obstacles outside ordinary flow
 
-Cytat, grafika lub przyszły KPI może być osobnym insertionem. Jego zmierzony
-box jest obstacle’em dla tekstu, ale jego tekst nie staje się liniami zwykłego
-flow. Dzięki temu można zmienić typ elementu bez przepisywania mechaniki
-kolumnowego tekstu.
+A quote, graphic, or future KPI can be a separate insertion. Its measured box is
+an obstacle for text, but its text does not become ordinary-flow lines. This
+allows the element type to change without rewriting column-text mechanics.
 
-## Flow barriers jako wspólne miejsca kontynuacji
+## Flow barriers as shared continuation areas
 
-`flowBarrierBoxCandidates` są prostokątami wynikającymi z przecięcia zwykłego
-flow z obstacle’em. Jawnie pokazują, gdzie tekst może legalnie kontynuować się
-przed lub za przeszkodą. Nie są dodatkowym szablonowym slotem ani kolejną
-barierą tylko dlatego, że zostały narysowane w debug.
+`flowBarrierBoxCandidates` are rectangles created where ordinary flow meets an
+obstacle. They explicitly show where text may legally continue before or after
+the obstacle. They are not another template slot or another barrier merely
+because they were drawn in debug.
 
-## Ruchome insertiony mają ograniczone bounds
+## Movable insertions have bounded positions
 
-Stałe sloty nie tworzą sensownej przestrzeni optymalizacji. Ruchomy element
-otrzymuje jednak ograniczoną ramę, preferowaną pozycję i skończoną liczbę prób.
-Planner generuje kompletne warianty, evaluator je porównuje, a refinement
-szuka lokalnie wokół najlepszego wariantu. To daje wartość bez budowy globalnego
-solvera.
+Fixed slots do not provide a meaningful optimization space. A movable element
+does receive a bounded frame, a preferred position, and a finite number of
+attempts. The planner generates complete variants, the evaluator compares them,
+and refinement searches locally around the best variant. This provides value
+without building a global solver.
 
-## Legalna przerwa nadal może być brzydka
+## A legal gap can still be ugly
 
-Fakt, że pusty obszar jest wymuszony nieruszalnym elementem, wyjaśnia przyczynę,
-ale nie poprawia estetyki. Score karze nierówność i wielkość przerw także w tej
-sytuacji. Przesunięcie innego ruchomego elementu może później tę przerwę zmienić.
+The fact that an empty area is forced by an immovable element explains its
+cause, but does not improve its aesthetics. The score penalizes unevenness and
+size of gaps in this situation as well. Moving another movable element may
+later change the gap.
 
-## Reflow jest kosztem, nie jakością
+## Reflow is a cost, not quality
 
-Reflow służy ustabilizowaniu pojedynczego planu, gdy geometria zależy od
-wcześniejszej treści. Nie jest automatycznie lepszym kandydatem. Dlatego trace
-raportuje osobno liczbę kandydatów i przebiegów reflow.
+Reflow stabilizes one plan when its geometry depends on earlier content. It is
+not automatically a better candidate. The trace therefore reports candidate
+count and reflow-pass count separately.
 
-## Geometria i konfiguracja są wspólne
+## Geometry and configuration are shared
 
-Template, page geometry, planner, evaluator, debug i renderer mają używać tych
-samych obliczonych ramek. Tunable wartości layoutu, score’u, progów i visual QA
-trafiają do YAML, nie do literalów w skryptach.
+The template, page geometry, planner, evaluator, debug, and renderer must use the
+same computed frames. Tunable layout, score, threshold, and visual-QA values
+belong in YAML, not as literals in scripts.
 
-## Aktualny zakres eksperymentu 1
+## Current scope of experiment 1
 
-Pierwsza optymalizacja dotyczy jednego ruchomego cytatu i realnego editorialu z
-małymi akapitami. Nie rozszerzamy jeszcze tej pętli jednocześnie na wszystkie
-grafiki, cytaty, breakpointy, growth i routing. Najpierw mierzymy legalność,
-score, orphany, spacing, zmianę łamania oraz koszt reflow.
+The first optimization covers one movable quote and a real editorial with small
+paragraphs. We are not yet extending this loop simultaneously to all graphics,
+quotes, breakpoints, growth, and routing. First we measure legality, score,
+orphans, spacing, changes in line breaking, and reflow cost.
