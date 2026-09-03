@@ -81,6 +81,27 @@ fragment policy: fewer lines make an early column or slot transition visibly
 weak. It is not a universal typography law and must be calibrated against the
 editorial corpus. A naturally empty final tail is allowed.
 
+### Planner-originated hard rules
+
+The evaluator preserves `error` diagnostics already produced by the planner,
+so these are also hard rejections even though their implementation lives in
+the planner. They describe an inability to construct an executable plan, not a
+quality preference.
+
+| Codes | Rejection rule | Why it is hard |
+|---|---|---|
+| `PLANNER_ITERATION_POLICY_INVALID`, `PLANNER_DID_NOT_STABILIZE` | The planner policy must be valid and the bounded planning/reflow process must reach a stable result. | The returned plan is not a reliable result of the planning contract. |
+| `MAX_PAGES_EXCEEDED`, `FLOW_CONTINUATION_FORBIDDEN`, `FLOW_START_PAGE_INVALID` | Content cannot exceed the configured page limit, continue through a forbidden route, or start outside the route’s allowed page. | The plan cannot be rendered within the template’s declared page/route contract. |
+| `FLOW_ROUTE_NOT_FOUND`, `FLOW_SLOT_NOT_FOUND`, `LAYOUT_NOT_FOUND` | Every flow continuation must resolve to a route, slot, and page layout. | There is no physical destination for the content. |
+| `GROW_POLICY_INVALID`, `GROW_TARGET_NOT_FOUND` | A growing slot must have a valid growth policy and every pushed target must exist. | The planner cannot execute the declared displacement relationship. |
+| `INSERTION_ROUTE_NOT_FOUND`, `INSERTION_SLOT_NOT_FOUND`, `INSERTION_PLAN_MISSING`, `INSERTION_PLAN_PASSED`, `INSERTION_OVERFLOW`, `INSERTION_PRECEDENCE_CONFLICT` | An insertion must have a valid route/slot, remain synchronized with its plan, fit its measured box, and obey precedence. | The obstacle and the text flow would disagree about what is on the page. |
+| `MOVABLE_INSERTION_TARGET_NOT_FOUND`, `MOVABLE_INSERTION_BOUNDS_INVALID` | A movable insertion must resolve to a planned insertion and its candidate frame must contain the measured box with a valid candidate count. | Candidate evaluation would otherwise compare fabricated or incomplete geometry. |
+| `GRAPHIC_ROUTE_NOT_FOUND`, `GRAPHIC_SLOT_NOT_FOUND`, `GRAPHIC_PAGE_OUT_OF_RANGE`, `GRAPHIC_SHAPE_PARAMETER_INVALID`, `GRAPHIC_ASSET_NOT_FOUND` | A graphic must have a valid route, slot, page, shape parameters, and asset. | Text wrapping and rendering cannot be trusted without a valid obstacle. |
+| `UNSUPPORTED_INLINE_ASSET` | Inline assets must have an asset-to-slot mapping before text planning. | The planner has no legal geometry for the inline content. |
+| `NON_ATOMIC_BLOCK_IN_BLOCK_SLOT`, `BLOCK_MEASUREMENT_UNAVAILABLE`, `BLOCK_MEASUREMENT_FAILED`, `BLOCK_MEASUREMENT_INVALID` | Block slots may only receive supported atomic blocks with a successful, valid measurement. | An unmeasured or malformed block cannot be placed deterministically. |
+| `TABLE_MEASUREMENT_UNAVAILABLE`, `TABLE_MEASUREMENT_FAILED`, `TABLE_MEASUREMENT_INVALID` | A table fragment must have an available, successful, and valid renderer-neutral measurement. | Row coverage and collision checks would be based on unknown geometry. |
+| `MINIMUM_FRAGMENT_UNSATISFIED`, `OVERFULL_LINE` | The planner must not commit a fragment below its configured minimum or a line that exceeds its usable width. | The result violates the text-flow execution contract, not merely its visual preference. |
+
 ### Tables, atomic blocks, and assets
 
 | Codes | Rejection rule | Why it is hard |

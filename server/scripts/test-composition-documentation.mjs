@@ -8,6 +8,7 @@ const root = process.cwd();
 const configPath = join(root, 'templates/render-config.yml');
 const compositionDocsRoot = join(root, '..', 'docs/composition');
 const evaluatorPath = join(root, 'src/composition/evaluator.ts');
+const plannerPath = join(root, 'src/composition/text-planner.ts');
 
 function leafPaths(value, prefix = '') {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [prefix];
@@ -43,19 +44,26 @@ if (missingFields.length > 0) {
 }
 
 const evaluator = await readFile(evaluatorPath, 'utf8');
-const hardRuleCodes = [...evaluator.matchAll(/error\('([A-Z][A-Z0-9_]*)'/gu)].map((match) => match[1]);
+const planner = await readFile(plannerPath, 'utf8');
+const evaluatorHardRuleCodes = [...evaluator.matchAll(/error\('([A-Z][A-Z0-9_]*)'/gu)].map((match) => match[1]);
+const plannerHardRuleCodes = [...planner.matchAll(/diagnostic\('error', '([A-Z][A-Z0-9_]*)'/gu)].map((match) => match[1]);
+const hardRuleCodes = [...evaluatorHardRuleCodes, ...plannerHardRuleCodes];
 const missingHardRules = [...new Set(hardRuleCodes)].filter((code) => !documentation.includes(code));
 if (missingHardRules.length > 0) {
   throw new Error([
-    'Documentation contract failed: every evaluator hard rule must be listed with its rejection meaning and reason.',
+    'Documentation contract failed: every composition hard rule must be listed with its rejection meaning and reason.',
     `Missing hard rules: ${missingHardRules.join(', ')}`,
   ].join('\n'));
 }
 
 const pdfCompositionFields = [
   'planner_max_iterations',
+  'heading_keep_with_next_lines',
+  'widow_min_lines',
+  'orphan_min_lines',
   'planner_minimum_fragment_lines',
   'composition_geometry_tolerance',
+  'list_item_keep_together',
   'composition_max_pages',
   'plan_coverage_max_gap',
 ];

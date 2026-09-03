@@ -106,18 +106,52 @@ explicitly tied to the composition contract:
 | Field | Meaning and interactions |
 |---|---|
 | `pdf.planner_max_iterations` | Upper bound for planner/reflow passes. It limits recovery work; it does not make an unresolved illegal plan legal. |
+| `pdf.heading_keep_with_next_lines` | Minimum following lines reserved with a heading by the planner. It interacts with heading detection, available slot height, and `minimumLinesAtStart`. |
+| `pdf.widow_min_lines` | Minimum lines retained at the start of a continued text fragment. It interacts with slot capacity and `planner_minimum_fragment_lines`; it can cause a block to move or produce a hard planner diagnostic. |
+| `pdf.orphan_min_lines` | Minimum lines retained at the end of a text fragment before continuing. It interacts with the next slot’s capacity and the planner’s fragment selection. It is distinct from `composition_score.orphan_max_fragment_lines`, which is a visual-quality heuristic. |
 | `pdf.planner_minimum_fragment_lines` | Default minimum useful fragment size copied into the plan and used by underfilled-slot checks. It interacts with obstacle availability and planner decisions. |
 | `pdf.composition_geometry_tolerance` | Planning/search tolerance for comparing candidate geometry. It is separate from the evaluator’s machine-precision containment guard and visual-QA tolerance. |
+| `pdf.list_item_keep_together` | Boolean-style switch controlling whether a list item is kept together when the first fragment would leave a hole. It interacts with `widow_min_lines` and local slot capacity. |
 | `pdf.composition_max_pages` | Maximum number of composition pages accepted by the report renderer. It interacts with page-limit validation after composition. |
 | `pdf.plan_coverage_max_gap` | Maximum allowed coverage gap in the report-plan contract. It interacts with dynamic-flow coverage checks before final PDF rendering. |
 
 ## Hard-rule source
 
 Hard rules are not configuration fields. Their canonical list is the
-`error('CODE', ...)` call sites in
-[`composition/evaluator.ts`](../../server/src/composition/evaluator.ts) and
-is documented in [evaluator.md](evaluator.md). The documentation-contract test
-extracts those codes and fails if a newly added hard rule is not added to that
-catalog. Numeric policy values that influence hard checks are listed above;
-geometry containment still uses machine precision, while minimum-fragment and
+`error('CODE', ...)` call sites in the evaluator and the
+`diagnostic('error', 'CODE', ...)` call sites in the planner. Because the
+evaluator carries planner diagnostics into the final evaluation, both sources
+are part of the same hard gate. The documentation-contract test extracts both
+sets of codes and fails if a newly added hard rule is not added to the catalog.
+Numeric policy values that influence hard checks are listed above; geometry
+containment still uses machine precision, while minimum-fragment and
 page/coverage limits come from the `pdf` configuration seam.
+
+## Responsibility boundaries
+
+The configuration is intentionally consumed through different seams:
+
+- `composition/evaluator.ts` reads `composition_score` and evaluates the
+  completed plan. It does not read `quality`, `composition_search`, or PDF
+  typography values directly.
+- `composition/text-planner.ts` does not read YAML. Its interface accepts a
+  planner policy, which keeps the core planner independent of the renderer
+  configuration and makes policy injection testable.
+- `composition/text-engine.ts` and `composition/report-shadow.ts` are the
+  adapters that translate `pdf` configuration into planner policy, text
+  styles, measurements, and block capabilities. This is the intended seam for
+  jsPDF and template-specific configuration.
+- `quality` belongs to artifact inspection and visual QA. A quality threshold
+  must not be used as evaluator permission to place an illegal plan.
+- `pdf.composition_max_pages` and `pdf.plan_coverage_max_gap` are outer
+  renderer/report-plan gates. They are not score terms and are not evaluated by
+  `composition/evaluator.ts`.
+- `composition_search` currently supplies movable-candidate policies to tests
+  and experiments. The production planner accepts those policies through its
+  interface; the runtime does not yet load this group automatically. That is
+  an explicit integration gap, not a reason to make the planner read YAML.
+
+The architecture check protects import cycles and broad layer violations. This
+documentation test protects the semantic side of the seam: when a policy
+field or hard rule is added, its owner and interactions must be described here
+or in the evaluator/planner documents.
