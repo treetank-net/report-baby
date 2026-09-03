@@ -1,7 +1,8 @@
 # Plan 08 — głębokość wyszukiwania kandydatów
 
-Status: eksperyment screeningu kontrastu wykonany; integracja produkcyjna
-oczekuje na osobny krok implementacyjny
+Status: eksperyment screeningu i renderer-neutralny sampler wykonane;
+integracja z asset adapterem i evaluatorem oczekuje na osobny krok
+implementacyjny
 
 ## Cel
 
@@ -140,9 +141,13 @@ screening nie wydawały różnych werdyktów dla tego samego koloru.
 
 ## Następny krok po eksperymencie
 
-Najpierw należy przenieść samą funkcję lokalnego próbkowania do małego modułu
-wykorzystywanego przez adapter assetów, zachowując evaluator bez zależności od
-dekodera pikseli. Następnie trzeba dostarczyć do istniejącego wyniku ewaluacji
+Renderer-neutralny sampler został już dodany w
+[`server/src/composition/contrast.ts`](../../server/src/composition/contrast.ts)
+i sprawdzony na publicznym composition seam. Nie dekoduje on obrazów i nie
+zna PDF-a — przyjmuje przygotowany raster oraz region w jego współrzędnych.
+
+Następnie trzeba podłączyć go do adaptera assetów, zachowując evaluator bez
+zależności od dekodera pikseli, a potem dostarczyć do istniejącego wyniku ewaluacji
 status, najgorszy pomiar i obszar próbki, bez dodawania kontrastu do łamania
 linii. Pierwsza wersja produkcyjna powinna obsługiwać znane kolory i
 znormalizowane obrazy PNG; JPEG/SVG i nieznane tła powinny jawnie zwracać

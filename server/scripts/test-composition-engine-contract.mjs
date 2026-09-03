@@ -19,7 +19,7 @@ if (build.status !== 0) throw new Error(`composition engine contract bundle fail
 
 try {
   const composition = await import(bundle);
-  const { combineJsPdfCompositionBlockCapabilities, compareCompositionEvaluations, createCompositionEngine, renderComposition } = composition.default ?? composition;
+  const { combineJsPdfCompositionBlockCapabilities, compareCompositionEvaluations, contrastRatio, createCompositionEngine, relativeLuminance, renderComposition, sampleCompositionContrast } = composition.default ?? composition;
   const document = { flows: { main: { id: 'main', blocks: [], continuation: 'allowed' } } };
   const plan = {
     pages: [],
@@ -133,6 +133,49 @@ try {
     () => renderComposition(document, { ...result, evaluation: { status: 'rejected', diagnostics: [], residualContent: [] } }, { render: () => 'must not render' }),
     /rejected and cannot be rendered/u,
   );
+  assert.equal(relativeLuminance([0, 0, 0]), 0);
+  assert.equal(relativeLuminance([255, 255, 255]), 1);
+  assert.ok(Math.abs(contrastRatio([10, 10, 10], [0, 0, 0]) - 1.0607) < 0.0001, 'contrast must use the current sRGB branch point');
+  const localImage = {
+    width: 4,
+    height: 1,
+    channels: 3,
+    pixels: Uint8Array.from([255, 255, 255, 255, 255, 255, 0, 0, 0, 255, 255, 255]),
+  };
+  const localContrast = sampleCompositionContrast(localImage, {
+    region: { x: 0, y: 0, width: 4, height: 1 },
+    foreground: [0, 0, 0],
+    minimumRatio: 4.5,
+    sampleCount: 4,
+  });
+  assert.equal(localContrast.status, 'fail', 'local contrast must reject a sampled dark patch');
+  assert.equal(localContrast.minimumRatio, 1);
+  assert.deepEqual(localContrast.worstSample, { x: 2, y: 0, ratio: 1 });
+  const transparentImage = {
+    width: 1,
+    height: 1,
+    channels: 4,
+    pixels: Uint8Array.from([0, 0, 0, 128]),
+  };
+  assert.equal(sampleCompositionContrast(transparentImage, {
+    region: { x: 0, y: 0, width: 1, height: 1 },
+    foreground: [0, 0, 0],
+    minimumRatio: 4.5,
+    sampleCount: 1,
+    pageBackground: [255, 255, 255],
+  }).status, 'pass');
+  assert.equal(sampleCompositionContrast(transparentImage, {
+    region: { x: 0, y: 0, width: 1, height: 1 },
+    foreground: [0, 0, 0],
+    minimumRatio: 4.5,
+    sampleCount: 1,
+  }).status, 'unknown');
+  assert.equal(sampleCompositionContrast(localImage, {
+    region: { x: 4, y: 0, width: 1, height: 1 },
+    foreground: [0, 0, 0],
+    minimumRatio: 4.5,
+    sampleCount: 1,
+  }).reason, 'invalid-region');
   console.log(JSON.stringify({ status: 'passed', seam: 'planner-evaluator-backend-neutral' }, null, 2));
 } finally {
   await rm(temporary, { recursive: true, force: true });

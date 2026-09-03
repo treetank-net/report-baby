@@ -59,6 +59,16 @@ export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOption
 export { createTextCompositionPlanner, type TextCompositionPlannerPolicy } from './text-planner.js';
 export { createTextCompositionEngine } from './text-engine.js';
 export {
+  contrastRatio,
+  relativeLuminance,
+  sampleCompositionContrast,
+  type CompositionContrastResult,
+  type CompositionContrastSampleOptions,
+  type CompositionContrastStatus,
+  type CompositionRasterImage,
+  type CompositionRgbColor,
+} from './contrast.js';
+export {
   createJsPdfTextBackend,
   createJsPdfChartBlockCapabilities,
   createJsPdfMetricBlockCapabilities,

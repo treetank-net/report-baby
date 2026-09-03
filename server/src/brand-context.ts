@@ -750,7 +750,7 @@ function parseHexColor(value: string | undefined): [number, number, number] | un
 
 function channelLuminance(value: number): number {
   const ratio = value / 255;
-  return ratio <= 0.03928 ? ratio / 12.92 : ((ratio + 0.055) / 1.055) ** 2.4;
+  return ratio <= 0.04045 ? ratio / 12.92 : ((ratio + 0.055) / 1.055) ** 2.4;
 }
 
 export function colorContrastRatio(foreground: string | undefined, background: string | undefined): number | undefined {

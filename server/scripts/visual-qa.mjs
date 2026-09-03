@@ -84,7 +84,7 @@ function worstOverflow(inner, outer) {
 
 function channelLuminance(value) {
   const channel = value / 255;
-  return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 }
 
 function relativeLuminance(rgb) {

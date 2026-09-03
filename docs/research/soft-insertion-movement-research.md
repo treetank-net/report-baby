@@ -769,9 +769,10 @@ This validates the shape of the cheap screening experiment, not yet the full
 production implementation. The fixture is synthetic, the sample region is a
 rectangle rather than an exact glyph mask, and JPEG/SVG decoding plus actual
 `contain`/crop mapping still need real-asset tests. The next implementation
-step should therefore promote the sampler behind the existing asset-adapter
-seam and leave the planner free of pixel decoding. It should add no score
-weight until real PDF fixtures have shown that the measurement tracks visible
+step should therefore connect the new renderer-neutral sampler in
+`server/src/composition/contrast.ts` behind the existing asset-adapter seam
+and leave the planner free of pixel decoding. It should add no score weight
+until real PDF fixtures have shown that the measurement tracks visible
 quality.
 
 The experiment also exposed a small consistency issue that must be resolved
