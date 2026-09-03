@@ -65,6 +65,9 @@ najpierw muszą istnieć testy i działający seam dla pętli.
    wydzielanie odpowiedzialności z obecnego monolitu.
 7. [Block kinds i miękkie insertiony](07-block-kinds-and-soft-insertions.md) —
    dalsze rozszerzenie na KPI, wykresy, grafiki i cytaty.
+8. [Głębokość wyszukiwania kandydatów](08-candidate-search-depth.md) —
+   sprawdzenie, czy zgrubne pozycje i lokalne doprecyzowanie szukają dostatecznie
+   dokładnie bez niekontrolowanego wzrostu kosztu.
 
 ## Granica wykonalności
 

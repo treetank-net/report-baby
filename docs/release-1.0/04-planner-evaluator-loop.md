@@ -2,7 +2,8 @@
 
 Status: ograniczona pętla selekcji kandydatów jest zaimplementowana i
 zweryfikowana dla ruchomego cytatu; globalne feedback-driven rewrites pozostają
-poza zakresem eksperymentu 1
+poza zakresem eksperymentu 1. Najbliższym priorytetem jest podłączenie tej
+możliwości do normalnego renderowania oraz opisanie dozwolonych ruchów elementu.
 
 ## Cel
 
@@ -93,6 +94,82 @@ eksperymenty do zbudowania `movableInsertionBounds`. Produkcyjny planner nie
 czyta tej grupy z YAML; przyjmuje policy przez swój interfejs. To jest
 świadoma, ale niedomknięta decyzja seamu, a nie powód, aby planner importował
 `render-config.yml`.
+
+## Najbliższy priorytet: opisać i uruchomić rzeczywiste ruchy elementu
+
+Zanim zwiększymy liczbę kandydatów albo zaczniemy przesuwać wiele elementów,
+musimy jawnie opisać, co może się zmienić dla jednego konkretnego insertionu.
+Nie wprowadzamy nowej encji. Wykorzystujemy istniejący block, jego placement,
+box, powiązany flow i istniejące obstacles/barriers.
+
+### Co można zadeklarować
+
+| Obszar | Przykład deklaracji | Co sprawdza planner |
+|---|---|---|
+| Pozycja | „najlepiej tutaj, ale do 10 mm wyżej lub niżej” | generuje pozycje w podanym zakresie, bez wychodzenia poza bounds |
+| Kierunek ruchu | tylko `x`, tylko `y`, albo oba kierunki | nie tworzy wariantów w niedozwolonym kierunku |
+| Przyklejenie | dolna krawędź grafiki przy dolnej krawędzi obszaru; cytat związany z początkiem tekstu | zachowuje wskazaną relację w każdym kandydacie |
+| Wyrównanie | lewa, prawa lub środkowa krawędź względem boxa/slotu | zmienia tylko dozwoloną współrzędną |
+| Rozmiar | szerokość i wysokość stałe albo zakres `min`–`max` | odrzuca wariant poza zakresem; nie zmienia wymiaru, którego nie wolno zmieniać |
+| Proporcje | stałe proporcje grafiki albo niezależna szerokość/wysokość | zachowuje proporcje, jeśli użytkownik ich nie poluzował |
+| Padding | minimalny i maksymalny padding treści | box cytatu nie staje się mniejszy niż jego treść i wymagany padding |
+| Tekst wewnątrz | szerokość nie mniejsza niż wymagana przez najdłuższe słowo; wysokość wyliczona z fontu i liczby linii | przy zmianie szerokości ponownie mierzy i łamie tekst; nie dopuszcza do overflow ani utraty słów |
+| Wpływ na flow | box grafiki/cytatu zasłania określony obszar flow | przelicza dostępne miejsca tekstu po każdej zmianie boxa |
+
+### Co jest możliwe już teraz
+
+Obecny kod potrafi bez zmiany podstawowego modelu:
+
+1. wziąć istniejący insertion i zmierzyć jego rzeczywisty rozmiar;
+2. wyznaczyć jego dozwolone bounds;
+3. wygenerować kilka deterministycznych pozycji na jednej osi;
+4. utrzymać element w całości w bounds;
+5. użyć jego boxa jako przeszkody dla tekstu;
+6. przeliczyć pełny układ dla każdej pozycji;
+7. odrzucić warianty nielegalne;
+8. porównać legalne warianty przez score i wybrać najlepszy;
+9. wykonać lokalne doprecyzowanie wokół wybranego wariantu;
+10. zapisać pozycję, score i koszt ponownego przeliczenia w trace.
+
+To jest zakres pierwszej implementacji produkcyjnej. Nie zakładamy jeszcze, że
+możemy bezpiecznie zmieniać rozmiar każdego elementu.
+
+### Czego obecny kod jeszcze nie gwarantuje
+
+Poniższe możliwości wymagają osobnych testów i nie mogą zostać dopisane jako
+luźne opcje bez określenia ich skutków:
+
+- zmiana szerokości tekstowego insertionu połączona z ponownym pomiarem jego
+  wysokości;
+- zgniatanie boxa do wartości minimalnej wynikającej z fontu, paddingu i
+  najdłuższego słowa;
+- jednoczesne utrzymywanie przyklejenia do krawędzi i zmiany rozmiaru;
+- przesuwanie jednocześnie w osi `x` i `y`;
+- optymalizacja kilku insertionów w jednym przebiegu;
+- automatyczne wyznaczanie bounds na podstawie relacji do dowolnego innego
+  elementu;
+- nieograniczone przeszukiwanie całej strony.
+
+### Rozdzielenie legalności od wyglądu
+
+Planner sprawdza, czy może zbudować wariant. Evaluator odpowiada na dwa osobne
+pytania:
+
+- czy wariant łamie twarde ograniczenie, na przykład wychodzi poza bounds,
+  traci słowa albo narusza niedozwoloną relację;
+- jeśli jest legalny, czy wygląda lepiej od innych legalnych wariantów.
+
+Naruszenie bounds, minimalnej szerokości tekstu, paddingu, proporcji albo
+przyklejenia jest odrzuceniem. Większy odstęp, gorsze łamanie akapitu albo
+gorszy balans kolumny pozostają ujemnymi punktami, ale nie odrzucają wariantu.
+
+### Kryterium zamknięcia tego priorytetu
+
+Test produkcyjnego renderowania musi pokazać, że deklaracja ruchu przechodzi
+przez cały przebieg: zmierzony box → kandydaci → ponowne ułożenie tekstu →
+ocena → wybrany PDF. Musimy również umieć odczytać z trace, które pozycje
+sprawdzono, które odrzucono, które zaakceptowano i dlaczego wybrany wariant
+był najlepszy.
 
 ## Minimalny wariant implementacji
 

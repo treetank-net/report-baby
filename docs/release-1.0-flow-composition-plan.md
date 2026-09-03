@@ -53,6 +53,7 @@ Szczegóły, zależności, testy i miejsca wymagające doprecyzowania są w:
 5. [Render, dry_run i debug](release-1.0/05-render-dry-run-debug-parity.md)
 6. [Utrzymywalność planera](release-1.0/06-planner-maintainability.md)
 7. [Block kinds i miękkie insertiony](release-1.0/07-block-kinds-and-soft-insertions.md)
+8. [Głębokość wyszukiwania kandydatów](release-1.0/08-candidate-search-depth.md)
 
 Dokumentacja aktualnego systemu znajduje się osobno w katalogu
 [Composition](composition/README.md). Plany wykonawcze opisują kolejność prac,
@@ -92,11 +93,16 @@ obniżenie oczekiwań bez zmiany kontraktu renderer’a.
 06 utrzymywalność planera
         ↓
 07 kolejne block kinds i miękkie insertiony
+        ↓
+08 głębokość wyszukiwania kandydatów
 ```
 
 Plan 05 może być częściowo wykonywany wcześniej jako obserwacja obecnego
 renderingu, ale jego pełne kryteria zależą od planu 04. Plan 07 jest
-rozszerzeniem po udowodnieniu, że pętla działa na ograniczonym przypadku.
+rozszerzeniem po udowodnieniu, że pętla działa na ograniczonym przypadku. Plan
+08 jest celowo późniejszy: najpierw musimy wiedzieć, jakie ruchy elementu są
+legalne i jak działa pełne przeliczenie tekstu, dopiero potem mierzymy, czy
+przeszukujemy wystarczająco dużą część dozwolonego obszaru.
 
 ## Kryteria całego release’u
 
