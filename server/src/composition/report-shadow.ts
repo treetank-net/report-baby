@@ -5,6 +5,7 @@ import type { CompositionInput } from '../contract/schema.js';
 import type { CompiledTemplate } from '../template-contract.js';
 import type { CompositionTemplate } from './model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './engine.js';
+import type { CompositionContrastProvider } from './contrast.js';
 import { compositionDocumentFromInput } from './input.js';
 import { compositionTemplateFromPageGeometry } from './page-template-adapter.js';
 import {
@@ -30,6 +31,7 @@ export interface ReportCompositionOptions {
   styles?: JsPdfCompositionStyles;
   measureBlock?: CompositionTextMetrics['measureBlock'];
   measureTable?: CompositionTextMetrics['measureTable'];
+  contrastProvider?: CompositionContrastProvider;
 }
 
 export interface ReportCompositionResult {
@@ -354,7 +356,7 @@ export function planReportComposition(
     keepListItemsTogether: pdfNumber(readRenderConfig().pdf, 'listItemKeepTogether') === 1,
     ...options.policy,
   };
-  const result = createTextCompositionEngine(template, policy).plan(document, metrics);
+  const result = createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics);
   return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };
 }
 

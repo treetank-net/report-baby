@@ -484,6 +484,7 @@ contrast:
   large_minimum: 3
   large_text_px: 24
   large_bold_text_px: 19
+  sample_count: 6
 chrome:
   lockup:
     standard:

@@ -9,6 +9,7 @@ import type {
   CompositionScoreComponent,
 } from './engine.js';
 import { graphicIntervalsForLine } from './graphic-geometry.js';
+import type { CompositionContrastAssessment, CompositionContrastProvider } from './contrast.js';
 
 function wordsOf(text: string | undefined): string[] {
   return text?.trim().split(/\s+/u).filter(Boolean) ?? [];
@@ -441,8 +442,25 @@ function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreComponent
   };
 }
 
-function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan): { score: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan)];
+function scoreContrast(assessments: CompositionContrastAssessment[]): CompositionScoreComponent {
+  const failing = assessments.filter((assessment) => assessment.status === 'fail');
+  const unknown = assessments.filter((assessment) => assessment.status === 'unknown');
+  return {
+    code: 'contrast',
+    value: failing.length,
+    points: 0,
+    details: {
+      assessmentCount: assessments.length,
+      failingGraphicIds: failing.map((assessment) => assessment.graphicId),
+      unknownGraphicIds: unknown.map((assessment) => assessment.graphicId),
+      assessments,
+      pointsPolicy: 'not-calibrated',
+    },
+  };
+}
+
+function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; breakdown: CompositionScoreComponent[] } {
+  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
   return {
     score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
     breakdown,
@@ -669,8 +687,29 @@ function checkInsertionSourceOrder(document: CompositionDocument, plan: Composit
  * Evaluate the renderer-neutral text plan before a backend is allowed to draw.
  * This evaluator intentionally knows nothing about PDF, PNG or jsPDF.
  */
-export function evaluateCompositionPlan(document: CompositionDocument, plan: CompositionPlan): CompositionEvaluation {
+export interface CompositionEvaluationOptions {
+  contrastProvider?: CompositionContrastProvider;
+}
+
+export function evaluateCompositionPlan(document: CompositionDocument, plan: CompositionPlan, options: CompositionEvaluationOptions = {}): CompositionEvaluation {
   const diagnostics = [...plan.diagnostics];
+  const contrastAssessments = options.contrastProvider?.assess(plan) ?? [];
+  for (const assessment of contrastAssessments) {
+    const details = {
+      graphicId: assessment.graphicId,
+      assetId: assessment.assetId,
+      page: assessment.page,
+      lineCount: assessment.lineCount,
+      minimumRatio: assessment.minimumRatio,
+      sampleCount: assessment.sampleCount,
+      requiredRatio: assessment.requiredRatio,
+      regions: assessment.regions,
+      worstSample: assessment.worstSample,
+      reason: assessment.reason,
+    } satisfies Record<string, unknown>;
+    if (assessment.status === 'fail') diagnostics.push({ severity: 'warning', code: 'CONTRAST_BELOW_THRESHOLD', message: `Text over graphic '${assessment.graphicId}' has insufficient sampled contrast.`, page: assessment.page, details });
+    if (assessment.status === 'unknown') diagnostics.push({ severity: 'warning', code: 'CONTRAST_UNKNOWN', message: `Contrast for text over graphic '${assessment.graphicId}' could not be established.`, page: assessment.page, details });
+  }
   checkEmptyFlowPlacements(document, plan, diagnostics);
   checkFlowBarrierBoxCandidates(plan, diagnostics);
   checkEmptyAndUnderfilledSlots(document, plan, diagnostics);
@@ -1036,7 +1075,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
   }
   const hasErrors = diagnostics.some((item) => item.severity === 'error');
   const hardViolations = diagnostics.filter((item) => item.severity === 'error');
-  const scored = hasErrors ? { score: Number.NEGATIVE_INFINITY, breakdown: [] } : scoreLegalPlan(document, plan);
+  const scored = hasErrors ? { score: Number.NEGATIVE_INFINITY, breakdown: [] } : scoreLegalPlan(document, plan, contrastAssessments);
   return {
     status: hasErrors ? 'rejected' : diagnostics.length > 0 ? 'accepted-with-warnings' : 'accepted',
     diagnostics,

@@ -53,15 +53,19 @@ export type {
   CompositionWordRange,
 } from './engine.js';
 export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './engine.js';
-export { evaluateCompositionPlan } from './evaluator.js';
+export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluator.js';
 export { compositionDocumentFromInput } from './input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './page-template-adapter.js';
 export { createTextCompositionPlanner, type TextCompositionPlannerPolicy } from './text-planner.js';
-export { createTextCompositionEngine } from './text-engine.js';
+export { createTextCompositionEngine, type TextCompositionEngineOptions } from './text-engine.js';
 export {
   contrastRatio,
+  createCompositionContrastProvider,
   relativeLuminance,
   sampleCompositionContrast,
+  type CompositionContrastAssessment,
+  type CompositionContrastProvider,
+  type CompositionContrastProviderOptions,
   type CompositionContrastResult,
   type CompositionContrastSampleOptions,
   type CompositionContrastStatus,

@@ -768,19 +768,60 @@ without that fill the result remained `unknown`.
 This validates the shape of the cheap screening experiment, not yet the full
 production implementation. The fixture is synthetic, the sample region is a
 rectangle rather than an exact glyph mask, and JPEG/SVG decoding plus actual
-`contain`/crop mapping still need real-asset tests. The next implementation
-step should therefore connect the new renderer-neutral sampler in
+`contain`/crop mapping still need real-asset tests. The first implementation
+slice now connects the renderer-neutral sampler in
 `server/src/composition/contrast.ts` behind the existing asset-adapter seam
-and leave the planner free of pixel decoding. It should add no score weight
-until real PDF fixtures have shown that the measurement tracks visible
-quality.
+and leaves the planner free of pixel decoding. It decodes PNG assets once,
+maps their actual `contain` rectangle, and passes compact assessments to the
+evaluator. It adds no score weight until real PDF fixtures have shown that the
+measurement tracks visible quality.
 
-The experiment also exposed a small consistency issue that must be resolved
-before promotion: the existing `brand-context.ts` and `visual-qa.mjs` helpers
-use the older sRGB branch point `0.03928`, while the current WCAG definition
-uses `0.04045`. The numerical difference is usually small, but one shared
-implementation and boundary tests are preferable to three subtly different
-contrast decisions.
+The experiment exposed a small consistency issue: the existing
+`brand-context.ts` and `visual-qa.mjs` helpers used the older sRGB branch point
+`0.03928`, while the current WCAG definition uses `0.04045`. The numerical
+difference is usually small. The implementation was updated to `0.04045` and
+the boundary is covered by the composition contract test; centralizing the
+formula remains a maintainability improvement for a later cleanup.
+
+### Measured cost on a real editorial image
+
+A separate disposable benchmark used the 1620×1080 RGB PNG from the earlier
+editorial artifact (`driver-technology.png`, 1,200,915 bytes). It used the
+production `sampleCompositionContrast` function for candidate screening and
+measured the preparation and reference operations separately:
+
+| Operation | Workload | Median |
+|---|---:|---:|
+| Decode the full PNG | one image | 95.5 ms |
+| Downsample to a 320×213 thumbnail | one image | 1.53 ms |
+| Downsample separately for 20 candidates | 20 preparations | 25.1 ms |
+| Local screening on the decoded full image | 20 × 6×6 samples | 0.92 ms |
+| Local screening on one cached thumbnail | 20 × 6×6 samples | 0.91 ms |
+| Exhaustive scan of the 20 candidate regions | all region pixels | 2079 ms |
+
+The result supports reusing the decoded source raster. Once decoded, twenty
+local checks are effectively negligible compared with decoding or full pixel
+scans. Creating one small derivative is also cheap, but creating it separately
+for every candidate is wasted work. A blur or global average does not buy
+enough correctness to replace local sampling: it can hide a dark or light
+patch under only part of the text region.
+
+This was a cost experiment, not a production integration test. It covered a
+real PNG but not JPEG decoding, SVG rasterization, PDF partial rendering,
+exact glyph masks, or the cost of retaining many decoded assets in memory. The
+current resolver can return PNG, JPEG, or rasterized SVG, while the sampler
+expects a raster; the adapter must therefore decode once and cache by asset
+identity plus preparation parameters. The cache should be bounded by the
+number of assets participating in the page/candidate set rather than decoding
+the same source for each candidate.
+
+Contrast is a mandatory evaluation step whenever a text region is placed over
+an image, transparency, overlay, or non-guaranteed custom palette. Mandatory
+evaluation is distinct from mandatory rejection: a known below-threshold
+sample can invalidate a candidate, while `unknown` needs an explicit policy,
+and a provisional pass over a varying image may need exact verification for
+the selected candidate. A known flat colour should use the exact colour
+calculation directly and should not be rasterized merely to run the check.
 
 ## Conclusions versus hypotheses
 
@@ -800,6 +841,10 @@ contrast decisions.
 - A cached, conservative low-resolution background sample is likely cheap
   enough for every candidate, while full partial rendering should be reserved
   for the winner and near-threshold alternatives.
+- On a real 1620×1080 PNG, twenty local checks took about 0.92 ms after one
+  decode of about 95.5 ms; preparing a thumbnail once took about 1.53 ms, so
+  a shared full-resolution raster is preferable when it is already needed for
+  rendering.
 - A blurred/global-average background is not sufficient for a hard contrast
   decision when an image has local light and dark regions.
 
@@ -842,6 +887,10 @@ contrast decisions.
    movable items?
 10. Should the score include a general readability penalty, or should each
     element family provide its own minimum-size hard rule?
+11. What is the measured decode and memory cost for JPEG and SVG assets in the
+    production asset adapter?
+12. How much does a bounded partial PDF render cost for a near-threshold
+    candidate compared with exact sampling of its source background?
 
 ## Suggested next work
 
@@ -856,9 +905,8 @@ capability and test it end to end:
    debug/trace output;
 4. verify that PDF, debug, and dry-run use the selected candidate identically;
 5. add bounded quote height fitting; and
-6. add contrast screening as an evaluator input, reusing the existing asset
-   decoding/cache seam and keeping the renderer-neutral planner free of pixel
-   decoding; and
+6. add the missing exact-PDF comparison and winner-fallback test for contrast;
+   the cheap PNG screening seam is already implemented; and
 7. only then add proportional image-size candidates.
 
 After those tests pass, run the search-depth experiment from

@@ -1,8 +1,8 @@
 # Plan 08 — głębokość wyszukiwania kandydatów
 
-Status: eksperyment screeningu i renderer-neutralny sampler wykonane;
-integracja z asset adapterem i evaluatorem oczekuje na osobny krok
-implementacyjny
+Status: eksperyment screeningu, renderer-neutralny sampler oraz pierwsza
+integracja PNG z asset adapterem i evaluatorem wykonane; kalibracja wag,
+JPEG/SVG i dokładna weryfikacja finalnego PDF-a pozostają otwarte
 
 ## Cel
 
@@ -146,21 +146,59 @@ Renderer-neutralny sampler został już dodany w
 i sprawdzony na publicznym composition seam. Nie dekoduje on obrazów i nie
 zna PDF-a — przyjmuje przygotowany raster oraz region w jego współrzędnych.
 
-Następnie trzeba podłączyć go do adaptera assetów, zachowując evaluator bez
-zależności od dekodera pikseli, a potem dostarczyć do istniejącego wyniku ewaluacji
-status, najgorszy pomiar i obszar próbki, bez dodawania kontrastu do łamania
-linii. Pierwsza wersja produkcyjna powinna obsługiwać znane kolory i
-znormalizowane obrazy PNG; JPEG/SVG i nieznane tła powinny jawnie zwracać
-`unknown`, dopóki nie będą miały bezpiecznego dekodowania.
+Sampler jest podłączony do istniejącego seam-u asset adapter → evaluator.
+Adapter dekoduje PNG raz, mapuje rzeczywisty prostokąt obrazu po `contain`, a
+evaluator zapisuje status, najgorszy pomiar, regiony próbek i ostrzeżenia bez
+dodawania kontrastu do łamania linii. JPEG oraz nieznane rastry zwracają
+`unknown`; SVG jest obsługiwane tylko wtedy, gdy resolver dostarczy raster.
+Planer pozostaje wolny od dekodowania pikseli.
 
-Przed tym podłączeniem należy ujednolicić granicę sRGB w istniejących
-implementacjach kontrastu i potwierdzić, że wynik dla granic testowych jest
-zgodny z WCAG.
+Granica sRGB w istniejących implementacjach kontrastu została ujednolicona do
+`0.04045` i objęta testem kontraktu zgodności z granicą WCAG.
 
-Dopiero po tym dodajemy test na prawdziwym obrazie, test mapowania cropu,
-test fallbacku po dokładnym odrzuceniu zwycięzcy oraz benchmark dla 20+
-kandydatów. Wagi scoringu pozostają niezmienione do czasu porównania wyników
-z ręczną oceną PDF-ów.
+### Pomiar kosztu na rzeczywistym obrazie
+
+Wykonano osobny, jednorazowy benchmark na rzeczywistym obrazie PNG z artefaktu
+editorialu: 1620×1080 px, RGB, 1 200 915 bajtów. Benchmark używał
+produkcyjnego `sampleCompositionContrast`; przygotowanie obrazu i pełny skan
+były osobnymi operacjami pomiarowymi. Mediany lokalnego uruchomienia były
+następujące:
+
+| Operacja | Zakres | Mediana |
+|---|---:|---:|
+| Dekodowanie pełnego PNG | 1 obraz | 95,5 ms |
+| Zmniejszenie do thumbnaila 320×213 | 1 obraz | 1,53 ms |
+| Zmniejszenie do thumbnaila osobno dla 20 kandydatów | 20 przygotowań | 25,1 ms |
+| Screening 20 kandydatów na pełnym, zdekodowanym obrazie | 20 × 6×6 próbek | 0,92 ms |
+| Screening 20 kandydatów na jednym cached thumbnailu | 20 × 6×6 próbek | 0,91 ms |
+| Skan wszystkich pikseli w 20 regionach | 20 regionów | 2079 ms |
+
+Wniosek praktyczny jest ważniejszy niż dokładne milisekundy z jednej maszyny:
+obraz należy przygotować raz, a potem próbkować lokalnie dla każdego kandydata.
+Jeżeli pełny raster jest już potrzebny do późniejszego renderingu, użycie jego
+próbek jest tańsze i dokładniejsze niż tworzenie rozmytej kopii. Thumbnail ma
+sens jako ograniczenie pamięci albo drugi, przybliżony etap, ale nie jako
+warunek screeningu. Generowanie thumbnaila osobno dla każdego kandydata jest
+niepotrzebnym mnożeniem kosztu.
+
+Benchmark nie mierzył JPEG-a, SVG ani częściowego renderowania PDF. Obecny
+`image-resolver` zachowuje JPEG jako JPEG, a renderer-neutralny sampler
+otrzymuje już raster; dlatego integracja musi najpierw jawnie określić decoder
+JPEG/SVG i cache. Nie wolno przenosić tego kosztu do każdego kandydata.
+
+Kontrast powinien być obowiązkowo sprawdzany, gdy tekst leży na grafice,
+przezroczystym obrazie, nakładce albo tle z niestandardowej palety. „Obowiązkowo
+sprawdzany” nie oznacza automatycznie „twardo odrzucany”: znany poniżej-progowy
+wynik może odrzucać kandydata, natomiast wynik `unknown` musi mieć jawną
+politykę, a wynik pozytywny dla zmiennego obrazu może wymagać dokładnego
+sprawdzenia zwycięzcy. Dla jednolitego koloru nie ma powodu dekodować obrazu —
+można policzyć dokładny kontrast z koloru tła.
+
+Benchmark dla 20 kandydatów na prawdziwym obrazie został wykonany. Test ścieżki
+adaptera i mapowania `contain` również istnieje. Pozostają test fallbacku po
+dokładnym odrzuceniu zwycięzcy oraz test porównujący screening z finalnym
+renderem PDF-a. Wagi scoringu pozostają niezmienione do czasu porównania
+wyników z ręczną oceną PDF-ów.
 
 ## Zależność od wcześniejszych planów
 
@@ -177,8 +215,12 @@ kilka elementów.
 
 - konkretna metoda przeszukiwania wymaga uzupełnienia po benchmarku planu 04
   i pierwszej wersji miękkich insertionów;
-- metoda i koszt weryfikacji kontrastu wymagają uzupełnienia po benchmarku
-  próbek obrazu i dokładnego renderowania;
+- dokładna weryfikacja kontrastu względem finalnego rastera PDF wymaga
+  uzupełnienia po pomiarze renderowania częściowego;
+- koszt dekodowania JPEG/SVG oraz częściowego renderowania PDF wymaga osobnego
+  pomiaru przed dopuszczeniem tych ścieżek do screeningu;
+- obowiązkowe wykonanie screeningu kontrastu jest już podłączone dla PNG, ale
+  wagi punktów i polityka `unknown` nadal wymagają kalibracji na PDF-ach;
 - decyzja, czy `unknown` ma blokować publikację dla określonych typów tekstu,
   wymaga osobnego ustalenia produktu;
 - wartości limitów wymagają uzupełnienia po pomiarze czasu na realnym

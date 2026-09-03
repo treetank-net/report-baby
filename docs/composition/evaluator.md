@@ -146,6 +146,7 @@ measurements are computed from plan geometry:
 | `paragraph-fragmentation` | Paragraphs split across different pages/slots | negative: count * `paragraph_fragmentation_penalty` |
 | `orphan-lines` | One-line paragraph fragments separated by at least `orphan_min_gap_mm` when an obstacle causes the gap | negative: count * `orphan_penalty` |
 | `insertion-spacing` | Uneven insertion padding, gaps before/after it, and spread between streams | negative: sum of measurements * the relevant weights |
+| `contrast` | Local contrast measurements for text overlapping painted image graphics | currently `0` points; statuses and samples are recorded while the product penalty is calibrated |
 
 A gap may be legal and caused by an immovable object, while still being
 aesthetically unfavorable. Its cause remains in the evaluation details and
@@ -169,5 +170,9 @@ showing which variant wins because of it.
 `CompositionEvaluation.scoreBreakdown` contains the value, points, and details
 for every component. The engine trace records this for every candidate together
 with insertion placements, status, hard-violation count, and `reflowPasses`.
-Raster PDF/PNG is a separate artifact test; the evaluator does not derive score
-from the image.
+Raster PDF/PNG is a separate artifact test; the evaluator does not decode
+image bytes. When an injected asset adapter supplies a contrast assessment, the
+evaluator records it in this component and emits a diagnostic for `fail` or
+`unknown`. The first integration keeps its points at zero until real editorial
+PDFs establish a useful penalty; this makes the mandatory measurement visible
+without inventing a weight.

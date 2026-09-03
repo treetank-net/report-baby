@@ -7,12 +7,20 @@ import { build } from 'esbuild';
 const root = resolve(new URL('..', import.meta.url).pathname);
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-image-resolver-'));
 const output = join(temporary, 'image-resolver.cjs');
+const rasterOutput = join(temporary, 'image-raster.cjs');
+const compositionOutput = join(temporary, 'composition.cjs');
 const contentRoot = join(root, '..', 'examples/brand-showcase/brands/flux');
 
 try {
   await build({ entryPoints: [join(root, 'src/image-resolver.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', loader: { '.ttf': 'binary', '.wasm': 'binary' }, outfile: output });
+  await build({ entryPoints: [join(root, 'src/image-raster.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', outfile: rasterOutput });
+  await build({ entryPoints: [join(root, 'src/composition/index.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', outfile: compositionOutput });
   const bundled = await import(output);
+  const rasterBundled = await import(rasterOutput);
+  const composition = await import(compositionOutput);
   const resolver = bundled.resolveImageAsset ?? bundled.default.resolveImageAsset;
+  const decodePngDataUri = rasterBundled.decodePngDataUri ?? rasterBundled.default.decodePngDataUri;
+  const createCompositionContrastProvider = composition.createCompositionContrastProvider ?? composition.default.createCompositionContrastProvider;
   const sourceModule = await build({ entryPoints: [join(root, 'src/source-context.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: join(temporary, 'source-context.cjs'), write: false });
   const sourceOutput = join(temporary, 'source-context.cjs');
   await writeFile(sourceOutput, sourceModule.outputFiles[0].contents);
@@ -22,6 +30,25 @@ try {
   const asset = await resolver('assets/backgrounds/hero.png', context);
   assert.equal(asset.format, 'PNG');
   assert.ok(asset.width > 0 && asset.height > 0);
+  const raster = decodePngDataUri(asset.data);
+  assert.ok(raster, 'resolved PNG must be decodable once for composition screening');
+  assert.equal(raster.width, asset.width);
+  assert.equal(raster.height, asset.height);
+  assert.equal(raster.pixels.length, raster.width * raster.height * raster.channels);
+  const provider = createCompositionContrastProvider({
+    rasterImages: new Map([['hero', raster]]),
+    foreground: [0, 0, 0],
+    minimumRatio: 4.5,
+    sampleCount: 6,
+  });
+  const findings = provider.assess({
+    lines: [{ blockId: 'body', flowId: 'main', slotId: 'text', page: 1, text: 'body', box: { x: 20, y: 20, width: 150, height: 10 }, naturalWidth: 150, startWord: 0, endWord: 1 }],
+    insertionLines: [],
+    graphicPlacements: [{ id: 'graphic:hero', graphicId: 'hero', assetId: 'hero', slotId: 'graphic', page: 1, shape: 'rectangle', wrap: 'none', box: { x: 0, y: 0, width: 200, height: 100 } }],
+  });
+  assert.equal(findings.length, 1);
+  assert.notEqual(findings[0].status, 'unknown', 'a resolved real PNG must produce a contrast result');
+  assert.ok((findings[0].minimumRatio ?? 0) > 0);
   await assert.rejects(() => resolver('../outside.png', context), /escapes|not found/);
   console.log('image resolver: local PNG validation and root confinement passed');
 } finally {

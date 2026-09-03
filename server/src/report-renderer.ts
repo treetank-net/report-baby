@@ -17,6 +17,7 @@ import {
   planReportComposition,
   type ReportCompositionResult,
 } from './composition/report-shadow.js';
+import { createCompositionContrastProvider } from './composition/contrast.js';
 import { compositionDocumentFromInput } from './composition/input.js';
 import {
   combineJsPdfCompositionBlockCapabilities,
@@ -35,6 +36,7 @@ import { installReportDrawingRecorder, type ReportDrawing } from './report-drawi
 import { loadRenderFontSet, newPdf, pdfFont, readableTextColor } from './render-primitives.js';
 import { compileTemplateSource, type CompiledTemplate } from './template-contract.js';
 import { resolveImageAsset } from './image-resolver.js';
+import { decodePngDataUri } from './image-raster.js';
 import type { SourceContext } from './source-context.js';
 
 export interface TemplateInfo { name: string; description: string; }
@@ -367,7 +369,21 @@ async function prepareReportComposition(name: string, data: CompositionInput, th
     if (!sourceContext) throw new Error('Image content requires an explicit source context.');
     resolvedImages.set(asset.id, await resolveImageAsset(asset.source, sourceContext));
   }
-    const imageCaption = theme.reportImageCaption;
+  const contrastRasters = new Map<string, NonNullable<ReturnType<typeof decodePngDataUri>>>();
+  for (const [assetId, asset] of resolvedImages) {
+    const raster = decodePngDataUri(asset.data);
+    if (raster) contrastRasters.set(assetId, raster);
+  }
+  const contrastProvider = resolvedImages.size > 0
+    ? createCompositionContrastProvider({
+      rasterImages: contrastRasters,
+      foreground: rgb(theme.foreground),
+      minimumRatio: configNumber(RENDER_CONFIG.contrast.bodyMinimum, 'contrast.body_minimum'),
+      sampleCount: configNumber(RENDER_CONFIG.contrast.sampleCount, 'contrast.sample_count'),
+      pageBackground: rgb(theme.background),
+    })
+    : undefined;
+  const imageCaption = theme.reportImageCaption;
   const compositionChartStyle = compositionChartStyleFromRenderConfig({ fillColor: rgb(theme.background), drawColor: rgb(theme.line), foregroundColor: rgb(theme.foreground), mutedColor: rgb(theme.muted), gridColor: rgb(theme.line), palette: theme.palette.map(rgb) });
   const imageCapabilities = compositionDocument.assets?.length
     ? createJsPdfImageBlockCapabilities(doc, family, resolvedImages, compositionImageStyleFromRenderConfig({
@@ -406,7 +422,7 @@ async function prepareReportComposition(name: string, data: CompositionInput, th
     subtitle: reportMetadataColor,
     eyebrow: reportMetadataColor,
   }, theme.titleCase, theme.glyphFontFamily);
-  const composition = planReportComposition(doc, template, planGeometry, data, { family, maxPages, includeTitlePage: Boolean(data.flows.title && template.pageTitle), includeHeaderFlow: Boolean(data.flows.header), auxiliaryTextWidths: { footer: footerTextWidth(doc, geometry, maxPages, theme) }, policy: { minimumWrapWidth: PDF_CONFIG.floatMinWidth }, styles: compositionStyles, ...(combined ? { measureBlock: combined.measureBlock } : {}), ...(tableCapabilities ? { measureTable: tableCapabilities.measureTable } : {}) });
+  const composition = planReportComposition(doc, template, planGeometry, data, { family, maxPages, includeTitlePage: Boolean(data.flows.title && template.pageTitle), includeHeaderFlow: Boolean(data.flows.header), auxiliaryTextWidths: { footer: footerTextWidth(doc, geometry, maxPages, theme) }, policy: { minimumWrapWidth: PDF_CONFIG.floatMinWidth }, styles: compositionStyles, ...(combined ? { measureBlock: combined.measureBlock } : {}), ...(tableCapabilities ? { measureTable: tableCapabilities.measureTable } : {}), ...(contrastProvider ? { contrastProvider } : {}) });
   attachPageChrome(doc, composition, planGeometry, theme);
   if (rejectOnEvaluation && composition.evaluation.status === 'rejected') {
     const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');

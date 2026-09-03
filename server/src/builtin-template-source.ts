@@ -29,7 +29,7 @@ export interface RenderConfig {
   metrics: { maxHeight: number; usableHeight: number; valueBaseline: number; labelBaseline: number; deltaBaseline: number; noteBottom: number; calloutHeight: number; calloutPaddingX: number; calloutPaddingY: number };
   text: { headingGlyphWidth: number; bodyGlyphWidth: number; monoHeadingGlyphWidth: number; monoBodyGlyphWidth: number; monoEstimatedGlyphWidth: number; lineHeight: number; titleMaxLines: number; subtitleMaxLines: number; headerMaxLines: number };
   pptx: Record<string, number>;
-  contrast: { bodyMinimum: number; largeMinimum: number; largeTextPx: number; largeBoldTextPx: number };
+  contrast: { bodyMinimum: number; largeMinimum: number; largeTextPx: number; largeBoldTextPx: number; sampleCount: number };
   chrome: {
     lockup: {
       standard: { markWidthPx: number; markHeightPx: number; markYPx: number; nameSizePx: number; nameWidthPx: number; nameHeightPx: number; verticalAlign: 'top' | 'middle' | 'bottom'; gapCompactPx: number; gapNormalPx: number; gapOpenPx: number };

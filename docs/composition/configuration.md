@@ -2,7 +2,7 @@
 
 This document explains the configuration groups that are part of the
 composition contract. The documentation-contract test checks every leaf field
-in `quality`, `composition_score`, and `composition_search` against this
+in `quality`, `composition_score`, `composition_search`, and `contrast` against this
 document and the other canonical documents in this directory. Adding a field
 to one of those groups without documenting its meaning and interactions fails
 the quality suite.
@@ -84,6 +84,22 @@ component while the evaluator still rejects any hard violation.
 | `composition_score.insertion_external_spacing_penalty` | Weight for the gap between an insertion and surrounding main-flow content. It interacts with preceding/following line geometry. |
 | `composition_score.insertion_cross_stream_spacing_penalty` | Weight for unequal gaps between insertion streams or columns. It interacts with same-page stream geometry and the other insertion-spacing weights. |
 
+## `contrast`
+
+These values define the initial contrast-reading policy for text painted over
+an image or another variable background. The asset adapter prepares a raster
+once, and the evaluator receives the resulting measurements for every
+overlapping candidate. They do not change line breaking and they do not make
+an unknown background silently pass.
+
+| Field | Meaning and interactions |
+|---|---|
+| `contrast.body_minimum` | Minimum WCAG-style contrast ratio used for ordinary text over a known background. A sampled failure is reported against the candidate; it is separate from the not-yet-calibrated quality points. |
+| `contrast.large_minimum` | Minimum ratio for large text when a future text-size-aware contrast policy selects the large-text rule. It must remain distinct from `body_minimum`; the current first adapter slice uses the ordinary-text policy. |
+| `contrast.large_text_px` | Text-size boundary used to classify large regular text. It interacts with `large_minimum` and the renderer's actual text-size units. |
+| `contrast.large_bold_text_px` | Text-size boundary used to classify large bold text. It interacts with `large_minimum`, font weight, and the renderer's actual text-size units. |
+| `contrast.sample_count` | Number of samples per axis in the deterministic local grid for each overlapping text region. It trades screening cost against the chance of missing a small background patch; it is not a full-pixel verification. |
+
 ## `composition_search`
 
 These values control how many legal movable-insertion variants are explored.
@@ -132,8 +148,9 @@ page/coverage limits come from the `pdf` configuration seam.
 The configuration is intentionally consumed through different seams:
 
 - `composition/evaluator.ts` reads `composition_score` and evaluates the
-  completed plan. It does not read `quality`, `composition_search`, or PDF
-  typography values directly.
+  completed plan. Contrast measurements arrive through an injected provider;
+  the evaluator does not decode image bytes. It does not read `quality`,
+  `composition_search`, or PDF typography values directly.
 - `composition/text-planner.ts` does not read YAML. Its interface accepts a
   planner policy, which keeps the core planner independent of the renderer
   configuration and makes policy injection testable.
@@ -143,6 +160,9 @@ The configuration is intentionally consumed through different seams:
   jsPDF and template-specific configuration.
 - `quality` belongs to artifact inspection and visual QA. A quality threshold
   must not be used as evaluator permission to place an illegal plan.
+- `contrast` belongs to the asset-adapter/evaluator seam. The adapter owns
+  decoding and crop mapping; the evaluator owns diagnostics and score
+  interpretation. The planner remains unaware of pixels.
 - `pdf.composition_max_pages` and `pdf.plan_coverage_max_gap` are outer
   renderer/report-plan gates. They are not score terms and are not evaluated by
   `composition/evaluator.ts`.

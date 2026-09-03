@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat, writeFile, mkdir } from 'node:fs/promises';
 import { join, relative, dirname, extname } from 'node:path';
-import { deflateSync, inflateSync } from 'node:zlib';
+import { deflateSync } from 'node:zlib';
 import { readRenderConfig } from './builtin-template-source.js';
+import { decodePng, type PngRaster } from './image-raster.js';
 
 export interface PreparedAssetSource {
   path: string;
@@ -34,12 +35,7 @@ export interface PreparedAssetsManifest {
   assets: PreparedAssetEntry[];
 }
 
-interface PngImage {
-  width: number;
-  height: number;
-  channels: 3 | 4;
-  pixels: Buffer;
-}
+type PngImage = PngRaster;
 
 interface PreparedTarget {
   role: string;
@@ -53,10 +49,6 @@ const preparedImageCache = new Map<string, Buffer>();
 
 export function clearPreparedAssetCache(): void {
   preparedImageCache.clear();
-}
-
-function uint32(buffer: Buffer, offset: number): number {
-  return buffer.readUInt32BE(offset);
 }
 
 function crc32(buffer: Buffer): number {
@@ -76,63 +68,6 @@ function pngChunk(type: string, data: Buffer): Buffer {
   const length = Buffer.alloc(4);
   length.writeUInt32BE(data.length, 0);
   return Buffer.concat([length, body, checksum]);
-}
-
-function decodePng(source: Buffer): PngImage {
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  if (!source.subarray(0, 8).equals(signature)) throw new Error('Only PNG brand assets can be prepared automatically.');
-  let width = 0;
-  let height = 0;
-  let channels: 3 | 4 = 3;
-  let interlace = 0;
-  const idat: Buffer[] = [];
-  let offset = 8;
-  while (offset + 12 <= source.length) {
-    const length = uint32(source, offset);
-    const type = source.toString('ascii', offset + 4, offset + 8);
-    const data = source.subarray(offset + 8, offset + 8 + length);
-    offset += 12 + length;
-    if (type === 'IHDR') {
-      width = uint32(data, 0);
-      height = uint32(data, 4);
-      const bitDepth = data[8];
-      const colorType = data[9];
-      interlace = data[12];
-      if (bitDepth !== 8 || (colorType !== 2 && colorType !== 6) || data[10] !== 0 || data[11] !== 0 || interlace !== 0) {
-        throw new Error('Prepared PNG assets must be non-interlaced 8-bit RGB or RGBA images.');
-      }
-      channels = colorType === 6 ? 4 : 3;
-    } else if (type === 'IDAT') idat.push(data);
-    else if (type === 'IEND') break;
-  }
-  if (!width || !height || idat.length === 0) throw new Error('PNG asset is missing image data.');
-  const rowBytes = width * channels;
-  const raw = inflateSync(Buffer.concat(idat));
-  const pixels = Buffer.alloc(height * rowBytes);
-  let sourceOffset = 0;
-  for (let y = 0; y < height; y += 1) {
-    const filter = raw[sourceOffset++];
-    const rowStart = y * rowBytes;
-    for (let x = 0; x < rowBytes; x += 1) {
-      const left = x >= channels ? pixels[rowStart + x - channels] : 0;
-      const above = y > 0 ? pixels[rowStart - rowBytes + x] : 0;
-      const upperLeft = y > 0 && x >= channels ? pixels[rowStart - rowBytes + x - channels] : 0;
-      const value = raw[sourceOffset++];
-      let predicted = 0;
-      if (filter === 1) predicted = left;
-      else if (filter === 2) predicted = above;
-      else if (filter === 3) predicted = Math.floor((left + above) / 2);
-      else if (filter === 4) {
-        const estimate = left + above - upperLeft;
-        const pa = Math.abs(estimate - left);
-        const pb = Math.abs(estimate - above);
-        const pc = Math.abs(estimate - upperLeft);
-        predicted = pa <= pb && pa <= pc ? left : pb <= pc ? above : upperLeft;
-      } else if (filter !== 0) throw new Error(`Unsupported PNG filter ${filter}.`);
-      pixels[rowStart + x] = (value + predicted) & 0xff;
-    }
-  }
-  return { width, height, channels, pixels };
 }
 
 function encodePng(image: PngImage): Buffer {

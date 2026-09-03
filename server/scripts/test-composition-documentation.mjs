@@ -25,7 +25,7 @@ const docNames = (await readdir(compositionDocsRoot))
   .sort();
 const documentation = (await Promise.all(docNames.map((name) => readFile(join(compositionDocsRoot, name), 'utf8')))).join('\n');
 
-const documentedGroups = ['quality', 'composition_score', 'composition_search'];
+const documentedGroups = ['quality', 'composition_score', 'composition_search', 'contrast'];
 const missingFields = [];
 for (const group of documentedGroups) {
   const fields = leafPaths(config[group]);
