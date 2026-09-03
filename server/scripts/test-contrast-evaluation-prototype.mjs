@@ -62,7 +62,7 @@ function everyPixelRatio(image, rect, foreground, pageBackground) {
       samples += 1;
     }
   }
-  return { status: minimumRatio >= minimum ? 'pass' : 'fail', minimumRatio, samples };
+  return { status: minimumRatio >= minimum ? 'at-or-above-reference' : 'below-reference', minimumRatio, samples };
 }
 
 function averageRatio(image, rect, foreground, pageBackground) {
@@ -78,7 +78,7 @@ function averageRatio(image, rect, foreground, pageBackground) {
   }
   const average = totals.map((value) => value / samples);
   const ratio = contrastRatio(foreground, average);
-  return { status: ratio >= minimum ? 'pass' : 'fail', ratio, samples };
+  return { status: ratio >= minimum ? 'at-or-above-reference' : 'below-reference', ratio, samples };
 }
 
 function sampledRatios(image, rect, foreground, pageBackground) {
@@ -94,7 +94,7 @@ function sampledRatios(image, rect, foreground, pageBackground) {
       samples += 1;
     }
   }
-  return { status: minimumRatio >= minimum ? 'pass' : 'fail', minimumRatio, samples };
+  return { status: minimumRatio >= minimum ? 'at-or-above-reference' : 'below-reference', minimumRatio, samples };
 }
 
 function makeImage(width, height, pixel) {
@@ -145,10 +145,10 @@ const transparentKnown = evaluateCandidate(transparentImage, 0, [255, 255, 255])
 const transparentUnknown = evaluateCandidate(transparentImage, 0);
 const unknown = evaluateCandidate(transparentImage, 0, undefined);
 
-assert(candidates.find((candidate) => candidate.x === 40)?.averageStatus === 'pass', 'the global average fixture must demonstrate a false pass');
-assert(candidates.find((candidate) => candidate.x === 40)?.sampledStatus === 'fail', 'the local sample must detect the dark patch');
+assert(candidates.find((candidate) => candidate.x === 40)?.averageStatus === 'at-or-above-reference', 'the global average fixture must demonstrate a falsely safe result');
+assert(candidates.find((candidate) => candidate.x === 40)?.sampledStatus === 'below-reference', 'the local sample must detect the dark patch');
 assert(candidates.every((candidate) => candidate.approximationMatchesExact), `local sampling must match the exhaustive reference: ${JSON.stringify(candidates)}`);
-assert(transparentKnown.sampledStatus === 'pass', `known page background must resolve transparent pixels: ${JSON.stringify(transparentKnown)}`);
+assert(transparentKnown.sampledStatus === 'at-or-above-reference', `known page background must resolve transparent pixels: ${JSON.stringify(transparentKnown)}`);
 assert(transparentUnknown.sampledStatus === 'unknown', `transparent pixels without an underneath colour must remain unknown: ${JSON.stringify(transparentUnknown)}`);
 assert(unknown.sampledStatus === 'unknown', `missing background must remain unknown: ${JSON.stringify(unknown)}`);
 

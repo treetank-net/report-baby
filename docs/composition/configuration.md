@@ -68,7 +68,7 @@ They do not turn a visual preference into a hard evaluator rejection.
 These values rank plans that have already passed the hard legality gate. They
 are deliberately heuristic and are not universal typography rules. The score
 is additive, so changing a weight changes the relative influence of that
-component while the evaluator still rejects any hard violation.
+component while the evaluator still rejects genuine structural violations.
 
 | Field | Meaning and interactions |
 |---|---|
@@ -83,22 +83,25 @@ component while the evaluator still rejects any hard violation.
 | `composition_score.insertion_internal_spacing_penalty` | Weight for uneven spacing inside an insertion. It interacts with insertion content height and the two padding edges. |
 | `composition_score.insertion_external_spacing_penalty` | Weight for the gap between an insertion and surrounding main-flow content. It interacts with preceding/following line geometry. |
 | `composition_score.insertion_cross_stream_spacing_penalty` | Weight for unequal gaps between insertion streams or columns. It interacts with same-page stream geometry and the other insertion-spacing weights. |
+| `composition_score.contrast_penalty` | Maximum normalized penalty for measured text contrast over variable graphic backgrounds. It interacts with normalized contrast quality and is part of the general plan score, not a separate legality gate. |
 
 ## `contrast`
 
 These values define the initial contrast-reading policy for text painted over
 an image or another variable background. The asset adapter prepares a raster
 once, and the evaluator receives the resulting measurements for every
-overlapping candidate. They do not change line breaking and they do not make
-an unknown background silently pass.
+overlapping candidate. They do not change line breaking. Contrast is always a
+quality input, never a second pass/fail gate: a weak measurement lowers the
+general score, while an unknown measurement is retained as evidence and is
+neutral until a separate policy is calibrated.
 
 | Field | Meaning and interactions |
 |---|---|
-| `contrast.body_minimum` | Minimum WCAG-style contrast ratio used for ordinary text over a known background. A sampled failure is reported against the candidate; it is separate from the not-yet-calibrated quality points. |
+| `contrast.body_minimum` | Reference ratio for ordinary text. The evaluator uses it as the upper anchor of the normalized contrast-quality curve; it does not independently reject a plan. |
 | `contrast.large_minimum` | Minimum ratio for large text when a future text-size-aware contrast policy selects the large-text rule. It must remain distinct from `body_minimum`; the current first adapter slice uses the ordinary-text policy. |
 | `contrast.large_text_px` | Text-size boundary used to classify large regular text. It interacts with `large_minimum` and the renderer's actual text-size units. |
 | `contrast.large_bold_text_px` | Text-size boundary used to classify large bold text. It interacts with `large_minimum`, font weight, and the renderer's actual text-size units. |
-| `contrast.sample_count` | Number of samples per axis in the deterministic local grid for each overlapping text region. It trades screening cost against the chance of missing a small background patch; it is not a full-pixel verification. |
+| `contrast.sample_count` | Number of samples per axis in the deterministic local grid for each overlapping text region. It trades measurement cost against the chance of missing a small background patch; it is not a full-pixel verification. |
 
 ## `composition_search`
 

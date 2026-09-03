@@ -1,6 +1,6 @@
 import type { CompositionBox, CompositionPlan } from './engine.js';
 
-export type CompositionContrastStatus = 'pass' | 'fail' | 'unknown';
+export type CompositionContrastStatus = 'measured' | 'unknown';
 
 export interface CompositionRasterImage {
   width: number;
@@ -14,7 +14,6 @@ export type CompositionRgbColor = [number, number, number];
 export interface CompositionContrastSampleOptions {
   region: CompositionBox;
   foreground: CompositionRgbColor;
-  minimumRatio: number;
   sampleCount: number;
   pageBackground?: CompositionRgbColor;
 }
@@ -34,7 +33,6 @@ export interface CompositionContrastAssessment {
   lineCount: number;
   regions: CompositionBox[];
   status: CompositionContrastStatus;
-  requiredRatio: number;
   minimumRatio?: number;
   sampleCount: number;
   worstSample?: { x: number; y: number; ratio: number };
@@ -44,7 +42,6 @@ export interface CompositionContrastAssessment {
 export interface CompositionContrastProviderOptions {
   rasterImages: ReadonlyMap<string, CompositionRasterImage>;
   foreground: CompositionRgbColor;
-  minimumRatio: number;
   sampleCount: number;
   pageBackground?: CompositionRgbColor;
 }
@@ -102,7 +99,7 @@ export function sampleCompositionContrast(image: CompositionRasterImage, options
     return { status: 'unknown', sampleCount: 0, reason: 'invalid-image' };
   }
   if (!validRegion(image, options.region)) return { status: 'unknown', sampleCount: 0, reason: 'invalid-region' };
-  if (!validColor(options.foreground) || !Number.isFinite(options.minimumRatio) || options.minimumRatio <= 0 || !Number.isInteger(options.sampleCount) || options.sampleCount < 1) {
+  if (!validColor(options.foreground) || !Number.isInteger(options.sampleCount) || options.sampleCount < 1) {
     return { status: 'unknown', sampleCount: 0, reason: 'invalid-policy' };
   }
 
@@ -124,7 +121,7 @@ export function sampleCompositionContrast(image: CompositionRasterImage, options
     }
   }
   return {
-    status: minimumRatio >= options.minimumRatio ? 'pass' : 'fail',
+    status: 'measured',
     minimumRatio,
     sampleCount: samples,
     ...(worstSample ? { worstSample } : {}),
@@ -167,9 +164,7 @@ function aggregateAssessment(
   page: number,
   regions: CompositionBox[],
   results: CompositionContrastResult[],
-  requiredRatio: number,
 ): CompositionContrastAssessment {
-  const failing = results.find((result) => result.status === 'fail');
   const unknown = results.find((result) => result.status === 'unknown');
   const worst = results
     .filter((result) => result.worstSample !== undefined)
@@ -181,12 +176,11 @@ function aggregateAssessment(
     page,
     lineCount: results.length,
     regions,
-    status: failing ? 'fail' : unknown ? 'unknown' : 'pass',
-    requiredRatio,
+    status: unknown ? 'unknown' : 'measured',
     ...(finiteRatios.length > 0 ? { minimumRatio: Math.min(...finiteRatios) } : {}),
     sampleCount: results.reduce((sum, result) => sum + result.sampleCount, 0),
     ...(worst?.worstSample ? { worstSample: worst.worstSample } : {}),
-    ...(failing?.reason ? { reason: failing.reason } : unknown?.reason ? { reason: unknown.reason } : {}),
+    ...(unknown?.reason ? { reason: unknown.reason } : {}),
   };
 }
 
@@ -211,7 +205,6 @@ export function createCompositionContrastProvider(options: CompositionContrastPr
             lineCount: pageRegions.length,
             regions: pageRegions,
             status: 'unknown' as const,
-            requiredRatio: options.minimumRatio,
             sampleCount: 0,
             reason: 'asset-raster-missing' as const,
           }];
@@ -219,11 +212,10 @@ export function createCompositionContrastProvider(options: CompositionContrastPr
         const results = pageRegions.map((region) => sampleCompositionContrast(image, {
           region: imageRegion(region, painted, image),
           foreground: options.foreground,
-          minimumRatio: options.minimumRatio,
           sampleCount: options.sampleCount,
           ...(options.pageBackground === undefined ? {} : { pageBackground: options.pageBackground }),
         }));
-        return [aggregateAssessment(graphic.graphicId, graphic.assetId, graphic.page, pageRegions, results, options.minimumRatio)];
+        return [aggregateAssessment(graphic.graphicId, graphic.assetId, graphic.page, pageRegions, results)];
       });
     },
   };

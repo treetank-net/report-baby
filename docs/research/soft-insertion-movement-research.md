@@ -691,9 +691,10 @@ The second stage is reserved for the selected candidate and close alternatives
 when the first stage is near the threshold. It may render only the relevant
 background crop and text mask at a bounded resolution, or use the existing PDF
 visual-QA raster path after a candidate artifact is produced. It should not
-rasterize all twenty candidates by default. If the exact check rejects the
-selected candidate, the planner/evaluator loop must try the next ranked legal
-candidate rather than silently keeping an unverified winner.
+rasterize all twenty candidates by default. If the exact check materially
+changes the selected candidate's measured quality, the planner/evaluator loop
+should re-rank the affected legal candidates rather than silently keeping an
+unverified winner.
 
 ### Why a blurred average is not sufficient
 
@@ -701,35 +702,43 @@ A blurred or average image colour is a useful fast diagnostic but not a safe
 contrast measurement. A dark patch and a light patch can average to a colour
 that appears to meet 4.5:1 even though some letters are drawn directly over
 the dark patch. The average can therefore be used for ordering or a debug hint,
-but it must not be the only input to a hard contrast decision. A low-resolution
-grid retaining the worst or lower-tail local result is the safer first-stage
-approximation; it still needs an exact check before claiming a final pass.
+but it must not be the only input to the quality score. A low-resolution grid
+retaining the worst or lower-tail local result is the safer first-stage
+approximation; an exact check can later calibrate how well that score predicts
+the final PDF.
 
-### Hard rule versus score component
+### Continuous score component
 
-The initial policy should distinguish three outcomes:
+Contrast is deliberately not a legality rule and does not produce a separate
+plan-level `pass` or `fail`. The sampler returns either a measured minimum
+ratio or `unknown`; the evaluator keeps the latter visible but neutral until
+the product has enough evidence to price missing measurements.
 
-- `fail`: a known required text/background pair is below the configured
-  minimum; the candidate cannot win through other score points;
-- `pass`: the bounded check found no failing sample, but an image-based pass is
-  provisional until the selected candidate receives the exact check; and
-- `unknown`: the asset, alpha background, crop, or text/background pairing could
-  not be determined. Unknown must receive a visible diagnostic and an explicit
-  policy decision, never an implicit pass.
+For each measured graphic, the current normalized quality is:
 
-For body text over a solid, known background, a below-threshold result can be a
-hard rejection. For a varying image, the approximation should reject an
-observed failure, while an observed pass should trigger exact verification if
-the candidate is selected. Decorative glyphs and logo text should not inherit
-the body-text hard rule merely because they are painted near body text; they
-may use a softer product-quality preference. This preserves the existing rule
-that legality and aesthetics are separate questions.
+```text
+quality = clamp((minimumRatio - 1) / (targetRatio - 1), 0, 1)
+```
+
+`targetRatio` is `contrast.body_minimum` from the render configuration. The
+quality values are averaged and the general plan receives:
+
+```text
+contrast points = -composition_score.contrast_penalty * (1 - average quality)
+```
+
+Thus 1:1 receives the largest configured penalty, the reference ratio receives
+zero penalty, and values above the reference do not earn unbounded extra
+points. Moving text or a graphic can change this component because it changes
+the sampled background, but a low result does not by itself invalidate an
+otherwise legal plan. The penalty is provisional and must be calibrated against
+rendered PDFs and human visual review.
 
 ### What should be measured and tested
 
 The contrast result should expose enough detail to explain a ranking without
 turning the model into a pixel dump: background source kind, resolved crop or
-overlay, minimum/low-tail ratio, configured threshold, status, and the sample
+overlay, minimum/low-tail ratio, normalized quality, points, and the sample
 region. Debug output can draw the sampled region and the worst sample; the
 regular PDF remains unchanged.
 
@@ -742,13 +751,15 @@ The first experiment should cover:
 - `contain` and crop mapping after moving the same text candidate;
 - twenty-plus candidates using one decoded thumbnail, with timing and cache
   hit counts; and
-- a selected candidate that passes the approximation but fails the exact
-  check, proving that fallback to the next ranked candidate works.
+- a selected candidate whose approximate and exact measurements differ,
+  proving that the ranking can be recalibrated without a separate rejection
+  status.
 
-The experiment should report contrast status and cost next to the existing
-candidate score, reflow count, orphan count, and spacing breakdown. It should
-not change the current score weights until the rendered fixtures show that the
-contrast component corresponds to a human-visible improvement.
+The experiment should report the measured ratio, normalized quality, contrast
+points, and cost next to the existing candidate score, reflow count, orphan
+count, and spacing breakdown. It should not treat the WCAG reference as a
+candidate rejection threshold; the configured penalty remains provisional until
+rendered fixtures show that it corresponds to a human-visible difference.
 
 ### Result of the first prototype experiment
 
@@ -757,8 +768,9 @@ The disposable prototype in
 confirmed the main risk. It evaluated eight positions over a synthetic image
 with a local dark strip. The global average reported `5.28:1` and would have
 passed the ordinary-text threshold for a candidate whose actual dark pixels
-had a `1:1` ratio. The conservative `6x6` local sample reported `fail` and
-matched the exhaustive reference scan for every position.
+had a `1:1` ratio. The conservative `6x6` local sample found the same worst
+regions as the exhaustive reference scan for every position; production turns
+those measured ratios into score differences rather than rejection statuses.
 
 The experiment performed one image preparation and reused it for seven later
 candidates. It used 288 local samples versus 1920 pixels in the exhaustive
@@ -773,8 +785,9 @@ slice now connects the renderer-neutral sampler in
 `server/src/composition/contrast.ts` behind the existing asset-adapter seam
 and leaves the planner free of pixel decoding. It decodes PNG assets once,
 maps their actual `contain` rectangle, and passes compact assessments to the
-evaluator. It adds no score weight until real PDF fixtures have shown that the
-measurement tracks visible quality.
+evaluator. It now contributes a provisional, configurable continuous score
+component; rendered editorial fixtures must calibrate its weight and confirm
+that the measurement tracks visible quality.
 
 The experiment exposed a small consistency issue: the existing
 `brand-context.ts` and `visual-qa.mjs` helpers used the older sRGB branch point
@@ -845,8 +858,8 @@ calculation directly and should not be rasterized merely to run the check.
   decode of about 95.5 ms; preparing a thumbnail once took about 1.53 ms, so
   a shared full-resolution raster is preferable when it is already needed for
   rendering.
-- A blurred/global-average background is not sufficient for a hard contrast
-  decision when an image has local light and dark regions.
+- A blurred/global-average background is not sufficient for a reliable contrast
+  score when an image has local light and dark regions.
 
 ### Hypotheses that require Report Baby experiments
 
@@ -905,8 +918,8 @@ capability and test it end to end:
    debug/trace output;
 4. verify that PDF, debug, and dry-run use the selected candidate identically;
 5. add bounded quote height fitting; and
-6. add the missing exact-PDF comparison and winner-fallback test for contrast;
-   the cheap PNG screening seam is already implemented; and
+6. add the missing exact-PDF comparison and score-recalibration test for
+   contrast; the cheap PNG screening seam is already implemented; and
 7. only then add proportional image-size candidates.
 
 After those tests pass, run the search-depth experiment from

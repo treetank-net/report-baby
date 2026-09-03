@@ -38,7 +38,6 @@ try {
   const provider = createCompositionContrastProvider({
     rasterImages: new Map([['hero', raster]]),
     foreground: [0, 0, 0],
-    minimumRatio: 4.5,
     sampleCount: 6,
   });
   const findings = provider.assess({

@@ -378,7 +378,6 @@ async function prepareReportComposition(name: string, data: CompositionInput, th
     ? createCompositionContrastProvider({
       rasterImages: contrastRasters,
       foreground: rgb(theme.foreground),
-      minimumRatio: configNumber(RENDER_CONFIG.contrast.bodyMinimum, 'contrast.body_minimum'),
       sampleCount: configNumber(RENDER_CONFIG.contrast.sampleCount, 'contrast.sample_count'),
       pageBackground: rgb(theme.background),
     })

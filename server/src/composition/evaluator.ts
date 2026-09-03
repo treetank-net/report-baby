@@ -443,18 +443,28 @@ function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreComponent
 }
 
 function scoreContrast(assessments: CompositionContrastAssessment[]): CompositionScoreComponent {
-  const failing = assessments.filter((assessment) => assessment.status === 'fail');
-  const unknown = assessments.filter((assessment) => assessment.status === 'unknown');
+  const targetRatio = readRenderConfig().contrast.bodyMinimum;
+  const maximumPenalty = scoreConfigNumber('contrastPenalty');
+  const measured = assessments
+    .filter((assessment) => assessment.status === 'measured' && Number.isFinite(assessment.minimumRatio))
+    .map((assessment) => Math.max(0, Math.min(1, ((assessment.minimumRatio ?? 1) - 1) / (targetRatio - 1))));
+  const normalizedQuality = measured.length > 0
+    ? measured.reduce((sum, quality) => sum + quality, 0) / measured.length
+    : 1;
+  const points = normalizedQuality >= 1 ? 0 : -maximumPenalty * (1 - normalizedQuality);
   return {
     code: 'contrast',
-    value: failing.length,
-    points: 0,
+    value: normalizedQuality,
+    points,
     details: {
       assessmentCount: assessments.length,
-      failingGraphicIds: failing.map((assessment) => assessment.graphicId),
-      unknownGraphicIds: unknown.map((assessment) => assessment.graphicId),
+      measuredAssessmentCount: measured.length,
+      unknownGraphicIds: assessments.filter((assessment) => assessment.status === 'unknown').map((assessment) => assessment.graphicId),
+      targetRatio,
+      maximumPenalty,
+      normalization: 'clamp((minimumRatio - 1) / (targetRatio - 1), 0, 1); unknown measurements are neutral',
       assessments,
-      pointsPolicy: 'not-calibrated',
+      pointsPolicy: 'continuous quality component; weights require visual calibration',
     },
   };
 }
@@ -694,22 +704,6 @@ export interface CompositionEvaluationOptions {
 export function evaluateCompositionPlan(document: CompositionDocument, plan: CompositionPlan, options: CompositionEvaluationOptions = {}): CompositionEvaluation {
   const diagnostics = [...plan.diagnostics];
   const contrastAssessments = options.contrastProvider?.assess(plan) ?? [];
-  for (const assessment of contrastAssessments) {
-    const details = {
-      graphicId: assessment.graphicId,
-      assetId: assessment.assetId,
-      page: assessment.page,
-      lineCount: assessment.lineCount,
-      minimumRatio: assessment.minimumRatio,
-      sampleCount: assessment.sampleCount,
-      requiredRatio: assessment.requiredRatio,
-      regions: assessment.regions,
-      worstSample: assessment.worstSample,
-      reason: assessment.reason,
-    } satisfies Record<string, unknown>;
-    if (assessment.status === 'fail') diagnostics.push({ severity: 'warning', code: 'CONTRAST_BELOW_THRESHOLD', message: `Text over graphic '${assessment.graphicId}' has insufficient sampled contrast.`, page: assessment.page, details });
-    if (assessment.status === 'unknown') diagnostics.push({ severity: 'warning', code: 'CONTRAST_UNKNOWN', message: `Contrast for text over graphic '${assessment.graphicId}' could not be established.`, page: assessment.page, details });
-  }
   checkEmptyFlowPlacements(document, plan, diagnostics);
   checkFlowBarrierBoxCandidates(plan, diagnostics);
   checkEmptyAndUnderfilledSlots(document, plan, diagnostics);

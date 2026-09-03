@@ -43,7 +43,7 @@ Dla każdej rundy zapisujemy:
 - score każdego legalnego planu i jego breakdown;
 - zmianę liczby fragmentacji, orphanów i nierównych odstępów;
 - wynik sprawdzenia kontrastu tekstu względem rzeczywistego tła kandydata,
-  wraz ze statusem `pass`, `fail` albo `unknown` i kosztem pomiaru;
+  wraz z minimum ratio, znormalizowaną jakością, punktami i kosztem pomiaru;
 - różnicę pomiędzy zwycięzcą danej rundy a najlepszym znanym wynikiem.
 
 Nie wystarczy, że score wzrósł. Musimy zobaczyć, czy wzrost odpowiada
@@ -92,22 +92,23 @@ choć część tekstu leży na tle o złym kontraście. Zachowujemy najgorszą l
 dolną część wyników próbek i pokazujemy obszar próbki w debug trace.
 
 Dokładniejsze, ograniczone renderowanie wykonujemy dopiero dla zwycięzcy i
-kandydatów bliskich remisu albo progu. Jeżeli dokładna weryfikacja odrzuci
-zwycięzcę, wybieramy następnego legalnego kandydata. `unknown` nie jest
-automatycznym `pass`: brak informacji o przezroczystości, cropie albo tle musi
-być widoczny i mieć osobną decyzję polityki.
+kandydatów bliskich remisu albo punktu kalibracyjnego. Nie służy ono do
+odrzucania planu, tylko do sprawdzenia, czy przybliżony pomiar dobrze porządkuje
+rozwiązania. `unknown` nie udaje pomiaru: pozostaje widoczny w breakdownie i
+jest obecnie neutralny punktowo.
 
-Progi 4.5:1 dla zwykłego tekstu i 3:1 dla dużego tekstu są punktem wyjścia z
-WCAG 2.2, a nie dowodem pełnej zgodności PDF-a. Dla znanego jednolitego tła
-wynik poniżej progu może być twardym odrzuceniem. Dla obrazu screening może
-odrzucić zaobserwowaną porażkę, ale pozytywny wynik pozostaje tymczasowy do
-chwili dokładnego sprawdzenia. Ozdobne glyphy i logo nie powinny automatycznie
-dostać twardej reguły tekstu głównego.
+Progi 4.5:1 dla zwykłego tekstu i 3:1 dla dużego tekstu są punktami odniesienia
+z WCAG 2.2, a nie twardymi bramkami planera. Dla mierzonego minimum liczymy
+znormalizowaną jakość `clamp((minimum - 1) / (target - 1), 0, 1)` i z tej
+wartości odejmujemy skonfigurowaną karę od ogólnego score planu. Ozdobne glyphy
+i logo mogą w przyszłości dostać osobne wagi, ale nadal jako jakość, nie
+legalność.
 
 Pierwszy benchmark powinien mierzyć: czas dekodowania i czas próbkowania,
 trafienia cache, rozbieżność między screeningiem a wynikiem dokładnym oraz
-przypadek, w którym przesunięcie tego samego tekstu nad obrazem zmienia status
-kontrastu. Dopiero po tym można dodać wagi kontrastu do `composition_score`.
+przypadek, w którym przesunięcie tego samego tekstu nad obrazem zmienia
+znormalizowane punkty kontrastu. Wagi można dostrajać dopiero po porównaniu z
+PDF-ami i ręczną oceną wizualną.
 
 ### Wynik pierwszego eksperymentu
 
@@ -119,10 +120,10 @@ ciemnym pasem przetestowano 8 pozycji tekstu:
 - obraz został przygotowany raz, a 7 kolejnych kandydatów skorzystało z cache;
 - screening `6x6` zużył 288 próbek, podczas gdy referencyjne przejście po
   wszystkich pikselach zużyło 1920 próbek;
-- globalna średnia dała fałszywy `pass` z wynikiem `5.28:1` dla pozycji, która
+- globalna średnia dała fałszywie bezpieczny wynik `5.28:1` dla pozycji, która
   zawierała czarny fragment o rzeczywistym kontraście `1:1`;
-- lokalny screening wykrył oba kandydaty z czarnym fragmentem jako `fail` i
-  zgodził się z referencyjnym przejściem dla wszystkich pozycji;
+- lokalny screening wykrył oba kandydaty z czarnym fragmentem i zgodził się z
+  referencyjnym minimum dla wszystkich pozycji;
 - znane tło pod przezroczystym PNG dało wynik, a brak koloru pod spodem dał
   `unknown`.
 
@@ -130,8 +131,8 @@ To potwierdza kierunek taniego screeningu, ale jeszcze nie dowodzi poprawności
 dla wszystkich formatów wejściowych ani zgodności z finalnym rasterem PDF-a.
 Fixture jest syntetyczny, a referencja skanuje region prostokątny, nie dokładną
 maskę glifów. Przed produkcyjnym podłączeniem trzeba sprawdzić realny asset po
-rzeczywistym `contain`/cropie oraz przypadek, w którym screening przepuszcza,
-a dokładniejszy pomiar odrzuca.
+rzeczywistym `contain`/cropie oraz przypadek, w którym dokładniejszy pomiar
+zmienia ranking punktowy.
 
 Eksperyment ujawnił też rozbieżność do usunięcia: istniejące funkcje kontrastu
 w `brand-context.ts` i `visual-qa.mjs` używają granicy sRGB `0.03928`, podczas
@@ -189,16 +190,15 @@ JPEG/SVG i cache. Nie wolno przenosić tego kosztu do każdego kandydata.
 Kontrast powinien być obowiązkowo sprawdzany, gdy tekst leży na grafice,
 przezroczystym obrazie, nakładce albo tle z niestandardowej palety. „Obowiązkowo
 sprawdzany” nie oznacza automatycznie „twardo odrzucany”: znany poniżej-progowy
-wynik może odrzucać kandydata, natomiast wynik `unknown` musi mieć jawną
-politykę, a wynik pozytywny dla zmiennego obrazu może wymagać dokładnego
-sprawdzenia zwycięzcy. Dla jednolitego koloru nie ma powodu dekodować obrazu —
-można policzyć dokładny kontrast z koloru tła.
+wynik obniża ogólny score kandydata, a wynik `unknown` pozostaje widoczny i
+neutralny do czasu kalibracji. Dla jednolitego koloru nie ma powodu dekodować
+obrazu — można policzyć dokładny kontrast z koloru tła.
 
 Benchmark dla 20 kandydatów na prawdziwym obrazie został wykonany. Test ścieżki
-adaptera i mapowania `contain` również istnieje. Pozostają test fallbacku po
-dokładnym odrzuceniu zwycięzcy oraz test porównujący screening z finalnym
-renderem PDF-a. Wagi scoringu pozostają niezmienione do czasu porównania
-wyników z ręczną oceną PDF-ów.
+adaptera i mapowania `contain` również istnieje. Pozostaje test porównujący
+screening z finalnym renderem PDF-a oraz kalibracja wpływu
+`composition_score.contrast_penalty`. Waga pozostaje robocza do czasu
+porównania wyników z ręczną oceną PDF-ów.
 
 ## Zależność od wcześniejszych planów
 
@@ -219,10 +219,11 @@ kilka elementów.
   uzupełnienia po pomiarze renderowania częściowego;
 - koszt dekodowania JPEG/SVG oraz częściowego renderowania PDF wymaga osobnego
   pomiaru przed dopuszczeniem tych ścieżek do screeningu;
-- obowiązkowe wykonanie screeningu kontrastu jest już podłączone dla PNG, ale
-  wagi punktów i polityka `unknown` nadal wymagają kalibracji na PDF-ach;
-- decyzja, czy `unknown` ma blokować publikację dla określonych typów tekstu,
-  wymaga osobnego ustalenia produktu;
+- obowiązkowe wykonanie pomiaru kontrastu jest już podłączone dla PNG, ale
+  waga `contrast_penalty` i neutralna polityka `unknown` nadal wymagają
+  kalibracji na PDF-ach;
+- decyzja, jak wycenić brak pomiaru (`unknown`) dla określonych typów tekstu,
+  wymaga osobnego ustalenia produktu; nie jest to obecnie twarda bramka;
 - wartości limitów wymagają uzupełnienia po pomiarze czasu na realnym
   editorialu;
 - decyzja, czy dodatkowe punkty rzeczywiście odpowiadają poprawie wizualnej,

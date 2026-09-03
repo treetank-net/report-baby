@@ -145,10 +145,9 @@ try {
   const localContrast = sampleCompositionContrast(localImage, {
     region: { x: 0, y: 0, width: 4, height: 1 },
     foreground: [0, 0, 0],
-    minimumRatio: 4.5,
     sampleCount: 4,
   });
-  assert.equal(localContrast.status, 'fail', 'local contrast must reject a sampled dark patch');
+  assert.equal(localContrast.status, 'measured', 'local contrast must return a measured value');
   assert.equal(localContrast.minimumRatio, 1);
   assert.deepEqual(localContrast.worstSample, { x: 2, y: 0, ratio: 1 });
   const transparentImage = {
@@ -160,26 +159,22 @@ try {
   assert.equal(sampleCompositionContrast(transparentImage, {
     region: { x: 0, y: 0, width: 1, height: 1 },
     foreground: [0, 0, 0],
-    minimumRatio: 4.5,
     sampleCount: 1,
     pageBackground: [255, 255, 255],
-  }).status, 'pass');
+  }).status, 'measured');
   assert.equal(sampleCompositionContrast(transparentImage, {
     region: { x: 0, y: 0, width: 1, height: 1 },
     foreground: [0, 0, 0],
-    minimumRatio: 4.5,
     sampleCount: 1,
   }).status, 'unknown');
   assert.equal(sampleCompositionContrast(localImage, {
     region: { x: 4, y: 0, width: 1, height: 1 },
     foreground: [0, 0, 0],
-    minimumRatio: 4.5,
     sampleCount: 1,
   }).reason, 'invalid-region');
   const contrastProvider = createCompositionContrastProvider({
     rasterImages: new Map([['photo', localImage]]),
     foreground: [0, 0, 0],
-    minimumRatio: 4.5,
     sampleCount: 4,
   });
   const contrastFindings = contrastProvider.assess({
@@ -188,12 +183,11 @@ try {
     graphicPlacements: [{ id: 'graphic:photo', graphicId: 'photo', assetId: 'photo', slotId: 'graphic', page: 1, shape: 'rectangle', wrap: 'none', box: { x: 0, y: 0, width: 4, height: 1 } }],
   });
   assert.equal(contrastFindings.length, 1);
-  assert.equal(contrastFindings[0].status, 'fail', 'provider must assess text over a painted asset');
+  assert.equal(contrastFindings[0].status, 'measured', 'provider must assess text over a painted asset');
   assert.equal(contrastFindings[0].graphicId, 'photo');
   const unknownContrastFindings = createCompositionContrastProvider({
     rasterImages: new Map(),
     foreground: [0, 0, 0],
-    minimumRatio: 4.5,
     sampleCount: 4,
   }).assess({
     ...plan,
@@ -208,17 +202,47 @@ try {
     graphicPlacements: [{ id: 'graphic:boundary', graphicId: 'boundary', assetId: 'photo', slotId: 'graphic', page: 1, shape: 'rectangle', wrap: 'around', paint: false, box: { x: 0, y: 0, width: 4, height: 1 } }],
   });
   assert.equal(boundaryContrastFindings.length, 0, 'planner-only exclusion boundaries must not be contrast-tested');
-  const contrastEvaluation = evaluateCompositionPlan({
-    assets: [{ id: 'photo', source: 'photo.png', width: 'full', fit: 'contain', keepWithCaption: false }],
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [] } },
-  }, {
+  const contrastPlan = {
     ...plan,
     slots: [{ id: 'text', page: 1, regionId: 'content', kind: 'text', box: { x: 0, y: 0, width: 4, height: 1 }, state: 'exhausted' }, { id: 'graphic', page: 1, regionId: 'hero', kind: 'graphic', box: { x: 0, y: 0, width: 4, height: 1 }, state: 'exhausted' }],
     lines: [{ blockId: 'body', flowId: 'main', slotId: 'text', page: 1, text: 'body', box: { x: 0, y: 0, width: 4, height: 1 }, naturalWidth: 4, startWord: 0, endWord: 1 }],
     graphicPlacements: [{ id: 'graphic:photo', graphicId: 'photo', assetId: 'photo', slotId: 'graphic', page: 1, shape: 'rectangle', wrap: 'none', box: { x: 0, y: 0, width: 4, height: 1 } }],
-  }, { contrastProvider });
-  assert.ok(contrastEvaluation.scoreBreakdown.some((component) => component.code === 'contrast'), 'evaluation must expose contrast in the score breakdown');
-  assert.ok(contrastEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'CONTRAST_BELOW_THRESHOLD'), 'evaluation must explain a failing contrast assessment');
+  };
+  const contrastDocument = {
+    assets: [{ id: 'photo', source: 'photo.png', width: 'full', fit: 'contain', keepWithCaption: false }],
+    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [] } },
+  };
+  const contrastEvaluation = evaluateCompositionPlan(contrastDocument, contrastPlan, { contrastProvider });
+  const contrastComponent = contrastEvaluation.scoreBreakdown.find((component) => component.code === 'contrast');
+  assert.ok(contrastComponent, 'evaluation must expose contrast in the score breakdown');
+  assert.ok((contrastComponent?.points ?? 0) < 0, 'poor measured contrast must lower the general plan score');
+  assert.equal(contrastComponent?.value, 0, 'the contrast quality must normalize a 1:1 result to zero');
+  assert.equal(contrastComponent?.details?.maximumPenalty, 6, 'the contrast penalty must come from render configuration');
+  assert.equal(contrastEvaluation.diagnostics.some((diagnostic) => diagnostic.code.startsWith('CONTRAST_')), false, 'contrast quality must not create a separate pass/fail diagnostic');
+  const highContrastEvaluation = evaluateCompositionPlan({
+    assets: [{ id: 'photo', source: 'photo.png', width: 'full', fit: 'contain', keepWithCaption: false }],
+    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [] } },
+  }, contrastPlan, {
+    contrastProvider: createCompositionContrastProvider({
+      rasterImages: new Map([['photo', { width: 4, height: 1, channels: 3, pixels: Uint8Array.from([255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255]) }]]),
+      foreground: [0, 0, 0],
+      sampleCount: 4,
+    }),
+  });
+  const highContrastComponent = highContrastEvaluation.scoreBreakdown.find((component) => component.code === 'contrast');
+  assert.equal(highContrastComponent?.value, 1, 'reference-level contrast must normalize to full quality');
+  assert.equal(highContrastComponent?.points, 0, 'reference-level contrast must receive no penalty');
+  assert.ok(highContrastEvaluation.score > contrastEvaluation.score, 'better contrast must improve the general plan score');
+  const unknownEvaluation = evaluateCompositionPlan(contrastDocument, contrastPlan, {
+    contrastProvider: createCompositionContrastProvider({
+      rasterImages: new Map(),
+      foreground: [0, 0, 0],
+      sampleCount: 4,
+    }),
+  });
+  const unknownComponent = unknownEvaluation.scoreBreakdown.find((component) => component.code === 'contrast');
+  assert.equal(unknownComponent?.points, 0, 'unknown contrast evidence must remain neutral until calibrated');
+  assert.equal(unknownEvaluation.diagnostics.some((diagnostic) => diagnostic.code.startsWith('CONTRAST_')), false, 'unknown contrast must not create a separate failure diagnostic');
   console.log(JSON.stringify({ status: 'passed', seam: 'planner-evaluator-backend-neutral' }, null, 2));
 } finally {
   await rm(temporary, { recursive: true, force: true });

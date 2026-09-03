@@ -146,7 +146,7 @@ measurements are computed from plan geometry:
 | `paragraph-fragmentation` | Paragraphs split across different pages/slots | negative: count * `paragraph_fragmentation_penalty` |
 | `orphan-lines` | One-line paragraph fragments separated by at least `orphan_min_gap_mm` when an obstacle causes the gap | negative: count * `orphan_penalty` |
 | `insertion-spacing` | Uneven insertion padding, gaps before/after it, and spread between streams | negative: sum of measurements * the relevant weights |
-| `contrast` | Local contrast measurements for text overlapping painted image graphics | currently `0` points; statuses and samples are recorded while the product penalty is calibrated |
+| `contrast` | Local contrast measurements for text overlapping painted image graphics | continuous negative adjustment based on normalized measured quality; no binary plan failure |
 
 A gap may be legal and caused by an immovable object, while still being
 aesthetically unfavorable. Its cause remains in the evaluation details and
@@ -158,7 +158,8 @@ The first heuristic was created in the debug composition-score prototype. The
 production weights were then moved to `render-config.yml` and extended in
 later experiments with fragmentation, spacing, and orphan lines. The current
 range — `base: 100`, `column_balance_weight: 12`, bonus `4`, penalties `3` and
-`4`, and spacing weights `1/1/1` — is a manually selected working range.
+`4`, spacing weights `1/1/1`, and contrast maximum penalty `6` — is a manually
+selected working range.
 
 Tests show that the components affect candidate selection, but do not yet prove
 that the proportions are right for every article. Calibration requires a larger
@@ -172,7 +173,10 @@ for every component. The engine trace records this for every candidate together
 with insertion placements, status, hard-violation count, and `reflowPasses`.
 Raster PDF/PNG is a separate artifact test; the evaluator does not decode
 image bytes. When an injected asset adapter supplies a contrast assessment, the
-evaluator records it in this component and emits a diagnostic for `fail` or
-`unknown`. The first integration keeps its points at zero until real editorial
-PDFs establish a useful penalty; this makes the mandatory measurement visible
-without inventing a weight.
+evaluator records it in this component and converts measured ratios to a
+normalized quality value. The current normalization is
+`clamp((minimumRatio - 1) / (targetRatio - 1), 0, 1)`, averaged across measured
+graphics; the component contributes `-contrast_penalty * (1 - quality)` to the
+general plan score. Unknown measurements remain visible but neutral until a
+product policy gives missing evidence a calibrated cost. Contrast never turns
+a legal plan into a rejected plan.
