@@ -613,6 +613,143 @@ The score must not be treated as validated merely because it selects a
 different candidate. A useful test should isolate the changed property and
 show that the score component responsible for the change is the intended one.
 
+## Contrast verification as a candidate quality signal
+
+Contrast belongs in the candidate result because moving an insertion can change
+which part of an image sits behind the text. It must not be implemented inside
+the text line-breaking algorithm: the planner already knows the candidate
+geometry, while the renderer/asset adapter knows how a background is decoded
+and composited. The evaluator can then consume a compact contrast measurement
+alongside spacing, fragmentation, and orphan measurements.
+
+### What the repository can already do
+
+The repository already has a flat-colour contrast path. `render-primitives.ts`
+chooses readable text colours using thresholds from the `contrast` section of
+`render-config.yml`, and `brand-context.ts` contains the relative-luminance and
+contrast-ratio calculation. The visual-QA script also measures contrast against
+rendered pixels. These paths are useful building blocks, but the composition
+evaluator currently does not derive candidate scores from image pixels.
+
+Sources: [`server/src/render-primitives.ts`](../../server/src/render-primitives.ts),
+[`server/src/brand-context.ts`](../../server/src/brand-context.ts),
+[`server/scripts/visual-qa.mjs`](../../server/scripts/visual-qa.mjs)
+
+### Verified standard requirements
+
+WCAG 2.2 defines contrast using relative luminance and the ratio
+`(L1 + 0.05) / (L2 + 0.05)`. Its AA threshold is 4.5:1 for ordinary text and
+3:1 for large text; the comparison must not be rounded before deciding whether
+the threshold is met. The background is the background actually behind the
+text, not an unrelated colour from the same page.
+
+Source: [W3C Understanding Success Criterion 1.4.3](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+
+For a background whose luminance varies, W3C's G145 procedure measures pixels
+next to the letters rather than treating the entire image as one colour. W3C
+also describes a local background treatment or halo as a way to keep letters
+readable over a varying image. This supports inspecting the local background
+under a planned text region, not just the image's global average.
+
+Source: [W3C Technique G145](https://www.w3.org/WAI/WCAG22/Techniques/general/G145.html)
+
+These are accessibility thresholds, not a claim that a PDF passing them is
+automatically accessible or legally compliant. Report Baby should use them as
+the initial readability floor and keep the product's visual preferences
+separate from the standard's hard threshold.
+
+### Recommended two-stage check
+
+The first stage runs for every complete candidate after its position, image
+fit/crop, overlay, and text placement are known:
+
+1. Resolve the background behind the text rectangle. For a solid fill, use its
+   exact colour. For an image, decode it once and retain a bounded thumbnail or
+   luminance cache. For an SVG, rasterize the bounded thumbnail using the
+   existing raster path.
+2. Map the candidate's page rectangle through the image's actual `contain` or
+   explicit crop geometry. A sample from the wrong crop is a false pass.
+3. Composite transparent pixels with the known page fill or overlay colour.
+   If the underneath colour is not known, return `unknown`; do not silently
+   assume white just because the debug page is white.
+4. Sample a small, deterministic grid over the planned text ink region and
+   calculate the ratio for each background sample. Keep the lower-tail or
+   worst observed result, rather than only the mean. The exact sample density
+   and lower-tail policy belong in render configuration after benchmarking.
+5. Return the measurement and its status in the candidate's existing score
+   breakdown/trace. No PDF or full-page rasterization is required for this
+   stage.
+
+This is cheap for twenty or more candidates because image decoding and
+downsampling are shared. Moving the candidate changes only the mapped sample
+coordinates, so the per-candidate work is bounded pixel sampling plus a few
+relative-luminance calculations. The cache must be keyed by the source bytes or
+content hash and the preparation parameters; it must not reuse a thumbnail for
+a different crop or overlay.
+
+The second stage is reserved for the selected candidate and close alternatives
+when the first stage is near the threshold. It may render only the relevant
+background crop and text mask at a bounded resolution, or use the existing PDF
+visual-QA raster path after a candidate artifact is produced. It should not
+rasterize all twenty candidates by default. If the exact check rejects the
+selected candidate, the planner/evaluator loop must try the next ranked legal
+candidate rather than silently keeping an unverified winner.
+
+### Why a blurred average is not sufficient
+
+A blurred or average image colour is a useful fast diagnostic but not a safe
+contrast measurement. A dark patch and a light patch can average to a colour
+that appears to meet 4.5:1 even though some letters are drawn directly over
+the dark patch. The average can therefore be used for ordering or a debug hint,
+but it must not be the only input to a hard contrast decision. A low-resolution
+grid retaining the worst or lower-tail local result is the safer first-stage
+approximation; it still needs an exact check before claiming a final pass.
+
+### Hard rule versus score component
+
+The initial policy should distinguish three outcomes:
+
+- `fail`: a known required text/background pair is below the configured
+  minimum; the candidate cannot win through other score points;
+- `pass`: the bounded check found no failing sample, but an image-based pass is
+  provisional until the selected candidate receives the exact check; and
+- `unknown`: the asset, alpha background, crop, or text/background pairing could
+  not be determined. Unknown must receive a visible diagnostic and an explicit
+  policy decision, never an implicit pass.
+
+For body text over a solid, known background, a below-threshold result can be a
+hard rejection. For a varying image, the approximation should reject an
+observed failure, while an observed pass should trigger exact verification if
+the candidate is selected. Decorative glyphs and logo text should not inherit
+the body-text hard rule merely because they are painted near body text; they
+may use a softer product-quality preference. This preserves the existing rule
+that legality and aesthetics are separate questions.
+
+### What should be measured and tested
+
+The contrast result should expose enough detail to explain a ranking without
+turning the model into a pixel dump: background source kind, resolved crop or
+overlay, minimum/low-tail ratio, configured threshold, status, and the sample
+region. Debug output can draw the sampled region and the worst sample; the
+regular PDF remains unchanged.
+
+The first experiment should cover:
+
+- black and white solid backgrounds at the exact threshold boundary;
+- an image with bright and dark halves where the global average gives the
+  wrong answer;
+- a transparent PNG over a known page fill and over an unknown fill;
+- `contain` and crop mapping after moving the same text candidate;
+- twenty-plus candidates using one decoded thumbnail, with timing and cache
+  hit counts; and
+- a selected candidate that passes the approximation but fails the exact
+  check, proving that fallback to the next ranked candidate works.
+
+The experiment should report contrast status and cost next to the existing
+candidate score, reflow count, orphan count, and spacing breakdown. It should
+not change the current score weights until the rendered fixtures show that the
+contrast component corresponds to a human-visible improvement.
+
 ## Conclusions versus hypotheses
 
 ### Conclusions supported by the repository and standards
@@ -628,6 +765,11 @@ show that the score component responsible for the change is the intended one.
 - Legal but unattractive spacing belongs in scoring, not automatic rejection.
 - The current five-position search is a sensible coarse starting point, not a
   final guarantee of an optimum.
+- A cached, conservative low-resolution background sample is likely cheap
+  enough for every candidate, while full partial rendering should be reserved
+  for the winner and near-threshold alternatives.
+- A blurred/global-average background is not sufficient for a hard contrast
+  decision when an image has local light and dark regions.
 
 ### Hypotheses that require Report Baby experiments
 
@@ -682,7 +824,10 @@ capability and test it end to end:
    debug/trace output;
 4. verify that PDF, debug, and dry-run use the selected candidate identically;
 5. add bounded quote height fitting; and
-6. only then add proportional image-size candidates.
+6. add contrast screening as an evaluator input, reusing the existing asset
+   decoding/cache seam and keeping the renderer-neutral planner free of pixel
+   decoding; and
+7. only then add proportional image-size candidates.
 
 After those tests pass, run the search-depth experiment from
 [`docs/release-1.0/08-candidate-search-depth.md`](../release-1.0/08-candidate-search-depth.md)
@@ -698,6 +843,8 @@ rendered article before more element types are added.
 - [W3C CSS Text Module Level 3](https://www.w3.org/TR/css-text-3/)
 - [W3C CSS Multi-column Layout Module Level 1](https://www.w3.org/TR/css-multicol-1/)
 - [W3C Web Content Accessibility Guidelines 2.2](https://www.w3.org/TR/WCAG22/)
+- [W3C Understanding Success Criterion 1.4.3, Contrast (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+- [W3C Technique G145, contrast over varying backgrounds](https://www.w3.org/WAI/WCAG22/Techniques/general/G145.html)
 - [W3C WAI, Decorative Images](https://www.w3.org/WAI/tutorials/images/decorative/)
 - [WHATWG HTML Standard, `blockquote`](https://html.spec.whatwg.org/multipage/grouping-content.html#the-blockquote-element)
 - [WHATWG HTML Standard, `figure` and `figcaption`](https://html.spec.whatwg.org/multipage/grouping-content.html#the-figure-element)

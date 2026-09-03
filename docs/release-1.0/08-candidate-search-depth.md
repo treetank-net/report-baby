@@ -40,6 +40,8 @@ Dla każdej rundy zapisujemy:
 - liczbę planów nielegalnych;
 - score każdego legalnego planu i jego breakdown;
 - zmianę liczby fragmentacji, orphanów i nierównych odstępów;
+- wynik sprawdzenia kontrastu tekstu względem rzeczywistego tła kandydata,
+  wraz ze statusem `pass`, `fail` albo `unknown` i kosztem pomiaru;
 - różnicę pomiędzy zwycięzcą danej rundy a najlepszym znanym wynikiem.
 
 Nie wystarczy, że score wzrósł. Musimy zobaczyć, czy wzrost odpowiada
@@ -73,6 +75,38 @@ fixture’u, gdzie łatwo sprawdzić pojedyncze fragmenty.
   obrazu dokumentu, pozostawiamy to jako otwartą kwestię kalibracji score, a
   nie jako dowód, że trzeba szukać głębiej.
 
+## Kontrast jako dodatkowa miara kandydata
+
+Przesunięcie grafiki albo tekstu może zmienić tło znajdujące się bezpośrednio
+pod literami. Dlatego kontrast powinien być liczony po ustaleniu geometrii
+kandydata, ale przed jego wyborem przez ewaluatora. Nie powinien być częścią
+algorytmu łamania linii.
+
+Wszystkie kandydaty mogą dostać tani screening: obraz dekodujemy i
+downsample'ujemy raz, a dla kolejnych pozycji tylko pobieramy próbki z
+odpowiedniego cropu. Nie używamy samej średniej ani samego rozmycia, ponieważ
+jasne i ciemne fragmenty obrazu mogą dać średnią, która wygląda bezpiecznie,
+choć część tekstu leży na tle o złym kontraście. Zachowujemy najgorszą lub
+dolną część wyników próbek i pokazujemy obszar próbki w debug trace.
+
+Dokładniejsze, ograniczone renderowanie wykonujemy dopiero dla zwycięzcy i
+kandydatów bliskich remisu albo progu. Jeżeli dokładna weryfikacja odrzuci
+zwycięzcę, wybieramy następnego legalnego kandydata. `unknown` nie jest
+automatycznym `pass`: brak informacji o przezroczystości, cropie albo tle musi
+być widoczny i mieć osobną decyzję polityki.
+
+Progi 4.5:1 dla zwykłego tekstu i 3:1 dla dużego tekstu są punktem wyjścia z
+WCAG 2.2, a nie dowodem pełnej zgodności PDF-a. Dla znanego jednolitego tła
+wynik poniżej progu może być twardym odrzuceniem. Dla obrazu screening może
+odrzucić zaobserwowaną porażkę, ale pozytywny wynik pozostaje tymczasowy do
+chwili dokładnego sprawdzenia. Ozdobne glyphy i logo nie powinny automatycznie
+dostać twardej reguły tekstu głównego.
+
+Pierwszy benchmark powinien mierzyć: czas dekodowania i czas próbkowania,
+trafienia cache, rozbieżność między screeningiem a wynikiem dokładnym oraz
+przypadek, w którym przesunięcie tego samego tekstu nad obrazem zmienia status
+kontrastu. Dopiero po tym można dodać wagi kontrastu do `composition_score`.
+
 ## Zależność od wcześniejszych planów
 
 Plan 08 nie może zastąpić planu 04. Najpierw musimy znać legalne bounds,
@@ -88,6 +122,10 @@ kilka elementów.
 
 - konkretna metoda przeszukiwania wymaga uzupełnienia po benchmarku planu 04
   i pierwszej wersji miękkich insertionów;
+- metoda i koszt weryfikacji kontrastu wymagają uzupełnienia po benchmarku
+  próbek obrazu i dokładnego renderowania;
+- decyzja, czy `unknown` ma blokować publikację dla określonych typów tekstu,
+  wymaga osobnego ustalenia produktu;
 - wartości limitów wymagają uzupełnienia po pomiarze czasu na realnym
   editorialu;
 - decyzja, czy dodatkowe punkty rzeczywiście odpowiadają poprawie wizualnej,
