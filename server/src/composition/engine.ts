@@ -464,9 +464,18 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
             index,
             status: candidateEvaluation.status,
             score: candidateEvaluation.score,
+            scoreBreakdown: candidateEvaluation.scoreBreakdown,
             hardViolationCount: candidateEvaluation.hardViolations.length,
             reflowPasses: candidates[index].trace?.phases.filter((phase) => phase.name === 'reflow').length ?? 0,
             refinementRound: candidateRounds[index],
+            insertionPlacements: candidates[index].graphicPlacements
+              .filter((graphic) => graphic.graphicId.startsWith('insertion:'))
+              .map((graphic) => ({
+                graphicId: graphic.graphicId,
+                page: graphic.page,
+                slotId: graphic.slotId,
+                box: { ...graphic.box },
+              })),
           })),
           selectedCandidate,
         },

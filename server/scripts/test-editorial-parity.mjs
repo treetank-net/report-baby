@@ -18,6 +18,9 @@ const brandBundle = join(temporary, 'brand-context.cjs');
 const baselinePath = join(root, '..', 'docs/quality/editorial-baseline.json');
 const templateRef = 'pages/editorial-inset-two-column';
 const illustrationPath = join(root, 'scripts/fixtures/editorial-neutral-illustration.svg');
+const debugArtifactDirectory = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR
+  ? join(process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR, 'editorial-parity')
+  : undefined;
 
 function build(entry, output, extra = []) {
   const result = runProcess('npx', [
@@ -124,11 +127,11 @@ try {
     const baseline = JSON.parse(await readFile(baselinePath, 'utf8'));
     assert.deepEqual(summary, baseline, 'editorial parity baseline changed');
   }
-  if (process.env.REPORT_BABY_ARTIFACT_DIR) {
-    await mkdir(process.env.REPORT_BABY_ARTIFACT_DIR, { recursive: true });
-    await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'editorial.pdf'), result.buffer);
-    await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'editorial-summary.json'), serialized);
-    await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'ink-occupancy.json'), JSON.stringify(inkOccupancy, null, 2));
+  if (debugArtifactDirectory) {
+    await mkdir(debugArtifactDirectory, { recursive: true });
+    await writeFile(join(debugArtifactDirectory, 'editorial.pdf'), result.buffer);
+    await writeFile(join(debugArtifactDirectory, 'editorial-summary.json'), serialized);
+    await writeFile(join(debugArtifactDirectory, 'ink-occupancy.json'), JSON.stringify(inkOccupancy, null, 2));
   }
   console.log(JSON.stringify({
     status: 'passed',

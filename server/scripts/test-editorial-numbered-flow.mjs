@@ -17,6 +17,9 @@ const backendBundle = join(temporary, 'composition.cjs');
 const primitivesBundle = join(temporary, 'primitives.cjs');
 const templateBundle = join(temporary, 'template.cjs');
 const geometryBundle = join(temporary, 'geometry.cjs');
+const debugArtifactDirectory = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR
+  ? join(process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR, 'editorial-numbered-flow')
+  : undefined;
 
 function plannedLines(plan) {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
@@ -492,6 +495,112 @@ try {
       quote: [232, 117, 61],
     }),
   });
+  const fixedQuote = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
+  assert.ok(fixedQuote, 'editorial fixture must expose the quote selected for movable-position search');
+  const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_quote_window_ratio;
+  const movableQuotePolicy = {
+    movableInsertionBounds: {
+      'quotes:quote-market': {
+        bounds: {
+          x: fixedQuote.box.x,
+          y: fixedQuote.box.y - movableQuoteWindow,
+          width: fixedQuote.box.width,
+          height: fixedQuote.box.height + (2 * movableQuoteWindow),
+        },
+        axis: 'y',
+        preferred: { y: fixedQuote.box.y },
+        candidateCount: renderConfig.composition_search.movable_quote_candidate_count,
+        refinementRounds: renderConfig.composition_search.movable_quote_refinement_rounds,
+        refinementCandidateCount: renderConfig.composition_search.movable_quote_refinement_candidate_count,
+      },
+    },
+  };
+  const movablePdf = newPdf('portrait', [geometry.width, geometry.height]);
+  const movableResult = planReportCompositionShadow(movablePdf, template, geometry, fixture.input, {
+    family: 'DejaVu',
+    maxPages: 12,
+    policy: movableQuotePolicy,
+    styles: compositionStylesFromRenderConfig({
+      foreground: [25, 51, 79],
+      muted: [88, 106, 131],
+      primary: [42, 110, 166],
+      quote: [232, 117, 61],
+    }),
+  });
+  const movableEvaluationPhase = movableResult.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
+  const movableCandidates = movableEvaluationPhase?.details?.candidates ?? [];
+  assert.equal(movableResult.evaluation.status, 'accepted', JSON.stringify(movableResult.evaluation));
+  assert.ok(movableCandidates.length >= renderConfig.composition_search.movable_quote_candidate_count, 'movable quote search must evaluate its configured coarse candidates');
+  assert.ok(movableCandidates.some((candidate) => candidate.refinementRound === 1), 'movable quote search must evaluate a local refinement round');
+  assert.ok(movableCandidates.every((candidate) => candidate.status === 'accepted'), 'movable quote candidates must remain legal');
+  assert.ok(new Set(movableCandidates.map((candidate) => candidate.score)).size > 1, 'movable quote search must distinguish candidate quality');
+  const orphanScore = (candidate) => candidate.scoreBreakdown?.find((component) => component.code === 'orphan-lines');
+  assert.equal(orphanScore(result.evaluation)?.value, 1, 'the fixed reference placement must count the existing isolated paragraph fragment');
+  const selectedCandidate = movableCandidates.find((candidate) => candidate.index === movableEvaluationPhase.details.selectedCandidate);
+  assert.ok(orphanScore(selectedCandidate)?.value <= orphanScore(result.evaluation)?.value, 'the selected movable quote must not increase the number of isolated paragraph fragments');
+  const lowerWindowCandidate = movableCandidates.find((candidate) => {
+    const placement = candidate.insertionPlacements?.find((item) => item.graphicId === 'insertion:quote-market');
+    return placement && Math.abs(placement.box.y - (fixedQuote.box.y - movableQuoteWindow)) <= renderConfig.pdf.composition_geometry_tolerance;
+  });
+  assert.equal(orphanScore(lowerWindowCandidate)?.value, 2, 'the lower movable quote candidate must expose both isolated paragraph fragments');
+  assert.deepEqual(orphanScore(lowerWindowCandidate)?.details?.orphans?.map((orphan) => orphan.text), ['elit0380', 'est0437 mollit0438'], 'the orphan score must identify both detached lines in the real fixture');
+  assert.ok(movableResult.evaluation.score >= result.evaluation.score, `movable quote search must not score below fixed placement: ${JSON.stringify({ fixed: result.evaluation.score, movable: movableResult.evaluation.score })}`);
+  const movableQuote = movableResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
+  assert.ok(movableQuote, 'movable quote result must retain the quote placement');
+  assert.ok(Math.abs(movableQuote.box.y - fixedQuote.box.y) <= movableQuoteWindow + renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm, 'selected movable quote must remain inside its configured micro-window');
+  if (movableResult.evaluation.score === result.evaluation.score) assert.ok(Math.abs(movableQuote.box.y - fixedQuote.box.y) <= renderConfig.pdf.composition_geometry_tolerance, 'a score tie must preserve the preferred fixed quote position');
+  if (debugArtifactDirectory) {
+    await mkdir(debugArtifactDirectory, { recursive: true });
+    const movableArtifact = renderComposition(movableResult.document, movableResult, createJsPdfTextBackend(movablePdf, 'DejaVu', compositionStylesFromRenderConfig({
+      foreground: [25, 51, 79],
+      muted: [88, 106, 131],
+      primary: [42, 110, 166],
+      quote: [232, 117, 61],
+    }), compositionPdfBackendOptionsFromRenderConfig()));
+    await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote.pdf'), movableArtifact);
+    await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote-plan.json'), JSON.stringify(movableResult.plan, null, 2));
+    await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote-candidates.json'), JSON.stringify({
+      fixedScore: result.evaluation.score,
+      movableScore: movableResult.evaluation.score,
+      scoreDelta: movableResult.evaluation.score - result.evaluation.score,
+      fixedScoreBreakdown: result.evaluation.scoreBreakdown,
+      movableScoreBreakdown: movableResult.evaluation.scoreBreakdown,
+      fixedQuoteY: fixedQuote.box.y,
+      selectedQuoteY: movableQuote.box.y,
+      movableQuoteWindow,
+      candidates: movableCandidates.map((candidate) => ({
+        index: candidate.index,
+        refinementRound: candidate.refinementRound,
+        score: candidate.score,
+        scoreBreakdown: candidate.scoreBreakdown,
+        status: candidate.status,
+        reflowPasses: candidate.reflowPasses,
+        insertionPlacements: candidate.insertionPlacements,
+      })),
+    }, null, 2));
+    const selectedCandidateIndex = movableEvaluationPhase.details.selectedCandidate;
+    const debugPdf = movablePdf;
+    debugPdf.setPage(fixedQuote.page);
+    for (const candidate of movableCandidates) {
+      const candidatePlacement = candidate.insertionPlacements?.find((placement) => placement.graphicId === 'insertion:quote-market');
+      if (!candidatePlacement || candidatePlacement.page !== fixedQuote.page) continue;
+      const selected = candidate.index === selectedCandidateIndex;
+      debugPdf.setDrawColor(...(selected ? [220, 20, 60] : [232, 117, 61]));
+      debugPdf.setLineWidth(selected
+        ? renderConfig.composition_debug.candidate_selected_line_width
+        : renderConfig.composition_debug.candidate_line_width);
+      if (typeof debugPdf.GState === 'function' && typeof debugPdf.setGState === 'function') debugPdf.setGState(new debugPdf.GState({
+        opacity: selected ? 1 : renderConfig.composition_debug.candidate_alternative_opacity,
+      }));
+      debugPdf.rect(candidatePlacement.box.x, candidatePlacement.box.y, candidatePlacement.box.width, candidatePlacement.box.height, 'S');
+      if (typeof debugPdf.GState === 'function' && typeof debugPdf.setGState === 'function') debugPdf.setGState(new debugPdf.GState({ opacity: 1 }));
+      debugPdf.setTextColor(...(selected ? [220, 20, 60] : [232, 117, 61]));
+      debugPdf.setFont('helvetica', selected ? 'bold' : 'normal');
+      debugPdf.setFontSize(renderConfig.composition_debug.candidate_label_size);
+      debugPdf.text(`${selected ? 'SELECTED' : 'candidate'} ${candidate.index} · score ${candidate.score.toFixed(2)}`, renderConfig.composition_debug.page_padding, Math.max(renderConfig.composition_debug.page_padding, candidatePlacement.box.y - renderConfig.composition_debug.candidate_label_gap));
+    }
+    await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote-candidates-debug.pdf'), Buffer.from(debugPdf.output('arraybuffer')));
+  }
   assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
   const continuationLayout = result.template.layouts.find((layout) => layout.id.endsWith(':continuation'));
   const continuationRoute = result.template.routes.main.slotsByLayout?.[continuationLayout?.id ?? ''] ?? [];
@@ -500,7 +609,7 @@ try {
   assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b', 'quote-c'], 'quotes must be declared as a separate obstacle flow with three per-page insertion slots');
   assert.deepEqual(result.template.routes.intro.slots, ['intro'], 'intro Markdown image and lead must share a dedicated flow');
   assert.equal(result.template.routes.chart, undefined, 'editorial inset template must not reserve a chart section');
-  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'plan-trace.json'), JSON.stringify(result.plan.trace ?? {}, null, 2));
+  if (debugArtifactDirectory) await writeFile(join(debugArtifactDirectory, 'plan-trace.json'), JSON.stringify(result.plan.trace ?? {}, null, 2));
   assert.equal(result.evaluation.status, 'accepted', JSON.stringify(result.evaluation));
   assert.equal(result.plan.residualContent.length, 0, JSON.stringify(result.plan.residualContent));
   assert.deepEqual(result.evaluation.hardViolations, [], 'accepted editorial must expose no hard violations');
@@ -661,8 +770,8 @@ try {
   }), compositionPdfBackendOptionsFromRenderConfig()));
   const artifactPath = join(temporary, 'numbered-editorial.pdf');
   await writeFile(artifactPath, artifact);
-  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeDebugArtifacts(process.env.REPORT_BABY_ARTIFACT_DIR, result, fixture, artifact);
-  const inkOccupancy = await assertRenderedInk(artifactPath, result, geometry, renderConfig, process.env.REPORT_BABY_ARTIFACT_DIR);
+  if (debugArtifactDirectory) await writeDebugArtifacts(debugArtifactDirectory, result, fixture, artifact);
+  const inkOccupancy = await assertRenderedInk(artifactPath, result, geometry, renderConfig, debugArtifactDirectory);
   const tokenPattern = new RegExp(`^(?:${fixture.tokenPrefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|')})\\d{4}$`, 'u');
   const words = pdfWords(artifactPath).filter((word) => tokenPattern.test(word.text));
   assertExactNumberSet(numbers(words.map((word) => word.text)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'final PDF must contain every numbered word exactly once');
@@ -689,7 +798,7 @@ try {
   assertRenderedHeaderMetaStaysInsidePlan(headerOverflowPath, headerOverflow, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
 
   const columnBalance = inspectColumnBalance(readPdfLayout(artifactPath), renderConfig.quality.layout_diff);
-  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));
+  if (debugArtifactDirectory) await writeFile(join(debugArtifactDirectory, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));
 
   const authoredBlockOrder = new Map(fixture.sourceShape.map((block, index) => [block.id, index]));
   const planNumbers = numbers(numberedTokens(plannedLines(result.plan)

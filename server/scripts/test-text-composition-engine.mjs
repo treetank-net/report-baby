@@ -254,6 +254,14 @@ async function writeMovableCandidateArtifacts(directory, candidates, document, c
   await writeFile(join(directory, 'movable-quote-candidates.json'), JSON.stringify(entries, null, 2));
 }
 
+const debugArtifactRoot = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR;
+const movableCandidateArtifactDirectory = debugArtifactRoot
+  ? join(debugArtifactRoot, 'text-composition-engine', 'candidate-search')
+  : undefined;
+const numberedFlowArtifactDirectory = debugArtifactRoot
+  ? join(debugArtifactRoot, 'text-composition-engine', 'numbered-flow-boxes')
+  : undefined;
+
 try {
   const { createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, createTextCompositionPlanner, evaluateCompositionPlan, renderComposition } = await import(bundle);
   const { newPdf } = await import(primitivesBundle);
@@ -468,7 +476,7 @@ try {
   const bestFragmentation = Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs));
   assert.equal(selectedCandidate.score, Math.max(...movableEvaluationPhase.details.candidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring movable candidate');
   assert.equal(movableCandidateSummary.find((candidate) => candidate.quoteY === movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y)?.fragmentedParagraphs, bestFragmentation, 'the selected quote position must have the least paragraph fragmentation');
-  await writeMovableCandidateArtifacts(process.env.REPORT_BABY_ARTIFACT_DIR ? join(process.env.REPORT_BABY_ARTIFACT_DIR, 'movable-quote-candidates') : undefined, movableCandidatePlans, movableQuoteDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8')));
+  await writeMovableCandidateArtifacts(movableCandidateArtifactDirectory, movableCandidatePlans, movableQuoteDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8')));
   const invalidMovableQuote = createTextCompositionEngine(movableQuoteTemplate, {
     movableInsertionBounds: {
       'quotes:movable-quote-block': { bounds: { x: 5, y: 25, width: 20, height: 5 }, axis: 'y', candidateCount: 2 },
@@ -990,7 +998,7 @@ try {
     assert.ok(profile.boxMm && profile.boundsMm && profile.rowBands.length > 0, `quote insertion has no positional ink profile: ${JSON.stringify(check)}`);
     assert.ok(profile.inkPixels >= pdfRenderConfig.quality.pdf_pixel_qa.minimum_ink_pixels, `quote insertion is visually empty: ${JSON.stringify(check)}`);
   }
-  await writeNumberedPixelArtifacts(process.env.REPORT_BABY_ARTIFACT_DIR, numberedObstacle, numberedObstacleDocument, await readFile(rasterPdf), pixelChecks);
+  await writeNumberedPixelArtifacts(numberedFlowArtifactDirectory, numberedObstacle, numberedObstacleDocument, await readFile(rasterPdf), pixelChecks);
   const extractedNumberedWords = pdfWords(rasterPdf);
   assertPdfSpatialOrder(extractedNumberedWords, {
     expectedWords: pixelFixture.expected_words,
@@ -1622,13 +1630,21 @@ try {
       coarseCandidateCount: movableCandidateSummary.length,
       evaluatedCandidateCount: movableEvaluationPhase.details.candidates.length,
       refinementRounds: [...new Set(movableEvaluationPhase.details.candidates.map((candidate) => candidate.refinementRound))],
+      evaluatedCandidates: movableEvaluationPhase.details.candidates.map((candidate) => ({
+        index: candidate.index,
+        refinementRound: candidate.refinementRound,
+        score: candidate.score,
+        status: candidate.status,
+        hardViolationCount: candidate.hardViolationCount,
+        reflowPasses: candidate.reflowPasses,
+      })),
       candidates: movableCandidateSummary,
       selectedCandidate: movableEvaluationPhase.details.selectedCandidate,
       selectedQuoteY: movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y,
       selectedScore: movableEvaluationPhase.details.candidates[movableEvaluationPhase.details.selectedCandidate]?.score,
       reflowPasses: movableEvaluationPhase.details.candidates.map((candidate) => candidate.reflowPasses),
     },
-    numberedObstacleArtifact: process.env.REPORT_BABY_ARTIFACT_DIR ? join(process.env.REPORT_BABY_ARTIFACT_DIR, 'numbered-obstacle-pixel-qa.pdf') : undefined,
+    numberedObstacleArtifact: numberedFlowArtifactDirectory ? join(numberedFlowArtifactDirectory, 'numbered-obstacle-pixel-qa.pdf') : undefined,
   }, null, 2));
 } finally {
   await rm(temporary, { recursive: true, force: true });

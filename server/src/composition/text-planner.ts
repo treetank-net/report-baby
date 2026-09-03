@@ -626,7 +626,7 @@ function movableInsertionBoxes(proposal: PlannedInsertion, policy: MovableInsert
   if (minimum > maximum || !Number.isInteger(policy.candidateCount) || policy.candidateCount < 1) return [];
   const preferredX = clamp(policy.preferred?.x ?? proposal.box.x, minimumX, maximumX);
   const preferredY = clamp(policy.preferred?.y ?? proposal.box.y, minimumY, maximumY);
-  return Array.from({ length: policy.candidateCount }, (_, index) => {
+  const boxes = Array.from({ length: policy.candidateCount }, (_, index) => {
     const fraction = policy.candidateCount === 1 ? 0.5 : index / (policy.candidateCount - 1);
     const coordinate = minimum + (maximum - minimum) * fraction;
     return {
@@ -634,6 +634,12 @@ function movableInsertionBoxes(proposal: PlannedInsertion, policy: MovableInsert
       x: axis === 'x' ? coordinate : preferredX,
       y: axis === 'y' ? coordinate : preferredY,
     };
+  });
+  const preferredCoordinate = axis === 'x' ? preferredX : preferredY;
+  return boxes.sort((left, right) => {
+    const leftCoordinate = axis === 'x' ? left.x : left.y;
+    const rightCoordinate = axis === 'x' ? right.x : right.y;
+    return Math.abs(leftCoordinate - preferredCoordinate) - Math.abs(rightCoordinate - preferredCoordinate);
   });
 }
 

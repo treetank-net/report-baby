@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -12,6 +12,10 @@ import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composi
 
 const outputDir = await mkdtemp(join(tmpdir(), 'report-baby-test-'));
 const brandDir = join(outputDir, 'brands');
+const debugArtifactDirectory = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR
+  ? join(process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR, 'public-behavior')
+  : undefined;
+if (debugArtifactDirectory) await mkdir(debugArtifactDirectory, { recursive: true });
 await writePublicBrandFixture(brandDir);
 const renderConfig = parse(await readFile(join(process.cwd(), 'templates', 'render-config.yml'), 'utf8'));
 const transport = new StdioClientTransport({
@@ -169,7 +173,7 @@ try {
   });
   assert.notEqual(metricReport.isError, true, JSON.stringify(metricReport.content));
   assert.equal(metricReport.structuredContent?.layoutEngine, 'composition-planner');
-  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'public-metrics-plan.json'), JSON.stringify(metricReport.structuredContent?.compositionPlan ?? {}, null, 2));
+  if (debugArtifactDirectory) await writeFile(join(debugArtifactDirectory, 'public-metrics-plan.json'), JSON.stringify(metricReport.structuredContent?.compositionPlan ?? {}, null, 2));
   assert.equal(metricReport.structuredContent?.compositionEvaluation?.status, 'accepted');
   const metricPlacements = metricReport.structuredContent?.compositionPlan?.blockPlacements ?? [];
   assert.deepEqual(metricPlacements.filter((placement) => placement.kind === 'metric').map((placement) => placement.slotId), ['1:metric-1', '1:metric-2', '1:metric-3']);
@@ -229,7 +233,7 @@ try {
       },
     },
   });
-  if (process.env.REPORT_BABY_ARTIFACT_DIR) await writeFile(join(process.env.REPORT_BABY_ARTIFACT_DIR, 'public-metrics-overflow-plan.json'), JSON.stringify(overflowingMetricReport.structuredContent?.compositionPlan ?? {}, null, 2));
+  if (debugArtifactDirectory) await writeFile(join(debugArtifactDirectory, 'public-metrics-overflow-plan.json'), JSON.stringify(overflowingMetricReport.structuredContent?.compositionPlan ?? {}, null, 2));
   assert.notEqual(overflowingMetricReport.isError, true, JSON.stringify(overflowingMetricReport.content));
   assert.equal(overflowingMetricReport.structuredContent?.compositionEvaluation?.status, 'accepted');
   const overflowingMetricPlacements = overflowingMetricReport.structuredContent?.compositionPlan?.blockPlacements ?? [];

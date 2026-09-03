@@ -319,6 +319,60 @@ function scoreParagraphFragmentation(document: CompositionDocument, plan: Compos
   };
 }
 
+function scoreOrphanLines(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
+  const paragraphs = new Map(Object.values(document.flows).flatMap((flow) => flow.blocks
+    .filter((block: CompositionBlock) => block.kind === 'paragraph' && typeof block.text === 'string')
+    .map((block) => [block.id, block] as const)));
+  const orphanFragmentLimit = Math.max(1, Math.floor(scoreConfigNumber('orphanMaxFragmentLines')));
+  const linesByBlock = new Map<string, CompositionLine[]>();
+  for (const line of plan.lines) {
+    if (!paragraphs.has(line.blockId)) continue;
+    linesByBlock.set(line.blockId, [...(linesByBlock.get(line.blockId) ?? []), line]);
+  }
+  const orphans = [...linesByBlock.entries()].flatMap(([blockId, lines]) => {
+    const block = paragraphs.get(blockId);
+    if (!block || lines.length < 2) return [];
+    const orderedLines = [...lines].sort((left, right) => left.endWord - right.endWord);
+    return orderedLines.flatMap((line, index) => {
+      if (index === 0) return [];
+      const previousLine = orderedLines[index - 1];
+      if (line.page !== previousLine.page || line.slotId !== previousLine.slotId) return [];
+      const gap = line.box.y - (previousLine.box.y + previousLine.box.height);
+      if (gap < scoreConfigNumber('orphanMinGapMm')) return [];
+      const blockingGraphic = plan.graphicPlacements.find((graphic) => graphic.page === line.page
+        && graphic.slotId !== line.slotId
+        && graphic.wrap === 'around'
+        && graphic.box.y <= line.box.y
+        && graphic.box.y + graphic.box.height >= previousLine.box.y + previousLine.box.height
+        && horizontalOverlap(graphic.box, line.box));
+      if (!blockingGraphic) return [];
+      const beforeLines = index;
+      const afterLines = orderedLines.length - index;
+      const isolatedSide = beforeLines <= orphanFragmentLimit ? 'before' : afterLines <= orphanFragmentLimit ? 'after' : undefined;
+      if (!isolatedSide) return [];
+      const isolatedLines = isolatedSide === 'before' ? orderedLines.slice(0, index) : orderedLines.slice(index);
+      const isolatedLine = isolatedSide === 'before' ? isolatedLines[0] : isolatedLines.at(-1)!;
+      return [{
+        blockId,
+        page: isolatedLine.page,
+        slotId: isolatedLine.slotId,
+        text: isolatedLine.text,
+        fragmentLines: isolatedLines.length,
+        side: isolatedSide,
+        gap,
+        graphicId: blockingGraphic.graphicId,
+      }];
+    });
+  }).sort((left, right) => left.page - right.page || left.slotId.localeCompare(right.slotId) || left.blockId.localeCompare(right.blockId));
+  const minGap = scoreConfigNumber('orphanMinGapMm');
+  return {
+    code: 'orphan-lines',
+    value: orphans.length,
+    points: -orphans.length * scoreConfigNumber('orphanPenalty'),
+    details: { maxFragmentLines: orphanFragmentLimit, minGap, orphans },
+  };
+}
+
 function horizontalOverlap(first: { x: number; width: number }, second: { x: number; width: number }): boolean {
   return Math.min(first.x + first.width, second.x + second.width) > Math.max(first.x, second.x);
 }
@@ -388,7 +442,7 @@ function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreComponent
 }
 
 function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan): { score: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreInsertionSpacing(plan)];
+  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan)];
   return {
     score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
     breakdown,

@@ -96,9 +96,9 @@ try {
       diagnosticCount: 0,
       errorCount: 0,
       candidates: [
-        { index: 0, status: 'rejected', score: 999, hardViolationCount: 1, reflowPasses: 0, refinementRound: 0 },
-        { index: 1, status: 'accepted', score: 101, hardViolationCount: 0, reflowPasses: 0, refinementRound: 0 },
-        { index: 2, status: 'accepted', score: 102, hardViolationCount: 0, reflowPasses: 0, refinementRound: 0 },
+        { index: 0, status: 'rejected', score: 999, scoreBreakdown: [], hardViolationCount: 1, reflowPasses: 0, refinementRound: 0, insertionPlacements: [] },
+        { index: 1, status: 'accepted', score: 101, scoreBreakdown: [], hardViolationCount: 0, reflowPasses: 0, refinementRound: 0, insertionPlacements: [] },
+        { index: 2, status: 'accepted', score: 102, scoreBreakdown: [], hardViolationCount: 0, reflowPasses: 0, refinementRound: 0, insertionPlacements: [] },
       ],
       selectedCandidate: 2,
     },
