@@ -21,6 +21,8 @@ selected plan and does not make after-the-fact text-flow decisions.
   candidates, and refinement.
 - [Evaluator](evaluator.md) — the hard gate, scoring, configuration, and
   result observability.
+- [Configuration](configuration.md) — documented quality, search, scoring,
+  and composition-linked PDF fields, including their interactions.
 - [Decisions](decisions.md) — why the system has this division of
   responsibilities and which trade-offs were accepted.
 

@@ -35,6 +35,7 @@ const suites = {
     ['brand contract', 'scripts/test-brand-contract.mjs'],
   ],
   quality: [
+    ['composition documentation', 'scripts/test-composition-documentation.mjs'],
     ['manifest contract', 'scripts/test-manifest-contract.mjs'],
     ['manifest consumers', 'scripts/test-showcase-manifest-consumers.mjs'],
     ['input errors', 'scripts/test-input-errors.mjs'],
