@@ -1,6 +1,7 @@
 # Plan 08 — głębokość wyszukiwania kandydatów
 
-Status: zaplanowane po ustabilizowaniu planów 01–07
+Status: eksperyment screeningu kontrastu wykonany; integracja produkcyjna
+oczekuje na osobny krok implementacyjny
 
 ## Cel
 
@@ -106,6 +107,55 @@ Pierwszy benchmark powinien mierzyć: czas dekodowania i czas próbkowania,
 trafienia cache, rozbieżność między screeningiem a wynikiem dokładnym oraz
 przypadek, w którym przesunięcie tego samego tekstu nad obrazem zmienia status
 kontrastu. Dopiero po tym można dodać wagi kontrastu do `composition_score`.
+
+### Wynik pierwszego eksperymentu
+
+Prototyp w
+[`server/scripts/test-contrast-evaluation-prototype.mjs`](../../server/scripts/test-contrast-evaluation-prototype.mjs)
+przeszedł jako element composition gate. Na kontrolowanym obrazie z lokalnym
+ciemnym pasem przetestowano 8 pozycji tekstu:
+
+- obraz został przygotowany raz, a 7 kolejnych kandydatów skorzystało z cache;
+- screening `6x6` zużył 288 próbek, podczas gdy referencyjne przejście po
+  wszystkich pikselach zużyło 1920 próbek;
+- globalna średnia dała fałszywy `pass` z wynikiem `5.28:1` dla pozycji, która
+  zawierała czarny fragment o rzeczywistym kontraście `1:1`;
+- lokalny screening wykrył oba kandydaty z czarnym fragmentem jako `fail` i
+  zgodził się z referencyjnym przejściem dla wszystkich pozycji;
+- znane tło pod przezroczystym PNG dało wynik, a brak koloru pod spodem dał
+  `unknown`.
+
+To potwierdza kierunek taniego screeningu, ale jeszcze nie dowodzi poprawności
+dla wszystkich formatów wejściowych ani zgodności z finalnym rasterem PDF-a.
+Fixture jest syntetyczny, a referencja skanuje region prostokątny, nie dokładną
+maskę glifów. Przed produkcyjnym podłączeniem trzeba sprawdzić realny asset po
+rzeczywistym `contain`/cropie oraz przypadek, w którym screening przepuszcza,
+a dokładniejszy pomiar odrzuca.
+
+Eksperyment ujawnił też rozbieżność do usunięcia: istniejące funkcje kontrastu
+w `brand-context.ts` i `visual-qa.mjs` używają granicy sRGB `0.03928`, podczas
+gdy aktualna definicja WCAG podaje `0.04045`. Przed użyciem nowej miary trzeba
+ujednolicić wzór i objąć zmianę testem kontraktu, aby evaluator, visual QA i
+screening nie wydawały różnych werdyktów dla tego samego koloru.
+
+## Następny krok po eksperymencie
+
+Najpierw należy przenieść samą funkcję lokalnego próbkowania do małego modułu
+wykorzystywanego przez adapter assetów, zachowując evaluator bez zależności od
+dekodera pikseli. Następnie trzeba dostarczyć do istniejącego wyniku ewaluacji
+status, najgorszy pomiar i obszar próbki, bez dodawania kontrastu do łamania
+linii. Pierwsza wersja produkcyjna powinna obsługiwać znane kolory i
+znormalizowane obrazy PNG; JPEG/SVG i nieznane tła powinny jawnie zwracać
+`unknown`, dopóki nie będą miały bezpiecznego dekodowania.
+
+Przed tym podłączeniem należy ujednolicić granicę sRGB w istniejących
+implementacjach kontrastu i potwierdzić, że wynik dla granic testowych jest
+zgodny z WCAG.
+
+Dopiero po tym dodajemy test na prawdziwym obrazie, test mapowania cropu,
+test fallbacku po dokładnym odrzuceniu zwycięzcy oraz benchmark dla 20+
+kandydatów. Wagi scoringu pozostają niezmienione do czasu porównania wyników
+z ręczną oceną PDF-ów.
 
 ## Zależność od wcześniejszych planów
 

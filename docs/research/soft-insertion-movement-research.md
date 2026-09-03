@@ -750,6 +750,37 @@ candidate score, reflow count, orphan count, and spacing breakdown. It should
 not change the current score weights until the rendered fixtures show that the
 contrast component corresponds to a human-visible improvement.
 
+### Result of the first prototype experiment
+
+The disposable prototype in
+[`server/scripts/test-contrast-evaluation-prototype.mjs`](../../server/scripts/test-contrast-evaluation-prototype.mjs)
+confirmed the main risk. It evaluated eight positions over a synthetic image
+with a local dark strip. The global average reported `5.28:1` and would have
+passed the ordinary-text threshold for a candidate whose actual dark pixels
+had a `1:1` ratio. The conservative `6x6` local sample reported `fail` and
+matched the exhaustive reference scan for every position.
+
+The experiment performed one image preparation and reused it for seven later
+candidates. It used 288 local samples versus 1920 pixels in the exhaustive
+reference. A known page fill allowed a transparent image to be evaluated;
+without that fill the result remained `unknown`.
+
+This validates the shape of the cheap screening experiment, not yet the full
+production implementation. The fixture is synthetic, the sample region is a
+rectangle rather than an exact glyph mask, and JPEG/SVG decoding plus actual
+`contain`/crop mapping still need real-asset tests. The next implementation
+step should therefore promote the sampler behind the existing asset-adapter
+seam and leave the planner free of pixel decoding. It should add no score
+weight until real PDF fixtures have shown that the measurement tracks visible
+quality.
+
+The experiment also exposed a small consistency issue that must be resolved
+before promotion: the existing `brand-context.ts` and `visual-qa.mjs` helpers
+use the older sRGB branch point `0.03928`, while the current WCAG definition
+uses `0.04045`. The numerical difference is usually small, but one shared
+implementation and boundary tests are preferable to three subtly different
+contrast decisions.
+
 ## Conclusions versus hypotheses
 
 ### Conclusions supported by the repository and standards

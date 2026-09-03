@@ -21,6 +21,7 @@ const suites = {
     ['composition shadow', 'scripts/test-report-composition-shadow.mjs'],
     ['composition oracle', 'scripts/test-report-composition-oracle.mjs'],
     ['composition image', 'scripts/test-report-composition-image.mjs'],
+    ['contrast evaluation prototype', 'scripts/test-contrast-evaluation-prototype.mjs'],
     ['editorial numbered flow', 'scripts/test-editorial-numbered-flow.mjs'],
     ['composition page limits', 'scripts/test-composition-page-limits.mjs'],
   ],
