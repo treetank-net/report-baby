@@ -38,6 +38,9 @@ opakować obecne zachowanie innymi nazwami.
    planera według odpowiedzialności. Nie dzielimy funkcji mechanicznie.
 5. Każda wartość wpływająca na layout, score, threshold albo visual QA ma
    pochodzić z istniejącej konfiguracji YAML.
+6. Dokumentacja kanoniczna planera, evaluatora i uzasadnień decyzji jest
+   aktualizowana w tym samym kroku co zmiana kontraktu lub reguły. Plan release
+   nie jest jedynym miejscem opisu systemu.
 
 ## Plany wykonawcze
 
@@ -50,6 +53,11 @@ Szczegóły, zależności, testy i miejsca wymagające doprecyzowania są w:
 5. [Render, dry_run i debug](release-1.0/05-render-dry-run-debug-parity.md)
 6. [Utrzymywalność planera](release-1.0/06-planner-maintainability.md)
 7. [Block kinds i miękkie insertiony](release-1.0/07-block-kinds-and-soft-insertions.md)
+
+Dokumentacja aktualnego systemu znajduje się osobno w katalogu
+[Composition](composition/README.md). Plany wykonawcze opisują kolejność prac,
+a dokumenty Composition opisują stan i uzasadnienie reguł. Każda zakończona
+zmiana planera, evaluatora albo kontraktu musi zaktualizować oba miejsca.
 
 ## Regresje z audytu composition
 
@@ -102,6 +110,9 @@ rozszerzeniem po udowodnieniu, że pętla działa na ograniczonym przypadku.
 - `dry_run` i render opisują ten sam plan;
 - działają testy composition oraz ręczny przegląd realnego editorialu;
 - maintainer może znaleźć cały przebieg i właściciela reguły w dokumentacji.
+- maintainer może znaleźć aktualny kontrakt planera, evaluatora oraz powód
+  decyzji w [kanonicznej dokumentacji composition](composition/README.md), a
+  nie tylko w historii planu lub komentarzu kodu.
 
 ## Granica zakresu
 

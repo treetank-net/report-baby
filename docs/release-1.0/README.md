@@ -7,6 +7,11 @@ na osobne dokumenty wykonawcze. Dokumenty opisują istniejące pojęcia: input,
 flow, block, template, geometry, placement, obstacle, planner, evaluator,
 renderer, debug i trace. Nie wprowadzają nowego modelu domenowego.
 
+Aktualny kontrakt systemu i uzasadnienia decyzji są utrzymywane w osobnym,
+kanonicznym katalogu [Composition](../composition/README.md). Ten katalog
+opisuje kolejność prac i kryteria ich ukończenia; nie zastępuje dokumentacji
+aktualnego zachowania.
+
 ## Cel release’u
 
 ```text
