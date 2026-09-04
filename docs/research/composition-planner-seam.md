@@ -621,7 +621,7 @@ Test `test:template-flow-contract` chroni tę prostą granicę template/engine.
 
 ### Planner path z wejściem Report Baby (2026-08-27)
 
-`report-shadow.ts` składa istniejące wejście `ReportData` przez
+`report-composition-entrypoint.ts` składa istniejące wejście raportu przez
 `compositionDocumentFromReportData`, tłumaczy prawdziwy YAML strony na layout i
 tworzy metryki z `jsPDF.getTextWidth()`. Style i offsety baseline'u pochodzą z
 `render-config.yml`, więc test nie ma drugiego, ukrytego zestawu wartości

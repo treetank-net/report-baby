@@ -1,46 +1,12 @@
-import type { jsPDF } from 'jspdf';
 import { readRenderConfig } from '../builtin-template-source.js';
-import type { PageGeometry } from '../page-geometry.js';
-import type { CompositionInput } from '../contract/schema.js';
-import type { CompiledTemplate } from '../template-contract.js';
-import type { CompositionTemplate } from './model.js';
-import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './engine.js';
-import type { CompositionContrastProvider } from './contrast.js';
-import { compositionDocumentFromInput } from './input.js';
-import { compositionTemplateFromPageGeometry } from './page-template-adapter.js';
-import {
-  createJsPdfTextMetrics,
-  type JsPdfCompositionStyle,
-  type JsPdfCompositionChartStyle,
-  type JsPdfCompositionMetricStyle,
-  type JsPdfCompositionTableStyle,
-  type JsPdfCompositionImageStyle,
-  type JsPdfCompositionStyles,
+import type {
+  JsPdfCompositionChartStyle,
+  JsPdfCompositionImageStyle,
+  JsPdfCompositionMetricStyle,
+  JsPdfCompositionStyle,
+  JsPdfCompositionStyles,
+  JsPdfCompositionTableStyle,
 } from './js-pdf-adapter.js';
-import { createTextCompositionEngine } from './text-engine.js';
-import type { TextCompositionPlannerPolicy } from './text-planner.js';
-
-export interface ReportCompositionOptions {
-  family: string;
-  maxPages: number;
-  includeTitlePage?: boolean;
-  includeHeaderFlow?: boolean;
-  mainFlowId?: string;
-  auxiliaryTextWidths?: Record<string, number>;
-  policy?: TextCompositionPlannerPolicy;
-  styles?: JsPdfCompositionStyles;
-  measureBlock?: CompositionTextMetrics['measureBlock'];
-  measureTable?: CompositionTextMetrics['measureTable'];
-  contrastProvider?: CompositionContrastProvider;
-}
-
-export interface ReportCompositionResult {
-  document: ReturnType<typeof compositionDocumentFromInput>;
-  template: CompositionTemplate;
-  metrics: CompositionTextMetrics;
-  plan: CompositionPlan;
-  evaluation: CompositionEvaluation;
-}
 
 function pdfNumber(pdf: Record<string, number>, key: string): number {
   const value = pdf[key];
@@ -48,11 +14,6 @@ function pdfNumber(pdf: Record<string, number>, key: string): number {
   return value;
 }
 
-/**
- * Keep the composition adapter on the same typography seam as the report
- * renderer. The planner receives measured widths from jsPDF, while every
- * tunable size, line height and baseline offset comes from render-config.yml.
- */
 export interface CompositionTextColors {
   foreground: [number, number, number];
   muted: [number, number, number];
@@ -215,11 +176,6 @@ export interface CompositionTableColors {
   lineColor: [number, number, number];
 }
 
-/**
- * Keep metric geometry in render-config.yml while allowing the brand/theme to
- * provide only colors. This object can be passed to the jsPDF metric
- * capability without leaking render-config knowledge into the adapter.
- */
 export function compositionMetricStyleFromRenderConfig(colors: CompositionMetricColors): JsPdfCompositionMetricStyle {
   const pdf = readRenderConfig().pdf;
   return {
@@ -319,43 +275,4 @@ export function compositionImageStyleFromRenderConfig(overrides: Partial<JsPdfCo
 
 export function compositionPdfBackendOptionsFromRenderConfig(): { pageSizeTolerance: number } {
   return { pageSizeTolerance: pdfNumber(readRenderConfig().pdf, 'pageSizeTolerance') };
-}
-
-/**
- * Build a renderer-neutral plan for real Report Baby input using real jsPDF
- * text measurements. The planner does not draw; a selected PDF backend later
- * executes the accepted placements. The file keeps its historical name while
- * the prototype harness is being migrated.
- */
-export function planReportComposition(
-  doc: jsPDF,
-  compiled: CompiledTemplate,
-  geometry: PageGeometry,
-  data: CompositionInput,
-  options: ReportCompositionOptions,
-): ReportCompositionResult {
-  const document = compositionDocumentFromInput(data);
-  const template = compositionTemplateFromPageGeometry(compiled, geometry, {
-    maxPages: options.maxPages,
-    ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
-    includeHeaderFlow: options.includeHeaderFlow ?? true,
-    ...(options.mainFlowId === undefined ? {} : { mainFlowId: options.mainFlowId }),
-    ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
-  });
-  const styles = options.styles ?? compositionStylesFromRenderConfig();
-  const metrics = createJsPdfTextMetrics(doc, options.family, styles);
-  if (options.measureBlock) metrics.measureBlock = options.measureBlock;
-  if (options.measureTable) metrics.measureTable = options.measureTable;
-  const policy: TextCompositionPlannerPolicy = {
-    headingKeepWithNextLines: pdfNumber(readRenderConfig().pdf, 'headingKeepWithNextLines'),
-    minimumLinesAtStart: pdfNumber(readRenderConfig().pdf, 'widowMinLines'),
-    minimumLinesAtEnd: pdfNumber(readRenderConfig().pdf, 'orphanMinLines'),
-    maxPlanningIterations: pdfNumber(readRenderConfig().pdf, 'plannerMaxIterations'),
-    minimumFragmentLines: pdfNumber(readRenderConfig().pdf, 'plannerMinimumFragmentLines'),
-    geometryTolerance: pdfNumber(readRenderConfig().pdf, 'compositionGeometryTolerance'),
-    keepListItemsTogether: pdfNumber(readRenderConfig().pdf, 'listItemKeepTogether') === 1,
-    ...options.policy,
-  };
-  const result = createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics);
-  return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };
 }

@@ -35,7 +35,8 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
 | `composition/js-pdf-adapter.ts` | jsPDF measurements and rendering capabilities | report adapter, PDF tests | flow routing, candidate selection, score policy |
 | `composition/text-engine.ts` | Composition-specific wiring of planner, evaluator and render configuration | report renderer | layout rules, drawing, duplicated thresholds |
-| `composition/report-shadow.ts` | Compatibility adapter that prepares report composition through the current report path | report renderer and legacy harnesses | a second planner, a second renderer, independent layout rules |
+| `composition/report-composition-entrypoint.ts` | Report-specific entry point that prepares composition input, jsPDF metrics and planner policy | report renderer and composition test harnesses | a second planner, a second renderer, independent layout rules |
+| `composition/render-config-styles.ts` | Translates render-config values and theme colors into jsPDF composition styles and backend options | report renderer and composition entry point | layout decisions, document input, planner state |
 | `report-renderer.ts` | Report-level orchestration, asset preparation, theme/config loading and artifact output | MCP/CLI entrypoints | deciding text breaks or ranking candidates |
 
 Small geometry helpers such as `graphic-geometry.ts` and `image-geometry.ts`

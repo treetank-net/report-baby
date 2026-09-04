@@ -18,7 +18,7 @@ const suites = {
     ['text composition engine', 'scripts/test-text-composition-engine.mjs'],
     ['page template adapter', 'scripts/test-page-template-adapter.mjs'],
     ['jsPDF adapter', 'scripts/test-js-pdf-adapter.mjs'],
-    ['composition shadow', 'scripts/test-report-composition-shadow.mjs'],
+    ['composition adapter', 'scripts/test-report-composition-adapter.mjs'],
     ['composition oracle', 'scripts/test-report-composition-oracle.mjs'],
     ['composition image', 'scripts/test-report-composition-image.mjs'],
     ['contrast evaluation prototype', 'scripts/test-contrast-evaluation-prototype.mjs'],

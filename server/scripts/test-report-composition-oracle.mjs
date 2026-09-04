@@ -13,7 +13,7 @@ import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composi
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-oracle-'));
 const reportBundle = join(temporary, 'report-renderer.cjs');
-const shadowBundle = join(temporary, 'report-shadow.cjs');
+const adapterBundle = join(temporary, 'report-composition-entrypoint.cjs');
 const backendBundle = join(temporary, 'composition.cjs');
 const primitivesBundle = join(temporary, 'render-primitives.cjs');
 const templateBundle = join(temporary, 'template.cjs');
@@ -35,7 +35,7 @@ function build(entry, output, extra = []) {
 }
 
 build('src/report-renderer.ts', reportBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
-build('src/composition/report-shadow.ts', shadowBundle);
+build('src/composition/report-composition-entrypoint.ts', adapterBundle);
 build('src/composition/index.ts', backendBundle);
 build('src/render-primitives.ts', primitivesBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
 build('src/template-contract.ts', templateBundle);
@@ -165,7 +165,7 @@ function lineBoxParity(plan, pdfPath) {
 try {
   const { renderReportCompositionPdf, renderReportPdfDetailed } = await import(reportBundle);
   const { createJsPdfTextBackend, createTextCompositionEngine, renderComposition } = await import(backendBundle);
-  const { compositionPdfBackendOptionsFromRenderConfig, planReportComposition } = await import(shadowBundle);
+  const { compositionPdfBackendOptionsFromRenderConfig, planReportComposition } = await import(adapterBundle);
   const { newPdf } = await import(primitivesBundle);
   const { compileTemplateSource } = await import(templateBundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
@@ -178,7 +178,7 @@ try {
     title: 'A production chrome fixture',
     subtitle: 'Metadata is rendered by the transitional product chrome.',
     period: '2026 Q3',
-    intro: 'The same intro is rendered by both the legacy oracle and the composition shadow.',
+    intro: 'The same intro is rendered by both the legacy oracle and the composition adapter.',
     sections: [{ heading: 'A comparable narrative section', body }],
     footer: 'Oracle comparison fixture',
   };
@@ -191,7 +191,7 @@ try {
   const shadowPdf = newPdf();
   const shadow = planReportComposition(shadowPdf, compiled, geometry, input, { family: 'DejaVu', maxPages: 3 });
   assert.equal(shadow.evaluation.status, 'accepted', JSON.stringify(shadow.evaluation));
-  const shadowArtifact = renderComposition(shadow.document, shadow, createJsPdfTextBackend(shadowPdf, 'DejaVu', (await import(shadowBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
+  const shadowArtifact = renderComposition(shadow.document, shadow, createJsPdfTextBackend(shadowPdf, 'DejaVu', (await import(adapterBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
   const shadowPath = join(temporary, 'shadow.pdf');
   await writeFile(shadowPath, shadowArtifact);
   const expectedText = [...shadow.document.flows.main.blocks, ...(shadow.document.flows.footer?.blocks ?? [])].map((block) => block.text ?? '').join(' ');
@@ -253,7 +253,7 @@ try {
     .flatMap((line) => line.text.match(/lorem\d+/gu) ?? []);
   assert.deepEqual(plannedNumberedTokens, [...numberedHeadingWords, ...numberedBodyWords, ...numberedTailWords], 'the plan must retain numbered source order across the insertion');
   const numberedPdf = newPdf('portrait', [numberedInsetTemplate.layouts[0].width, numberedInsetTemplate.layouts[0].height]);
-  const numberedArtifact = renderComposition(numberedInsetDocument, numberedComposition, createJsPdfTextBackend(numberedPdf, 'DejaVu', (await import(shadowBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
+  const numberedArtifact = renderComposition(numberedInsetDocument, numberedComposition, createJsPdfTextBackend(numberedPdf, 'DejaVu', (await import(adapterBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
   const numberedPdfPath = join(temporary, 'numbered-inset.pdf');
   await writeFile(numberedPdfPath, numberedArtifact);
   const numberedPdfWords = pdfWords(numberedPdfPath).filter((word) => /^lorem\d+$/u.test(word.text));
@@ -352,7 +352,7 @@ try {
       },
     },
   };
-  const quoteStyles = (await import(shadowBundle)).compositionStylesFromRenderConfig({ foreground: [0, 0, 0], muted: [100, 100, 100], primary: [1, 92, 146], quote: [1, 92, 146] });
+  const quoteStyles = (await import(adapterBundle)).compositionStylesFromRenderConfig({ foreground: [0, 0, 0], muted: [100, 100, 100], primary: [1, 92, 146], quote: [1, 92, 146] });
   const quotePlan = {
     pages: [{ page: 1, layoutId: 'quote-fixture', width: 210, height: 297 }],
     slots: [{ id: '1:quote', page: 1, regionId: 'main', box: { x: 17, y: 40, width: 176, height: 20 }, state: 'partial' }],

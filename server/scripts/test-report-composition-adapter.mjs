@@ -10,22 +10,22 @@ import { runProcess } from './lib/process.mjs';
 import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
 
 const root = process.cwd();
-const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-shadow-'));
-const bundle = join(temporary, 'composition-shadow.cjs');
+const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-adapter-'));
+const bundle = join(temporary, 'composition-adapter.cjs');
 const backendBundle = join(temporary, 'composition.cjs');
 const primitivesBundle = join(temporary, 'render-primitives.cjs');
 const templateBundle = join(temporary, 'template.cjs');
 const geometryBundle = join(temporary, 'geometry.cjs');
 const buildComposition = runProcess('npx', [
   'esbuild',
-  'src/composition/report-shadow.ts',
+  'src/composition/report-composition-entrypoint.ts',
   '--bundle',
   '--platform=node',
   '--target=node18',
   '--format=cjs',
   `--outfile=${bundle}`,
 ], { cwd: root, timeout: 30_000 });
-if (buildComposition.status !== 0) throw new Error(`composition shadow bundle failed: ${buildComposition.stderr || buildComposition.stdout}`);
+if (buildComposition.status !== 0) throw new Error(`composition adapter bundle failed: ${buildComposition.stderr || buildComposition.stdout}`);
 const buildBackend = runProcess('npx', [
   'esbuild',
   'src/composition/index.ts',
@@ -55,7 +55,7 @@ const buildTemplate = runProcess('npx', [
   '--format=cjs',
   `--outfile=${templateBundle}`,
 ], { cwd: root, timeout: 30_000 });
-if (buildTemplate.status !== 0) throw new Error(`composition shadow template bundle failed: ${buildTemplate.stderr || buildTemplate.stdout}`);
+if (buildTemplate.status !== 0) throw new Error(`composition adapter template bundle failed: ${buildTemplate.stderr || buildTemplate.stdout}`);
 const buildGeometry = runProcess('npx', [
   'esbuild',
   'src/page-geometry.ts',
@@ -64,7 +64,7 @@ const buildGeometry = runProcess('npx', [
   '--format=cjs',
   `--outfile=${geometryBundle}`,
 ], { cwd: root, timeout: 30_000 });
-if (buildGeometry.status !== 0) throw new Error(`composition shadow geometry bundle failed: ${buildGeometry.stderr || buildGeometry.stdout}`);
+if (buildGeometry.status !== 0) throw new Error(`composition adapter geometry bundle failed: ${buildGeometry.stderr || buildGeometry.stdout}`);
 
 try {
   const { compositionChartStyleFromRenderConfig, compositionMetricStyleFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig, compositionStylesFromRenderConfig, compositionTableStyleFromRenderConfig, planReportComposition } = await import(bundle);

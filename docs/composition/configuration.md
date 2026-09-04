@@ -179,7 +179,8 @@ The configuration is intentionally consumed through different seams:
 - `composition/text-planner.ts` does not read YAML. Its interface accepts a
   planner policy, which keeps the core planner independent of the renderer
   configuration and makes policy injection testable.
-- `composition/text-engine.ts` and `composition/report-shadow.ts` are the
+- `composition/text-engine.ts`, `composition/report-composition-entrypoint.ts`,
+  and `composition/render-config-styles.ts` are the
   adapters that translate `pdf` configuration into planner policy, text
   styles, measurements, and block capabilities. This is the intended seam for
   jsPDF and template-specific configuration.

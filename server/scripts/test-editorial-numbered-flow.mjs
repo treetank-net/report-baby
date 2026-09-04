@@ -12,7 +12,7 @@ import { inspectColumnBalance, readPdfLayout } from './lib/pdf-layout-diff.mjs';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-editorial-numbered-'));
-const shadowBundle = join(temporary, 'shadow.cjs');
+const adapterBundle = join(temporary, 'composition-adapter.cjs');
 const backendBundle = join(temporary, 'composition.cjs');
 const primitivesBundle = join(temporary, 'primitives.cjs');
 const templateBundle = join(temporary, 'template.cjs');
@@ -71,7 +71,7 @@ function build(entry, output, extra = []) {
   if (result.status !== 0) throw new Error(`numbered-flow bundle '${entry}' failed: ${result.stderr || result.stdout}`);
 }
 
-build('src/composition/report-shadow.ts', shadowBundle);
+build('src/composition/report-composition-entrypoint.ts', adapterBundle);
 build('src/composition/index.ts', backendBundle);
 build('src/render-primitives.ts', primitivesBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
 build('src/template-contract.ts', templateBundle);
@@ -466,7 +466,7 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
 }
 
 try {
-  const { planReportComposition, compositionStylesFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig } = await import(shadowBundle);
+  const { planReportComposition, compositionStylesFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig } = await import(adapterBundle);
   const { compareCompositionEvaluations, evaluateCompositionPlan } = await import(backendBundle);
   const { createJsPdfTextBackend, renderComposition } = await import(backendBundle);
   const { newPdf } = await import(primitivesBundle);

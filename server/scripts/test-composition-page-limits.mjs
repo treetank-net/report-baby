@@ -11,7 +11,7 @@ import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composi
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-page-limits-'));
 const bundles = {
-  shadow: join(temporary, 'shadow.cjs'),
+  adapter: join(temporary, 'composition-adapter.cjs'),
   primitives: join(temporary, 'primitives.cjs'),
   template: join(temporary, 'template.cjs'),
   geometry: join(temporary, 'geometry.cjs'),
@@ -22,7 +22,7 @@ function build(entry, output, extra = []) {
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
 }
 
-build('src/composition/report-shadow.ts', bundles.shadow);
+build('src/composition/report-composition-entrypoint.ts', bundles.adapter);
 build('src/render-primitives.ts', bundles.primitives, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
 build('src/template-contract.ts', bundles.template);
 build('src/page-geometry.ts', bundles.geometry);
@@ -35,7 +35,7 @@ const validEditorialInput = (body) => legacyFixtureToCompositionInput({
 });
 
 try {
-  const { planReportComposition } = await import(bundles.shadow);
+  const { planReportComposition } = await import(bundles.adapter);
   const { newPdf } = await import(bundles.primitives);
   const { compileTemplateSource } = await import(bundles.template);
   const { pageGeometryFromTemplate } = await import(bundles.geometry);

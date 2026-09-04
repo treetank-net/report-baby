@@ -58,7 +58,7 @@ chrome, opcjonalny debug overlay i backend composition.
 `planReportComposition` tworzy dokument i template, wstrzykuje metryki jsPDF,
 scala politykę z YAML, uruchamia engine, a następnie ponownie wywołuje
 `evaluateCompositionPlan`. To jest konkretne podwójne sprzężenie ewaluacji.
-[`report-shadow.ts:329-359`](../../server/src/composition/report-shadow.ts#L329-L359)
+[`report-composition-entrypoint.ts:57-93`](../../server/src/composition/report-composition-entrypoint.ts#L57-L93)
 
 Sam `CompositionEngine` wykonuje obecnie jeden `planner.plan()` i jeden
 `evaluator.evaluate()`; nie ma tu generatora kolejnych kandydatów ani selekcji.
@@ -97,14 +97,14 @@ TypeScript 5.9.3; liczba linii obejmuje deklarację i ciało funkcji.
 | `evaluateCompositionPlan` | `server/src/composition/evaluator.ts:373-744` | 372 linii | targety slotów, containment, duplicate ranges, overlap linii/grafik/blocks/tables, kolejność flow, insertion order, coverage, residual content, atomic blocks, graphics i status |
 | `compositionTemplateFromPageGeometry` | `server/src/composition/page-template-adapter.ts:370-624` | 255 linii | first/continuation/title layouts, normalized frames, segmenty, auxiliary flows, block/text/lockup slots, growth targets i route mapping |
 | `drawCompositionDebugOverlay` | `server/src/report-renderer.ts:150-277` | 128 linii | chrome, flow placements, obstacles, barrier candidates, blocks, tables, footer/page number, lines i glyphs |
-| `compositionStylesFromRenderConfig` | `server/src/composition/report-shadow.ts:65-185` | 121 linii | odczyt wartości PDF, body/list/title/subtitle/quote styles, padding, markers, glyphs i kolory |
+| `compositionStylesFromRenderConfig` | `server/src/composition/render-config-styles.ts:16-143` | 128 linii | odczyt wartości PDF, body/list/title/subtitle/quote styles, padding, markers, glyphs i kolory |
 | `compileTemplateSource` | `server/src/template-contract.ts:348-469` | 122 linii | walidacja schema, canvas/direction, regions, slotów, flowów, archetype, page, composition i no-overlap |
 | `drawCompositionChart` | `server/src/composition/js-pdf-adapter.ts:437-546` | 110 linii | geometria wykresu, skale, osie, etykiety, kolory i rysowanie elementów chartu |
 | `checkEmptyAndUnderfilledSlots` | `server/src/composition/evaluator.ts:211-310` | 100 linii | wykrywanie pustych route segments, underfill, minimalnych fragmentów i diagnostyki przejścia |
 
 Rozmiary całych kluczowych modułów wynoszą: `text-planner.ts` 2418 linii,
 `evaluator.ts` 744, `page-template-adapter.ts` 624, `js-pdf-adapter.ts` 947,
-`report-shadow.ts` 374 i `report-renderer.ts` 400.
+`report-composition-entrypoint.ts` oraz `report-renderer.ts`.
 [`text-planner.ts:1-2418`](../../server/src/composition/text-planner.ts#L1-L2418)
 [`evaluator.ts:1-744`](../../server/src/composition/evaluator.ts#L1-L744)
 [`page-template-adapter.ts:1-624`](../../server/src/composition/page-template-adapter.ts#L1-L624)

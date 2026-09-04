@@ -17,7 +17,7 @@ import {
   compositionTableStyleFromRenderConfig,
   planReportComposition,
   type ReportCompositionResult,
-} from './composition/report-shadow.js';
+} from './composition/report-composition-entrypoint.js';
 import { createCompositionContrastProvider } from './composition/contrast.js';
 import { compositionDocumentFromInput } from './composition/input.js';
 import {
