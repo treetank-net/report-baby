@@ -12,9 +12,8 @@ import type {
   CompositionBlockMeasurement,
   CompositionBlockTrace,
   CompositionBlockPlacement,
-  CompositionFlowBarrierBoxCandidate,
   CompositionMovableInsertionFrame,
-  CompositionFlowPlacement,
+  CompositionFlowBarrierBoxCandidate,
   CompositionDiagnostic,
   CompositionGraphicPlacement,
   CompositionGlyphSamplingBox,
@@ -34,6 +33,11 @@ import type {
 } from './engine.js';
 import { polygonPoints } from './graphic-geometry.js';
 import { compositionStyleName } from './style-name.js';
+import {
+  flowBarrierBoxCandidatesForSlot,
+  registerFlowBarrierBoxCandidates,
+  registerFlowPlacements,
+} from './flow-barriers.js';
 import { obstructionAcrossLineBands, wrapText, type WrappedLine } from './text-wrapping.js';
 import {
   movableInsertionProposalCandidates,
@@ -1403,118 +1407,6 @@ function normalizePlanReadingOrder(document: CompositionDocument, plan: Composit
   });
 }
 
-function registerFlowPlacements(document: CompositionDocument, plan: CompositionPlan): CompositionFlowPlacement[] {
-  const blockFlowIds = new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block) => [block.id, flowId] as const)));
-  const contentBySlot = new Map<string, Set<string>>();
-  const linesBySlot = new Map<string, number>();
-  const addContent = (flowId: string | undefined, slotId: string, blockId: string): void => {
-    if (!flowId) return;
-    const key = `${flowId}:${slotId}`;
-    const blockIds = contentBySlot.get(key) ?? new Set<string>();
-    blockIds.add(blockId);
-    contentBySlot.set(key, blockIds);
-  };
-  for (const line of plannedLines(plan)) {
-    addContent(line.flowId, line.slotId, line.blockId);
-    linesBySlot.set(line.slotId, (linesBySlot.get(line.slotId) ?? 0) + 1);
-  }
-  for (const placement of [...plan.placements, ...plan.blockPlacements, ...plan.tablePlacements]) {
-    addContent(blockFlowIds.get(placement.blockId), placement.slotId, placement.blockId);
-  }
-  return plan.slots
-    .filter((slot): slot is CompositionSlot & { flowId: string; routeIndex: number } => slot.flowId !== undefined && slot.routeIndex !== undefined && slot.kind === 'text')
-    .map((slot) => {
-      const key = `${slot.flowId}:${slot.id}`;
-      const blockIds = [...(contentBySlot.get(key) ?? new Set<string>())];
-      const blockedBy = plan.graphicPlacements
-        .filter((graphic) => graphic.page === slot.page && graphic.wrap === 'around'
-          && graphic.box.x <= slot.box.x
-          && graphic.box.y <= slot.box.y
-          && rectBottom(graphic.box) >= rectBottom(slot.box)
-          && graphic.box.x + graphic.box.width >= slot.box.x + slot.box.width)
-        .map((graphic) => graphic.graphicId);
-      return {
-        id: `flow-placement:${slot.id}`,
-        flowId: slot.flowId,
-        page: slot.page,
-        slotId: slot.id,
-        routeIndex: slot.routeIndex,
-        box: { ...slot.box },
-        state: slot.state,
-        hasContent: blockIds.length > 0,
-        blockIds,
-        lineCount: linesBySlot.get(slot.id) ?? 0,
-        blockedBy,
-      };
-    })
-    .sort((left, right) => left.page - right.page || left.routeIndex - right.routeIndex || left.slotId.localeCompare(right.slotId));
-}
-
-function splitFlowBarrierBoxCandidates(
-  textPlacements: Array<Pick<CompositionFlowPlacement, 'id' | 'flowId' | 'page' | 'slotId' | 'box'>>,
-  graphics: CompositionGraphicPlacement[],
-): CompositionFlowBarrierBoxCandidate[] {
-  const barriers = graphics.filter((candidate) => candidate.wrap === 'around');
-  const candidates: CompositionFlowBarrierBoxCandidate[] = [];
-  for (const placement of textPlacements) {
-    const placementBottom = rectBottom(placement.box);
-    const boundaries = barriers
-      .filter((candidate) => candidate.page === placement.page && candidate.slotId !== placement.slotId && horizontalOverlap(placement.box, candidate.box) && rectsOverlap(placement.box, candidate.box))
-      .sort((left, right) => left.box.y - right.box.y || left.graphicId.localeCompare(right.graphicId));
-    if (boundaries.length === 0) continue;
-    let segmentTop = placement.box.y;
-    let previousSourceId: string | undefined;
-    for (const boundary of boundaries) {
-      const boundaryTop = Math.max(placement.box.y, Math.min(placementBottom, boundary.box.y));
-      if (boundaryTop > segmentTop) {
-        candidates.push({
-          id: `flow-barrier-box:${placement.page}:${placement.flowId}:${placement.id}:${previousSourceId ?? 'flow-start'}:${boundary.graphicId}`,
-          flowId: placement.flowId,
-          ...(previousSourceId === undefined ? {} : { previousSourceId }),
-          nextSourceId: boundary.graphicId,
-          placementId: placement.id,
-          page: placement.page,
-          box: { x: placement.box.x, y: segmentTop, width: placement.box.width, height: boundaryTop - segmentTop },
-        });
-      }
-      segmentTop = Math.max(segmentTop, Math.min(placementBottom, rectBottom(boundary.box)));
-      previousSourceId = boundary.graphicId;
-    }
-    if (placementBottom > segmentTop) {
-      candidates.push({
-        id: `flow-barrier-box:${placement.page}:${placement.flowId}:${placement.id}:${previousSourceId ?? 'flow-start'}:flow-end`,
-        flowId: placement.flowId,
-        ...(previousSourceId === undefined ? {} : { previousSourceId }),
-        placementId: placement.id,
-        page: placement.page,
-        box: { x: placement.box.x, y: segmentTop, width: placement.box.width, height: placementBottom - segmentTop },
-      });
-    }
-  }
-  return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.flowId.localeCompare(right.flowId) || left.placementId.localeCompare(right.placementId) || (left.nextSourceId ?? '').localeCompare(right.nextSourceId ?? ''));
-}
-
-function flowBarrierBoxCandidatesForSlot(
-  pageState: PageState,
-  slot: CompositionSlot,
-  flowId: string,
-  plan: CompositionPlan,
-): CompositionFlowBarrierBoxCandidate[] {
-  if (slot.kind !== 'text') return [];
-  return splitFlowBarrierBoxCandidates([{
-    id: `flow-placement:${slot.id}`,
-    flowId,
-    page: pageState.page,
-    slotId: slot.id,
-    box: { ...slot.box },
-  }], plan.graphicPlacements);
-}
-
-function registerFlowBarrierBoxCandidates(plan: CompositionPlan): CompositionFlowBarrierBoxCandidate[] {
-  const textPlacements = (plan.flowPlacements ?? []).filter((placement) => placement.flowId !== undefined);
-  return splitFlowBarrierBoxCandidates(textPlacements, plan.graphicPlacements);
-}
-
 function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
   for (const layout of template.layouts) {
     const slotIds = new Set(layout.slots.map((slot) => slot.id));
@@ -1862,7 +1754,7 @@ function planFlow(
     const pageGraphics = plan.graphicPlacements.filter((graphic) => graphic.page === currentPage.page && graphic.graphicId !== `insertion:${block.id}`);
     const flowBarrierBoxCandidates = block.role === 'quote'
       ? []
-      : flowBarrierBoxCandidatesForSlot(currentPage, slot, flowId, plan);
+      : flowBarrierBoxCandidatesForSlot(currentPage.page, slot, flowId, plan.graphicPlacements);
     if (flowBarrierBoxCandidates.length > 0) {
       plan.decisions.push({
         code: 'FLOW_BARRIER_BOXES_CONSUMED',

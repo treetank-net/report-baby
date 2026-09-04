@@ -1,6 +1,6 @@
 # Plan 06 — utrzymywalność planera
 
-Status: mapa modułów i dwa bezpieczne seamy wydzielone; dalsze wydzielanie
+Status: mapa modułów i trzy bezpieczne seamy wydzielone; dalsze wydzielanie
 wymaga testów zachowania po każdym kroku
 
 ## Wykonane w pierwszym kroku
@@ -12,6 +12,8 @@ wymaga testów zachowania po każdym kroku
   wydzielone do `composition/text-planner-candidates.ts`;
 - wrapping słów, dostępne przedziały i kontynuacja przez flow barriers zostały
   wydzielone do `composition/text-wrapping.ts`;
+- projekcja `flowPlacements` i dzielenie obszarów tekstu przez grafiki
+  opływane zostały wydzielone do `composition/flow-barriers.ts`;
 - `createTextCompositionPlanner` zachował ten sam interfejs, a testy nadal
   obserwują zachowanie przez publiczny planner i engine;
 - composition gate potwierdza niezmienione planowanie, scoring, rendering,
@@ -29,7 +31,7 @@ wrappingu zmieni routing grafiki albo ochronę nagłówka.
 
 ## Stan obecny
 
-`server/src/composition/text-planner.ts` ma około 2418 linii. `planFlow` ma
+`server/src/composition/text-planner.ts` ma około 2240 linii. `planFlow` ma
 około 666 linii i łączy m.in. cursor po stronie i route, insertiony, kolizje,
 grafiki, tabele, growth, wrapping, heading keeps, fragment limits, placements,
 reflow i diagnostykę.

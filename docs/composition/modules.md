@@ -22,9 +22,10 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/input.ts` | Conversion of accepted input into named flows, blocks, assets and graphics | report adapter, input tests | page coordinates, wrapping, PDF drawing |
 | `composition/model.ts` | Renderer-neutral document and template types | all composition modules | planning decisions or mutable runtime state |
 | `composition/page-template-adapter.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
-| `composition/text-planner.ts` | Text measurement, wrapping, routing, block placement, obstacles, flow barriers and trace materialization | `text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks |
+| `composition/text-planner.ts` | Text measurement, wrapping adapter, routing, block placement, obstacle decisions and trace materialization | `text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks |
 | `composition/text-planner-candidates.ts` | Deterministic legal position variants for an existing movable insertion frame | `text-planner.ts` | document semantics, score, rendering, candidate evaluation |
 | `composition/text-wrapping.ts` | Renderer-neutral word wrapping, available intervals, flow-barrier continuation and obstacle-gap inspection | `text-planner.ts` | page routing, insertion policy, score, PDF drawing |
+| `composition/flow-barriers.ts` | Flow-placement projection and renderer-neutral splitting of text areas around wrapping graphics | `text-planner.ts`, trace/evaluator consumers through `CompositionPlan` | page orchestration, text measurement, candidate ranking, PDF drawing |
 | `composition/engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | text engine, composition tests | wrapping, geometry invention, PDF drawing |
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
@@ -41,10 +42,12 @@ make composition decisions.
 
 `text-planner.ts` exposes `CompositionPlanner` through
 `createTextCompositionPlanner`. Its implementation may use private modules for
-wrapping, routing or candidate geometry, but callers should not need to know
-those modules separately. `text-wrapping.ts` has a private implementation seam
-used by the planner's `wrapBlock` adapter; it is not a second planner
-interface. `engine.ts` consumes the planner and an
+wrapping, flow-barrier geometry or candidate geometry, but callers should not
+need to know those modules separately. `text-wrapping.ts` has a private
+implementation seam used by the planner's `wrapBlock` adapter; it is not a
+second planner interface. `flow-barriers.ts` similarly projects already
+planned slots and splits them around already placed wrapping graphics; it does
+not choose placements. `engine.ts` consumes the planner and an
 `CompositionEvaluator`; this is the main renderer-neutral seam for candidate
 selection.
 
@@ -68,9 +71,10 @@ interface rather than importing the other module's configuration group.
 ## Refactoring rule
 
 Extract a module only when it removes a responsibility from a caller while
-keeping a smaller interface. The first safe seam is deterministic movable-
-insertion candidate generation: it transforms an existing proposal and policy
-into complete proposal variants, without knowing how the document is wrapped or
-how a variant is scored. Tests continue to call the public planner and engine
-interfaces; they do not import the extracted implementation merely to increase
-coverage.
+keeping a smaller interface. The safe seams currently are deterministic
+movable-insertion candidate generation, renderer-neutral wrapping, and
+flow-barrier projection. The latter transforms existing plan placements and
+graphic placements into trace/evaluator geometry; it does not decide where a
+graphic or text block should go. Tests continue to call the public planner and
+engine interfaces; they do not import the extracted implementation merely to
+increase coverage.
