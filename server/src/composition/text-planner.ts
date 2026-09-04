@@ -37,6 +37,7 @@ import {
 import { placeGlyphObjects } from './glyph-objects.js';
 import { glyphSamplingBoxes } from './glyph-sampling.js';
 import { hasRoleEligibleSlot, isAtomicBlock, slotFor } from './route-slots.js';
+import { insertionKey, nextInsertionBoundary, nextInsertionProposal } from './insertion-order.js';
 import { obstructionAcrossLineBands, wrapText, type WrappedLine } from './text-wrapping.js';
 import {
   movableInsertionProposalCandidates,
@@ -223,10 +224,6 @@ function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
     });
   }
   return { page, layout, slots };
-}
-
-function insertionKey(flowId: string, blockId: string): string {
-  return `${flowId}:${blockId}`;
 }
 
 function fitInsertionProposal(
@@ -844,43 +841,6 @@ function collapseInsertionBeforeContinuation(
     delta,
     reason: 'continuation-needs-uninterrupted-column',
   });
-}
-
-/**
- * Return the first reserved insertion that occurs after the current authored
- * block and on this page. A full-width insertion is not a route segment: it
- * is a hard horizontal boundary for the current stream. Without this bound,
- * wrapBlock can see the obstacle, skip over it, and place the text authored
- * before the quote below the quote itself.
- */
-function nextInsertionProposal(
-  flow: CompositionFlowRoute,
-  blocks: CompositionBlock[],
-  blockIndex: number,
-  page: number,
-  proposals: Map<string, PlannedInsertion>,
-  flowId: string,
-  afterY = Number.NEGATIVE_INFINITY,
-): PlannedInsertion | undefined {
-  if ((flow.insertionSlots?.length ?? 0) === 0) return undefined;
-  return blocks
-    .slice(blockIndex + 1)
-    .filter((block) => block.role === 'quote')
-    .map((block) => proposals.get(insertionKey(flowId, block.id)))
-    .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === page && proposal.box.y > afterY + Number.EPSILON)
-    .sort((left, right) => left.box.y - right.box.y)[0];
-}
-
-function nextInsertionBoundary(
-  flow: CompositionFlowRoute,
-  blocks: CompositionBlock[],
-  blockIndex: number,
-  page: number,
-  proposals: Map<string, PlannedInsertion>,
-  flowId: string,
-  afterY = Number.NEGATIVE_INFINITY,
-): number | undefined {
-  return nextInsertionProposal(flow, blocks, blockIndex, page, proposals, flowId, afterY)?.box.y;
 }
 
 function placeLines(
