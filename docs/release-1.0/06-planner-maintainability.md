@@ -1,7 +1,7 @@
 # Plan 06 — utrzymywalność planera
 
-Status: mapa modułów i pierwszy seam wydzielone; dalsze wydzielanie wymaga
-testów zachowania po każdym kroku
+Status: mapa modułów i dwa bezpieczne seamy wydzielone; dalsze wydzielanie
+wymaga testów zachowania po każdym kroku
 
 ## Wykonane w pierwszym kroku
 
@@ -10,6 +10,8 @@ testów zachowania po każdym kroku
   kanonicznej dokumentacji composition;
 - generowanie pozycji coarse/refinement dla ruchomego insertionu zostało
   wydzielone do `composition/text-planner-candidates.ts`;
+- wrapping słów, dostępne przedziały i kontynuacja przez flow barriers zostały
+  wydzielone do `composition/text-wrapping.ts`;
 - `createTextCompositionPlanner` zachował ten sam interfejs, a testy nadal
   obserwują zachowanie przez publiczny planner i engine;
 - composition gate potwierdza niezmienione planowanie, scoring, rendering,

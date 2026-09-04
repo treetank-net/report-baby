@@ -24,6 +24,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/page-template-adapter.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
 | `composition/text-planner.ts` | Text measurement, wrapping, routing, block placement, obstacles, flow barriers and trace materialization | `text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks |
 | `composition/text-planner-candidates.ts` | Deterministic legal position variants for an existing movable insertion frame | `text-planner.ts` | document semantics, score, rendering, candidate evaluation |
+| `composition/text-wrapping.ts` | Renderer-neutral word wrapping, available intervals, flow-barrier continuation and obstacle-gap inspection | `text-planner.ts` | page routing, insertion policy, score, PDF drawing |
 | `composition/engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | text engine, composition tests | wrapping, geometry invention, PDF drawing |
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
@@ -41,7 +42,9 @@ make composition decisions.
 `text-planner.ts` exposes `CompositionPlanner` through
 `createTextCompositionPlanner`. Its implementation may use private modules for
 wrapping, routing or candidate geometry, but callers should not need to know
-those modules separately. `engine.ts` consumes the planner and an
+those modules separately. `text-wrapping.ts` has a private implementation seam
+used by the planner's `wrapBlock` adapter; it is not a second planner
+interface. `engine.ts` consumes the planner and an
 `CompositionEvaluator`; this is the main renderer-neutral seam for candidate
 selection.
 
