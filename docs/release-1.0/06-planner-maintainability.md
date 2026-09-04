@@ -22,6 +22,12 @@ wymaga testów zachowania po każdym kroku
   route zostały wydzielone do `composition/route-slots.ts`;
 - wyszukiwanie następnego insertionu i wyznaczanie jego granicy względem tekstu
   zostały wydzielone do `composition/insertion-order.ts`;
+- publiczny test `test-text-composition-engine.mjs` ma jawny kontrakt pętli:
+  stabilny plan, plan wymagający ponownego pełnego planowania, grafikę z
+  wykluczeniem, tabelę/KPI oraz skończone końcowe bounds wszystkich placementów;
+- kontrakt rozróżnia jednorazową kontrolę stabilności od dodatkowego pełnego
+  planowania: pierwszy przypadek ma jednego kandydata, a przypadek przesuniętego
+  insertionu ma dwa kandydaty;
 - `createTextCompositionPlanner` zachował ten sam interfejs, a testy nadal
   obserwują zachowanie przez publiczny planner i engine;
 - composition gate potwierdza niezmienione planowanie, scoring, rendering,
