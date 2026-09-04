@@ -1,6 +1,6 @@
 # Plan 06 — utrzymywalność planera
 
-Status: mapa modułów i siedem bezpiecznych seamów wydzielonych; dalsze wydzielanie
+Status: mapa modułów i osiem bezpiecznych seamów wydzielonych; dalsze wydzielanie
 wymaga testów zachowania po każdym kroku
 
 ## Wykonane w pierwszym kroku
