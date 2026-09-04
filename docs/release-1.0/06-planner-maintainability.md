@@ -1,7 +1,7 @@
 # Plan 06 — utrzymywalność planera
 
-Status: mapa modułów i dziewięć bezpiecznych seamów wydzielonych; dalsze wydzielanie
-wymaga testów zachowania po każdym kroku
+Status: mapa modułów, integracja runtime oraz dwanaście bezpiecznych seamów
+wydzielonych; dalsze wydzielanie wymaga testów zachowania po każdym kroku
 
 ## Wykonane w pierwszym kroku
 
@@ -51,6 +51,13 @@ wymaga testów zachowania po każdym kroku
   `scripts/lib/pdf-text.mjs`; pusty tekst poprawnego PDF-a jest wynikiem
   pomiaru, a niedostępny lub uszkodzony dekoder ma osobny kod błędu. Oracle
   nadal decyduje dopiero później, czy brak oczekiwanych tokenów oznacza fail.
+
+W tym punkcie planu zakończono także opisane wcześniej seam-y integracji,
+candidate generation, wrappingu, flow barriers, glyphów, próbkowania,
+slotów, insertion order, trace, bloków strukturalnych oraz PDF extraction.
+Pozostały fragment `planFlow` nie ma jeszcze wydzielonej granicy, która byłaby
+bezpieczniejsza niż istniejący publiczny test engine’a; nie wydzielamy go tylko
+na podstawie długości funkcji.
 
 To wydzielenie jest techniczne, nie domenowe: nie powstał nowy rodzaj contentu
 ani nowa encja. Moduł kandydatów przyjmuje istniejące propozycje i politykę
@@ -144,8 +151,9 @@ w `report-renderer.ts`.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 
-- Docelowy podział plików wymaga uzupełnienia po punktach 2 i 3, bo dopiero
-  analiza przepływu stanu pokaże bezpieczne granice.
+- Docelowy podział plików wymaga uzupełnienia po kolejnych testach stanu
+  `planFlow`; obecna mapa opisuje już wydzielone granice, ale nie zakłada, że
+  cały planner trzeba rozbić na mniejsze funkcje.
 - Zakres refaktoryzacji `planFlow` wymaga uzupełnienia po planie 04. Pętla może
   ujawnić, że pierwszym seamem powinno być generowanie wariantów, a nie routing.
 - Kryteria wydajności wymagają uzupełnienia po benchmarku z planu 04.
