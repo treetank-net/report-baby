@@ -43,6 +43,10 @@ wymaga testów zachowania po każdym kroku
   `composition/planning-trace.ts`, a wspólne liczenie pełnych linii do
   `composition/line-capacity.ts`; planner nadal wywołuje te funkcje dopiero po
   zakończeniu placementu i normalizacji kolejności.
+- obsługa tabel i bloków atomowych została wydzielona do
+  `composition/structured-block-placement.ts`; moduł zachowuje istniejący
+  cursor i zapisuje te same placementy, decyzje oraz diagnostykę. Grafika
+  opływana nadal tworzy w tym samym miejscu flow barrier.
 
 To wydzielenie jest techniczne, nie domenowe: nie powstał nowy rodzaj contentu
 ani nowa encja. Moduł kandydatów przyjmuje istniejące propozycje i politykę
@@ -114,7 +118,9 @@ w `report-renderer.ts`.
 11. Kontynuować wydzielanie z `planFlow` tylko przez istniejące, testowalne
     odpowiedzialności. Trace jest już poza plannerem; następnym kandydatem jest
     obsługa bloków strukturalnych (tabele i bloki atomowe), pod warunkiem że
-    zachowa ten sam cursor, decyzje i diagnostykę.
+    zachowa ten sam cursor, decyzje i diagnostykę. Ten seam jest już wykonany;
+    pozostałe fragmenty `planFlow` wymagają osobnego testu zachowania przed
+    wydzieleniem.
 
 ## Kryteria ukończenia
 

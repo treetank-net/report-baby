@@ -32,6 +32,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/insertion-order.ts` | Deterministic source-order lookup and vertical boundary for the next planned insertion | `text-planner.ts` | placing insertion content, text wrapping, scoring, page mutation |
 | `composition/line-capacity.ts` | Renderer-neutral conversion of a vertical interval into complete line capacity with the planner's geometry tolerance | `text-planner.ts`, `planning-trace.ts` | layout policy, text measurement, page mutation |
 | `composition/planning-trace.ts` | Read-only projection of a completed plan into block/slot fragments, decisions and planning phases | `text-planner.ts`, trace consumers through `CompositionPlan` | placement decisions, reflow, scoring, PDF drawing |
+| `composition/structured-block-placement.ts` | Measurement, fit checks and placement of tables and atomic blocks, including wrapped-image boundary reservations | `text-planner.ts`, table/image/KPI tests through `CompositionPlan` | ordinary text wrapping, route selection, candidate ranking, PDF drawing |
 | `composition/engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | text engine, composition tests | wrapping, geometry invention, PDF drawing |
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
@@ -57,7 +58,9 @@ second planner interface. `flow-barriers.ts` similarly projects already
 planned slots and splits them around already placed wrapping graphics; it does
 not choose placements. `engine.ts` consumes the planner and an
 `CompositionEvaluator`; this is the main renderer-neutral seam for candidate
-selection.
+selection. `structured-block-placement.ts` owns only the structured-block
+branch of the flow loop. It receives the planner's mutable cursor and typed
+callbacks for existing slot rules, so it cannot become a second flow router.
 
 The jsPDF adapter satisfies `CompositionTextMetrics` and
 `CompositionBackend`. The planner receives capabilities such as text width and
