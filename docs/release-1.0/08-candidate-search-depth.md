@@ -1,8 +1,9 @@
 # Plan 08 — głębokość wyszukiwania kandydatów
 
-Status: eksperyment screeningu, renderer-neutralny sampler oraz pierwsza
-integracja PNG z asset adapterem i evaluatorem wykonane; kalibracja wag,
-JPEG/SVG i dokładna weryfikacja finalnego PDF-a pozostają otwarte
+Status: eksperyment screeningu, renderer-neutralny sampler, próbkowanie komórek
+glifów dla całego korpusu oraz integracja PNG z asset adapterem i evaluatorem
+wykonane; kalibracja wag, JPEG/SVG i dokładna weryfikacja finalnego PDF-a
+pozostają otwarte
 
 ## Cel
 
@@ -98,11 +99,16 @@ rozwiązania. `unknown` nie udaje pomiaru: pozostaje widoczny w breakdownie i
 jest obecnie neutralny punktowo.
 
 Progi 4.5:1 dla zwykłego tekstu i 3:1 dla dużego tekstu są punktami odniesienia
-z WCAG 2.2, a nie twardymi bramkami planera. Dla mierzonego minimum liczymy
-znormalizowaną jakość `clamp((minimum - 1) / (target - 1), 0, 1)` i z tej
-wartości odejmujemy skonfigurowaną karę od ogólnego score planu. Ozdobne glyphy
-i logo mogą w przyszłości dostać osobne wagi, ale nadal jako jakość, nie
-legalność.
+z WCAG 2.2, a nie twardymi bramkami planera. Aktualny evaluator nie używa już
+prostego clampowania minimum. Dla każdego glifu średni kontrast zasila rozproszoną
+ocenę jakości, natomiast najgorszy punkt próbkowania glifu zasila lokalny sygnał
+widoczności, a liczba glifów z najgorszym punktem poniżej
+`contrast_severe_ratio` zasila osobny, wysycający się sygnał szerokości problemu.
+Każdy sygnał jest normalizowany asymptotycznie funkcją
+`x / (x + response)`, a ich wpływ kontrolują wagi w `composition_score`.
+Wartość `contrast.body_minimum` jest konfigurowalnym celem punktacji, nie
+automatycznym odrzuceniem. Ozdobne glyphy i logo mogą w przyszłości dostać
+osobne wagi, ale nadal jako jakość, nie legalność.
 
 Pierwszy benchmark powinien mierzyć: czas dekodowania i czas próbkowania,
 trafienia cache, rozbieżność między screeningiem a wynikiem dokładnym oraz
@@ -134,28 +140,30 @@ maskę glifów. Przed produkcyjnym podłączeniem trzeba sprawdzić realny asset
 rzeczywistym `contain`/cropie oraz przypadek, w którym dokładniejszy pomiar
 zmienia ranking punktowy.
 
-Eksperyment ujawnił też rozbieżność do usunięcia: istniejące funkcje kontrastu
-w `brand-context.ts` i `visual-qa.mjs` używają granicy sRGB `0.03928`, podczas
-gdy aktualna definicja WCAG podaje `0.04045`. Przed użyciem nowej miary trzeba
-ujednolicić wzór i objąć zmianę testem kontraktu, aby evaluator, visual QA i
-screening nie wydawały różnych werdyktów dla tego samego koloru.
+Eksperyment ujawnił rozbieżność, którą usunięto: istniejące funkcje kontrastu
+w `brand-context.ts` i `visual-qa.mjs` używały granicy sRGB `0.03928`, podczas
+gdy aktualna definicja WCAG podaje `0.04045`. Wzór został ujednolicony i objęty
+testem kontraktu, aby evaluator, visual QA i screening nie wydawały różnych
+werdyktów dla tego samego koloru.
 
-## Następny krok po eksperymencie
+## Stan implementacji po eksperymencie
 
-Renderer-neutralny sampler został już dodany w
+Renderer-neutralny sampler został dodany w
 [`server/src/composition/contrast.ts`](../../server/src/composition/contrast.ts)
 i sprawdzony na publicznym composition seam. Nie dekoduje on obrazów i nie
 zna PDF-a — przyjmuje przygotowany raster oraz region w jego współrzędnych.
 
 Sampler jest podłączony do istniejącego seam-u asset adapter → evaluator.
 Adapter dekoduje PNG raz, mapuje rzeczywisty prostokąt obrazu po `contain`, a
-evaluator zapisuje status, najgorszy pomiar, regiony próbek i ostrzeżenia bez
-dodawania kontrastu do łamania linii. JPEG oraz nieznane rastry zwracają
+evaluator zapisuje status, najgorszy pomiar, komórki glifów, najgorszy punkt,
+regiony próbek i ostrzeżenia bez dodawania kontrastu do łamania linii. JPEG oraz nieznane rastry zwracają
 `unknown`; SVG jest obsługiwane tylko wtedy, gdy resolver dostarczy raster.
 Planer pozostaje wolny od dekodowania pikseli.
 
 Granica sRGB w istniejących implementacjach kontrastu została ujednolicona do
-`0.04045` i objęta testem kontraktu zgodności z granicą WCAG.
+`0.04045` i objęta testem kontraktu zgodności z granicą WCAG. Kontrast jest
+sprawdzany względem koloru tła całej strony oraz obrazów znajdujących się pod
+komórkami glifów; nie ogranicza się do glifów przecinających grafikę.
 
 ### Pomiar kosztu na rzeczywistym obrazie
 
@@ -195,10 +203,10 @@ neutralny do czasu kalibracji. Dla jednolitego koloru nie ma powodu dekodować
 obrazu — można policzyć dokładny kontrast z koloru tła.
 
 Benchmark dla 20 kandydatów na prawdziwym obrazie został wykonany. Test ścieżki
-adaptera i mapowania `contain` również istnieje. Pozostaje test porównujący
-screening z finalnym renderem PDF-a oraz kalibracja wpływu
-`composition_score.contrast_penalty`. Waga pozostaje robocza do czasu
-porównania wyników z ręczną oceną PDF-ów.
+adaptera, mapowania `contain`, komórek glifów i deterministycznego strumienia
+losowego również istnieje. Pozostaje test porównujący screening z finalnym
+renderem PDF-a oraz kalibracja wpływu `composition_score.contrast_penalty`.
+Waga pozostaje robocza do czasu porównania wyników z ręczną oceną PDF-ów.
 
 ## Zależność od wcześniejszych planów
 

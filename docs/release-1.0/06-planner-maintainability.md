@@ -1,6 +1,24 @@
 # Plan 06 — utrzymywalność planera
 
-Status: po uruchomieniu pierwszej pętli; nie zaczynać od mechanicznego splitu
+Status: mapa modułów i pierwszy seam wydzielone; dalsze wydzielanie wymaga
+testów zachowania po każdym kroku
+
+## Wykonane w pierwszym kroku
+
+- mapa odpowiedzialności znajduje się w
+  [`docs/composition/modules.md`](../composition/modules.md) i jest częścią
+  kanonicznej dokumentacji composition;
+- generowanie pozycji coarse/refinement dla ruchomego insertionu zostało
+  wydzielone do `composition/text-planner-candidates.ts`;
+- `createTextCompositionPlanner` zachował ten sam interfejs, a testy nadal
+  obserwują zachowanie przez publiczny planner i engine;
+- composition gate potwierdza niezmienione planowanie, scoring, rendering,
+  debug oraz realny editorial.
+
+To wydzielenie jest techniczne, nie domenowe: nie powstał nowy rodzaj contentu
+ani nowa encja. Moduł kandydatów przyjmuje istniejące propozycje i politykę
+ruchu, a zwraca ograniczony, deterministyczny zbiór wariantów. Nie zna flow,
+wrappingu, evaluatora ani renderera.
 
 ## Cel
 
@@ -30,7 +48,8 @@ site’ów mogłoby tylko rozproszyć seam.
 2. Opisać wejścia i wyjścia `planFlow`, `planDocumentOnce`, wrappingu,
    placementów, obstacles, blocks i trace.
 3. Wskazać fragmenty, które są czystymi obliczeniami i mogą zostać wydzielone
-   bez zmiany kontraktu.
+   bez zmiany kontraktu. Pierwszy wybrany seam to generowanie wariantów
+   ruchomego insertionu, opisane w `docs/composition/modules.md`.
 4. Wydzielać tylko istniejące odpowiedzialności:
    - routing;
    - wrapping i breakpointy;
