@@ -50,6 +50,13 @@ asset. Its shape may split available text intervals. An image block is content
 that must be placed and covered; a graphic is a geometry/paint object that may
 or may not wrap text.
 
+Public `CompositionInput.graphics` entries are the accepted input form for
+these authored graphics. They use `slot_id` and `asset_id` because the
+template owns page geometry and the asset list owns source resolution. A
+provided `size` is the measured painted box used by movable placement; without
+it, the graphic occupies its whole template slot. The input adapter maps this
+form into `CompositionGraphic` before planning.
+
 Glyph definitions are resolved after final block/graphic geometry exists. The
 glyph target identifies the existing block or graphic, while its anchor and
 target mode determine whether its position follows a box, the first line or

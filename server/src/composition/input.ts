@@ -1,7 +1,7 @@
 import { normalizeMarkdown, normalizeStructuredContent, normalizedText } from '../markdown-normalizer.js';
 import type { NormalizedContentNode, NormalizedImageNode } from '../content-model.js';
 import type { CompositionInput } from '../contract/schema.js';
-import type { CompositionAsset, CompositionBlock, CompositionDocument, CompositionFlow } from './model.js';
+import type { CompositionAsset, CompositionBlock, CompositionDocument, CompositionFlow, CompositionGraphic } from './model.js';
 
 function blockId(value: string | undefined, flowId: string, index: number): string {
   return value ?? `${flowId}-block-${index + 1}`;
@@ -185,9 +185,23 @@ export function compositionDocumentFromInput(input: CompositionInput): Compositi
       }
     }
   }
+  const graphics: CompositionGraphic[] = (input.graphics ?? []).map((graphic) => ({
+    id: graphic.id,
+    ...(graphic.asset_id === undefined ? {} : { assetId: graphic.asset_id }),
+    slotId: graphic.slot_id,
+    ...(graphic.size === undefined ? {} : { size: { width: graphic.size.width, height: graphic.size.height } }),
+    shape: graphic.shape,
+    ...(graphic.wrap === undefined ? {} : { wrap: graphic.wrap }),
+    ...(graphic.page === undefined ? {} : { page: graphic.page }),
+    ...(graphic.points === undefined ? {} : { points: graphic.points.map((point) => ({ x: point.x, y: point.y })) }),
+    ...(graphic.vertex_count === undefined ? {} : { vertexCount: graphic.vertex_count }),
+    ...(graphic.inner_ratio === undefined ? {} : { innerRatio: graphic.inner_ratio }),
+    ...(graphic.alt === undefined ? {} : { alt: graphic.alt }),
+  }));
   return {
     flows,
     ...(assets.length > 0 ? { assets } : {}),
+    ...(graphics.length > 0 ? { graphics } : {}),
     ...(input.glyphs && input.glyphs.length > 0 ? {
       glyphs: input.glyphs.map((glyph) => ({
         id: glyph.id,

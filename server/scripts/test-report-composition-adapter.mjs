@@ -99,7 +99,7 @@ try {
   assert.equal(result.metrics.family, 'DejaVu');
   const styles = compositionStylesFromRenderConfig();
   const artifact = renderComposition(result.document, result, createJsPdfTextBackend(pdf, 'DejaVu', styles, compositionPdfBackendOptionsFromRenderConfig()));
-  const artifactPath = join(temporary, 'shadow.pdf');
+  const artifactPath = join(temporary, 'composition.pdf');
   await writeFile(artifactPath, artifact);
   assert.equal(artifact.subarray(0, 5).toString(), '%PDF-');
   assert.equal(pdf.getNumberOfPages(), result.plan.pages.length);
@@ -114,7 +114,7 @@ try {
   assert.throws(() => renderComposition(unsupported.document, unsupported, createJsPdfTextBackend(newPdf(), 'DejaVu', styles)), /rejected/u);
 
   const metricSource = structuredClone(source);
-  metricSource.id = 'pages/editorial-metric-shadow';
+  metricSource.id = 'pages/editorial-metric-composition';
   metricSource.page.reserved_bands.metrics = { x: 0, y: 0.20, width: 1, height: 0.11 };
   metricSource.slots['metric-1'] = { type: 'metric-card', frame: { x: 0.081, y: 0.20, width: 0.39, height: 0.11 } };
   metricSource.slots['metric-2'] = { type: 'metric-card', frame: { x: 0.529, y: 0.20, width: 0.39, height: 0.11 } };
@@ -142,7 +142,7 @@ try {
     ...compositionPdfBackendOptionsFromRenderConfig(),
     blockRenderers: { metric: metricCapabilities.renderer },
   }));
-  const metricArtifactPath = join(temporary, 'metric-shadow.pdf');
+  const metricArtifactPath = join(temporary, 'metric-composition.pdf');
   await writeFile(metricArtifactPath, metricArtifact);
   const metricText = runProcess('pdftotext', [metricArtifactPath, '-']);
   assert.equal(metricText.status, 0, metricText.stderr);
@@ -151,7 +151,7 @@ try {
   assert.match(metricText.stdout, /LEADS/u);
 
   const chartSource = structuredClone(source);
-  chartSource.id = 'pages/editorial-chart-shadow';
+  chartSource.id = 'pages/editorial-chart-composition';
   chartSource.page.reserved_bands.chart = { x: 0, y: 0.20, width: 1, height: 0.36 };
   chartSource.slots.chart = { type: 'chart', frame: { x: 0.081, y: 0.20, width: 0.838, height: 0.36 }, role: 'chart' };
   chartSource.flows.main.slots = ['chart', 'content'];
@@ -176,7 +176,7 @@ try {
     ...compositionPdfBackendOptionsFromRenderConfig(),
     blockRenderers: { chart: chartCapabilities.renderer },
   }));
-  const chartArtifactPath = join(temporary, 'chart-shadow.pdf');
+  const chartArtifactPath = join(temporary, 'chart-composition.pdf');
   await writeFile(chartArtifactPath, chartArtifact);
   const chartText = runProcess('pdftotext', [chartArtifactPath, '-']);
   assert.equal(chartText.status, 0, chartText.stderr);
@@ -242,7 +242,7 @@ try {
   assert.equal(fluxResult.plan.decisions.some((decision) => decision.code === 'KEEP_CLUSTER_PUSHED' && decision.blockId === 'body-heading'), false);
 
   const tableSource = structuredClone(source);
-  tableSource.id = 'pages/editorial-table-shadow';
+  tableSource.id = 'pages/editorial-table-composition';
   tableSource.page.reserved_bands.table = { x: 0, y: 0.20, width: 1, height: 0.36 };
   tableSource.slots.table = { type: 'table', frame: { x: 0.081, y: 0.20, width: 0.838, height: 0.36 }, role: 'table' };
   tableSource.flows.main.slots = ['content', 'table'];
@@ -272,7 +272,7 @@ try {
     ...compositionPdfBackendOptionsFromRenderConfig(),
     tableRenderer: tableCapabilities.renderer,
   }));
-  const tableArtifactPath = join(temporary, 'table-shadow.pdf');
+  const tableArtifactPath = join(temporary, 'table-composition.pdf');
   await writeFile(tableArtifactPath, tableArtifact);
   const tableText = runProcess('pdftotext', [tableArtifactPath, '-']);
   assert.equal(tableText.status, 0, tableText.stderr);
@@ -281,7 +281,7 @@ try {
   assert.match(tableText.stdout, /Narrative after table/u);
 
   const tableGapSource = structuredClone(source);
-  tableGapSource.id = 'pages/editorial-table-gap-shadow';
+  tableGapSource.id = 'pages/editorial-table-gap-composition';
   tableGapSource.slots.content.allowed_block_kinds = ['paragraph', 'table'];
   tableGapSource.flows.main.slots = ['content'];
   const tableGapCompiled = compileTemplateSource(tableGapSource);

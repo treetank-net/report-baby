@@ -28,7 +28,7 @@ powtarzania wcześniej zbudowanego przebiegu.
 
 - usunięto drugą ewaluację z `planReportComposition()`;
 - wrapper zwraca teraz `result.evaluation` z engine’u;
-- test shadow potwierdza jedną fazę `evaluation` w wyniku;
+- test composition potwierdza jedną fazę `evaluation` w wyniku;
 - contract test potwierdza jedno wywołanie evaluatora dla jednego planu;
 - bundlowanie testów composition używa CommonJS, dzięki czemu testy dochodzą
   do asercji zamiast kończyć się na `Dynamic require of "process"`;

@@ -78,6 +78,20 @@ const compositionGlyphSchema = z.object({
   opacity: z.number().min(0).max(1).optional(),
 }).strict();
 
+const compositionGraphicSchema = z.object({
+  id: z.string(),
+  asset_id: z.string().optional(),
+  slot_id: z.string(),
+  size: z.object({ width: z.number().positive(), height: z.number().positive() }).strict().optional(),
+  shape: z.enum(['rectangle', 'ellipse', 'triangle', 'star', 'polygon']),
+  wrap: z.enum(['none', 'around']).optional(),
+  page: z.number().int().positive().optional(),
+  points: z.array(z.object({ x: z.number(), y: z.number() }).strict()).min(3).optional(),
+  vertex_count: z.number().int().min(3).optional(),
+  inner_ratio: z.number().gt(0).lt(1).optional(),
+  alt: z.string().optional(),
+}).strict();
+
 const compositionBlockBase = {
   id: z.string().optional(),
   role: compositionRoleSchema.optional(),
@@ -158,6 +172,7 @@ const compositionInputCoreSchema = z.object({
     keep_with_caption: z.boolean().optional().default(true),
   }).strict()).optional(),
   glyphs: z.array(compositionGlyphSchema).optional(),
+  graphics: z.array(compositionGraphicSchema).optional(),
 }).strict().superRefine((input, context) => {
   for (const [flowId, flow] of Object.entries(input.flows)) {
     flow.blocks.forEach((block, index) => {

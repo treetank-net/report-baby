@@ -1032,6 +1032,11 @@
           ],
           "description": "Request-level brand source. It overrides the process-level source without mutating it."
         },
+        "composition_debug": {
+          "default": false,
+          "description": "Draw the resolved composition placements, obstacles and line boxes over the normal PDF rendering.",
+          "type": "boolean"
+        },
         "content_root": {
           "description": "Explicit root for bare relative content and image paths.",
           "type": "string"
@@ -1607,6 +1612,189 @@
                 "type": "object"
               },
               "type": "object"
+            },
+            "glyphs": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "anchor": {
+                    "enum": [
+                      "box",
+                      "text-start",
+                      "text-end"
+                    ],
+                    "type": "string"
+                  },
+                  "anchor_alignment": {
+                    "enum": [
+                      "start",
+                      "end"
+                    ],
+                    "type": "string"
+                  },
+                  "anchor_measure_style": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "clamp_to_target": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "offset_x": {
+                    "type": "number"
+                  },
+                  "offset_y": {
+                    "type": "number"
+                  },
+                  "opacity": {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "style": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "enum": [
+                          "block",
+                          "graphic"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "type": "object"
+                  },
+                  "target_mode": {
+                    "default": "box",
+                    "enum": [
+                      "first-line",
+                      "last-line",
+                      "box"
+                    ],
+                    "type": "string"
+                  },
+                  "text": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "target",
+                  "text",
+                  "style",
+                  "anchor"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "graphics": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "alt": {
+                    "type": "string"
+                  },
+                  "asset_id": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "inner_ratio": {
+                    "exclusiveMaximum": 1,
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  "page": {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  "points": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 3,
+                    "type": "array"
+                  },
+                  "shape": {
+                    "enum": [
+                      "rectangle",
+                      "ellipse",
+                      "triangle",
+                      "star",
+                      "polygon"
+                    ],
+                    "type": "string"
+                  },
+                  "size": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "height": {
+                        "exclusiveMinimum": 0,
+                        "type": "number"
+                      },
+                      "width": {
+                        "exclusiveMinimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "type": "object"
+                  },
+                  "slot_id": {
+                    "type": "string"
+                  },
+                  "vertex_count": {
+                    "minimum": 3,
+                    "type": "integer"
+                  },
+                  "wrap": {
+                    "enum": [
+                      "none",
+                      "around"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "slot_id",
+                  "shape"
+                ],
+                "type": "object"
+              },
+              "type": "array"
             }
           },
           "required": [

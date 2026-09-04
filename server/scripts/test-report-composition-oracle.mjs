@@ -188,35 +188,35 @@ try {
   await writeFile(oraclePath, oracle.buffer);
   assert.equal(oracle.diagnostics.composition?.evaluation.status, 'accepted', 'public editorial rendering must execute an accepted composition plan');
   assert.ok((oracle.diagnostics.composition?.plan.lines.length ?? 0) > 0, 'public editorial rendering must expose concrete planner lines');
-  const shadowPdf = newPdf();
-  const shadow = planReportComposition(shadowPdf, compiled, geometry, input, { family: 'DejaVu', maxPages: 3 });
-  assert.equal(shadow.evaluation.status, 'accepted', JSON.stringify(shadow.evaluation));
-  const shadowArtifact = renderComposition(shadow.document, shadow, createJsPdfTextBackend(shadowPdf, 'DejaVu', (await import(adapterBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
-  const shadowPath = join(temporary, 'shadow.pdf');
-  await writeFile(shadowPath, shadowArtifact);
-  const expectedText = [...shadow.document.flows.main.blocks, ...(shadow.document.flows.footer?.blocks ?? [])].map((block) => block.text ?? '').join(' ');
-  const shadowText = execFileSync('pdftotext', ['-layout', shadowPath, '-'], { encoding: 'utf8' });
+  const compositionPdf = newPdf();
+  const composition = planReportComposition(compositionPdf, compiled, geometry, input, { family: 'DejaVu', maxPages: 3 });
+  assert.equal(composition.evaluation.status, 'accepted', JSON.stringify(composition.evaluation));
+  const compositionArtifact = renderComposition(composition.document, composition, createJsPdfTextBackend(compositionPdf, 'DejaVu', (await import(adapterBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
+  const compositionPath = join(temporary, 'composition.pdf');
+  await writeFile(compositionPath, compositionArtifact);
+  const expectedText = [...composition.document.flows.main.blocks, ...(composition.document.flows.footer?.blocks ?? [])].map((block) => block.text ?? '').join(' ');
+  const compositionText = execFileSync('pdftotext', ['-layout', compositionPath, '-'], { encoding: 'utf8' });
   const oracleText = execFileSync('pdftotext', ['-layout', oraclePath, '-'], { encoding: 'utf8' });
   const expected = tokenCounts(expectedText.replaceAll('{{page.number}}', '').replaceAll('{{page.count}}', ''));
   const oracleCounts = tokenCounts(joinHyphenatedLines(oracleText));
   const report = {
     oraclePages: pdfPages(oraclePath),
-    shadowPages: pdfPages(shadowPath),
-    pageDelta: pdfPages(shadowPath) - pdfPages(oraclePath),
+    compositionPages: pdfPages(compositionPath),
+    pageDelta: pdfPages(compositionPath) - pdfPages(oraclePath),
     oracleMissingTokens: missingTokens(expected, oracleCounts),
     oracleExtraTokens: missingTokens(oracleCounts, expected),
-    shadowMissingTokens: missingTokens(expected, tokenCounts(shadowText)),
-    shadowLineBoxMissing: lineBoxParity(shadow.plan, shadowPath),
+    compositionMissingTokens: missingTokens(expected, tokenCounts(compositionText)),
+    compositionLineBoxMissing: lineBoxParity(composition.plan, compositionPath),
   };
-  const plannedText = shadow.plan.lines
+  const plannedText = composition.plan.lines
     .filter((line) => line.flowId === 'main' || line.flowId === 'footer')
     .map((line) => line.text)
     .join(' ');
   report.planMissingTokens = missingTokens(expected, tokenCounts(plannedText));
   assert.equal(report.oracleMissingTokens.length, 0, JSON.stringify(report));
-  assert.equal(report.shadowMissingTokens.length, 0, JSON.stringify(report));
+  assert.equal(report.compositionMissingTokens.length, 0, JSON.stringify(report));
   assert.equal(report.planMissingTokens.length, 0, JSON.stringify(report));
-  assert.equal(report.shadowLineBoxMissing.length, 0, JSON.stringify(report));
+  assert.equal(report.compositionLineBoxMissing.length, 0, JSON.stringify(report));
 
   const numberedInsetTemplate = {
     maxPages: 1,
@@ -274,7 +274,7 @@ try {
     }
   }
   const integrated = await renderReportCompositionPdf('pages/editorial-two-column', input);
-  const integratedPath = join(temporary, 'integrated-shadow.pdf');
+  const integratedPath = join(temporary, 'integrated-composition.pdf');
   await writeFile(integratedPath, integrated.buffer);
   const integratedText = execFileSync('pdftotext', ['-layout', integratedPath, '-'], { encoding: 'utf8' });
   assert.match(integratedText, /sentinel0001/u);

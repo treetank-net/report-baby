@@ -26,6 +26,11 @@ autorskiej grafiki: `CompositionGraphic.size` wyznacza mierzony box, a
 `movableGraphicBounds` używa tego samego coarse/refinement search co quote.
 Nie jest to jeszcze jednolity mechanizm dla image-blocków, KPI i wykresów.
 
+Public input accepts authored graphics through `graphics`; the input adapter
+maps them into the same `CompositionGraphic` model used by internal callers.
+This completes declaration and normalization, but not yet the general policy
+that makes every image, KPI, or chart movable.
+
 Kanoniczna mapa obecnych rodzajów bloków znajduje się w
 [`docs/composition/block-kinds.md`](../composition/block-kinds.md). Opisuje
 ona osobno `heading`, `paragraph`, `list-item`, `image`, `table`, `metric` i

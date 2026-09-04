@@ -8,6 +8,7 @@ import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composi
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-data-'));
 const bundle = join(temporary, 'composition.cjs');
+const schemaBundle = join(temporary, 'schema.cjs');
 const build = runProcess('npx', [
   'esbuild',
   'src/composition/index.ts',
@@ -17,9 +18,19 @@ const build = runProcess('npx', [
   `--outfile=${bundle}`,
 ], { cwd: root, timeout: 30_000 });
 if (build.status !== 0) throw new Error(`composition adapter test bundle failed: ${build.stderr || build.stdout}`);
+const buildSchema = runProcess('npx', [
+  'esbuild',
+  'src/contract/schema.ts',
+  '--bundle',
+  '--platform=node',
+  '--format=cjs',
+  `--outfile=${schemaBundle}`,
+], { cwd: root, timeout: 30_000 });
+if (buildSchema.status !== 0) throw new Error(`composition schema test bundle failed: ${buildSchema.stderr || buildSchema.stdout}`);
 
 try {
   const composition = await import(bundle);
+  const { compositionInputSchema } = await import(schemaBundle);
   const { compositionDocumentFromInput } = composition.default ?? composition;
   const legacyFixture = {
     title: 'A semantic report',
@@ -80,6 +91,23 @@ try {
   assert.equal(document.flows.main.blocks[6].atomic, undefined);
   assert.equal(document.flows.main.blocks[10].text, 'Second highlight');
   assert.equal(document.flows.footer.continuation, 'forbidden');
+
+  const publicGraphicInput = compositionInputSchema.parse({
+    flows: { main: { blocks: [{ type: 'text', id: 'graphic-body', text: 'Text around the authored graphic.' }] } },
+    assets: [{ id: 'hero-asset', source: 'assets/hero.png' }],
+    graphics: [{ id: 'hero-panel', asset_id: 'hero-asset', slot_id: 'hero-slot', shape: 'rectangle', wrap: 'around', page: 1, size: { width: 20, height: 10 }, alt: 'Hero panel' }],
+  });
+  const publicGraphicDocument = compositionDocumentFromInput(publicGraphicInput);
+  assert.deepEqual(publicGraphicDocument.graphics, [{
+    id: 'hero-panel',
+    assetId: 'hero-asset',
+    slotId: 'hero-slot',
+    size: { width: 20, height: 10 },
+    shape: 'rectangle',
+    wrap: 'around',
+    page: 1,
+    alt: 'Hero panel',
+  }]);
 
   const empty = compositionDocumentFromInput({ flows: { main: { blocks: [], continuation: 'allowed' } } });
   assert.deepEqual(Object.keys(empty.flows), ['main']);

@@ -58,6 +58,15 @@ turning the whole text area into a vertical barrier.
 the selected plan and round number, but cannot mutate the evaluator result. The
 engine evaluates every variant and selects the best legal plan.
 
+Public input may declare an authored graphic with the `graphics` array. Each
+entry identifies an existing `kind: graphic` template slot through `slot_id`,
+may reference an asset through `asset_id`, and may provide a measured `size`,
+`shape`, `wrap`, `page`, and normalized polygon or star parameters. The input
+adapter converts these snake_case fields into the renderer-neutral
+`CompositionGraphic`; the planner then resolves the slot and final box. This
+is the same path used by direct `CompositionDocument` callers, so a graphic
+declared by an LLM does not receive a separate placement implementation.
+
 Experiment 1 used one movable quote, a configured vertical window, five coarse
 candidates, and one refinement round with three candidates. This is not yet a
 global search over all graphics, quotes, and breakpoints.
