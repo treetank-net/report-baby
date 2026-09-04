@@ -39,6 +39,10 @@ wymaga testów zachowania po każdym kroku
 - przygotowanie runtime raportu zostało wydzielone do
   `report-composition-runtime.ts`; zasoby, capability i backend są składane
   tam, a `report-renderer.ts` zachowuje chrome, debug overlay i zapis artefaktu.
+- projekcja śladu gotowego planu została wydzielona do
+  `composition/planning-trace.ts`, a wspólne liczenie pełnych linii do
+  `composition/line-capacity.ts`; planner nadal wywołuje te funkcje dopiero po
+  zakończeniu placementu i normalizacji kolejności.
 
 To wydzielenie jest techniczne, nie domenowe: nie powstał nowy rodzaj contentu
 ani nowa encja. Moduł kandydatów przyjmuje istniejące propozycje i politykę
@@ -107,6 +111,10 @@ w `report-renderer.ts`.
     planner policy adapter, jsPDF capability adapter i visual-QA muszą mieć
     osobne źródła ustawień oraz test przeciwko przypadkowemu odczytowi z
     niewłaściwej grupy.
+11. Kontynuować wydzielanie z `planFlow` tylko przez istniejące, testowalne
+    odpowiedzialności. Trace jest już poza plannerem; następnym kandydatem jest
+    obsługa bloków strukturalnych (tabele i bloki atomowe), pod warunkiem że
+    zachowa ten sam cursor, decyzje i diagnostykę.
 
 ## Kryteria ukończenia
 
@@ -114,6 +122,8 @@ w `report-renderer.ts`.
 - nowe zachowanie ma test na właściwym seamie;
 - `planFlow` nie jest miejscem, w którym trzeba zmieniać każdą niezależną
   regułę jednocześnie;
+- trace planu i obliczanie capacity nie są implementowane jako prywatne kopie w
+  `text-planner.ts`;
 - planowanie pozostaje niezależne od jsPDF poza capability seamem;
 - composition gate i realny editorial są zielone po refaktoryzacji.
 - punkt wejścia composition ma jedną udokumentowaną rolę i nie tworzy równoległej

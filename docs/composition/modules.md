@@ -22,7 +22,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/input.ts` | Conversion of accepted input into named flows, blocks, assets and graphics | report adapter, input tests | page coordinates, wrapping, PDF drawing |
 | `composition/model.ts` | Renderer-neutral document and template types | all composition modules | planning decisions or mutable runtime state |
 | `composition/page-template-adapter.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
-| `composition/text-planner.ts` | Text measurement, wrapping adapter, routing, block placement, obstacle decisions and trace materialization | `text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks |
+| `composition/text-planner.ts` | Text measurement, wrapping adapter, routing, block placement and obstacle decisions | `text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks, trace projection |
 | `composition/text-planner-candidates.ts` | Deterministic legal position variants for existing movable insertion and authored-graphic frames | `text-planner.ts` | document semantics, score, rendering, candidate evaluation |
 | `composition/text-wrapping.ts` | Renderer-neutral word wrapping, available intervals, flow-barrier continuation and obstacle-gap inspection | `text-planner.ts` | page routing, insertion policy, score, PDF drawing |
 | `composition/flow-barriers.ts` | Flow-placement projection and renderer-neutral splitting of text areas around wrapping graphics | `text-planner.ts`, trace/evaluator consumers through `CompositionPlan` | page orchestration, text measurement, candidate ranking, PDF drawing |
@@ -30,6 +30,8 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/glyph-sampling.ts` | Renderer-neutral character-cell geometry and foreground metadata for contrast sampling | `text-planner.ts`, contrast tests through `CompositionLine` | raster decoding, contrast scoring, placement decisions, PDF drawing |
 | `composition/route-slots.ts` | Pure compatibility checks and first-compatible-slot selection for a block in a route | `text-planner.ts` | page mutation, occupied-space checks, insertion placement, scoring |
 | `composition/insertion-order.ts` | Deterministic source-order lookup and vertical boundary for the next planned insertion | `text-planner.ts` | placing insertion content, text wrapping, scoring, page mutation |
+| `composition/line-capacity.ts` | Renderer-neutral conversion of a vertical interval into complete line capacity with the planner's geometry tolerance | `text-planner.ts`, `planning-trace.ts` | layout policy, text measurement, page mutation |
+| `composition/planning-trace.ts` | Read-only projection of a completed plan into block/slot fragments, decisions and planning phases | `text-planner.ts`, trace consumers through `CompositionPlan` | placement decisions, reflow, scoring, PDF drawing |
 | `composition/engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | text engine, composition tests | wrapping, geometry invention, PDF drawing |
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
@@ -86,8 +88,9 @@ renderer remains responsible for page chrome and the final PDF buffer.
 
 Extract a module only when it removes a responsibility from a caller while
 keeping a smaller interface. The safe seams currently are deterministic
-movable-placement candidate generation, renderer-neutral wrapping, and
-flow-barrier projection, and glyph-object resolution. The latter transforms
+movable-placement candidate generation, renderer-neutral wrapping,
+flow-barrier projection, glyph-object resolution and completed-plan tracing.
+The latter transforms
 existing text or graphic geometry into painted decoration placements; it does
 not reserve space or decide where the target should go. Glyph sampling is a
 separate geometry seam: it describes a full line-height cell per visible
