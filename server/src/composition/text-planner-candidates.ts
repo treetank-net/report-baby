@@ -102,6 +102,63 @@ function movablePlacementRefinementBoxes(proposal: { box: CompositionRect }, pol
   }).filter((box, index, boxes) => boxes.findIndex((candidate) => candidate.x === box.x && candidate.y === box.y) === index);
 }
 
+type PlannedPlacement = { box: CompositionRect };
+type SelectedPlacement = { id: string; page: number; slotId: string; box: CompositionRect };
+type MovablePlacementPolicy = Record<string, MovablePlacementBounds>;
+
+function movablePlacementProposalCandidates<T extends PlannedPlacement>(
+  seed: Map<string, T>,
+  policies: MovablePlacementPolicy,
+): Map<string, T>[] {
+  const movableEntries = Object.entries(policies).filter(([key]) => seed.has(key));
+  if (movableEntries.length === 0) return [seed];
+  let variants: Map<string, T>[] = [seed];
+  for (const [key, bounds] of movableEntries) {
+    const proposal = seed.get(key)!;
+    const boxes = movablePlacementBoxes(proposal, bounds);
+    if (boxes.length === 0) continue;
+    variants = variants.flatMap((variant) => boxes.map((box) => {
+      const next = new Map(variant);
+      next.set(key, { ...proposal, box: { ...box } } as T);
+      return next;
+    }));
+  }
+  return variants;
+}
+
+function movablePlacementProposalRefinements<T extends PlannedPlacement>(
+  seeded: Map<string, T>,
+  selectedPlacements: readonly SelectedPlacement[],
+  policies: MovablePlacementPolicy,
+  round: number,
+  selectedIdForKey: (key: string, proposal: T) => string,
+): Map<string, T>[] {
+  const movableEntries = Object.entries(policies).filter(([, bounds]) => (bounds.refinementRounds ?? 0) >= round);
+  if (movableEntries.length === 0) return [];
+  let variants: Map<string, T>[] = [seeded];
+  for (const [key, bounds] of movableEntries) {
+    const seededProposal = seeded.get(key);
+    const selectedPlacement = seededProposal
+      ? selectedPlacements.find((placement) => selectedIdForKey(key, seededProposal) === placement.id)
+      : undefined;
+    if (!seededProposal || !selectedPlacement) return [];
+    const anchoredProposal = {
+      ...seededProposal,
+      page: selectedPlacement.page,
+      slotId: selectedPlacement.slotId.replace(/^\d+:/u, ''),
+      box: { ...selectedPlacement.box },
+    } as T;
+    const boxes = movablePlacementRefinementBoxes(anchoredProposal, bounds, round);
+    if (boxes.length === 0) return [];
+    variants = variants.flatMap((variant) => boxes.map((box) => {
+      const next = new Map(variant);
+      next.set(key, { ...anchoredProposal, box: { ...box } } as T);
+      return next;
+    }));
+  }
+  return variants;
+}
+
 /**
  * Generate complete proposal variants for every configured movable insertion.
  * Cross-product expansion is deliberate and remains bounded by policy.
@@ -110,20 +167,7 @@ export function movableInsertionProposalCandidates(
   seed: Map<string, PlannedInsertion>,
   policies: MovableInsertionPolicy,
 ): Map<string, PlannedInsertion>[] {
-  const movableEntries = Object.entries(policies).filter(([key]) => seed.has(key));
-  if (movableEntries.length === 0) return [seed];
-  let variants: Map<string, PlannedInsertion>[] = [seed];
-  for (const [key, bounds] of movableEntries) {
-    const proposal = seed.get(key)!;
-    const boxes = movablePlacementBoxes(proposal, bounds);
-    if (boxes.length === 0) continue;
-    variants = variants.flatMap((variant) => boxes.map((box) => {
-      const next = new Map(variant);
-      next.set(key, { ...proposal, box: { ...box } });
-      return next;
-    }));
-  }
-  return variants;
+  return movablePlacementProposalCandidates(seed, policies);
 }
 
 /**
@@ -137,28 +181,13 @@ export function movableInsertionProposalRefinements(
   policies: MovableInsertionPolicy,
   round: number,
 ): Map<string, PlannedInsertion>[] {
-  const movableEntries = Object.entries(policies).filter(([, bounds]) => (bounds.refinementRounds ?? 0) >= round);
-  if (movableEntries.length === 0) return [];
-  let variants: Map<string, PlannedInsertion>[] = [seeded];
-  for (const [key, bounds] of movableEntries) {
-    const seededProposal = seeded.get(key);
-    const selectedGraphic = selectedPlacements.find((graphic) => graphic.graphicId === `insertion:${seededProposal?.blockId}`);
-    if (!seededProposal || !selectedGraphic) return [];
-    const anchoredProposal: PlannedInsertion = {
-      ...seededProposal,
-      page: selectedGraphic.page,
-      slotId: selectedGraphic.slotId.replace(/^\d+:/u, ''),
-      box: { ...selectedGraphic.box },
-    };
-    const boxes = movablePlacementRefinementBoxes(anchoredProposal, bounds, round);
-    if (boxes.length === 0) return [];
-    variants = variants.flatMap((variant) => boxes.map((box) => {
-      const next = new Map(variant);
-      next.set(key, { ...anchoredProposal, box: { ...box } });
-      return next;
-    }));
-  }
-  return variants;
+  return movablePlacementProposalRefinements(
+    seeded,
+    selectedPlacements.map(({ graphicId, page, slotId, box }) => ({ id: graphicId, page, slotId, box })),
+    policies,
+    round,
+    (_key, proposal) => `insertion:${proposal.blockId}`,
+  );
 }
 
 export type MovableGraphicPolicy = Record<string, MovablePlacementBounds>;
@@ -167,20 +196,7 @@ export function movableGraphicProposalCandidates(
   seed: Map<string, PlannedGraphic>,
   policies: MovableGraphicPolicy,
 ): Map<string, PlannedGraphic>[] {
-  const movableEntries = Object.entries(policies).filter(([key]) => seed.has(key));
-  if (movableEntries.length === 0) return [seed];
-  let variants: Map<string, PlannedGraphic>[] = [seed];
-  for (const [key, bounds] of movableEntries) {
-    const proposal = seed.get(key)!;
-    const boxes = movablePlacementBoxes(proposal, bounds);
-    if (boxes.length === 0) continue;
-    variants = variants.flatMap((variant) => boxes.map((box) => {
-      const next = new Map(variant);
-      next.set(key, { ...proposal, box: { ...box } });
-      return next;
-    }));
-  }
-  return variants;
+  return movablePlacementProposalCandidates(seed, policies);
 }
 
 export interface SelectedGraphicPlacement {
@@ -196,28 +212,13 @@ export function movableGraphicProposalRefinements(
   policies: MovableGraphicPolicy,
   round: number,
 ): Map<string, PlannedGraphic>[] {
-  const movableEntries = Object.entries(policies).filter(([, bounds]) => (bounds.refinementRounds ?? 0) >= round);
-  if (movableEntries.length === 0) return [];
-  let variants: Map<string, PlannedGraphic>[] = [seeded];
-  for (const [key, bounds] of movableEntries) {
-    const seededProposal = seeded.get(key);
-    const selectedGraphic = selectedPlacements.find((graphic) => graphic.graphicId === key);
-    if (!seededProposal || !selectedGraphic) return [];
-    const anchoredProposal: PlannedGraphic = {
-      ...seededProposal,
-      page: selectedGraphic.page,
-      slotId: selectedGraphic.slotId.replace(/^\d+:/u, ''),
-      box: { ...selectedGraphic.box },
-    };
-    const boxes = movablePlacementRefinementBoxes(anchoredProposal, bounds, round);
-    if (boxes.length === 0) return [];
-    variants = variants.flatMap((variant) => boxes.map((box) => {
-      const next = new Map(variant);
-      next.set(key, { ...anchoredProposal, box: { ...box } });
-      return next;
-    }));
-  }
-  return variants;
+  return movablePlacementProposalRefinements(
+    seeded,
+    selectedPlacements.map(({ graphicId, page, slotId, box }) => ({ id: graphicId, page, slotId, box })),
+    policies,
+    round,
+    (key) => key,
+  );
 }
 
 export function movableInsertionProposalSignature(proposals: Map<string, PlannedInsertion>): string {
