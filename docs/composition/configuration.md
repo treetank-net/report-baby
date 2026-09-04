@@ -179,11 +179,13 @@ The configuration is intentionally consumed through different seams:
 - `composition/text-planner.ts` does not read YAML. Its interface accepts a
   planner policy, which keeps the core planner independent of the renderer
   configuration and makes policy injection testable.
-- `composition/text-engine.ts`, `composition/report-composition-entrypoint.ts`,
-  and `composition/render-config-styles.ts` are the
-  adapters that translate `pdf` configuration into planner policy, text
-  styles, measurements, and block capabilities. This is the intended seam for
-  jsPDF and template-specific configuration.
+- `composition/text-engine.ts` is the adapter that translates `pdf`
+  configuration into planner policy. The report entry point calls that adapter
+  and forwards only explicit policy overrides; it does not maintain a second
+  mapping of PDF fields. `composition/render-config-styles.ts` translates
+  renderer style configuration into text styles, measurements, and block
+  capabilities. These are the intended seams for jsPDF and template-specific
+  configuration.
 - `quality` belongs to artifact inspection and visual QA. A quality threshold
   must not be used as evaluator permission to place an illegal plan.
 - `contrast` belongs to the asset-adapter/evaluator seam. The adapter owns

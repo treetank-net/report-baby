@@ -1,5 +1,4 @@
 import type { jsPDF } from 'jspdf';
-import { readRenderConfig } from '../builtin-template-source.js';
 import type { PageGeometry } from '../page-geometry.js';
 import type { CompositionInput } from '../contract/schema.js';
 import type { CompiledTemplate } from '../template-contract.js';
@@ -9,7 +8,7 @@ import type { CompositionContrastProvider } from './contrast.js';
 import { compositionDocumentFromInput } from './input.js';
 import { compositionTemplateFromPageGeometry } from './page-template-adapter.js';
 import { createJsPdfTextMetrics, type JsPdfCompositionStyles } from './js-pdf-adapter.js';
-import { createTextCompositionEngine } from './text-engine.js';
+import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './text-engine.js';
 import type { TextCompositionPlannerPolicy } from './text-planner.js';
 import { compositionStylesFromRenderConfig } from './render-config-styles.js';
 
@@ -50,12 +49,6 @@ export interface ReportCompositionResult {
   evaluation: CompositionEvaluation;
 }
 
-function pdfNumber(pdf: Record<string, number>, key: string): number {
-  const value = pdf[key];
-  if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite pdf.${key}.`);
-  return value;
-}
-
 /**
  * Prepare one report composition run for the renderer-neutral engine.
  *
@@ -83,15 +76,8 @@ export function planReportComposition(
   const metrics = createJsPdfTextMetrics(doc, options.family, styles);
   if (options.measureBlock) metrics.measureBlock = options.measureBlock;
   if (options.measureTable) metrics.measureTable = options.measureTable;
-  const pdf = readRenderConfig().pdf;
   const policy: TextCompositionPlannerPolicy = {
-    headingKeepWithNextLines: pdfNumber(pdf, 'headingKeepWithNextLines'),
-    minimumLinesAtStart: pdfNumber(pdf, 'widowMinLines'),
-    minimumLinesAtEnd: pdfNumber(pdf, 'orphanMinLines'),
-    maxPlanningIterations: pdfNumber(pdf, 'plannerMaxIterations'),
-    minimumFragmentLines: pdfNumber(pdf, 'plannerMinimumFragmentLines'),
-    geometryTolerance: pdfNumber(pdf, 'compositionGeometryTolerance'),
-    keepListItemsTogether: pdfNumber(pdf, 'listItemKeepTogether') === 1,
+    ...plannerPolicyFromRenderConfig(),
     ...options.policy,
   };
   const result = createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics);

@@ -9,6 +9,7 @@ const configPath = join(root, 'templates/render-config.yml');
 const compositionDocsRoot = join(root, '..', 'docs/composition');
 const evaluatorPath = join(root, 'src/composition/evaluator.ts');
 const plannerPath = join(root, 'src/composition/text-planner.ts');
+const compositionSourceRoot = join(root, 'src/composition');
 
 function leafPaths(value, prefix = '') {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [prefix];
@@ -75,4 +76,37 @@ if (missingPdfFields.length > 0) {
   ].join('\n'));
 }
 
-console.log(`PASS: composition documentation covers ${documentedGroups.join(', ')}, ${new Set(hardRuleCodes).size} evaluator hard-rule code(s), and ${pdfCompositionFields.length} composition-linked pdf field(s)`);
+const sourceText = async (relativePath) => readFile(join(compositionSourceRoot, relativePath), 'utf8');
+const sourceOwnership = [
+  { file: 'text-planner.ts', allowedGroups: [], reason: 'the renderer-neutral planner must receive policy instead of reading YAML' },
+  { file: 'text-planner-candidates.ts', allowedGroups: [], reason: 'candidate geometry must remain independent of configuration loading' },
+  { file: 'text-wrapping.ts', allowedGroups: [], reason: 'wrapping must remain independent of configuration loading' },
+  { file: 'flow-barriers.ts', allowedGroups: [], reason: 'barrier geometry must remain independent of configuration loading' },
+  { file: 'glyph-objects.ts', allowedGroups: [], reason: 'glyph placement must remain independent of configuration loading' },
+  { file: 'glyph-sampling.ts', allowedGroups: [], reason: 'sampling geometry must receive its inputs through the composition interface' },
+  { file: 'route-slots.ts', allowedGroups: [], reason: 'route compatibility must remain independent of configuration loading' },
+  { file: 'insertion-order.ts', allowedGroups: [], reason: 'source-order geometry must remain independent of configuration loading' },
+  { file: 'contrast.ts', allowedGroups: [], reason: 'contrast measurement must receive sampling policy through its provider options' },
+  { file: 'evaluator.ts', allowedGroups: ['compositionScore', 'contrast'], reason: 'the evaluator owns score interpretation and contrast target policy' },
+  { file: 'text-engine.ts', allowedGroups: ['pdf'], reason: 'the text-engine adapter translates PDF policy into planner policy' },
+  { file: 'report-composition-entrypoint.ts', allowedGroups: [], reason: 'the report entrypoint delegates policy translation to the text-engine adapter' },
+  { file: 'render-config-styles.ts', allowedGroups: ['pdf', 'chart'], reason: 'the styles adapter owns renderer style configuration only' },
+];
+const ownershipViolations = [];
+for (const rule of sourceOwnership) {
+  const source = await sourceText(rule.file);
+  const reads = [...source.matchAll(/readRenderConfig\(\)\.([A-Za-z]+)/gu)].map((match) => match[1]);
+  const disallowed = reads.filter((group) => !rule.allowedGroups.includes(group));
+  if (disallowed.length > 0) ownershipViolations.push(`${rule.file} reads ${[...new Set(disallowed)].join(', ')}; ${rule.reason}`);
+  if (rule.allowedGroups.length === 0 && /readRenderConfig\(|render-config\.yml/gu.test(source)) {
+    ownershipViolations.push(`${rule.file} reads render configuration; ${rule.reason}`);
+  }
+}
+if (ownershipViolations.length > 0) {
+  throw new Error([
+    'Configuration ownership contract failed: composition modules must read only their assigned render-config groups through the documented adapter seam.',
+    ...ownershipViolations,
+  ].join('\n'));
+}
+
+console.log(`PASS: composition documentation covers ${documentedGroups.join(', ')}, ${new Set(hardRuleCodes).size} evaluator hard-rule code(s), ${pdfCompositionFields.length} composition-linked pdf field(s), and configuration ownership`);

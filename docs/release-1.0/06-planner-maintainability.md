@@ -32,6 +32,10 @@ wymaga testów zachowania po każdym kroku
   obserwują zachowanie przez publiczny planner i engine;
 - composition gate potwierdza niezmienione planowanie, scoring, rendering,
   debug oraz realny editorial.
+- własność konfiguracji jest sprawdzana przez test dokumentacji: rdzeń planera
+  nie czyta YAML, evaluator nie czyta `quality` ani `composition_search`, a
+  pomiar kontrastu nie ładuje konfiguracji samodzielnie; `pdf` jest mapowane do
+  polityki planera w jednym resolverze adaptera `text-engine.ts`.
 
 To wydzielenie jest techniczne, nie domenowe: nie powstał nowy rodzaj contentu
 ani nowa encja. Moduł kandydatów przyjmuje istniejące propozycje i politykę
@@ -55,10 +59,12 @@ odpowiedzialności i stanu mutable w jednym przebiegu.
 
 `server/src/composition/report-composition-entrypoint.ts` ma inną klasę problemu: nie jest
 drugim plannerem ani rendererem, tylko adapterem produkcyjnej ścieżki, który
-łączy przygotowanie danych, konfigurację PDF, metryki jsPDF, capability
-renderera i wywołanie composition engine. Historyczna nazwa utrudnia
-znalezienie właściciela, ale mechaniczne dzielenie pliku przed mapą call
-site’ów mogłoby tylko rozproszyć seam.
+łączy przygotowanie danych, metryki jsPDF, capability renderera i wywołanie
+composition engine. Domyślna polityka PDF jest mapowana wyłącznie w
+`text-engine.ts`; entrypoint przekazuje ją przez ten seam i nie utrzymuje
+drugiej mapy pól. Historyczna nazwa utrudniała znalezienie właściciela, ale
+mechaniczne dzielenie pliku przed mapą call site’ów mogłoby tylko rozproszyć
+seam.
 
 ## Kroki
 

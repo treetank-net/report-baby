@@ -7,16 +7,40 @@ import type { CompositionPlan } from './engine.js';
 
 export type TextCompositionEngineOptions = CompositionEvaluationOptions;
 
+function pdfNumber(pdf: Record<string, number>, key: string): number {
+  const value = pdf[key];
+  if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite pdf.${key}.`);
+  return value;
+}
+
+/**
+ * Translate the renderer's PDF policy into the planner's renderer-neutral
+ * policy. This is the only composition adapter that owns these defaults;
+ * callers may override them through the returned policy or engine argument.
+ */
+export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
+  const pdf = readRenderConfig().pdf;
+  return {
+    headingKeepWithNextLines: pdfNumber(pdf, 'headingKeepWithNextLines'),
+    minimumLinesAtStart: pdfNumber(pdf, 'widowMinLines'),
+    minimumLinesAtEnd: pdfNumber(pdf, 'orphanMinLines'),
+    maxPlanningIterations: pdfNumber(pdf, 'plannerMaxIterations'),
+    minimumFragmentLines: pdfNumber(pdf, 'plannerMinimumFragmentLines'),
+    geometryTolerance: pdfNumber(pdf, 'compositionGeometryTolerance'),
+    keepListItemsTogether: pdfNumber(pdf, 'listItemKeepTogether') === 1,
+  };
+}
+
 export function createTextCompositionEngine(
   template: CompositionTemplate,
   policy: TextCompositionPlannerPolicy = {},
   options: TextCompositionEngineOptions = {},
 ): CompositionEngine {
-  const pdf = readRenderConfig().pdf;
+  const configPolicy = plannerPolicyFromRenderConfig();
   const configuredPolicy: TextCompositionPlannerPolicy = {
-    maxPlanningIterations: pdf.plannerMaxIterations,
-    minimumFragmentLines: pdf.plannerMinimumFragmentLines,
-    geometryTolerance: pdf.compositionGeometryTolerance,
+    maxPlanningIterations: configPolicy.maxPlanningIterations,
+    minimumFragmentLines: configPolicy.minimumFragmentLines,
+    geometryTolerance: configPolicy.geometryTolerance,
     ...policy,
     ...(template.headingKeepWithNextLines === undefined ? {} : { headingKeepWithNextLines: template.headingKeepWithNextLines }),
   };

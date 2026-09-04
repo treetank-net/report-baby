@@ -34,8 +34,8 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
 | `composition/js-pdf-adapter.ts` | jsPDF measurements and rendering capabilities | report adapter, PDF tests | flow routing, candidate selection, score policy |
-| `composition/text-engine.ts` | Composition-specific wiring of planner, evaluator and render configuration | report renderer | layout rules, drawing, duplicated thresholds |
-| `composition/report-composition-entrypoint.ts` | Report-specific entry point that prepares composition input, jsPDF metrics and planner policy | report renderer and composition test harnesses | a second planner, a second renderer, independent layout rules |
+| `composition/text-engine.ts` | Composition-specific wiring of planner, evaluator and the `pdf`-to-planner policy adapter | report renderer | layout rules, drawing, duplicated thresholds |
+| `composition/report-composition-entrypoint.ts` | Report-specific entry point that prepares composition input and jsPDF metrics, then forwards explicit policy overrides | report renderer and composition test harnesses | a second planner, a second renderer, independent layout rules, policy-default translation |
 | `composition/render-config-styles.ts` | Translates render-config values and theme colors into jsPDF composition styles and backend options | report renderer and composition entry point | layout decisions, document input, planner state |
 | `report-renderer.ts` | Report-level orchestration, asset preparation, theme/config loading and artifact output | MCP/CLI entrypoints | deciding text breaks or ranking candidates |
 
@@ -70,8 +70,12 @@ Configuration ownership is similarly directional:
 - `contrast` supplies contrast reference and sampling values;
 - `quality` belongs to artifact and visual-QA checks.
 
-If a value is needed in another module, pass it through the existing typed
-interface rather than importing the other module's configuration group.
+The `text-engine.ts` adapter is the single implementation of the PDF policy
+mapping. Its direct engine interface retains a smaller historical fallback
+subset for renderer-neutral callers; the report entry point requests the full
+policy through that same adapter and adds only explicit caller overrides. If a
+value is needed in another module, pass it through the existing typed interface
+rather than importing the other module's configuration group.
 
 ## Refactoring rule
 
