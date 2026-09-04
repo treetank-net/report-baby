@@ -445,13 +445,38 @@ function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreComponent
 function scoreContrast(assessments: CompositionContrastAssessment[]): CompositionScoreComponent {
   const targetRatio = readRenderConfig().contrast.bodyMinimum;
   const maximumPenalty = scoreConfigNumber('contrastPenalty');
+  const qualityResponse = scoreConfigNumber('contrastQualityResponse');
+  if (qualityResponse <= 0) throw new Error('Render configuration composition_score.contrast_quality_response must be greater than zero.');
+  const saturatingQuality = (signal: number): number => {
+    const nonNegativeSignal = Math.max(0, signal);
+    return nonNegativeSignal / (nonNegativeSignal + qualityResponse);
+  };
+  const normalize = (ratio: number): number => saturatingQuality(Math.max(0, (ratio - 1) / (targetRatio - 1)));
+  const glyphResults = assessments.flatMap((assessment) => assessment.glyphResults ?? []);
   const measured = assessments
-    .filter((assessment) => assessment.status === 'measured' && Number.isFinite(assessment.minimumRatio))
-    .map((assessment) => Math.max(0, Math.min(1, ((assessment.minimumRatio ?? 1) - 1) / (targetRatio - 1))));
-  const normalizedQuality = measured.length > 0
-    ? measured.reduce((sum, quality) => sum + quality, 0) / measured.length
-    : 1;
-  const points = normalizedQuality >= 1 ? 0 : -maximumPenalty * (1 - normalizedQuality);
+    .filter((assessment) => assessment.status === 'measured' && Number.isFinite(assessment.averageRatio ?? assessment.minimumRatio))
+    .map((assessment) => normalize(assessment.averageRatio ?? assessment.minimumRatio ?? 1));
+  const glyphQualities = glyphResults.map((glyph) => normalize(glyph.averageRatio));
+  const glyphWorstPointQualities = glyphResults.map((glyph) => normalize(glyph.minimumRatio));
+  const meanQuality = glyphQualities.length > 0
+    ? glyphQualities.reduce((sum, quality) => sum + quality, 0) / glyphQualities.length
+    : measured.length > 0
+      ? measured.reduce((sum, quality) => sum + quality, 0) / measured.length
+      : 1;
+  const worstPointQuality = glyphWorstPointQualities.length > 0 ? Math.min(...glyphWorstPointQualities) : meanQuality;
+  const severeRatio = scoreConfigNumber('contrastSevereRatio');
+  const affectedGlyphSaturation = Math.max(1, scoreConfigNumber('contrastAffectedGlyphSaturation'));
+  const affectedGlyphCount = glyphResults.filter((glyph) => glyph.minimumRatio < severeRatio).length;
+  const affectedGlyphBreadth = glyphResults.length > 0
+    ? saturatingQuality(affectedGlyphCount / affectedGlyphSaturation)
+    : 0;
+  const penaltyFraction = glyphResults.length > 0
+    ? scoreConfigNumber('contrastMeanQualityWeight') * (1 - meanQuality)
+      + scoreConfigNumber('contrastWorstGlyphWeight') * (1 - worstPointQuality)
+      + scoreConfigNumber('contrastAffectedGlyphWeight') * affectedGlyphBreadth
+    : 1 - meanQuality;
+  const normalizedQuality = 1 - penaltyFraction;
+  const points = penaltyFraction === 0 ? 0 : -maximumPenalty * penaltyFraction;
   return {
     code: 'contrast',
     value: normalizedQuality,
@@ -459,10 +484,20 @@ function scoreContrast(assessments: CompositionContrastAssessment[]): Compositio
     details: {
       assessmentCount: assessments.length,
       measuredAssessmentCount: measured.length,
-      unknownGraphicIds: assessments.filter((assessment) => assessment.status === 'unknown').map((assessment) => assessment.graphicId),
+      glyphCount: glyphResults.length,
+      affectedGlyphCount,
+      affectedGlyphBreadth,
+      meanQuality,
+      worstPointQuality,
+      penaltyFraction,
+      scoring: glyphResults.length > 0 ? 'mean-quality + worst-point + affected-glyph-breadth' : 'legacy-assessment-quality',
+      severeRatio,
+      affectedGlyphSaturation,
+      unknownGraphicIds: assessments.filter((assessment) => assessment.status === 'unknown').map((assessment) => assessment.graphicId).filter((graphicId): graphicId is string => graphicId !== undefined),
       targetRatio,
       maximumPenalty,
-      normalization: 'clamp((minimumRatio - 1) / (targetRatio - 1), 0, 1); unknown measurements are neutral',
+      qualityResponse,
+      normalization: 'mean quality uses glyph average ratios with an asymptotic response x / (x + response); localized defects use each glyph minimum sampled ratio for worst-point and affected-glyph terms; unknown measurements are neutral',
       assessments,
       pointsPolicy: 'continuous quality component; weights require visual calibration',
     },

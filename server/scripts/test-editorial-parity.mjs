@@ -71,6 +71,7 @@ try {
   assert.equal(composition.plan.lines.some((line) => line.flowId === 'quotes'), false, 'quotes must remain outside the ordinary flow');
   assert.equal(new Set((composition.plan.insertionLines ?? []).map((line) => line.blockId)).size, 4, 'all authored quotes must be retained');
   assert.equal((composition.plan.glyphPlacements ?? []).filter((glyph) => glyph.source === 'authored').length, 8, 'all authored quote glyphs must be retained');
+  assert.ok(composition.plan.lines.filter((line) => line.text.trim()).every((line) => (line.glyphSamplingBoxes?.length ?? 0) > 0), 'planned text lines must expose local glyph sampling frames');
   const barrierCandidates = composition.plan.flowBarrierBoxCandidates ?? [];
   assert.ok(barrierCandidates.some((candidate) => candidate.flowId === 'main'), 'editorial must expose main-flow barrier candidates');
   assert.deepEqual(

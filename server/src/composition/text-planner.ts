@@ -17,6 +17,7 @@ import type {
   CompositionFlowPlacement,
   CompositionDiagnostic,
   CompositionGraphicPlacement,
+  CompositionGlyphSamplingBox,
   CompositionGlyphPlacement,
   CompositionGlyphSpec,
   CompositionLine,
@@ -900,7 +901,7 @@ function placeInsertionLayer(
           maxHeight,
         });
       }
-      placeLines(page, definition, block, flowId, undefined, lines, leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion', padding);
+      placeLines(page, definition, block, metrics, flowId, undefined, lines, leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion', padding);
       slot.state = 'exhausted';
       const obstacle = plan.graphicPlacements.find((graphic) => graphic.graphicId === `insertion:${block.id}` && graphic.page === page.page);
       if (obstacle) obstacle.box = { ...slot.box };
@@ -1290,6 +1291,7 @@ function placeLines(
   pageState: PageState,
   definition: CompositionSlotTemplate,
   block: CompositionBlock,
+  metrics: CompositionTextMetrics,
   flowId: string,
   routeIndex: number | undefined,
   lines: WrappedLine[],
@@ -1327,6 +1329,12 @@ function placeLines(
     ...(layer === 'flow' ? {} : { layer }),
   });
   lines.forEach((line) => {
+    const lineY = box.y + padding.top + line.lineOffset * lineHeightValue + verticalOffset;
+    const textX = definition.textAlign === 'right'
+      ? line.x + line.width - line.naturalWidth
+      : definition.textAlign === 'center'
+        ? line.x + (line.width - line.naturalWidth) / 2
+        : line.x;
     const outputLine: CompositionLine = {
       blockId: block.id,
       flowId,
@@ -1336,7 +1344,7 @@ function placeLines(
       text: line.text,
       box: {
         x: line.x,
-        y: box.y + padding.top + line.lineOffset * lineHeightValue + verticalOffset,
+        y: lineY,
         width: line.width,
         height: lineHeightValue,
       },
@@ -1344,12 +1352,50 @@ function placeLines(
       naturalWidth: line.naturalWidth,
       startWord: line.startWord,
       endWord: line.endWord,
+      glyphSamplingBoxes: glyphSamplingBoxes(metrics, block, line.text, textX, lineY, line.naturalWidth, lineHeightValue),
       ...(layer === 'flow' ? {} : { layer }),
     };
     outputLines.push(outputLine);
   });
   const occupiedBottom = lastBottom;
   slot.state = occupiedBottom >= rectBottom(box) ? 'exhausted' : 'partial';
+}
+
+function glyphSamplingBoxes(
+  metrics: CompositionTextMetrics,
+  block: CompositionBlock,
+  text: string,
+  textX: number,
+  lineY: number,
+  naturalWidth: number,
+  lineHeightValue: number,
+): CompositionGlyphSamplingBox[] {
+  const characters = Array.from(text);
+  const result: CompositionGlyphSamplingBox[] = [];
+  const styleName = styleFor(block);
+  const foreground = metrics.foregroundColor?.(styleName);
+  let previousWidth = 0;
+  for (let index = 0; index < characters.length; index += 1) {
+    const character = characters[index]!;
+    const prefixWidth = measure(metrics, characters.slice(0, index + 1).join(''), block);
+    const width = Math.max(0, prefixWidth - previousWidth);
+    previousWidth = prefixWidth;
+    if (/^\s$/u.test(character) || width <= 0) continue;
+    result.push({
+      // Contrast sampling deliberately uses a predictable character cell:
+      // advance width horizontally and the complete line height vertically.
+      // It estimates the chance of a contrast problem; it is not an ink-mask
+      // proof and therefore does not need backend-specific glyph outlines.
+      box: { x: textX + prefixWidth - width, y: lineY, width, height: lineHeightValue },
+      baselineY: lineY + (metrics.glyphBaselineOffset?.(styleName) ?? 0),
+      ...(foreground ? { foreground } : {}),
+    });
+  }
+  if (result.length > 0 && Math.abs(previousWidth - naturalWidth) > 0.0001) {
+    const correction = naturalWidth - previousWidth;
+    result.at(-1)!.box.width = Math.max(0, result.at(-1)!.box.width + correction);
+  }
+  return result;
 }
 
 function placeAtomicBlock(
@@ -2381,7 +2427,7 @@ function planFlow(
     if (selected.some((line) => line.naturalWidth > line.width)) {
       plan.diagnostics.push(diagnostic('error', 'OVERFULL_LINE', `Flow '${flowId}' contains a token wider than slot '${definition.id}'.`, { flowId, blockId: block.id, page: currentPage.page, slotId: slot.id }));
     }
-    placeLines(currentPage, definition, block, flowId, continuousInsertion ? undefined : selectedSlot.routeIndex, selected, leading, plan.placements, plan.lines);
+    placeLines(currentPage, definition, block, metrics, flowId, continuousInsertion ? undefined : selectedSlot.routeIndex, selected, leading, plan.placements, plan.lines);
     lastLegalSlotId = slot.id;
     const consumedEnd = selected.at(-1)!.endWord;
     if (consumedEnd >= wordsForBlock(block).length) {

@@ -15,6 +15,8 @@ export interface CompositionTextMetrics {
   glyphInkBounds?(text: string, styleName: string): { top: number; bottom: number };
   /** Internal top/bottom padding for a text block, in page geometry units. */
   textPadding?(styleName: string): { top: number; bottom: number };
+  /** Foreground color used when sampling this style over a background. */
+  foregroundColor?(styleName: string): [number, number, number] | undefined;
   glyphs?(styleName: string): CompositionGlyphSpec[];
   glyphBaselineOffset?(styleName: string): number;
   textIndent?(styleName: string): number;
@@ -210,7 +212,18 @@ export interface CompositionLine {
   naturalWidth: number;
   startWord: number;
   endWord: number;
+  /** Per-glyph sampling frames used by local contrast evaluation. */
+  glyphSamplingBoxes?: CompositionGlyphSamplingBox[];
   layer?: 'flow' | 'insertion';
+}
+
+export interface CompositionGlyphSamplingBox {
+  /** Approximate character cell: measured advance width by complete line height. */
+  box: CompositionBox;
+  /** Baseline in the same page coordinates; sampling offsets are normalized around box center. */
+  baselineY: number;
+  /** Optional per-glyph foreground; the provider falls back to its default color. */
+  foreground?: [number, number, number];
 }
 
 export interface CompositionDecision {

@@ -83,17 +83,39 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.insertion_internal_spacing_penalty` | Weight for uneven spacing inside an insertion. It interacts with insertion content height and the two padding edges. |
 | `composition_score.insertion_external_spacing_penalty` | Weight for the gap between an insertion and surrounding main-flow content. It interacts with preceding/following line geometry. |
 | `composition_score.insertion_cross_stream_spacing_penalty` | Weight for unequal gaps between insertion streams or columns. It interacts with same-page stream geometry and the other insertion-spacing weights. |
-| `composition_score.contrast_penalty` | Maximum normalized penalty for measured text contrast over variable graphic backgrounds. It interacts with normalized contrast quality and is part of the general plan score, not a separate legality gate. |
+| `composition_score.contrast_penalty` | Maximum normalized penalty for measured text contrast across the complete corpus, including the supplied page background and variable graphic backgrounds. It interacts with normalized contrast quality and is part of the general plan score, not a separate legality gate. |
+| `composition_score.contrast_mean_quality_weight` | Weight for diffuse contrast quality across sampled glyphs. It interacts with the worst-point and affected-glyph terms; the three weights should normally sum to 1. |
+| `composition_score.contrast_worst_glyph_weight` | Weight that keeps one glyph with a severely affected sampled point visible in the score even when the document contains thousands of good glyphs. Despite the historical field name, it applies to the worst sampled point. It is continuous, not a rejection rule. |
+| `composition_score.contrast_affected_glyph_weight` | Weight for the breadth of severe contrast damage. It interacts with `contrast_severe_ratio` and `contrast_affected_glyph_saturation`. |
+| `composition_score.contrast_severe_ratio` | Raw contrast-ratio boundary below which a glyph's worst sampled point counts as severely affected. It is a scoring threshold, not a hard rule. |
+| `composition_score.contrast_affected_glyph_saturation` | Number of severely affected glyphs used as the breadth curve's scale; at this count the curve's input is `1`, before applying `contrast_quality_response`. It makes one affected glyph visible while still distinguishing broader damage. |
+| `composition_score.contrast_quality_response` | Positive response parameter for the asymptotic contrast-quality curve `x / (x + response)`. Lower values approach full quality faster; the curve never reaches 1 for finite contrast. It also controls the saturation curve for affected-glyph breadth. |
 
 ## `contrast`
 
-These values define the initial contrast-reading policy for text painted over
-an image or another variable background. The asset adapter prepares a raster
-once, and the evaluator receives the resulting measurements for every
-overlapping candidate. They do not change line breaking. Contrast is always a
-quality input, never a second pass/fail gate: a weak measurement lowers the
-general score, while an unknown measurement is retained as evidence and is
-neutral until a separate policy is calibrated.
+These values define the initial contrast-reading policy for the complete text
+corpus. The asset adapter prepares each available raster once, and the
+evaluator resolves the background at every Monte Carlo point from the page or
+region color and any painted graphic under that point. They do not change line
+breaking. Contrast is always a quality input, never a second pass/fail gate: a
+weak measurement lowers the general score, while an unknown measurement is
+retained as evidence and is neutral until a separate policy is calibrated.
+
+The checked-in `body_minimum` default is `2.76`. This is an editorial,
+brand-tolerant scoring target, not a claim that the rendered document conforms
+to WCAG. A consumer that targets WCAG AA should configure the ordinary-text
+target to `4.5` and use the large-text rule where applicable; a consumer that
+targets the enhanced level should use the corresponding stricter values. The
+contrast component remains continuous in every profile: changing the target
+changes ranking pressure, while very low measured contrast still receives a
+strong penalty through the worst-glyph and affected-glyph terms.
+
+The raster here is an image-asset representation, not a rasterized copy of the
+candidate PDF page. Page-space sample positions remain continuous. When a
+sample falls on a graphic, the adapter maps that position to the corresponding
+integer source-pixel index only to read the pixel color. The debug PDF is
+rasterized later solely to produce a viewable PNG; those PNG pixels are not fed
+back into the contrast evaluator.
 
 | Field | Meaning and interactions |
 |---|---|
@@ -101,7 +123,7 @@ neutral until a separate policy is calibrated.
 | `contrast.large_minimum` | Minimum ratio for large text when a future text-size-aware contrast policy selects the large-text rule. It must remain distinct from `body_minimum`; the current first adapter slice uses the ordinary-text policy. |
 | `contrast.large_text_px` | Text-size boundary used to classify large regular text. It interacts with `large_minimum` and the renderer's actual text-size units. |
 | `contrast.large_bold_text_px` | Text-size boundary used to classify large bold text. It interacts with `large_minimum`, font weight, and the renderer's actual text-size units. |
-| `contrast.sample_count` | Number of samples per axis in the deterministic local grid for each overlapping text region. It trades measurement cost against the chance of missing a small background patch; it is not a full-pixel verification. |
+| `contrast.sample_count` | Sampling budget for every non-whitespace glyph cell in the complete planned corpus. A cell is intentionally approximate: its width is the measured character advance and its height is the complete line height, not the painted ink outline. Coordinates are normalized around that cell's center, with `-1..1` on both axes, and remain continuous in page space. Each point resolves the background under the full cell: the explicitly supplied page background outside painted graphics and the mapped graphic pixel where a graphic is present. Mapping to a graphic pixel uses an integer raster index only for color lookup; it does not snap the page-space sample or the debug marker to a layout grid. The integer part is always sampled and the fractional part is a deterministic Bernoulli trial for one additional sample independently for each glyph, consuming one shared seeded random stream. The same corpus seed reproduces the same per-glyph sequence for every candidate, while neighbouring glyphs receive different offsets. When the renderer exposes a text color for a style, the cell uses that foreground rather than assuming one global body color; the provider option remains the fallback for renderer-neutral or legacy frames. Legacy line-box fallback uses the integer part as a grid size. It trades measurement cost against the chance of missing a small background patch; it is not a full-pixel verification. |
 
 ## `composition_search`
 

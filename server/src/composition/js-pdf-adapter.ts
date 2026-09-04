@@ -2,6 +2,7 @@ import type { jsPDF } from 'jspdf';
 import type { CompositionBlock, CompositionBlockKind, CompositionChart, CompositionDocument, CompositionTable } from './model.js';
 import type { CompositionBackend, CompositionPlan, CompositionTableMeasurement, CompositionTextMetrics } from './engine.js';
 import { compositionStyleName } from './style-name.js';
+import { fitContainBox } from './image-geometry.js';
 
 export interface JsPdfCompositionStyle {
   fontSize: number;
@@ -290,10 +291,8 @@ function drawGraphic(
     const asset = assets?.get(placement.assetId);
     if (!asset) throw new Error(`Graphic '${placement.graphicId}' references unresolved asset '${placement.assetId}'.`);
     if (![asset.width, asset.height].every((value) => Number.isFinite(value) && value > 0)) throw new Error(`Graphic asset '${placement.assetId}' has invalid dimensions.`);
-    const scale = Math.min(placement.box.width / asset.width, placement.box.height / asset.height);
-    const width = asset.width * scale;
-    const height = asset.height * scale;
-    doc.addImage(asset.data, asset.format, placement.box.x + (placement.box.width - width) / 2, placement.box.y + (placement.box.height - height) / 2, width, height);
+    const imageBox = fitContainBox(placement.box, asset.width, asset.height);
+    doc.addImage(asset.data, asset.format, imageBox.x, imageBox.y, imageBox.width, imageBox.height);
     return;
   }
   doc.setFillColor(...style.fillColor);
@@ -834,6 +833,11 @@ export function createJsPdfTextMetrics(
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return { top: selected.paddingTop ?? 0, bottom: selected.paddingBottom ?? 0 };
+    },
+    foregroundColor(style) {
+      const selected = styles[style];
+      if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
+      return selected.textColor;
     },
     glyphBaselineOffset(style) {
       const selected = styles[style];

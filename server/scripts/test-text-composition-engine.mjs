@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { deflateSync } from 'node:zlib';
 import { loremIpsum } from 'lorem-ipsum';
 import { parse } from 'yaml';
 import { runProcess } from './lib/process.mjs';
@@ -16,6 +17,102 @@ const primitivesBundle = join(temporary, 'render-primitives.cjs');
 
 function plannedLines(plan) {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
+}
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const value of buffer) {
+    crc ^= value;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const typeBuffer = Buffer.from(type, 'ascii');
+  const body = Buffer.concat([typeBuffer, data]);
+  const chunk = Buffer.alloc(12 + data.length);
+  chunk.writeUInt32BE(data.length, 0);
+  body.copy(chunk, 4);
+  chunk.writeUInt32BE(crc32(body), 8 + data.length);
+  return chunk;
+}
+
+function createBackgroundAsset(width, height, colorAt) {
+  // The contrast fixture supplies a synthetic raster asset directly. It does
+  // not rasterize the debug PDF; the later pdftoppm step is only for viewing
+  // the candidate. The evaluator samples this asset's pixels as a cheap
+  // background proxy at continuous page-space positions.
+  const rows = [];
+  const raster = new Uint8Array(width * height * 3);
+  for (let y = 0; y < height; y += 1) {
+    const row = Buffer.alloc(1 + width * 3);
+    row[0] = 0;
+    for (let x = 0; x < width; x += 1) {
+      const color = colorAt(x, y);
+      row[1 + x * 3] = color[0];
+      row[2 + x * 3] = color[1];
+      row[3 + x * 3] = color[2];
+      const rasterOffset = (y * width + x) * 3;
+      raster[rasterOffset] = color[0];
+      raster[rasterOffset + 1] = color[1];
+      raster[rasterOffset + 2] = color[2];
+    }
+    rows.push(row);
+  }
+  const raw = Buffer.concat(rows);
+  const png = Buffer.concat([
+    Buffer.from('\x89PNG\r\n\x1a\n', 'binary'),
+    pngChunk('IHDR', Buffer.from([0, 0, 0, width, 0, 0, 0, height, 8, 2, 0, 0, 0])),
+    pngChunk('IDAT', deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+  return { width, height, raster: { width, height, channels: 3, pixels: raster }, data: `data:image/png;base64,${png.toString('base64')}` };
+}
+
+function splitBackgroundAsset(width, height) {
+  return createBackgroundAsset(width, height, (x) => {
+    const dark = x >= Math.floor(width * 0.56) && x < Math.floor(width * 0.72);
+    return dark ? [38, 71, 108] : [246, 246, 246];
+  });
+}
+
+function gradientBackgroundAsset(width, height, stripeCount) {
+  const white = [246, 246, 246];
+  const navy = [38, 71, 108];
+  const center = 0.64;
+  const halfWidth = 0.24;
+  return createBackgroundAsset(width, height, (x) => {
+    const stripe = Math.min(stripeCount - 1, Math.floor(x * stripeCount / width));
+    const position = (stripe + 0.5) / stripeCount;
+    const strength = Math.max(0, 1 - Math.abs(position - center) / halfWidth);
+    return white.map((channel, index) => Math.round(channel + (navy[index] - channel) * strength));
+  });
+}
+
+function composeDebugPageRaster(width, height, pageBackground, placement, asset, fitContainBox, imagePixelAtPoint) {
+  // This raster is an independent visual-QA image used by the assertions. It
+  // mirrors the asset placement (including fit: contain) for inspection and
+  // is not the evaluator's contrast input or a rasterization of the final PDF.
+  const pixels = new Uint8Array(width * height * 3);
+  for (let index = 0; index < width * height; index += 1) {
+    pixels[index * 3] = pageBackground[0];
+    pixels[index * 3 + 1] = pageBackground[1];
+    pixels[index * 3 + 2] = pageBackground[2];
+  }
+  const painted = fitContainBox(placement.box, asset.width, asset.height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixel = imagePixelAtPoint(painted, asset.width, asset.height, x, y);
+      if (!pixel) continue;
+      const sourceOffset = (pixel.y * asset.width + pixel.x) * asset.raster.channels;
+      const targetOffset = (y * width + x) * 3;
+      pixels[targetOffset] = asset.raster.pixels[sourceOffset];
+      pixels[targetOffset + 1] = asset.raster.pixels[sourceOffset + 1];
+      pixels[targetOffset + 2] = asset.raster.pixels[sourceOffset + 2];
+    }
+  }
+  return { width, height, channels: 3, pixels };
 }
 const build = runProcess('npx', [
   'esbuild',
@@ -254,16 +351,115 @@ async function writeMovableCandidateArtifacts(directory, candidates, document, c
   await writeFile(join(directory, 'movable-quote-candidates.json'), JSON.stringify(entries, null, 2));
 }
 
+async function writeContrastPlannerArtifacts(directory, candidates, document, contrastProvider, background, createBackend, newPdf, renderComposition, evaluateCompositionPlan, sampleCompositionContrast, fitContainBox, imagePixelAtPoint, renderConfig, selectedCandidate) {
+  if (!directory) return;
+  await mkdir(directory, { recursive: true });
+  const backgroundPlacementFor = (candidate) => candidate.graphicPlacements.find((graphic) => graphic.graphicId === 'contrast-background');
+  const styles = {
+    body: { fontSize: 10, lineHeight: 5, baselineOffset: 3.8, fontStyle: 'normal', textColor: [38, 71, 108] },
+    quote: { fontSize: 10, lineHeight: 5, baselineOffset: 3.8, fontStyle: 'normal', textColor: [232, 117, 61] },
+  };
+  const contrastTargetRatio = renderConfig.contrast.body_minimum;
+  const contrastQualityResponse = renderConfig.composition_score.contrast_quality_response;
+  const contrastQualityForRatio = (ratio) => {
+    const signal = Math.max(0, (ratio - 1) / (contrastTargetRatio - 1));
+    return signal / (signal + contrastQualityResponse);
+  };
+  const pointColorForQuality = (quality) => {
+    const red = Math.round(220 + (30 - 220) * quality);
+    const green = Math.round(20 + (150 - 20) * quality);
+    const blue = Math.round(60 + (90 - 60) * quality);
+    return [red, green, blue];
+  };
+  const entries = [];
+  for (const [index, candidate] of candidates.entries()) {
+    const evaluation = evaluateCompositionPlan(document, candidate, { contrastProvider });
+    const contrast = evaluation.scoreBreakdown.find((component) => component.code === 'contrast');
+    const backgroundPlacement = backgroundPlacementFor(candidate);
+    if (!backgroundPlacement) throw new Error(`contrast candidate ${index} has no background placement`);
+    const candidateLines = [...candidate.lines, ...(candidate.insertionLines ?? [])];
+    const pageFrames = candidateLines
+      .filter((line) => line.page === backgroundPlacement.page)
+      .flatMap((line) => line.glyphSamplingBoxes ?? []);
+    const pageRaster = composeDebugPageRaster(100, 120, [246, 246, 246], backgroundPlacement, background, fitContainBox, imagePixelAtPoint);
+    const sampled = sampleCompositionContrast(pageRaster, {
+      region: { x: 0, y: 0, width: pageRaster.width, height: pageRaster.height },
+      foreground: [38, 71, 108],
+      sampleCount: 4,
+      sampleSeed: 'contrast-planner-visual-corpus',
+      pageBackground: [246, 246, 246],
+      glyphs: pageFrames,
+    });
+    const paintedBackground = fitContainBox(backgroundPlacement.box, background.width, background.height);
+    const darkSamplesOutsidePaintedImage = (sampled.sampledPoints ?? []).filter((point) => point.ratio === 1 && (
+      point.x < paintedBackground.x
+      || point.x >= paintedBackground.x + paintedBackground.width
+      || point.y < paintedBackground.y
+      || point.y >= paintedBackground.y + paintedBackground.height
+    ));
+    assert.equal(darkSamplesOutsidePaintedImage.length, 0, 'contrast debug raster must respect the graphic fit: contain bounds');
+    const pdf = newPdf('portrait', [100, 120]);
+    const artifact = renderComposition(document, { plan: candidate, evaluation }, createBackend(pdf, 'helvetica', styles, {
+      pageSizeTolerance: renderConfig.pdf.page_size_tolerance,
+      imageAssets: new Map([['contrast-background', { data: background.data, format: 'PNG', width: background.width, height: background.height }]]),
+      graphicStyle: { fillColor: [255, 255, 255], drawColor: [38, 71, 108], lineWidth: 0.2 },
+    }));
+    pdf.setPage(backgroundPlacement.page);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(renderConfig.composition_debug.candidate_label_size);
+    pdf.setTextColor(220, 20, 60);
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    pdf.text(`${index === selectedCandidate ? 'SELECTED' : 'candidate'} ${index} · score ${evaluation.score.toFixed(2)} · contrast ${contrast?.value?.toFixed(3) ?? 'n/a'} · penalty ${contrast?.points?.toFixed(2) ?? 'n/a'}`, renderConfig.composition_debug.page_padding, pageHeight - renderConfig.composition_debug.page_padding);
+    for (const point of sampled.sampledPoints ?? []) {
+      const quality = contrastQualityForRatio(point.ratio);
+      pdf.setFillColor(...pointColorForQuality(quality));
+      pdf.circle(point.x, point.y, renderConfig.composition_debug.glyph_line_width, 'F');
+    }
+    const pdfPath = join(directory, `contrast-planner-candidate-${index}.pdf`);
+    const pngPrefix = join(directory, `contrast-planner-candidate-${index}`);
+    await writeFile(pdfPath, Buffer.from(pdf.output('arraybuffer')));
+    const rasterized = runProcess('pdftoppm', ['-singlefile', '-png', '-r', String(renderConfig.quality.pdf_pixel_qa.raster_dpi), pdfPath, pngPrefix], { cwd: root, timeout: 30_000 });
+    if (rasterized.status !== 0) throw new Error(`contrast candidate ${index} rasterization failed: ${rasterized.stderr || rasterized.stdout}`);
+    entries.push({
+      index,
+      selected: index === selectedCandidate,
+      backgroundBox: backgroundPlacement.box,
+      samplingLines: candidate.lines.map((line) => ({
+        flowId: line.flowId,
+        slotId: line.slotId,
+        text: line.text,
+        box: line.box,
+        glyphFrameCount: line.glyphSamplingBoxes?.length ?? 0,
+      })),
+      score: evaluation.score,
+      contrastQuality: contrast?.value,
+      contrastPoints: contrast?.points,
+      contrastDetails: contrast?.details,
+      sampledPoints: (sampled.sampledPoints ?? []).map((point) => ({ ...point, quality: contrastQualityForRatio(point.ratio) })),
+      glyphResults: sampled.glyphResults,
+      pdf: pdfPath,
+      png: `${pngPrefix}.png`,
+    });
+  }
+  await writeFile(join(directory, 'contrast-planner-candidates.json'), JSON.stringify({ selectedCandidate, entries }, null, 2));
+}
+
 const debugArtifactRoot = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR;
 const movableCandidateArtifactDirectory = debugArtifactRoot
   ? join(debugArtifactRoot, 'text-composition-engine', 'candidate-search')
+  : undefined;
+const contrastPlannerArtifactDirectory = debugArtifactRoot
+  ? join(debugArtifactRoot, 'text-composition-engine', 'contrast-candidate-search')
+  : undefined;
+const contrastGradientArtifactDirectory = debugArtifactRoot
+  ? join(debugArtifactRoot, 'text-composition-engine', 'contrast-gradient-search')
   : undefined;
 const numberedFlowArtifactDirectory = debugArtifactRoot
   ? join(debugArtifactRoot, 'text-composition-engine', 'numbered-flow-boxes')
   : undefined;
 
 try {
-  const { createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, createTextCompositionPlanner, evaluateCompositionPlan, renderComposition } = await import(bundle);
+  const { createCompositionContrastProvider, createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, createTextCompositionPlanner, evaluateCompositionPlan, fitContainBox, imagePixelAtPoint, renderComposition, sampleCompositionContrast } = await import(bundle);
   const { newPdf } = await import(primitivesBundle);
   let randomState = 0x5eed;
   const random = () => {
@@ -427,6 +623,7 @@ try {
     ...metrics,
     lineHeight() { return 5; },
     textPadding(styleName) { return styleName === 'quote' ? { top: 1, bottom: 1 } : { top: 0, bottom: 0 }; },
+    glyphInkBounds() { return { top: 99, bottom: 100 }; },
   };
   const movablePlanner = createTextCompositionEngine(movableQuoteTemplate, movableQuotePolicy);
   const movableQuoteResult = movablePlanner.plan(movableQuoteDocument, movableMetrics);
@@ -471,12 +668,82 @@ try {
   }), `movable quote must expose balanced internal padding in the spacing score: ${JSON.stringify(movableCandidateSummary)}`);
   assert.ok(movableCandidateSummary.every((candidate) => candidate.status === 'accepted'), JSON.stringify(movableCandidateSummary));
   assert.ok(movableCandidateSummary.every((candidate) => candidate.score > Number.NEGATIVE_INFINITY), JSON.stringify(movableCandidateSummary));
+  assert.ok(movableCandidatePlans.every((candidate) => candidate.lines
+    .filter((line) => line.flowId === 'main' && line.text.trim())
+    .every((line) => line.glyphSamplingBoxes?.every((glyph) => glyph.box.y === line.box.y && glyph.box.height === line.box.height))), 'glyph sampling frames must use the complete line-height cell');
   assert.ok(new Set(movableCandidateSummary.map((candidate) => candidate.score)).size > 1, `moving the quote must change the evaluated composition score: ${JSON.stringify(movableCandidateSummary)}`);
   const selectedCandidate = movableEvaluationPhase.details.candidates[movableEvaluationPhase.details.selectedCandidate];
   const bestFragmentation = Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs));
   assert.equal(selectedCandidate.score, Math.max(...movableEvaluationPhase.details.candidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring movable candidate');
   assert.equal(movableCandidateSummary.find((candidate) => candidate.quoteY === movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y)?.fragmentedParagraphs, bestFragmentation, 'the selected quote position must have the least paragraph fragmentation');
   await writeMovableCandidateArtifacts(movableCandidateArtifactDirectory, movableCandidatePlans, movableQuoteDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8')));
+  const contrastBackground = splitBackgroundAsset(90, 15);
+  const contrastTemplate = structuredClone(movableQuoteTemplate);
+  contrastTemplate.layouts[0].slots.push({ id: 'contrast-background', regionId: 'background', kind: 'graphic', box: { x: 5, y: 25, width: 90, height: 20 } });
+  const contrastDocument = {
+    ...structuredClone(movableQuoteDocument),
+    flows: {
+      ...structuredClone(movableQuoteDocument.flows),
+      main: { ...structuredClone(movableQuoteDocument.flows.main), blocks: movableParagraphs.slice(0, 6) },
+    },
+    assets: [{ id: 'contrast-background', source: 'contrast-background.png', width: 'full', fit: 'contain', keepWithCaption: false }],
+    graphics: [{ id: 'contrast-background', assetId: 'contrast-background', slotId: 'contrast-background', shape: 'rectangle', wrap: 'none', page: 1 }],
+  };
+  const contrastRenderStyles = {
+    body: { fontSize: 10, lineHeight: 5, baselineOffset: 3.8, fontStyle: 'normal', textColor: [38, 71, 108] },
+    quote: { fontSize: 10, lineHeight: 5, baselineOffset: 3.8, fontStyle: 'normal', textColor: [232, 117, 61] },
+  };
+  const contrastMetricsPdf = newPdf('portrait', [100, 120]);
+  const contrastMetrics = createJsPdfTextMetrics(contrastMetricsPdf, 'helvetica', contrastRenderStyles);
+  const contrastPolicy = {
+    ...movableQuotePolicy,
+    movableInsertionBounds: {
+      'quotes:movable-quote-block': {
+        ...movableQuotePolicy.movableInsertionBounds['quotes:movable-quote-block'],
+        refinementRounds: 0,
+      },
+    },
+  };
+  const contrastProvider = createCompositionContrastProvider({
+    rasterImages: new Map([['contrast-background', contrastBackground.raster]]),
+    foreground: [38, 71, 108],
+    sampleCount: 4,
+    sampleSeed: 'contrast-planner-visual-corpus',
+    pageBackground: [246, 246, 246],
+  });
+  const contrastPlanner = createTextCompositionPlanner(contrastTemplate, contrastPolicy);
+  const contrastCandidates = contrastPlanner.planCandidates(contrastDocument, contrastMetrics);
+  const contrastEvaluations = contrastCandidates.map((candidate) => evaluateCompositionPlan(contrastDocument, candidate, { contrastProvider }));
+  const contrastSelectedCandidate = contrastEvaluations.reduce((best, evaluation, index) => evaluation.score > contrastEvaluations[best].score ? index : best, 0);
+  assert.equal(contrastCandidates.length, 6, 'contrast planner visual fixture must expose every coarse movable candidate');
+  assert.ok(contrastEvaluations.every((evaluation) => evaluation.status === 'accepted'), JSON.stringify(contrastEvaluations));
+  assert.ok(contrastEvaluations.every((evaluation) => evaluation.scoreBreakdown.some((component) => component.code === 'contrast')), 'planner candidates must be scored with the contrast component');
+  assert.ok(new Set(contrastEvaluations.map((evaluation) => evaluation.score)).size > 1, 'contrast-aware planner candidates must have distinguishable scores');
+  assert.ok(contrastEvaluations.some((evaluation) => {
+    const contrast = evaluation.scoreBreakdown.find((component) => component.code === 'contrast');
+    return (contrast?.details?.worstPointQuality ?? 1) < 1;
+  }), `visual contrast fixture must expose a quality reduction: ${JSON.stringify(contrastEvaluations.map((evaluation) => evaluation.scoreBreakdown.find((component) => component.code === 'contrast')?.details))}`);
+  const contrastEngineResult = createTextCompositionEngine(contrastTemplate, contrastPolicy, { contrastProvider }).plan(contrastDocument, contrastMetrics);
+  assert.equal(contrastEngineResult.evaluation.score, contrastEvaluations[contrastSelectedCandidate].score, 'engine selection must use the contrast-aware candidate score');
+  const contrastRenderConfig = parse(readFileSync(join(root, 'templates', 'render-config.yml'), 'utf8'));
+  await writeContrastPlannerArtifacts(contrastPlannerArtifactDirectory, contrastCandidates, contrastDocument, contrastProvider, contrastBackground, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, sampleCompositionContrast, fitContainBox, imagePixelAtPoint, contrastRenderConfig, contrastSelectedCandidate);
+  const gradientStripeCount = 30;
+  const gradientContrastBackground = gradientBackgroundAsset(contrastBackground.width, contrastBackground.height, gradientStripeCount);
+  const gradientContrastProvider = createCompositionContrastProvider({
+    rasterImages: new Map([['contrast-background', gradientContrastBackground.raster]]),
+    foreground: [38, 71, 108],
+    sampleCount: 4,
+    sampleSeed: 'contrast-planner-visual-corpus',
+    pageBackground: [246, 246, 246],
+  });
+  const gradientContrastEvaluations = contrastCandidates.map((candidate) => evaluateCompositionPlan(contrastDocument, candidate, { contrastProvider: gradientContrastProvider }));
+  const gradientContrastFindings = gradientContrastProvider.assess(contrastCandidates[0]);
+  const gradientGlyphRatios = gradientContrastFindings.flatMap((finding) => finding.glyphResults ?? []).map((glyph) => Math.round(glyph.averageRatio * 1000) / 1000);
+  const gradientContrastSelectedCandidate = gradientContrastEvaluations.reduce((best, evaluation, index) => evaluation.score > gradientContrastEvaluations[best].score ? index : best, 0);
+  assert.ok(gradientContrastEvaluations.every((evaluation) => evaluation.status === 'accepted'), JSON.stringify(gradientContrastEvaluations));
+  assert.ok(new Set(gradientGlyphRatios).size >= 3, `gradient contrast fixture must expose multiple measured contrast levels: ${JSON.stringify(gradientGlyphRatios)}`);
+  assert.ok(new Set(gradientContrastEvaluations.map((evaluation) => evaluation.score)).size > 1, 'gradient contrast candidates must remain distinguishable by score');
+  await writeContrastPlannerArtifacts(contrastGradientArtifactDirectory, contrastCandidates, contrastDocument, gradientContrastProvider, gradientContrastBackground, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, sampleCompositionContrast, fitContainBox, imagePixelAtPoint, contrastRenderConfig, gradientContrastSelectedCandidate);
   const invalidMovableQuote = createTextCompositionEngine(movableQuoteTemplate, {
     movableInsertionBounds: {
       'quotes:movable-quote-block': { bounds: { x: 5, y: 25, width: 20, height: 5 }, axis: 'y', candidateCount: 2 },

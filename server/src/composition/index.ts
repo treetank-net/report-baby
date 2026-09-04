@@ -32,6 +32,7 @@ export type {
   CompositionFlowBarrierBoxCandidate,
   CompositionMovableInsertionFrame,
   CompositionGraphicPlacement,
+  CompositionGlyphSamplingBox,
   CompositionLine,
   CompositionPagePlan,
   CompositionPlacement,
@@ -58,12 +59,14 @@ export { compositionDocumentFromInput } from './input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './page-template-adapter.js';
 export { createTextCompositionPlanner, type TextCompositionPlannerPolicy } from './text-planner.js';
 export { createTextCompositionEngine, type TextCompositionEngineOptions } from './text-engine.js';
+export { fitContainBox, imagePixelAtPoint } from './image-geometry.js';
 export {
   contrastRatio,
   createCompositionContrastProvider,
   relativeLuminance,
   sampleCompositionContrast,
   type CompositionContrastAssessment,
+  type CompositionContrastGlyphResult,
   type CompositionContrastProvider,
   type CompositionContrastProviderOptions,
   type CompositionContrastResult,

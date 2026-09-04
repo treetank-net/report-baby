@@ -50,6 +50,12 @@ composition_score:
   insertion_external_spacing_penalty: 1
   insertion_cross_stream_spacing_penalty: 1
   contrast_penalty: 6
+  contrast_mean_quality_weight: 0.25
+  contrast_worst_glyph_weight: 0.60
+  contrast_affected_glyph_weight: 0.15
+  contrast_severe_ratio: 1.5
+  contrast_affected_glyph_saturation: 10
+  contrast_quality_response: 0.25
 composition_search:
   movable_quote_window_ratio: 0.02
   movable_quote_candidate_count: 5
@@ -481,7 +487,7 @@ pptx:
   brand_name_box_height: 40
   logo_raster_width: 1200
 contrast:
-  body_minimum: 4.5
+  body_minimum: 2.76
   large_minimum: 3
   large_text_px: 24
   large_bold_text_px: 19

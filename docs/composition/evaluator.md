@@ -146,7 +146,7 @@ measurements are computed from plan geometry:
 | `paragraph-fragmentation` | Paragraphs split across different pages/slots | negative: count * `paragraph_fragmentation_penalty` |
 | `orphan-lines` | One-line paragraph fragments separated by at least `orphan_min_gap_mm` when an obstacle causes the gap | negative: count * `orphan_penalty` |
 | `insertion-spacing` | Uneven insertion padding, gaps before/after it, and spread between streams | negative: sum of measurements * the relevant weights |
-| `contrast` | Local contrast measurements for text overlapping painted image graphics | continuous negative adjustment based on normalized measured quality; no binary plan failure |
+| `contrast` | Monte Carlo contrast measurements for every planned glyph cell, resolving the supplied page background and painted image graphics at each sample point with the glyph's own foreground color when available | continuous negative adjustment based on normalized measured quality; no binary plan failure |
 
 A gap may be legal and caused by an immovable object, while still being
 aesthetically unfavorable. Its cause remains in the evaluation details and
@@ -174,9 +174,45 @@ with insertion placements, status, hard-violation count, and `reflowPasses`.
 Raster PDF/PNG is a separate artifact test; the evaluator does not decode
 image bytes. When an injected asset adapter supplies a contrast assessment, the
 evaluator records it in this component and converts measured ratios to a
-normalized quality value. The current normalization is
-`clamp((minimumRatio - 1) / (targetRatio - 1), 0, 1)`, averaged across measured
-graphics; the component contributes `-contrast_penalty * (1 - quality)` to the
-general plan score. Unknown measurements remain visible but neutral until a
-product policy gives missing evidence a calibrated cost. Contrast never turns
-a legal plan into a rejected plan.
+normalized quality value. The current normalization is asymptotic. For
+glyph-aware measurements, each glyph's sampled average ratio contributes to
+the diffuse mean quality through `x = max(0, (averageRatio - 1) /
+(targetRatio - 1))`, then normalizes with `x / (x + response)`. The response
+comes from `composition_score.contrast_quality_response`, so finite ratios
+never reach quality `1` and remain distinguishable above the target. Local
+visibility does not use that average: the worst sampled point in each glyph
+is normalized separately and drives the worst-point signal and the affected
+glyph count. The final quality combines three continuous signals: mean glyph
+quality, the quality of the worst sampled point, and the saturated breadth of
+severely affected glyphs. Their weights are `contrast_mean_quality_weight`,
+`contrast_worst_glyph_weight`, and `contrast_affected_glyph_weight`. This keeps
+one nearly invisible glyph visible in a large corpus while still making ten
+affected glyphs worse than one. `contrast_severe_ratio` defines severe damage
+and `contrast_affected_glyph_saturation` controls the scale of the asymptotic
+affected-glyph breadth term. The component contributes
+`-contrast_penalty * (1 - quality)` to the general plan score. With weights
+that sum to one, the penalty approaches but does not reach the configured
+maximum for finite measurements. The evaluator uses each glyph's `minimumRatio`
+for the local worst-point and affected-glyph terms, while the number of sampled
+pixels is not multiplied into the score. Legacy line-box measurements use the
+single normalized assessment quality. Unknown measurements remain visible but
+neutral until a product policy gives missing evidence a calibrated cost.
+Contrast never turns a legal plan into a rejected plan. A renderer supplies the
+known page background even when there are no graphics, so the same mechanism
+covers the complete text corpus. A uniform background normally gives every
+candidate the same high-quality contribution; it still matters when a
+candidate moves text across a colored or image-backed region.
+
+The contrast adapter's raster is a representation of an image asset, not a
+rasterized candidate page. It keeps the Monte Carlo point in continuous page
+coordinates, then converts that coordinate to an integer source-pixel index
+only when reading the asset color. Rasterizing the debug PDF happens afterward
+for visual inspection and is not part of the score calculation.
+
+The per-glyph frame used by this screening is deliberately a layout cell, not
+an exact glyph mask: the measured character advance supplies its width and the
+planned line height supplies its height. Monte Carlo offsets are continuous
+values in `[-1, 1]` relative to the center of that cell. This makes the
+measurement stable across renderer backends and inexpensive enough to use for
+candidate ranking; it estimates contrast-risk probability rather than proving
+the contrast of every painted pixel.

@@ -1,4 +1,5 @@
 import type { jsPDF } from 'jspdf';
+import { createHash } from 'node:crypto';
 import { relative } from 'node:path';
 import { defaultRenderTheme } from './brand-context.js';
 import { readBuiltinPageTemplateSource, readRenderConfig } from './builtin-template-source.js';
@@ -65,6 +66,13 @@ function rgb(hex: string): [number, number, number] {
   const normalized = value.length === 3 ? value.split('').map((part) => part + part).join('') : value;
   const number = Number.parseInt(normalized, 16);
   return [(number >> 16) & 255, (number >> 8) & 255, number & 255];
+}
+
+function compositionTextCorpusSeed(document: ReturnType<typeof compositionDocumentFromInput>): string {
+  const corpus = Object.values(document.flows)
+    .flatMap((flow) => flow.blocks.map((block) => block.text ?? ''))
+    .join('\u241e');
+  return createHash('sha1').update(corpus).digest('hex');
 }
 
 interface ResolvedReportTemplate { page?: CompiledTemplate['page']; compiled?: CompiledTemplate; }
@@ -374,14 +382,13 @@ async function prepareReportComposition(name: string, data: CompositionInput, th
     const raster = decodePngDataUri(asset.data);
     if (raster) contrastRasters.set(assetId, raster);
   }
-  const contrastProvider = resolvedImages.size > 0
-    ? createCompositionContrastProvider({
-      rasterImages: contrastRasters,
-      foreground: rgb(theme.foreground),
-      sampleCount: configNumber(RENDER_CONFIG.contrast.sampleCount, 'contrast.sample_count'),
-      pageBackground: rgb(theme.background),
-    })
-    : undefined;
+  const contrastProvider = createCompositionContrastProvider({
+    rasterImages: contrastRasters,
+    foreground: rgb(theme.foreground),
+    sampleCount: configNumber(RENDER_CONFIG.contrast.sampleCount, 'contrast.sample_count'),
+    sampleSeed: compositionTextCorpusSeed(compositionDocument),
+    pageBackground: rgb(theme.background),
+  });
   const imageCaption = theme.reportImageCaption;
   const compositionChartStyle = compositionChartStyleFromRenderConfig({ fillColor: rgb(theme.background), drawColor: rgb(theme.line), foregroundColor: rgb(theme.foreground), mutedColor: rgb(theme.muted), gridColor: rgb(theme.line), palette: theme.palette.map(rgb) });
   const imageCapabilities = compositionDocument.assets?.length
