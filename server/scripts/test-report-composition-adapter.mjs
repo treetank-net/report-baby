@@ -113,9 +113,11 @@ try {
   const graphicResult = planReportComposition(graphicPdf, graphicCompiled, graphicGeometry, {
     flows: { main: { blocks: [{ id: 'graphic-public-body', type: 'text', text: 'A public authored graphic is planned and rendered through the same composition path.' }] } },
     graphics: [{ id: 'public-panel', slot_id: 'public-graphic', shape: 'rectangle', size: { width: 20, height: 10 } }],
+    glyphs: [{ id: 'public-panel-glyph', target: { kind: 'graphic', id: 'public-panel' }, text: '+', style: 'body', anchor: 'box', target_mode: 'box' }],
   }, { family: 'DejaVu', maxPages: 1 });
   assert.equal(graphicResult.evaluation.status, 'accepted', JSON.stringify(graphicResult.evaluation));
   assert.deepEqual(graphicResult.plan.graphicPlacements.map((placement) => placement.graphicId), ['public-panel']);
+  assert.ok(graphicResult.plan.glyphPlacements.some((glyph) => glyph.targetType === 'graphic' && glyph.targetId === 'public-panel'), 'a public glyph must resolve against the final authored graphic placement');
   const graphicArtifact = renderComposition(graphicResult.document, graphicResult, createJsPdfTextBackend(graphicPdf, 'DejaVu', styles, {
     ...compositionPdfBackendOptionsFromRenderConfig(),
     graphicStyle: compositionGraphicStyleFromRenderConfig({ fillColor: [235, 240, 248], drawColor: [38, 71, 108] }),
