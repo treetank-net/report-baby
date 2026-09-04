@@ -1,6 +1,6 @@
 # Plan 06 — utrzymywalność planera
 
-Status: mapa modułów i osiem bezpiecznych seamów wydzielonych; dalsze wydzielanie
+Status: mapa modułów i dziewięć bezpiecznych seamów wydzielonych; dalsze wydzielanie
 wymaga testów zachowania po każdym kroku
 
 ## Wykonane w pierwszym kroku
@@ -36,6 +36,9 @@ wymaga testów zachowania po każdym kroku
   nie czyta YAML, evaluator nie czyta `quality` ani `composition_search`, a
   pomiar kontrastu nie ładuje konfiguracji samodzielnie; `pdf` jest mapowane do
   polityki planera w jednym resolverze adaptera `text-engine.ts`.
+- przygotowanie runtime raportu zostało wydzielone do
+  `report-composition-runtime.ts`; zasoby, capability i backend są składane
+  tam, a `report-renderer.ts` zachowuje chrome, debug overlay i zapis artefaktu.
 
 To wydzielenie jest techniczne, nie domenowe: nie powstał nowy rodzaj contentu
 ani nowa encja. Moduł kandydatów przyjmuje istniejące propozycje i politykę
@@ -65,6 +68,12 @@ composition engine. Domyślna polityka PDF jest mapowana wyłącznie w
 drugiej mapy pól. Historyczna nazwa utrudniała znalezienie właściciela, ale
 mechaniczne dzielenie pliku przed mapą call site’ów mogłoby tylko rozproszyć
 seam.
+
+Przygotowanie zasobów i capability zostało wydzielone z `report-renderer.ts` do
+`report-composition-runtime.ts`. Ten moduł nie podejmuje decyzji layoutowych:
+składa istniejące dane, fonty, assety, kontrast, capability i backend wokół
+`report-composition-entrypoint.ts`. Chrome i zapis finalnego artefaktu pozostają
+w `report-renderer.ts`.
 
 ## Kroki
 

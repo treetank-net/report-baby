@@ -36,8 +36,9 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/js-pdf-adapter.ts` | jsPDF measurements and rendering capabilities | report adapter, PDF tests | flow routing, candidate selection, score policy |
 | `composition/text-engine.ts` | Composition-specific wiring of planner, evaluator and the `pdf`-to-planner policy adapter | report renderer | layout rules, drawing, duplicated thresholds |
 | `composition/report-composition-entrypoint.ts` | Report-specific entry point that prepares composition input and jsPDF metrics, then forwards explicit policy overrides | report renderer and composition test harnesses | a second planner, a second renderer, independent layout rules, policy-default translation |
+| `report-composition-runtime.ts` | Report-specific resource preparation: fonts, assets, contrast provider, block capabilities, composition styles and the backend closure | `report-renderer.ts` | page chrome, final artifact orchestration, a second planner or renderer |
 | `composition/render-config-styles.ts` | Translates render-config values and theme colors into jsPDF composition styles and backend options | report renderer and composition entry point | layout decisions, document input, planner state |
-| `report-renderer.ts` | Report-level orchestration, asset preparation, theme/config loading and artifact output | MCP/CLI entrypoints | deciding text breaks or ranking candidates |
+| `report-renderer.ts` | Report-level orchestration, chrome, theme/config loading for chrome and artifact output | MCP/CLI entrypoints | deciding text breaks, ranking candidates or preparing composition capabilities |
 
 Small geometry helpers such as `graphic-geometry.ts` and `image-geometry.ts`
 own only their pure geometry calculations. They do not read configuration or
@@ -76,6 +77,10 @@ subset for renderer-neutral callers; the report entry point requests the full
 policy through that same adapter and adds only explicit caller overrides. If a
 value is needed in another module, pass it through the existing typed interface
 rather than importing the other module's configuration group.
+
+The report runtime is an integration module, not a new composition engine. It
+resolves report resources and composes the existing entrypoint, while the
+renderer remains responsible for page chrome and the final PDF buffer.
 
 ## Refactoring rule
 

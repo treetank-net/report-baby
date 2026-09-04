@@ -1,5 +1,4 @@
 import type { jsPDF } from 'jspdf';
-import { createHash } from 'node:crypto';
 import { relative } from 'node:path';
 import { defaultRenderTheme } from './brand-context.js';
 import { readBuiltinPageTemplateSource, readRenderConfig } from './builtin-template-source.js';
@@ -8,38 +7,16 @@ import type { ResolvedReportPlan } from './core/model/resolved-report-plan.js';
 import type { CompositionInput } from './contract/schema.js';
 import { pageGeometryFromTemplate, type PageGeometry } from './page-geometry.js';
 import { resolveReportPlan } from './report-plan.js';
-import {
-  compositionChartStyleFromRenderConfig,
-  compositionGraphicStyleFromRenderConfig,
-  compositionImageStyleFromRenderConfig,
-  compositionMetricStyleFromRenderConfig,
-  compositionPdfBackendOptionsFromRenderConfig,
-  compositionStylesFromRenderConfig,
-  compositionTableStyleFromRenderConfig,
-  planReportComposition,
-  type ReportCompositionResult,
-} from './composition/report-composition-entrypoint.js';
-import { createCompositionContrastProvider } from './composition/contrast.js';
+import type { ReportCompositionResult } from './composition/report-composition-entrypoint.js';
 import { compositionDocumentFromInput } from './composition/input.js';
-import {
-  combineJsPdfCompositionBlockCapabilities,
-  createJsPdfChartBlockCapabilities,
-  createJsPdfImageBlockCapabilities,
-  createJsPdfMetricBlockCapabilities,
-  createJsPdfTableBlockCapabilities,
-  createJsPdfTextBackend,
-} from './composition/js-pdf-adapter.js';
-import type { CompositionBlockKind } from './composition/model.js';
-import type { JsPdfCompositionBlockCapability } from './composition/js-pdf-adapter.js';
-import { renderComposition } from './composition/engine.js';
 import type { CompositionBox, CompositionPageChrome, CompositionPlan } from './composition/engine.js';
 import { assertReportPlan } from './report-plan-assertions.js';
 import { installReportDrawingRecorder, type ReportDrawing } from './report-drawing-recorder.js';
-import { loadRenderFontSet, newPdf, pdfFont, readableTextColor } from './render-primitives.js';
+import { pdfFont, readableTextColor } from './render-primitives.js';
 import { compileTemplateSource, type CompiledTemplate } from './template-contract.js';
 import { resolveImageAsset } from './image-resolver.js';
-import { decodePngDataUri } from './image-raster.js';
 import type { SourceContext } from './source-context.js';
+import { prepareReportComposition } from './report-composition-runtime.js';
 
 export interface TemplateInfo { name: string; description: string; }
 
@@ -67,13 +44,6 @@ function rgb(hex: string): [number, number, number] {
   const normalized = value.length === 3 ? value.split('').map((part) => part + part).join('') : value;
   const number = Number.parseInt(normalized, 16);
   return [(number >> 16) & 255, (number >> 8) & 255, number & 255];
-}
-
-function compositionTextCorpusSeed(document: ReturnType<typeof compositionDocumentFromInput>): string {
-  const corpus = Object.values(document.flows)
-    .flatMap((flow) => flow.blocks.map((block) => block.text ?? ''))
-    .join('\u241e');
-  return createHash('sha1').update(corpus).digest('hex');
 }
 
 interface ResolvedReportTemplate { page?: CompiledTemplate['page']; compiled?: CompiledTemplate; }
@@ -151,11 +121,6 @@ function drawReportChrome(doc: jsPDF, page: number, pageCount: number, geometry:
   doc.setTextColor(...rgb(theme.muted));
   const pageNumber = `${page} / ${pageCount}`;
   doc.text(pageNumber, chrome.pageNumber.x + chrome.pageNumber.width, chrome.pageNumber.y + chrome.pageNumber.height, { align: 'right' });
-}
-
-function configNumber(value: unknown, key: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Render configuration is missing finite ${key}.`);
-  return value;
 }
 
 function drawCompositionDebugOverlay(doc: jsPDF, composition: ReportCompositionResult, theme: RenderTheme, geometry: PageGeometry): void {
@@ -312,15 +277,6 @@ function footerTextWidth(doc: jsPDF, geometry: PageGeometry, maxPages: number, t
   return Math.min(...pages.map((page) => Math.max(1, page.width - page.margins.right - page.margins.left - PDF_CONFIG.footerNumberGap - labelWidth)));
 }
 
-interface PreparedReportComposition {
-  doc: jsPDF;
-  geometry: PageGeometry;
-  template: CompiledTemplate;
-  composition: ReportCompositionResult;
-  drawings: ReportDrawing[];
-  render: () => void;
-}
-
 function pageChrome(doc: jsPDF, page: CompositionPlan['pages'][number], pageCount: number, geometry: PageGeometry, theme: RenderTheme, lockup?: CompositionBox): CompositionPageChrome {
   const headerBandHeight = geometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight;
   const headerBand: CompositionBox = { x: 0, y: 0, width: page.width, height: headerBandHeight };
@@ -353,96 +309,10 @@ function attachPageChrome(doc: jsPDF, composition: ReportCompositionResult, geom
   }
 }
 
-async function prepareReportComposition(name: string, data: CompositionInput, theme: RenderTheme, sourceContext?: SourceContext, rejectOnEvaluation = true): Promise<PreparedReportComposition> {
-  const { template, geometry } = compositionGeometry(name);
-  const fontSet = await loadRenderFontSet(theme);
-  const doc = newPdf('portrait', [geometry.width, geometry.height], fontSet);
-  const family = pdfFont(theme);
-  const drawings: ReportDrawing[] = [];
-  installReportDrawingRecorder(doc, drawings);
-  const footerTop = geometry.bands.footer?.top ?? PDF_CONFIG.footerY;
-  const renderGeometry: PageGeometry = {
-    ...geometry,
-    bands: { ...geometry.bands, footer: geometry.bands.footer ? { ...geometry.bands.footer, top: footerTop } : { x: 0, top: footerTop, width: geometry.width, bottom: geometry.height } },
-    continuationTop: geometry.continuationTop ?? PDF_CONFIG.headerRepeatHeight + PDF_CONFIG.headerRepeatBottomGap,
-    continuationBottom: geometry.continuationBottom ?? footerTop,
-  };
-  // Do not invent a header band for templates that deliberately omit one.
-  // A continuation-only header must remain a property of that continuation
-  // layout, otherwise the planner turns it into a first-page header too.
-  const planGeometry: PageGeometry = renderGeometry;
-  const maxPages = configNumber(PDF_CONFIG.compositionMaxPages, 'pdf.composition_max_pages');
-  const compositionDocument = compositionDocumentFromInput(data);
-  const resolvedImages = new Map<string, Awaited<ReturnType<typeof resolveImageAsset>>>();
-  for (const asset of compositionDocument.assets ?? []) {
-    if (!sourceContext) throw new Error('Image content requires an explicit source context.');
-    resolvedImages.set(asset.id, await resolveImageAsset(asset.source, sourceContext));
-  }
-  const contrastRasters = new Map<string, NonNullable<ReturnType<typeof decodePngDataUri>>>();
-  for (const [assetId, asset] of resolvedImages) {
-    const raster = decodePngDataUri(asset.data);
-    if (raster) contrastRasters.set(assetId, raster);
-  }
-  const contrastProvider = createCompositionContrastProvider({
-    rasterImages: contrastRasters,
-    foreground: rgb(theme.foreground),
-    sampleCount: configNumber(RENDER_CONFIG.contrast.sampleCount, 'contrast.sample_count'),
-    sampleSeed: compositionTextCorpusSeed(compositionDocument),
-    pageBackground: rgb(theme.background),
-  });
-  const imageCaption = theme.reportImageCaption;
-  const compositionChartStyle = compositionChartStyleFromRenderConfig({ fillColor: rgb(theme.background), drawColor: rgb(theme.line), foregroundColor: rgb(theme.foreground), mutedColor: rgb(theme.muted), gridColor: rgb(theme.line), palette: theme.palette.map(rgb) });
-  const imageCapabilities = compositionDocument.assets?.length
-    ? createJsPdfImageBlockCapabilities(doc, family, resolvedImages, compositionImageStyleFromRenderConfig({
-      ...(imageCaption?.size === undefined ? {} : { captionSize: imageCaption.size }),
-      ...(imageCaption?.lineHeight === undefined ? {} : { captionLineHeight: imageCaption.lineHeight }),
-      ...(imageCaption?.baselineOffset === undefined ? {} : { captionBaselineOffset: imageCaption.baselineOffset }),
-      ...(imageCaption?.gap === undefined ? {} : { captionGap: imageCaption.gap }),
-      ...(imageCaption?.paddingX === undefined ? {} : { captionPaddingX: imageCaption.paddingX }),
-      ...(imageCaption?.bottomGap === undefined ? {} : { captionBottomGap: imageCaption.bottomGap }),
-      ...(imageCaption?.align === undefined ? {} : { captionAlign: imageCaption.align }),
-      chart: compositionChartStyle,
-    }))
-    : undefined;
-  const blocks = Object.values(compositionDocument.flows).flatMap((flow) => flow.blocks);
-  const capabilities: Partial<Record<CompositionBlockKind, JsPdfCompositionBlockCapability>> = {};
-  if (blocks.some((block) => block.kind === 'metric')) capabilities.metric = createJsPdfMetricBlockCapabilities(doc, family, compositionMetricStyleFromRenderConfig({ fillColor: rgb(theme.soft), drawColor: rgb(theme.line), labelColor: rgb(theme.muted), valueColor: rgb(theme.foreground), deltaColor: rgb(theme.primary), noteColor: rgb(theme.muted), trendUpColor: rgb(theme.success), trendDownColor: rgb(theme.danger), trendFlatColor: rgb(theme.muted) }));
-  if (blocks.some((block) => block.kind === 'chart')) capabilities.chart = createJsPdfChartBlockCapabilities(doc, family, compositionChartStyle);
-  const tableCapabilities = blocks.some((block) => block.kind === 'table') ? createJsPdfTableBlockCapabilities(doc, family, compositionTableStyleFromRenderConfig({ headerFillColor: rgb(theme.primary), headerTextColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)), rowFillColor: rgb(theme.background), alternateRowFillColor: rgb(theme.soft), textColor: rgb(theme.foreground), lineColor: rgb(theme.line) })) : undefined;
-  if (imageCapabilities) capabilities.image = imageCapabilities;
-  const combined = Object.keys(capabilities).length > 0 ? combineJsPdfCompositionBlockCapabilities(capabilities) : undefined;
-  const reportBand = theme.reportHeaderStyle === 'accent-band'
-    ? theme.primary
-    : theme.reportHeaderStyle === 'dark-band'
-      ? theme.background
-      : undefined;
-  const reportMetadataColor = reportBand
-    ? rgb(readableTextColor(reportBand, theme, PDF_CONFIG.headerPeriodSize * PT_TO_PX, false))
-    : theme.reportHeaderStyle === 'image-band'
-      ? rgb(theme.imageTextColor)
-      : rgb(theme.muted);
-  const compositionStyles = compositionStylesFromRenderConfig({
-    foreground: rgb(theme.foreground),
-    muted: rgb(theme.muted),
-    primary: rgb(theme.primary),
-    quote: rgb(theme.secondary),
-    subtitle: reportMetadataColor,
-    eyebrow: reportMetadataColor,
-  }, theme.titleCase, theme.glyphFontFamily);
-  const composition = planReportComposition(doc, template, planGeometry, data, { family, maxPages, includeTitlePage: Boolean(data.flows.title && template.pageTitle), includeHeaderFlow: Boolean(data.flows.header), auxiliaryTextWidths: { footer: footerTextWidth(doc, geometry, maxPages, theme) }, policy: { minimumWrapWidth: PDF_CONFIG.floatMinWidth }, styles: compositionStyles, ...(combined ? { measureBlock: combined.measureBlock } : {}), ...(tableCapabilities ? { measureTable: tableCapabilities.measureTable } : {}), ...(contrastProvider ? { contrastProvider } : {}) });
-  attachPageChrome(doc, composition, planGeometry, theme);
-  if (rejectOnEvaluation && composition.evaluation.status === 'rejected') {
-    const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');
-    throw new Error(`Composition plan rejected for '${name}': ${details}`);
-  }
-  const render = (): void => {
-    renderComposition(composition.document, composition, createJsPdfTextBackend(doc, family, compositionStyles, { ...compositionPdfBackendOptionsFromRenderConfig(), ...(resolvedImages.size > 0 ? { imageAssets: resolvedImages } : {}), ...(composition.plan.graphicPlacements.some((graphic) => graphic.paint !== false) ? { graphicStyle: compositionGraphicStyleFromRenderConfig({ fillColor: rgb(theme.soft), drawColor: rgb(theme.line) }) } : {}), ...(combined ? { blockRenderers: combined.blockRenderers } : {}), ...(tableCapabilities ? { tableRenderer: tableCapabilities.renderer } : {}) }));
-  };
-  return { doc, geometry, template, composition, drawings, render };
-}
-
 export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
-  const prepared = await prepareReportComposition(name, data, theme, sourceContext);
+  const resolved = compositionGeometry(name);
+  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template: resolved.template, geometry: resolved.geometry });
+  attachPageChrome(prepared.doc, prepared.composition, prepared.geometry, theme);
   const { doc, geometry, template, composition, drawings } = prepared;
   const logo = await reportLogo(theme, sourceContext);
   for (const page of composition.plan.pages) {
@@ -474,5 +344,8 @@ export function resolveReportPlanOnly(name: string, data: CompositionInput, them
  * planner.
  */
 export async function resolveReportCompositionOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext): Promise<ReportCompositionResult> {
-  return (await prepareReportComposition(name, data, theme, sourceContext, false)).composition;
+  const { template, geometry } = compositionGeometry(name);
+  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template, geometry, rejectOnEvaluation: false });
+  attachPageChrome(prepared.doc, prepared.composition, prepared.geometry, theme);
+  return prepared.composition;
 }
