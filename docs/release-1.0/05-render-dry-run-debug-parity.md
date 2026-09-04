@@ -81,6 +81,9 @@ wyliczania geometrii.
 
 - `prepareReportComposition()` jest wspólnym etapem planowania renderu i
   `dry_run`; tworzy jeden zestaw metryk jsPDF, capabilities i `CompositionPlan`.
+- `scripts/lib/pdf-text.mjs` jest wspólnym seamem odczytu selectable text i
+  word bounds dla oracle; rozróżnia poprawny pusty wynik od awarii `pdftotext`,
+  a test oracle pokrywa oba przypadki.
 - `dry_run` zwraca `compositionPlan` oraz `compositionEvaluation`, a dla planu
   odrzuconego nie produkuje PDF-a i nie kończy procesu błędem — odrzucenie jest
   danymi do inspekcji.

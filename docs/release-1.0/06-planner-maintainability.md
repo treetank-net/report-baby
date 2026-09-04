@@ -47,6 +47,10 @@ wymaga testów zachowania po każdym kroku
   `composition/structured-block-placement.ts`; moduł zachowuje istniejący
   cursor i zapisuje te same placementy, decyzje oraz diagnostykę. Grafika
   opływana nadal tworzy w tym samym miejscu flow barrier.
+- odczyt selectable text i word bounds został wydzielony z oracle do
+  `scripts/lib/pdf-text.mjs`; pusty tekst poprawnego PDF-a jest wynikiem
+  pomiaru, a niedostępny lub uszkodzony dekoder ma osobny kod błędu. Oracle
+  nadal decyduje dopiero później, czy brak oczekiwanych tokenów oznacza fail.
 
 To wydzielenie jest techniczne, nie domenowe: nie powstał nowy rodzaj contentu
 ani nowa encja. Moduł kandydatów przyjmuje istniejące propozycje i politykę
@@ -131,6 +135,7 @@ w `report-renderer.ts`.
 - trace planu i obliczanie capacity nie są implementowane jako prywatne kopie w
   `text-planner.ts`;
 - planowanie pozostaje niezależne od jsPDF poza capability seamem;
+- odczyt PDF-a nie jest spleciony z regułami planera ani scoringiem;
 - composition gate i realny editorial są zielone po refaktoryzacji.
 - punkt wejścia composition ma jedną udokumentowaną rolę i nie tworzy równoległej
   ścieżki planowania/renderowania;

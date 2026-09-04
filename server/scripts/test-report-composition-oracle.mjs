@@ -9,6 +9,7 @@ import { deflateSync } from 'node:zlib';
 import { parse } from 'yaml';
 import { runProcess } from './lib/process.mjs';
 import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
+import { extractPdfText, extractPdfWords } from './lib/pdf-text.mjs';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-oracle-'));
@@ -65,26 +66,6 @@ function missingTokens(expected, actual) {
 function pdfPages(pdfPath) {
   const info = execFileSync('pdfinfo', [pdfPath], { encoding: 'utf8' });
   return Number(info.match(/^Pages:\s+(\d+)$/mu)?.[1]);
-}
-
-function pdfWords(pdfPath) {
-  const xml = execFileSync('pdftotext', ['-bbox-layout', pdfPath, '-'], { encoding: 'utf8' });
-  const result = [];
-  let page = 0;
-  for (const pageMatch of xml.matchAll(/<page\b[^>]*>([\s\S]*?)<\/page>/gu)) {
-    for (const wordMatch of pageMatch[1].matchAll(/<word\s+xMin="([\d.-]+)"\s+yMin="([\d.-]+)"\s+xMax="([\d.-]+)"\s+yMax="([\d.-]+)"[^>]*>([\s\S]*?)<\/word>/gu)) {
-      result.push({
-        page,
-        xMin: Number(wordMatch[1]),
-        yMin: Number(wordMatch[2]),
-        xMax: Number(wordMatch[3]),
-        yMax: Number(wordMatch[4]),
-        text: wordMatch[5].replace(/<[^>]+>/gu, ''),
-      });
-    }
-    page += 1;
-  }
-  return result;
 }
 
 function crc32(bytes) {
@@ -146,7 +127,7 @@ function lineBoxParity(plan, pdfPath) {
     y1: line.box.y + line.box.height + toleranceMm,
     remaining: tokenCounts(line.text.replaceAll('{{page.number}}', '').replaceAll('{{page.count}}', '')),
   }));
-  const words = pdfWords(pdfPath);
+  const words = extractPdfWords(pdfPath);
   for (const word of words) {
     const token = normalizeToken(word.text);
     if (!token) continue;
@@ -169,6 +150,13 @@ try {
   const { newPdf } = await import(primitivesBundle);
   const { compileTemplateSource } = await import(templateBundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
+  const emptyPdfPath = join(temporary, 'empty-text.pdf');
+  const emptyPdf = newPdf();
+  await writeFile(emptyPdfPath, Buffer.from(emptyPdf.output('arraybuffer')));
+  assert.equal(extractPdfText(emptyPdfPath).trim(), '', 'a valid PDF without text must be distinguishable from a decoder failure');
+  const malformedPdfPath = join(temporary, 'malformed.pdf');
+  await writeFile(malformedPdfPath, Buffer.from('not a PDF document', 'utf8'));
+  assert.throws(() => extractPdfText(malformedPdfPath), (error) => error?.code === 'PDF_TEXT_EXTRACTION_FAILED', 'a failed PDF decoder must have a dedicated extraction error');
   const source = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
   const compiled = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(compiled);
@@ -195,8 +183,8 @@ try {
   const compositionPath = join(temporary, 'composition.pdf');
   await writeFile(compositionPath, compositionArtifact);
   const expectedText = [...composition.document.flows.main.blocks, ...(composition.document.flows.footer?.blocks ?? [])].map((block) => block.text ?? '').join(' ');
-  const compositionText = execFileSync('pdftotext', ['-layout', compositionPath, '-'], { encoding: 'utf8' });
-  const oracleText = execFileSync('pdftotext', ['-layout', oraclePath, '-'], { encoding: 'utf8' });
+  const compositionText = extractPdfText(compositionPath, ['-layout']);
+  const oracleText = extractPdfText(oraclePath, ['-layout']);
   const expected = tokenCounts(expectedText.replaceAll('{{page.number}}', '').replaceAll('{{page.count}}', ''));
   const oracleCounts = tokenCounts(joinHyphenatedLines(oracleText));
   const report = {
@@ -256,7 +244,7 @@ try {
   const numberedArtifact = renderComposition(numberedInsetDocument, numberedComposition, createJsPdfTextBackend(numberedPdf, 'DejaVu', (await import(adapterBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
   const numberedPdfPath = join(temporary, 'numbered-inset.pdf');
   await writeFile(numberedPdfPath, numberedArtifact);
-  const numberedPdfWords = pdfWords(numberedPdfPath).filter((word) => /^lorem\d+$/u.test(word.text));
+  const numberedPdfWords = extractPdfWords(numberedPdfPath).filter((word) => /^lorem\d+$/u.test(word.text));
   const numberedExpectedSet = [...numberedHeadingWords, ...numberedBodyWords, ...numberedTailWords].sort();
   assert.deepEqual(numberedPdfWords.map((word) => word.text).sort(), numberedExpectedSet, 'every numbered word must reach the final PDF');
   const numberedEntries = numberedPdfWords.map((word) => ({ number: Number(word.text.slice(5)), x: word.xMin, y: word.yMin }));
@@ -276,7 +264,7 @@ try {
   const integrated = await renderReportCompositionPdf('pages/editorial-two-column', input);
   const integratedPath = join(temporary, 'integrated-composition.pdf');
   await writeFile(integratedPath, integrated.buffer);
-  const integratedText = execFileSync('pdftotext', ['-layout', integratedPath, '-'], { encoding: 'utf8' });
+  const integratedText = extractPdfText(integratedPath, ['-layout']);
   assert.match(integratedText, /sentinel0001/u);
   assert.match(integratedText, /Oracle comparison fixture/u);
   assert.match(integratedText, /A production chrome fixture/u);
@@ -284,7 +272,7 @@ try {
   assert.match(integratedText, /2026 Q3/u);
   assert.ok(integrated.composition.plan.pages.length >= 2);
   for (let page = 1; page <= integrated.composition.plan.pages.length; page += 1) {
-    const pageText = execFileSync('pdftotext', ['-f', String(page), '-l', String(page), integratedPath, '-'], { encoding: 'utf8' });
+    const pageText = extractPdfText(integratedPath, ['-f', String(page), '-l', String(page)]);
     assert.equal((pageText.match(/Oracle comparison fixture/gu) ?? []).length, 1, `footer should be repeated once on page ${page}`);
   }
 
@@ -319,7 +307,7 @@ try {
   assert.ok(authoredImage.composition.plan.pages.length >= 1);
   const authoredImagePdfPath = join(temporary, 'authored-image.pdf');
   await writeFile(authoredImagePdfPath, authoredImage.buffer);
-  const authoredImageText = execFileSync('pdftotext', ['-layout', authoredImagePdfPath, '-'], { encoding: 'utf8' });
+  const authoredImageText = extractPdfText(authoredImagePdfPath, ['-layout']);
   assert.match(authoredImageText, /Text before the authored image/u);
   assert.match(authoredImageText, /A measured authored image/u);
   assert.match(authoredImageText, /Text after the authored image must remain\s+in the flow/u);
@@ -399,7 +387,7 @@ try {
   const quoteArtifact = createJsPdfTextBackend(quotePdf, 'DejaVu', quoteStyles, compositionPdfBackendOptionsFromRenderConfig()).render(quoteDocument, quotePlan);
   const quotePdfPath = join(temporary, 'quote-fixture.pdf');
   await writeFile(quotePdfPath, quoteArtifact);
-  const quoteWords = pdfWords(quotePdfPath);
+  const quoteWords = extractPdfWords(quotePdfPath);
   const openingMarks = quoteWords.filter((word) => word.text === '“');
   const closingMarks = quoteWords.filter((word) => word.text === '”');
   assert.equal(openingMarks.length, 1, 'quote fixture must emit one opening glyph');
