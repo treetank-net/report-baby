@@ -234,6 +234,17 @@ function declaredAuxiliaryLockupSlotsForFlow(compiled: CompiledTemplate, flowId:
   });
 }
 
+function declaredGraphicSlots(compiled: CompiledTemplate, pageGeometry: PageGeometry, continuation = false): CompositionSlotTemplate[] {
+  return Object.entries(compiled.slots)
+    .filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[1]?.kind === 'graphic')
+    .map(([id, source]) => ({
+      id,
+      regionId: source.region ?? 'content',
+      kind: 'graphic' as const,
+      box: normalizedBox(slotFrame(source, continuation), pageGeometry),
+    }));
+}
+
 function orderedMainSlotIds(
   sourceSlotIds: string[],
   textSlots: CompositionSlotTemplate[],
@@ -437,6 +448,8 @@ export function compositionTemplateFromPageGeometry(
     }, source, segments));
   const declaredTextSlots = declaredTextSlotsFor(geometry, firstMainSlotIds, firstSegments);
   const continuationTextSlots = declaredTextSlotsFor(continuationGeometry, continuationSourceIds, continuationSegments, true);
+  const firstGraphicSlots = declaredGraphicSlots(compiled, geometry);
+  const continuationGraphicSlots = declaredGraphicSlots(compiled, continuationGeometry, true);
   const continuationInsertionSlots = continuationSourceIds
     .filter((sourceId) => sourceId !== 'content')
     .map((sourceId) => continuationTextSlots.find((slot) => slot.id === sourceId))
@@ -515,8 +528,8 @@ export function compositionTemplateFromPageGeometry(
   }
   const firstTitleSlots = declaredTextSlotsForFlow(compiled, 'title', geometry);
   const continuationTitleSlots = declaredTextSlotsForFlow(compiled, 'title', continuationGeometry, true);
-  const firstLayout = layout(firstLayoutId, geometry, [...(leadSlot ? [leadSlot] : []), ...firstTitleSlots, ...declaredTextSlots, ...declaredBlockSlots, ...firstSegments, ...auxiliary.flatMap((item) => [...item.reservedFirst, ...item.first])]);
-  const continuationLayout = layout(continuationLayoutId, continuationGeometry, [...continuationTitleSlots, ...continuationTextSlots, ...continuationBlockSlots, ...continuationFlowSegments, ...auxiliary.flatMap((item) => [...item.reservedContinuation, ...item.continuation])]);
+  const firstLayout = layout(firstLayoutId, geometry, [...(leadSlot ? [leadSlot] : []), ...firstTitleSlots, ...declaredTextSlots, ...declaredBlockSlots, ...firstSegments, ...firstGraphicSlots, ...auxiliary.flatMap((item) => [...item.reservedFirst, ...item.first])]);
+  const continuationLayout = layout(continuationLayoutId, continuationGeometry, [...continuationTitleSlots, ...continuationTextSlots, ...continuationBlockSlots, ...continuationFlowSegments, ...continuationGraphicSlots, ...auxiliary.flatMap((item) => [...item.reservedContinuation, ...item.continuation])]);
   const titleLayout = options.includeTitlePage
     ? (() => {
       const titleContent = compiled.slots['title-page-content'];

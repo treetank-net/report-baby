@@ -67,7 +67,7 @@ const buildGeometry = runProcess('npx', [
 if (buildGeometry.status !== 0) throw new Error(`composition adapter geometry bundle failed: ${buildGeometry.stderr || buildGeometry.stdout}`);
 
 try {
-  const { compositionChartStyleFromRenderConfig, compositionMetricStyleFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig, compositionStylesFromRenderConfig, compositionTableStyleFromRenderConfig, planReportComposition } = await import(bundle);
+  const { compositionChartStyleFromRenderConfig, compositionGraphicStyleFromRenderConfig, compositionMetricStyleFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig, compositionStylesFromRenderConfig, compositionTableStyleFromRenderConfig, planReportComposition } = await import(bundle);
   const { combineJsPdfCompositionBlockCapabilities, createJsPdfChartBlockCapabilities, createJsPdfMetricBlockCapabilities, createJsPdfTableBlockCapabilities, createJsPdfTextBackend, renderComposition } = await import(backendBundle);
   const { newPdf } = await import(primitivesBundle);
   const { compileTemplateSource } = await import(templateBundle);
@@ -103,6 +103,25 @@ try {
   await writeFile(artifactPath, artifact);
   assert.equal(artifact.subarray(0, 5).toString(), '%PDF-');
   assert.equal(pdf.getNumberOfPages(), result.plan.pages.length);
+
+  const graphicSource = structuredClone(source);
+  graphicSource.id = 'pages/editorial-public-graphic-composition';
+  graphicSource.slots['public-graphic'] = { type: 'graphic', frame: { x: 0.40, y: 0.35, width: 0.20, height: 0.10 } };
+  const graphicCompiled = compileTemplateSource(graphicSource);
+  const graphicGeometry = pageGeometryFromTemplate(graphicCompiled);
+  const graphicPdf = newPdf('portrait', [graphicGeometry.width, graphicGeometry.height]);
+  const graphicResult = planReportComposition(graphicPdf, graphicCompiled, graphicGeometry, {
+    flows: { main: { blocks: [{ id: 'graphic-public-body', type: 'text', text: 'A public authored graphic is planned and rendered through the same composition path.' }] } },
+    graphics: [{ id: 'public-panel', slot_id: 'public-graphic', shape: 'rectangle', size: { width: 20, height: 10 } }],
+  }, { family: 'DejaVu', maxPages: 1 });
+  assert.equal(graphicResult.evaluation.status, 'accepted', JSON.stringify(graphicResult.evaluation));
+  assert.deepEqual(graphicResult.plan.graphicPlacements.map((placement) => placement.graphicId), ['public-panel']);
+  const graphicArtifact = renderComposition(graphicResult.document, graphicResult, createJsPdfTextBackend(graphicPdf, 'DejaVu', styles, {
+    ...compositionPdfBackendOptionsFromRenderConfig(),
+    graphicStyle: compositionGraphicStyleFromRenderConfig({ fillColor: [235, 240, 248], drawColor: [38, 71, 108] }),
+  }));
+  assert.equal(graphicArtifact.subarray(0, 5).toString(), '%PDF-');
+
   const unsupported = planReportComposition(newPdf(), compiled, geometry, legacyFixtureToCompositionInput({
     title: 'This title needs the report chrome backend.',
     kpis: [{ label: 'Reach', value: '184k' }],

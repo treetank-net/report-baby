@@ -10,6 +10,7 @@ import { pageGeometryFromTemplate, type PageGeometry } from './page-geometry.js'
 import { resolveReportPlan } from './report-plan.js';
 import {
   compositionChartStyleFromRenderConfig,
+  compositionGraphicStyleFromRenderConfig,
   compositionImageStyleFromRenderConfig,
   compositionMetricStyleFromRenderConfig,
   compositionPdfBackendOptionsFromRenderConfig,
@@ -435,7 +436,7 @@ async function prepareReportComposition(name: string, data: CompositionInput, th
     throw new Error(`Composition plan rejected for '${name}': ${details}`);
   }
   const render = (): void => {
-    renderComposition(composition.document, composition, createJsPdfTextBackend(doc, family, compositionStyles, { ...compositionPdfBackendOptionsFromRenderConfig(), ...(resolvedImages.size > 0 ? { imageAssets: resolvedImages } : {}), ...(combined ? { blockRenderers: combined.blockRenderers } : {}), ...(tableCapabilities ? { tableRenderer: tableCapabilities.renderer } : {}) }));
+    renderComposition(composition.document, composition, createJsPdfTextBackend(doc, family, compositionStyles, { ...compositionPdfBackendOptionsFromRenderConfig(), ...(resolvedImages.size > 0 ? { imageAssets: resolvedImages } : {}), ...(composition.plan.graphicPlacements.some((graphic) => graphic.paint !== false) ? { graphicStyle: compositionGraphicStyleFromRenderConfig({ fillColor: rgb(theme.soft), drawColor: rgb(theme.line) }) } : {}), ...(combined ? { blockRenderers: combined.blockRenderers } : {}), ...(tableCapabilities ? { tableRenderer: tableCapabilities.renderer } : {}) }));
   };
   return { doc, geometry, template, composition, drawings, render };
 }

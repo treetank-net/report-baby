@@ -127,6 +127,7 @@ pdf:
   table_line_height_ratio: 1.2
   table_cell_padding: 2.5
   table_line_width: 0.2
+  graphic_line_width: 0.3
   composition_max_pages: 12
   title_y: 88
   title_eyebrow_size: 10

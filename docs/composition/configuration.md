@@ -159,6 +159,7 @@ explicitly tied to the composition contract:
 | `pdf.orphan_min_lines` | Minimum lines retained at the end of a text fragment before continuing. It interacts with the next slot’s capacity and the planner’s fragment selection. It is distinct from `composition_score.orphan_max_fragment_lines`, which is a visual-quality heuristic. |
 | `pdf.planner_minimum_fragment_lines` | Default minimum useful fragment size copied into the plan and used by underfilled-slot checks. It interacts with obstacle availability and planner decisions. |
 | `pdf.composition_geometry_tolerance` | Planning/search tolerance for comparing candidate geometry. It is separate from the evaluator’s machine-precision containment guard and visual-QA tolerance. |
+| `pdf.graphic_line_width` | Stroke width used by the jsPDF backend for authored geometry graphics. Fill and stroke colors come from the active theme; this value affects painting only, not planner geometry or score. |
 | `pdf.list_item_keep_together` | Boolean-style switch controlling whether a list item is kept together when the first fragment would leave a hole. It interacts with `widow_min_lines` and local slot capacity. |
 | `pdf.composition_max_pages` | Maximum number of composition pages accepted by the report renderer. It interacts with page-limit validation after composition. |
 | `pdf.plan_coverage_max_gap` | Maximum allowed coverage gap in the report-plan contract. It interacts with dynamic-flow coverage checks before final PDF rendering. |

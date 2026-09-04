@@ -4,7 +4,7 @@ import { extname } from 'node:path';
 import { parse } from 'yaml';
 
 export type TemplateKind = 'slide' | 'page';
-export type TemplateSlotKind = 'text' | 'image' | 'lockup' | 'metric-card' | 'chart' | 'table';
+export type TemplateSlotKind = 'text' | 'image' | 'lockup' | 'graphic' | 'metric-card' | 'chart' | 'table';
 export type TemplateOverflow = 'reject' | 'shrink-to-fit';
 export type TemplateFlowContinuation = 'allowed' | 'forbidden';
 export type TemplateVerticalAlign = 'top' | 'middle' | 'bottom';
@@ -358,7 +358,7 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
 
   const slots: Record<string, CompiledTemplateSlot> = {};
   for (const [slotId, slot] of entriesAt(source.slots, 'slots')) {
-    const slotKind = slot.type === 'text' || slot.type === 'image' || slot.type === 'lockup' || slot.type === 'metric-card' || slot.type === 'chart' || slot.type === 'table' ? slot.type : fail(`slots.${slotId}.type`, "must be 'text', 'image', 'lockup', 'metric-card', 'chart' or 'table'.");
+    const slotKind = slot.type === 'text' || slot.type === 'image' || slot.type === 'lockup' || slot.type === 'graphic' || slot.type === 'metric-card' || slot.type === 'chart' || slot.type === 'table' ? slot.type : fail(`slots.${slotId}.type`, "must be 'text', 'image', 'lockup', 'graphic', 'metric-card', 'chart' or 'table'.");
     const region = slot.region === undefined ? undefined : stringAt(slot.region, `slots.${slotId}.region`);
     if (region && !regions[region]) fail(`slots.${slotId}.region`, `references unknown region '${region}'.`);
     const allowedBlockIds = slot.allowed_block_ids === undefined ? undefined : slot.allowed_block_ids;

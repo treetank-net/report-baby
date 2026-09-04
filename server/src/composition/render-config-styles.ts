@@ -1,6 +1,7 @@
 import { readRenderConfig } from '../builtin-template-source.js';
 import type {
   JsPdfCompositionChartStyle,
+  JsPdfCompositionGraphicStyle,
   JsPdfCompositionImageStyle,
   JsPdfCompositionMetricStyle,
   JsPdfCompositionStyle,
@@ -22,6 +23,11 @@ export interface CompositionTextColors {
   /** Color used by title metadata on a contrasting report header surface. */
   subtitle?: [number, number, number];
   eyebrow?: [number, number, number];
+}
+
+export interface CompositionGraphicColors {
+  fillColor: [number, number, number];
+  drawColor: [number, number, number];
 }
 
 export function compositionStylesFromRenderConfig(colors?: CompositionTextColors, titleCase: 'normal' | 'upper' = 'normal', glyphFontFamily?: string): JsPdfCompositionStyles {
@@ -270,6 +276,13 @@ export function compositionImageStyleFromRenderConfig(overrides: Partial<JsPdfCo
     captionPaddingX: pdfNumber(pdf, 'imageCaptionPaddingX'),
     captionAlign: 'center',
     ...overrides,
+  };
+}
+
+export function compositionGraphicStyleFromRenderConfig(colors: CompositionGraphicColors): JsPdfCompositionGraphicStyle {
+  return {
+    ...colors,
+    lineWidth: pdfNumber(readRenderConfig().pdf, 'graphicLineWidth'),
   };
 }
 

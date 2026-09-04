@@ -77,6 +77,13 @@ export {
   type CompositionRgbColor,
 } from './contrast.js';
 export {
+  compositionGraphicStyleFromRenderConfig,
+  compositionStylesFromRenderConfig,
+} from './render-config-styles.js';
+export type {
+  CompositionGraphicColors,
+} from './render-config-styles.js';
+export {
   createJsPdfTextBackend,
   createJsPdfChartBlockCapabilities,
   createJsPdfMetricBlockCapabilities,

@@ -14,6 +14,7 @@ import { compositionStylesFromRenderConfig } from './render-config-styles.js';
 
 export {
   compositionChartStyleFromRenderConfig,
+  compositionGraphicStyleFromRenderConfig,
   compositionImageStyleFromRenderConfig,
   compositionMetricStyleFromRenderConfig,
   compositionPdfBackendOptionsFromRenderConfig,
@@ -22,6 +23,7 @@ export {
 } from './render-config-styles.js';
 export type {
   CompositionChartColors,
+  CompositionGraphicColors,
   CompositionMetricColors,
   CompositionTableColors,
   CompositionTextColors,
