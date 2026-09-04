@@ -131,6 +131,13 @@ These values control how many legal movable-insertion variants are explored.
 They affect runtime and the set of alternatives presented to the evaluator;
 they do not change the hard legality rules.
 
+The same policy shape can be supplied by a caller for authored graphics through
+`movableGraphicBounds`. It is intentionally not a new YAML tuning group in
+this slice: the planner receives the movement frame and candidate budget from
+the composition request, while the render configuration continues to own only
+global defaults. The graphic must expose a measured `size` when it is smaller
+than its slot; otherwise there is no meaningful position to vary.
+
 | Field | Meaning and interactions |
 |---|---|
 | `composition_search.movable_quote_window_ratio` | Relative vertical movement window around a quote’s preferred position. It interacts with page height and candidate count. |

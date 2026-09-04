@@ -351,6 +351,55 @@ async function writeMovableCandidateArtifacts(directory, candidates, document, c
   await writeFile(join(directory, 'movable-quote-candidates.json'), JSON.stringify(entries, null, 2));
 }
 
+async function writeMovableGraphicArtifacts(directory, candidates, document, createBackend, newPdf, renderComposition, evaluateCompositionPlan, renderConfig) {
+  if (!directory) return;
+  await mkdir(directory, { recursive: true });
+  const styles = {
+    body: { fontSize: 10, lineHeight: 5, baselineOffset: 3.8, fontStyle: 'normal', textColor: [38, 71, 108] },
+  };
+  const entries = [];
+  for (const [index, candidate] of candidates.entries()) {
+    const page = candidate.pages[0];
+    const pdf = newPdf('portrait', [page.width, page.height]);
+    const evaluation = evaluateCompositionPlan(document, candidate);
+    if (evaluation.status === 'accepted' || evaluation.status === 'accepted-with-warnings') {
+      renderComposition(document, { plan: candidate, evaluation }, createBackend(pdf, 'helvetica', styles, {
+        pageSizeTolerance: renderConfig.pdf.page_size_tolerance,
+        graphicStyle: { fillColor: [38, 71, 108], drawColor: [38, 71, 108], lineWidth: 0.2 },
+      }));
+    } else {
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(3);
+      pdf.setTextColor(180, 0, 0);
+      pdf.text(`REJECTED DEBUG PLAN · candidate ${index}`, 5, 4);
+      pdf.setTextColor(38, 71, 108);
+      for (const line of candidate.lines) pdf.text(line.text, line.box.x, line.box.y + line.box.height * 0.75);
+      pdf.setFillColor(38, 71, 108);
+      for (const graphic of candidate.graphicPlacements.filter((item) => item.paint !== false)) pdf.rect(graphic.box.x, graphic.box.y, graphic.box.width, graphic.box.height, 'F');
+    }
+    const frame = candidate.movableGraphicFrames?.find((item) => item.id === 'movable-graphic');
+    const graphic = candidate.graphicPlacements.find((item) => item.graphicId === 'movable-graphic');
+    if (!frame || !graphic) throw new Error(`movable graphic candidate ${index} has no frame or placement`);
+    pdf.setDrawColor(255, 0, 0);
+    pdf.setLineWidth(0.6);
+    pdf.setLineDashPattern([2, 1], 0);
+    pdf.rect(frame.box.x, frame.box.y, frame.box.width, frame.box.height, 'S');
+    pdf.setLineDashPattern([], 0);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(3);
+    pdf.setTextColor(255, 0, 0);
+    pdf.text(`RED FRAME · candidate ${index} · graphic x=${graphic.box.x.toFixed(2)}`, frame.box.x, Math.max(3, frame.box.y - 1));
+    const pdfPath = join(directory, `movable-graphic-candidate-${index}.pdf`);
+    const pngPrefix = join(directory, `movable-graphic-candidate-${index}`);
+    await writeFile(pdfPath, Buffer.from(pdf.output('arraybuffer')));
+    const rasterized = runProcess('pdftoppm', ['-singlefile', '-png', '-r', String(renderConfig.quality.pdf_pixel_qa.raster_dpi), pdfPath, pngPrefix], { cwd: root, timeout: 30_000 });
+    if (rasterized.status !== 0) throw new Error(`movable graphic candidate ${index} rasterization failed: ${rasterized.stderr || rasterized.stdout}`);
+    await writeFile(join(directory, `movable-graphic-candidate-${index}.plan.json`), JSON.stringify(candidate, null, 2));
+    entries.push({ index, pdf: pdfPath, png: `${pngPrefix}.png`, status: evaluation.status, score: evaluation.score, frame: frame.box, graphic: graphic.box });
+  }
+  await writeFile(join(directory, 'movable-graphic-candidates.json'), JSON.stringify(entries, null, 2));
+}
+
 async function writeContrastPlannerArtifacts(directory, candidates, document, contrastProvider, background, createBackend, newPdf, renderComposition, evaluateCompositionPlan, sampleCompositionContrast, fitContainBox, imagePixelAtPoint, renderConfig, selectedCandidate) {
   if (!directory) return;
   await mkdir(directory, { recursive: true });
@@ -454,6 +503,9 @@ const contrastPlannerArtifactDirectory = debugArtifactRoot
 const contrastGradientArtifactDirectory = debugArtifactRoot
   ? join(debugArtifactRoot, 'text-composition-engine', 'contrast-gradient-search')
   : undefined;
+const movableGraphicArtifactDirectory = debugArtifactRoot
+  ? join(debugArtifactRoot, 'text-composition-engine', 'graphic-candidate-search')
+  : undefined;
 const numberedFlowArtifactDirectory = debugArtifactRoot
   ? join(debugArtifactRoot, 'text-composition-engine', 'numbered-flow-boxes')
   : undefined;
@@ -461,6 +513,7 @@ const numberedFlowArtifactDirectory = debugArtifactRoot
 try {
   const { createCompositionContrastProvider, createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, createTextCompositionPlanner, evaluateCompositionPlan, fitContainBox, imagePixelAtPoint, renderComposition, sampleCompositionContrast } = await import(bundle);
   const { newPdf } = await import(primitivesBundle);
+  const compositionRenderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
   let randomState = 0x5eed;
   const random = () => {
     randomState = (1664525 * randomState + 1013904223) >>> 0;
@@ -677,6 +730,72 @@ try {
   assert.equal(selectedCandidate.score, Math.max(...movableEvaluationPhase.details.candidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring movable candidate');
   assert.equal(movableCandidateSummary.find((candidate) => candidate.quoteY === movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y)?.fragmentedParagraphs, bestFragmentation, 'the selected quote position must have the least paragraph fragmentation');
   await writeMovableCandidateArtifacts(movableCandidateArtifactDirectory, movableCandidatePlans, movableQuoteDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8')));
+
+  const movableGraphicTemplate = {
+    maxPages: 1,
+    layouts: [{ id: 'movable-graphic', width: 100, height: 180, slots: [
+      { id: 'left', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 80 }, allowedRoles: ['body'] },
+      { id: 'right', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 80 }, allowedRoles: ['body'] },
+      { id: 'graphic', regionId: 'art', kind: 'graphic', box: { x: 5, y: 35, width: 90, height: 15 } },
+    ] }],
+    routes: { main: { slots: ['left', 'right'], layouts: ['movable-graphic'], continuation: 'forbidden' } },
+  };
+  const movableGraphicDocument = {
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [{
+        id: 'graphic-body',
+        kind: 'paragraph',
+        role: 'body',
+        text: Array.from({ length: 70 }, (_, index) => `graphic${String(index + 1).padStart(3, '0')}`).join(' '),
+      }] },
+    },
+    graphics: [{ id: 'movable-graphic', slotId: 'graphic', shape: 'rectangle', wrap: 'around', page: 1, size: { width: 20, height: 10 } }],
+  };
+  const movableGraphicPolicy = {
+    maxPlanningIterations: 2,
+    movableGraphicBounds: {
+      'movable-graphic': {
+        bounds: { x: 5, y: 35, width: 90, height: 15 },
+        axis: 'x',
+        candidateCount: 4,
+        refinementRounds: 1,
+        refinementCandidateCount: 3,
+      },
+    },
+  };
+  const movableGraphicMetrics = { ...movableMetrics, lineHeight() { return 5; } };
+  const movableGraphicPlans = createTextCompositionPlanner(movableGraphicTemplate, movableGraphicPolicy).planCandidates(movableGraphicDocument, movableGraphicMetrics);
+  assert.equal(movableGraphicPlans.length, 4, 'the same bounded candidate seam must generate four graphic positions');
+  const movableGraphicSummary = movableGraphicPlans.map((candidate) => {
+    const graphic = candidate.graphicPlacements.find((placement) => placement.graphicId === 'movable-graphic');
+    const frame = candidate.movableGraphicFrames?.find((item) => item.id === 'movable-graphic');
+    const evaluation = evaluateCompositionPlan(movableGraphicDocument, candidate);
+    return {
+      x: graphic?.box.x,
+      y: graphic?.box.y,
+      width: graphic?.box.width,
+      height: graphic?.box.height,
+      frameX: frame?.box.x,
+      frameWidth: frame?.box.width,
+      status: evaluation.status,
+      score: evaluation.score,
+      lineSignature: candidate.lines.filter((line) => line.blockId === 'graphic-body').map((line) => `${line.slotId}:${line.startWord}-${line.endWord}@${line.box.x},${line.box.width}`).join('|'),
+    };
+  });
+  assert.equal(new Set(movableGraphicSummary.map((candidate) => candidate.x)).size, 4, `movable graphic candidates must have distinct x positions: ${JSON.stringify(movableGraphicSummary)}`);
+  assert.ok(movableGraphicSummary.every((candidate) => candidate.y === 37.5 && candidate.width === 20 && candidate.height === 10), `graphic candidates must preserve measured size: ${JSON.stringify(movableGraphicSummary)}`);
+  assert.ok(movableGraphicSummary.every((candidate) => candidate.frameX === 5 && candidate.frameWidth === 90), `graphic candidates must expose the declared movement frame: ${JSON.stringify(movableGraphicSummary)}`);
+  const acceptedGraphicCandidates = movableGraphicSummary.filter((candidate) => candidate.status === 'accepted');
+  assert.ok(acceptedGraphicCandidates.length >= 2, `at least two graphic positions must remain legal: ${JSON.stringify(movableGraphicSummary)}`);
+  assert.ok(new Set(movableGraphicSummary.map((candidate) => candidate.lineSignature)).size > 1, `moving the graphic must change text composition: ${JSON.stringify(movableGraphicSummary)}`);
+  assert.ok(new Set(acceptedGraphicCandidates.map((candidate) => candidate.score)).size > 1, `legal graphic positions must remain distinguishable by score: ${JSON.stringify(movableGraphicSummary)}`);
+  const movableGraphicEngine = createTextCompositionEngine(movableGraphicTemplate, movableGraphicPolicy);
+  const movableGraphicResult = movableGraphicEngine.plan(movableGraphicDocument, movableGraphicMetrics);
+  const movableGraphicEvaluationPhase = movableGraphicResult.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
+  assert.ok((movableGraphicEvaluationPhase?.details?.candidates?.length ?? 0) > 4, 'movable graphics must receive a refinement evaluation after coarse candidates');
+  assert.equal(movableGraphicResult.evaluation.score, Math.max(...acceptedGraphicCandidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring legal graphic candidate');
+  await writeMovableGraphicArtifacts(movableGraphicArtifactDirectory, movableGraphicPlans, movableGraphicDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, compositionRenderConfig);
+
   const contrastBackground = splitBackgroundAsset(90, 15);
   const contrastTemplate = structuredClone(movableQuoteTemplate);
   contrastTemplate.layouts[0].slots.push({ id: 'contrast-background', regionId: 'background', kind: 'graphic', box: { x: 5, y: 25, width: 90, height: 20 } });

@@ -8,7 +8,14 @@ export interface PlannedInsertion {
   box: CompositionRect;
 }
 
-export interface MovableInsertionBounds {
+export interface PlannedGraphic {
+  graphicId: string;
+  page: number;
+  slotId: string;
+  box: CompositionRect;
+}
+
+export interface MovablePlacementBounds {
   bounds: CompositionRect;
   axis?: 'x' | 'y';
   preferred?: { x?: number; y?: number };
@@ -16,6 +23,9 @@ export interface MovableInsertionBounds {
   refinementRounds?: number;
   refinementCandidateCount?: number;
 }
+
+/** @deprecated Use MovablePlacementBounds; retained for the quote API. */
+export type MovableInsertionBounds = MovablePlacementBounds;
 
 export interface SelectedInsertionPlacement {
   graphicId: string;
@@ -38,7 +48,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
  * Expand one measured insertion into legal positions inside its frame.
  * The measured rectangle remains unchanged; only its position moves.
  */
-function movableInsertionBoxes(proposal: PlannedInsertion, policy: MovableInsertionBounds): CompositionRect[] {
+function movablePlacementBoxes(proposal: { box: CompositionRect }, policy: MovablePlacementBounds): CompositionRect[] {
   const { bounds } = policy;
   const minimumX = bounds.x;
   const maximumX = bounds.x + bounds.width - proposal.box.width;
@@ -67,7 +77,7 @@ function movableInsertionBoxes(proposal: PlannedInsertion, policy: MovableInsert
   });
 }
 
-function movableInsertionRefinementBoxes(proposal: PlannedInsertion, policy: MovableInsertionBounds, round: number): CompositionRect[] {
+function movablePlacementRefinementBoxes(proposal: { box: CompositionRect }, policy: MovablePlacementBounds, round: number): CompositionRect[] {
   const { bounds } = policy;
   const minimumX = bounds.x;
   const maximumX = bounds.x + bounds.width - proposal.box.width;
@@ -105,7 +115,7 @@ export function movableInsertionProposalCandidates(
   let variants: Map<string, PlannedInsertion>[] = [seed];
   for (const [key, bounds] of movableEntries) {
     const proposal = seed.get(key)!;
-    const boxes = movableInsertionBoxes(proposal, bounds);
+    const boxes = movablePlacementBoxes(proposal, bounds);
     if (boxes.length === 0) continue;
     variants = variants.flatMap((variant) => boxes.map((box) => {
       const next = new Map(variant);
@@ -140,7 +150,66 @@ export function movableInsertionProposalRefinements(
       slotId: selectedGraphic.slotId.replace(/^\d+:/u, ''),
       box: { ...selectedGraphic.box },
     };
-    const boxes = movableInsertionRefinementBoxes(anchoredProposal, bounds, round);
+    const boxes = movablePlacementRefinementBoxes(anchoredProposal, bounds, round);
+    if (boxes.length === 0) return [];
+    variants = variants.flatMap((variant) => boxes.map((box) => {
+      const next = new Map(variant);
+      next.set(key, { ...anchoredProposal, box: { ...box } });
+      return next;
+    }));
+  }
+  return variants;
+}
+
+export type MovableGraphicPolicy = Record<string, MovablePlacementBounds>;
+
+export function movableGraphicProposalCandidates(
+  seed: Map<string, PlannedGraphic>,
+  policies: MovableGraphicPolicy,
+): Map<string, PlannedGraphic>[] {
+  const movableEntries = Object.entries(policies).filter(([key]) => seed.has(key));
+  if (movableEntries.length === 0) return [seed];
+  let variants: Map<string, PlannedGraphic>[] = [seed];
+  for (const [key, bounds] of movableEntries) {
+    const proposal = seed.get(key)!;
+    const boxes = movablePlacementBoxes(proposal, bounds);
+    if (boxes.length === 0) continue;
+    variants = variants.flatMap((variant) => boxes.map((box) => {
+      const next = new Map(variant);
+      next.set(key, { ...proposal, box: { ...box } });
+      return next;
+    }));
+  }
+  return variants;
+}
+
+export interface SelectedGraphicPlacement {
+  graphicId: string;
+  page: number;
+  slotId: string;
+  box: CompositionRect;
+}
+
+export function movableGraphicProposalRefinements(
+  seeded: Map<string, PlannedGraphic>,
+  selectedPlacements: readonly SelectedGraphicPlacement[],
+  policies: MovableGraphicPolicy,
+  round: number,
+): Map<string, PlannedGraphic>[] {
+  const movableEntries = Object.entries(policies).filter(([, bounds]) => (bounds.refinementRounds ?? 0) >= round);
+  if (movableEntries.length === 0) return [];
+  let variants: Map<string, PlannedGraphic>[] = [seeded];
+  for (const [key, bounds] of movableEntries) {
+    const seededProposal = seeded.get(key);
+    const selectedGraphic = selectedPlacements.find((graphic) => graphic.graphicId === key);
+    if (!seededProposal || !selectedGraphic) return [];
+    const anchoredProposal: PlannedGraphic = {
+      ...seededProposal,
+      page: selectedGraphic.page,
+      slotId: selectedGraphic.slotId.replace(/^\d+:/u, ''),
+      box: { ...selectedGraphic.box },
+    };
+    const boxes = movablePlacementRefinementBoxes(anchoredProposal, bounds, round);
     if (boxes.length === 0) return [];
     variants = variants.flatMap((variant) => boxes.map((box) => {
       const next = new Map(variant);

@@ -32,8 +32,11 @@ planner is in [`composition/text-planner.ts`](../../server/src/composition/text-
 ## Candidates and movable insertions
 
 The default path produces one plan. Alternatives are generated only when the
-policy contains `movableInsertionBounds` for an existing insertion proposal.
-The frame describes the allowed area, not the element size. The planner:
+policy contains `movableInsertionBounds` for an existing insertion proposal or
+`movableGraphicBounds` for an authored graphic proposal. The frame describes
+the allowed area, not the element size. For graphics, the element size comes
+from `CompositionGraphic.size`; when it is omitted, the graphic remains
+slot-sized and has no useful room to move. The planner:
 
 - preserves the measured insertion size;
 - generates a finite, deterministic list of positions on the `x` or `y` axis;
@@ -42,6 +45,14 @@ The frame describes the allowed area, not the element size. The planner:
 - builds a complete plan for every position;
 - may generate a local refinement neighborhood after evaluation selects the
   best variant.
+
+`movableGraphicBounds` uses the same candidate count, axis, preferred position,
+and refinement rules as quote insertions. A graphic proposal must remain inside
+its `kind: graphic` slot. A partial wrapping graphic changes the available
+horizontal intervals for only the lines it intersects; a full-width graphic
+also creates flow-barrier candidates so a continuation cannot cross its blocked
+band. This distinction prevents a small movable graphic from accidentally
+turning the whole text area into a vertical barrier.
 
 `planCandidates` generates coarse candidates. `planRefinedCandidates` receives
 the selected plan and round number, but cannot mutate the evaluator result. The

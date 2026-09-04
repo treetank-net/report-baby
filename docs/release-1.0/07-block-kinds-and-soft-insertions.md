@@ -21,8 +21,10 @@ wbudowany w szablon jako „zawsze trzecia pozycja na stronie”.
 ## Stan obecny
 
 Grafiki, cytaty, glyphy, tabele i atomic blocks mają już częściowe ścieżki w
-composition. Nie mają jeszcze jednolitego, konfigurowalnego mechanizmu
-miękkiego wyboru pozycji z feedbackiem score.
+composition. Pierwszy slice soft placementu jest teraz wykonany dla
+autorskiej grafiki: `CompositionGraphic.size` wyznacza mierzony box, a
+`movableGraphicBounds` używa tego samego coarse/refinement search co quote.
+Nie jest to jeszcze jednolity mechanizm dla image-blocków, KPI i wykresów.
 
 Kanoniczna mapa obecnych rodzajów bloków znajduje się w
 [`docs/composition/block-kinds.md`](../composition/block-kinds.md). Opisuje

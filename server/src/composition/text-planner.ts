@@ -12,6 +12,7 @@ import type {
   CompositionBlockTrace,
   CompositionBlockPlacement,
   CompositionMovableInsertionFrame,
+  CompositionMovableGraphicFrame,
   CompositionFlowBarrierBoxCandidate,
   CompositionDiagnostic,
   CompositionGraphicPlacement,
@@ -43,11 +44,15 @@ import {
   movableInsertionProposalCandidates,
   movableInsertionProposalRefinements,
   movableInsertionProposalSignature,
+  movableGraphicProposalCandidates,
+  movableGraphicProposalRefinements,
+  type MovableGraphicPolicy,
   type MovableInsertionBounds,
+  type PlannedGraphic,
   type PlannedInsertion,
 } from './text-planner-candidates.js';
 
-export type { MovableInsertionBounds } from './text-planner-candidates.js';
+export type { MovableGraphicPolicy, MovableInsertionBounds } from './text-planner-candidates.js';
 
 export interface TextCompositionPlannerPolicy {
   minimumLinesAtStart?: number;
@@ -69,6 +74,8 @@ export interface TextCompositionPlannerPolicy {
    * evaluated as a complete candidate.
    */
   movableInsertionBounds?: Record<string, MovableInsertionBounds>;
+  /** Optional legal frames for authored graphics with an explicit size. */
+  movableGraphicBounds?: MovableGraphicPolicy;
 }
 
 interface FlowCursor {
@@ -338,6 +345,52 @@ function validateMovableInsertionBounds(
   }
 }
 
+function validateMovableGraphicBounds(
+  graphicProposals: Map<string, PlannedGraphic>,
+  policy: TextCompositionPlannerPolicy,
+  plan: CompositionPlan,
+): void {
+  for (const [key, movable] of Object.entries(policy.movableGraphicBounds ?? {})) {
+    const proposal = graphicProposals.get(key);
+    if (!proposal) {
+      plan.diagnostics.push(diagnostic('error', 'MOVABLE_GRAPHIC_TARGET_NOT_FOUND', `Movable graphic policy '${key}' does not match a planned graphic.`, { details: { key } }));
+      continue;
+    }
+    const { bounds } = movable;
+    const validNumbers = [bounds?.x, bounds?.y, bounds?.width, bounds?.height].every(Number.isFinite);
+    const validShape = Boolean(bounds && bounds.width > 0 && bounds.height > 0);
+    const containsMeasuredBox = Boolean(bounds && proposal.box.width <= bounds.width && proposal.box.height <= bounds.height);
+    if (!validNumbers || !validShape || !containsMeasuredBox || !Number.isInteger(movable.candidateCount) || movable.candidateCount < 1) {
+      plan.diagnostics.push(diagnostic('error', 'MOVABLE_GRAPHIC_BOUNDS_INVALID', `Movable graphic frame '${key}' cannot contain its measured graphic box or candidate count.`, { details: { key, bounds, measuredBox: proposal.box, candidateCount: movable.candidateCount } }));
+    }
+  }
+}
+
+function graphicBox(graphic: NonNullable<CompositionDocument['graphics']>[number], slot: CompositionSlotTemplate): CompositionRect {
+  const width = graphic.size?.width ?? slot.box.width;
+  const height = graphic.size?.height ?? slot.box.height;
+  return {
+    x: slot.box.x + (slot.box.width - width) / 2,
+    y: slot.box.y + (slot.box.height - height) / 2,
+    width,
+    height,
+  };
+}
+
+function seedGraphicProposals(document: CompositionDocument, template: CompositionTemplate): Map<string, PlannedGraphic> {
+  const proposals = new Map<string, PlannedGraphic>();
+  const route = template.routes.main ?? Object.values(template.routes)[0];
+  if (!route) return proposals;
+  for (const graphic of document.graphics ?? []) {
+    const page = graphic.page ?? 1;
+    const layout = routeLayout(route, template, page);
+    const slot = layout?.slots.find((candidate) => candidate.id === graphic.slotId && candidate.kind === 'graphic');
+    if (!slot) continue;
+    proposals.set(graphic.id, { graphicId: graphic.id, page, slotId: graphic.slotId, box: graphicBox(graphic, slot) });
+  }
+  return proposals;
+}
+
 /**
  * Seed hard insertions in reading order. This is intentionally independent of
  * the amount of main text: otherwise the first pass can fill a future quote
@@ -514,6 +567,7 @@ function placeGraphicsForPage(
   document: CompositionDocument,
   pageState: PageState,
   plan: CompositionPlan,
+  graphicProposals: Map<string, PlannedGraphic> = new Map(),
 ): void {
   for (const graphic of document.graphics ?? []) {
     if ((graphic.page ?? 1) !== pageState.page || plan.graphicPlacements.some((placement) => placement.graphicId === graphic.id)) continue;
@@ -535,7 +589,15 @@ function placeGraphicsForPage(
       plan.diagnostics.push(diagnostic('error', 'GRAPHIC_ASSET_NOT_FOUND', `Graphic '${graphic.id}' references missing asset '${graphic.assetId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId, details: { assetId: graphic.assetId } }));
       continue;
     }
-    const points = absoluteGraphicPoints(graphic, definition.box);
+    const proposal = graphicProposals.get(graphic.id);
+    const box = proposal?.box ?? graphicBox(graphic, definition);
+    if (box.x < definition.box.x || box.y < definition.box.y
+      || box.x + box.width > definition.box.x + definition.box.width
+      || box.y + box.height > definition.box.y + definition.box.height) {
+      plan.diagnostics.push(diagnostic('error', 'GRAPHIC_BOX_OUTSIDE_SLOT', `Graphic '${graphic.id}' leaves graphic slot '${graphic.slotId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId, details: { box, slot: definition.box } }));
+      continue;
+    }
+    const points = absoluteGraphicPoints(graphic, box);
     const placement: CompositionGraphicPlacement = {
       id: `graphic:${graphic.id}`,
       graphicId: graphic.id,
@@ -544,7 +606,7 @@ function placeGraphicsForPage(
       page: pageState.page,
       shape: graphic.shape,
       wrap: graphic.wrap ?? 'around',
-      box: { ...definition.box },
+      box: { ...box },
       ...(points ? { points } : {}),
       ...(graphic.vertexCount === undefined ? {} : { vertexCount: graphic.vertexCount }),
       ...(graphic.innerRatio === undefined ? {} : { innerRatio: graphic.innerRatio }),
@@ -559,6 +621,7 @@ function materializeGraphicPages(
   template: CompositionTemplate,
   pages: PageState[],
   plan: CompositionPlan,
+  graphicProposals: Map<string, PlannedGraphic> = new Map(),
 ): void {
   const graphics = document.graphics ?? [];
   if (graphics.length === 0) return;
@@ -575,7 +638,7 @@ function materializeGraphicPages(
     }
     ensurePage(pages, template, route, page, plan.diagnostics, 'graphics');
   }
-  for (const page of pages) placeGraphicsForPage(document, page, plan);
+  for (const page of pages) placeGraphicsForPage(document, page, plan, graphicProposals);
 }
 
 function ensurePage(
@@ -1873,6 +1936,7 @@ function planDocumentOnce(
   template: CompositionTemplate,
   policy: TextCompositionPlannerPolicy,
   insertionProposals: Map<string, PlannedInsertion>,
+  graphicProposals: Map<string, PlannedGraphic>,
 ): CompositionPlan {
   const plan = createPlan(policy.minimumFragmentLines);
   plan.movableInsertionFrames = Object.entries(policy.movableInsertionBounds ?? {}).flatMap(([key, movable]) => {
@@ -1888,11 +1952,24 @@ function planDocumentOnce(
       candidateCount: movable.candidateCount,
     } satisfies CompositionMovableInsertionFrame];
   });
+  plan.movableGraphicFrames = Object.entries(policy.movableGraphicBounds ?? {}).flatMap(([key, movable]) => {
+    const proposal = graphicProposals.get(key);
+    if (!proposal) return [];
+    return [{
+      id: key,
+      graphicId: proposal.graphicId,
+      page: proposal.page,
+      box: { ...movable.bounds },
+      axis: movable.axis ?? 'y',
+      candidateCount: movable.candidateCount,
+    } satisfies CompositionMovableGraphicFrame];
+  });
   validateMovableInsertionBounds(insertionProposals, policy, plan);
+  validateMovableGraphicBounds(graphicProposals, policy, plan);
   validateGrowthPolicies(template, plan);
   recordPlanningPhase(plan, 'preflight', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { layoutCount: template.layouts.length, flowCount: Object.keys(document.flows).length });
   const pages: PageState[] = [];
-  materializeGraphicPages(document, template, pages, plan);
+  materializeGraphicPages(document, template, pages, plan, graphicProposals);
   // A rendered document always has a first page, even when all content
   // flows are empty. This keeps the planner's page count aligned with the
   // PDF backend's initial jsPDF page.
@@ -1954,13 +2031,15 @@ export function createTextCompositionPlanner(
     }
     const candidates: CompositionPlan[] = [];
     const seededProposals = seedInsertionProposals(document, template, metrics);
+    const seededGraphicProposals = seedGraphicProposals(document, template);
     const movableCandidates = movableInsertionProposalCandidates(seededProposals, policy.movableInsertionBounds ?? {});
-    if (movableCandidates.length > 1) {
-      return movableCandidates.map((proposalSet) => planDocumentOnce(document, metrics, template, policy, proposalSet));
+    const movableGraphicCandidates = movableGraphicProposalCandidates(seededGraphicProposals, policy.movableGraphicBounds ?? {});
+    if (movableCandidates.length > 1 || movableGraphicCandidates.length > 1) {
+      return movableCandidates.flatMap((insertionSet) => movableGraphicCandidates.map((graphicSet) => planDocumentOnce(document, metrics, template, policy, insertionSet, graphicSet)));
     }
     let proposals = seededProposals;
     let previousSignature: string | undefined;
-    let latestPlan = planDocumentOnce(document, metrics, template, policy, proposals);
+    let latestPlan = planDocumentOnce(document, metrics, template, policy, proposals, seededGraphicProposals);
     for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
       candidates.push(latestPlan);
       const nextProposals = insertionProposalsFromPlan(document, template, latestPlan, metrics);
@@ -1978,7 +2057,7 @@ export function createTextCompositionPlanner(
       }
       proposals = nextProposals;
       previousSignature = signature;
-      latestPlan = planDocumentOnce(document, metrics, template, policy, proposals);
+      latestPlan = planDocumentOnce(document, metrics, template, policy, proposals, seededGraphicProposals);
     }
     return candidates;
   }
@@ -1988,14 +2067,26 @@ export function createTextCompositionPlanner(
       return planCandidates(document, metrics).at(-1)!;
     },
     planCandidates,
-    candidateRefinementRounds: Math.max(0, ...Object.values(policy.movableInsertionBounds ?? {}).map((bounds) => bounds.refinementRounds ?? 0)),
+    candidateRefinementRounds: Math.max(
+      0,
+      ...Object.values(policy.movableInsertionBounds ?? {}).map((bounds) => bounds.refinementRounds ?? 0),
+      ...Object.values(policy.movableGraphicBounds ?? {}).map((bounds) => bounds.refinementRounds ?? 0),
+    ),
     planRefinedCandidates(document, metrics, selected, round) {
       const seededProposals = seedInsertionProposals(document, template, metrics);
+      const seededGraphicProposals = seedGraphicProposals(document, template);
       const selectedPlacements = selected.graphicPlacements
         .filter((graphic) => graphic.graphicId.startsWith('insertion:'))
         .map(({ graphicId, page, slotId, box }) => ({ graphicId, page, slotId, box }));
-      return movableInsertionProposalRefinements(seededProposals, selectedPlacements, policy.movableInsertionBounds ?? {}, round)
-        .map((proposalSet) => planDocumentOnce(document, metrics, template, policy, proposalSet));
+      const selectedGraphicPlacements = selected.graphicPlacements
+        .filter((graphic) => policy.movableGraphicBounds?.[graphic.graphicId] !== undefined)
+        .map(({ graphicId, page, slotId, box }) => ({ graphicId, page, slotId, box }));
+      const insertionRefinements = movableInsertionProposalRefinements(seededProposals, selectedPlacements, policy.movableInsertionBounds ?? {}, round);
+      const graphicRefinements = movableGraphicProposalRefinements(seededGraphicProposals, selectedGraphicPlacements, policy.movableGraphicBounds ?? {}, round);
+      const insertionCandidates = insertionRefinements.length > 0 ? insertionRefinements : [seededProposals];
+      const graphicCandidates = graphicRefinements.length > 0 ? graphicRefinements : [seededGraphicProposals];
+      if (insertionRefinements.length === 0 && graphicRefinements.length === 0) return [];
+      return insertionCandidates.flatMap((insertionSet) => graphicCandidates.map((graphicSet) => planDocumentOnce(document, metrics, template, policy, insertionSet, graphicSet)));
     },
   };
 }

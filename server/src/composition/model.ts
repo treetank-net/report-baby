@@ -15,6 +15,8 @@ export interface CompositionGraphic {
   assetId?: string;
   /** References a `kind: graphic` slot in the selected page layout. */
   slotId: string;
+  /** Optional painted size inside the graphic slot; omitted means slot-sized. */
+  size?: { width: number; height: number };
   /**
    * The shape is the text-flow boundary. An asset remains a rectangular image;
    * transparent pixels in that image are responsible for its visual silhouette.

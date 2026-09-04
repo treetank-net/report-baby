@@ -24,6 +24,10 @@ function rectsOverlap(first: CompositionRect, second: CompositionRect): boolean 
   return horizontal > Number.EPSILON * scale * 32 && vertical > Number.EPSILON * scale * 32;
 }
 
+function coversFlowWidth(flow: CompositionRect, graphic: CompositionRect): boolean {
+  return graphic.x <= flow.x && graphic.x + graphic.width >= flow.x + flow.width;
+}
+
 function plannedLines(plan: CompositionPlan): CompositionLine[] {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
@@ -91,6 +95,7 @@ export function splitFlowBarrierBoxCandidates(
     const placementBottom = rectBottom(placement.box);
     const boundaries = barriers
       .filter((candidate) => candidate.page === placement.page && candidate.slotId !== placement.slotId && horizontalOverlap(placement.box, candidate.box) && rectsOverlap(placement.box, candidate.box))
+      .filter((candidate) => coversFlowWidth(placement.box, candidate.box))
       .sort((left, right) => left.box.y - right.box.y || left.graphicId.localeCompare(right.graphicId));
     if (boundaries.length === 0) continue;
     let segmentTop = placement.box.y;

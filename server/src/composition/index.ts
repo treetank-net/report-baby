@@ -31,6 +31,7 @@ export type {
   CompositionEvaluation,
   CompositionFlowBarrierBoxCandidate,
   CompositionMovableInsertionFrame,
+  CompositionMovableGraphicFrame,
   CompositionGraphicPlacement,
   CompositionGlyphSamplingBox,
   CompositionLine,
@@ -57,7 +58,7 @@ export { compareCompositionEvaluations, createCompositionEngine, renderCompositi
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluator.js';
 export { compositionDocumentFromInput } from './input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './page-template-adapter.js';
-export { createTextCompositionPlanner, type TextCompositionPlannerPolicy } from './text-planner.js';
+export { createTextCompositionPlanner, type MovableGraphicPolicy, type MovableInsertionBounds, type TextCompositionPlannerPolicy } from './text-planner.js';
 export { createTextCompositionEngine, type TextCompositionEngineOptions } from './text-engine.js';
 export { fitContainBox, imagePixelAtPoint } from './image-geometry.js';
 export {

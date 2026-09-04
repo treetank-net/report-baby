@@ -23,7 +23,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/model.ts` | Renderer-neutral document and template types | all composition modules | planning decisions or mutable runtime state |
 | `composition/page-template-adapter.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
 | `composition/text-planner.ts` | Text measurement, wrapping adapter, routing, block placement, obstacle decisions and trace materialization | `text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks |
-| `composition/text-planner-candidates.ts` | Deterministic legal position variants for an existing movable insertion frame | `text-planner.ts` | document semantics, score, rendering, candidate evaluation |
+| `composition/text-planner-candidates.ts` | Deterministic legal position variants for existing movable insertion and authored-graphic frames | `text-planner.ts` | document semantics, score, rendering, candidate evaluation |
 | `composition/text-wrapping.ts` | Renderer-neutral word wrapping, available intervals, flow-barrier continuation and obstacle-gap inspection | `text-planner.ts` | page routing, insertion policy, score, PDF drawing |
 | `composition/flow-barriers.ts` | Flow-placement projection and renderer-neutral splitting of text areas around wrapping graphics | `text-planner.ts`, trace/evaluator consumers through `CompositionPlan` | page orchestration, text measurement, candidate ranking, PDF drawing |
 | `composition/glyph-objects.ts` | Resolution of authored and generated decorative glyphs against final text or graphic bounds | `text-planner.ts`, glyph/rendering tests through `CompositionPlan` | text flow, obstacle reservation, candidate ranking, PDF drawing |
@@ -81,7 +81,7 @@ rather than importing the other module's configuration group.
 
 Extract a module only when it removes a responsibility from a caller while
 keeping a smaller interface. The safe seams currently are deterministic
-movable-insertion candidate generation, renderer-neutral wrapping, and
+movable-placement candidate generation, renderer-neutral wrapping, and
 flow-barrier projection, and glyph-object resolution. The latter transforms
 existing text or graphic geometry into painted decoration placements; it does
 not reserve space or decide where the target should go. Glyph sampling is a

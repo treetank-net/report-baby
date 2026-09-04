@@ -199,6 +199,16 @@ export interface CompositionMovableInsertionFrame {
   candidateCount: number;
 }
 
+/** A legal frame used to generate movable authored-graphic candidates. */
+export interface CompositionMovableGraphicFrame {
+  id: string;
+  graphicId: string;
+  page: number;
+  box: CompositionBox;
+  axis: 'x' | 'y';
+  candidateCount: number;
+}
+
 export interface CompositionLine {
   blockId: string;
   flowId: string;
@@ -352,6 +362,8 @@ export interface CompositionPlan {
   flowBarrierBoxCandidates?: CompositionFlowBarrierBoxCandidate[];
   /** Legal frame used to generate movable insertion candidates. */
   movableInsertionFrames?: CompositionMovableInsertionFrame[];
+  /** Legal frames used to generate movable authored-graphic candidates. */
+  movableGraphicFrames?: CompositionMovableGraphicFrame[];
   /** Ordinary flowing text only. Insertions are exposed separately below. */
   lines: CompositionLine[];
   /** Text painted into fixed insertion/obstacle boxes, outside the main route. */
