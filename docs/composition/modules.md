@@ -27,6 +27,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/text-wrapping.ts` | Renderer-neutral word wrapping, available intervals, flow-barrier continuation and obstacle-gap inspection | `text-planner.ts` | page routing, insertion policy, score, PDF drawing |
 | `composition/flow-barriers.ts` | Flow-placement projection and renderer-neutral splitting of text areas around wrapping graphics | `text-planner.ts`, trace/evaluator consumers through `CompositionPlan` | page orchestration, text measurement, candidate ranking, PDF drawing |
 | `composition/glyph-objects.ts` | Resolution of authored and generated decorative glyphs against final text or graphic bounds | `text-planner.ts`, glyph/rendering tests through `CompositionPlan` | text flow, obstacle reservation, candidate ranking, PDF drawing |
+| `composition/glyph-sampling.ts` | Renderer-neutral character-cell geometry and foreground metadata for contrast sampling | `text-planner.ts`, contrast tests through `CompositionLine` | raster decoding, contrast scoring, placement decisions, PDF drawing |
 | `composition/engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | text engine, composition tests | wrapping, geometry invention, PDF drawing |
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
@@ -76,6 +77,8 @@ keeping a smaller interface. The safe seams currently are deterministic
 movable-insertion candidate generation, renderer-neutral wrapping, and
 flow-barrier projection, and glyph-object resolution. The latter transforms
 existing text or graphic geometry into painted decoration placements; it does
-not reserve space or decide where the target should go. Tests continue to call
-the public planner and engine interfaces; they do not import the extracted
-implementation merely to increase coverage.
+not reserve space or decide where the target should go. Glyph sampling is a
+separate geometry seam: it describes a full line-height cell per visible
+character, while the contrast provider owns sampling and scoring. Tests
+continue to call the public planner and engine interfaces; they do not import
+the extracted implementation merely to increase coverage.

@@ -1,6 +1,6 @@
 # Plan 06 — utrzymywalność planera
 
-Status: mapa modułów i cztery bezpieczne seamy wydzielone; dalsze wydzielanie
+Status: mapa modułów i pięć bezpiecznych seamów wydzielonych; dalsze wydzielanie
 wymaga testów zachowania po każdym kroku
 
 ## Wykonane w pierwszym kroku
@@ -16,6 +16,8 @@ wymaga testów zachowania po każdym kroku
   opływane zostały wydzielone do `composition/flow-barriers.ts`;
 - rozwiązywanie authored/generated glyphów względem końcowych ramek tekstu lub
   grafiki zostało wydzielone do `composition/glyph-objects.ts`;
+- budowanie pełnych komórek próbkowania kontrastu dla widocznych znaków zostało
+  wydzielone do `composition/glyph-sampling.ts`;
 - `createTextCompositionPlanner` zachował ten sam interfejs, a testy nadal
   obserwują zachowanie przez publiczny planner i engine;
 - composition gate potwierdza niezmienione planowanie, scoring, rendering,
