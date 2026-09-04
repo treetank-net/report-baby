@@ -1,6 +1,7 @@
 # Plan 07 — block kinds i miękkie insertiony
 
-Status: rozszerzenie po ustabilizowaniu planów 01–06
+Status: mapa obecnych block kinds wykonana; soft insertiony pozostają kolejnym
+etapem po ustabilizowaniu planów 01–06
 
 ## Cel
 
@@ -22,6 +23,13 @@ wbudowany w szablon jako „zawsze trzecia pozycja na stronie”.
 Grafiki, cytaty, glyphy, tabele i atomic blocks mają już częściowe ścieżki w
 composition. Nie mają jeszcze jednolitego, konfigurowalnego mechanizmu
 miękkiego wyboru pozycji z feedbackiem score.
+
+Kanoniczna mapa obecnych rodzajów bloków znajduje się w
+[`docs/composition/block-kinds.md`](../composition/block-kinds.md). Opisuje
+ona osobno `heading`, `paragraph`, `list-item`, `image`, `table`, `metric` i
+`chart`, a także wyjaśnia, dlaczego quote jest rolą tekstu, a glyph nie jest
+blokiem treści. Test dokumentacji sprawdza, że każdy kind z modelu jest w tej
+mapie wymieniony.
 
 Istnieje również starszy plan miękkich insertionów:
 [`soft-insertion-placement-plan.md`](../research/soft-insertion-placement-plan.md).

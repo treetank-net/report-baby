@@ -10,6 +10,8 @@ const compositionDocsRoot = join(root, '..', 'docs/composition');
 const evaluatorPath = join(root, 'src/composition/evaluator.ts');
 const plannerPath = join(root, 'src/composition/text-planner.ts');
 const compositionSourceRoot = join(root, 'src/composition');
+const modelPath = join(compositionSourceRoot, 'model.ts');
+const blockKindsDocumentationPath = join(compositionDocsRoot, 'block-kinds.md');
 
 function leafPaths(value, prefix = '') {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [prefix];
@@ -109,4 +111,16 @@ if (ownershipViolations.length > 0) {
   ].join('\n'));
 }
 
-console.log(`PASS: composition documentation covers ${documentedGroups.join(', ')}, ${new Set(hardRuleCodes).size} evaluator hard-rule code(s), ${pdfCompositionFields.length} composition-linked pdf field(s), and configuration ownership`);
+const model = await readFile(modelPath, 'utf8');
+const blockKindsDocumentation = await readFile(blockKindsDocumentationPath, 'utf8');
+const blockKindsMatch = model.match(/export type CompositionBlockKind = ([^;]+);/u);
+const blockKinds = [...(blockKindsMatch?.[1].matchAll(/'([^']+)'/gu) ?? [])].map((match) => match[1]);
+const missingBlockKinds = blockKinds.filter((kind) => !new RegExp(`\\b${kind}\\b`, 'u').test(blockKindsDocumentation));
+if (missingBlockKinds.length > 0) {
+  throw new Error([
+    'Documentation contract failed: every CompositionBlockKind must be present in the canonical block-kind map.',
+    `Missing block kinds: ${missingBlockKinds.join(', ')}`,
+  ].join('\n'));
+}
+
+console.log(`PASS: composition documentation covers ${documentedGroups.join(', ')}, ${new Set(hardRuleCodes).size} evaluator hard-rule code(s), ${pdfCompositionFields.length} composition-linked pdf field(s), configuration ownership, and ${blockKinds.length} block kind(s)`);

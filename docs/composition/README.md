@@ -23,6 +23,9 @@ selected plan and does not make after-the-fact text-flow decisions.
   result observability.
 - [Configuration](configuration.md) — documented quality, search, scoring,
   and composition-linked PDF fields, including their interactions.
+- [Block kinds](block-kinds.md) — the canonical input, measurement,
+  placement, collision, evaluation and rendering path for each current block
+  kind.
 - [Module map](modules.md) — ownership, interfaces, dependency direction, and
   the current planner/evaluator/renderer seams.
 - [Decisions](decisions.md) — why the system has this division of
