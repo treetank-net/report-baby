@@ -1806,6 +1806,22 @@ try {
   assert.equal(sevenMetrics.evaluation.status, 'rejected');
   assert.ok(sevenMetrics.evaluation.diagnostics.some((item) => item.code === 'MAX_PAGES_EXCEEDED' || item.code === 'ATOMIC_BLOCK_NOT_FULLY_PLACED'));
 
+  // Public planner-loop contract: a stable text plan needs no reflow pass,
+  // while a changed insertion proposal produces a second candidate. The
+  // same loop must also preserve non-overlapping graphic flow, structured
+  // fragments, and finite final geometry for every placement kind.
+  const stableCandidate = spacingEvaluationPhase?.details?.candidates?.[0];
+  assert.equal(stableCandidate?.reflowPasses, 1, 'a stable text plan must expose one stability check and no additional planning pass');
+  assert.equal(spacingReflowPhases.length, 1, 'a stable text plan must not trigger a second full reflow');
+  assert.equal(boundaryEvaluationPhase?.details?.candidates?.length, 2, 'a moved insertion must expose both pre-reflow and post-reflow candidates');
+  assert.deepEqual(boundaryEvaluationPhase?.details?.candidates?.map((candidate) => candidate.reflowPasses), [1, 1], 'each moved-insertion candidate must expose its stability-check count');
+  assert.equal(graphicResult.evaluation.diagnostics.some((item) => item.code === 'LINE_GRAPHIC_OVERLAP'), false, 'the planner loop must preserve graphic exclusion geometry');
+  assert.ok(tableResult.plan.tablePlacements.length > 1 && fourMetrics.plan.blockPlacements.length === 4, 'the planner loop must preserve structured block placement and table continuation');
+  for (const plan of [result.plan, boundaryReflow.plan, graphicResult.plan, tableResult.plan, fourMetrics.plan]) {
+    assert.ok([...plan.slots, ...plan.placements, ...plan.blockPlacements, ...plan.tablePlacements, ...plan.graphicPlacements]
+      .every((placement) => Object.values(placement.box).every((value) => Number.isFinite(value))), 'the planner loop must expose finite geometry for every final placement');
+  }
+
   const introOnlyTemplate = {
     maxPages: 2,
     layouts: [
