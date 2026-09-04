@@ -26,6 +26,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/text-planner-candidates.ts` | Deterministic legal position variants for an existing movable insertion frame | `text-planner.ts` | document semantics, score, rendering, candidate evaluation |
 | `composition/text-wrapping.ts` | Renderer-neutral word wrapping, available intervals, flow-barrier continuation and obstacle-gap inspection | `text-planner.ts` | page routing, insertion policy, score, PDF drawing |
 | `composition/flow-barriers.ts` | Flow-placement projection and renderer-neutral splitting of text areas around wrapping graphics | `text-planner.ts`, trace/evaluator consumers through `CompositionPlan` | page orchestration, text measurement, candidate ranking, PDF drawing |
+| `composition/glyph-objects.ts` | Resolution of authored and generated decorative glyphs against final text or graphic bounds | `text-planner.ts`, glyph/rendering tests through `CompositionPlan` | text flow, obstacle reservation, candidate ranking, PDF drawing |
 | `composition/engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | text engine, composition tests | wrapping, geometry invention, PDF drawing |
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
@@ -73,8 +74,8 @@ interface rather than importing the other module's configuration group.
 Extract a module only when it removes a responsibility from a caller while
 keeping a smaller interface. The safe seams currently are deterministic
 movable-insertion candidate generation, renderer-neutral wrapping, and
-flow-barrier projection. The latter transforms existing plan placements and
-graphic placements into trace/evaluator geometry; it does not decide where a
-graphic or text block should go. Tests continue to call the public planner and
-engine interfaces; they do not import the extracted implementation merely to
-increase coverage.
+flow-barrier projection, and glyph-object resolution. The latter transforms
+existing text or graphic geometry into painted decoration placements; it does
+not reserve space or decide where the target should go. Tests continue to call
+the public planner and engine interfaces; they do not import the extracted
+implementation merely to increase coverage.
