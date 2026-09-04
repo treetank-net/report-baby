@@ -163,9 +163,9 @@ function lineBoxParity(plan, pdfPath) {
 }
 
 try {
-  const { renderReportCompositionShadowPdf, renderReportPdfDetailed } = await import(reportBundle);
+  const { renderReportCompositionPdf, renderReportPdfDetailed } = await import(reportBundle);
   const { createJsPdfTextBackend, createTextCompositionEngine, renderComposition } = await import(backendBundle);
-  const { compositionPdfBackendOptionsFromRenderConfig, planReportCompositionShadow } = await import(shadowBundle);
+  const { compositionPdfBackendOptionsFromRenderConfig, planReportComposition } = await import(shadowBundle);
   const { newPdf } = await import(primitivesBundle);
   const { compileTemplateSource } = await import(templateBundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
@@ -189,7 +189,7 @@ try {
   assert.equal(oracle.diagnostics.composition?.evaluation.status, 'accepted', 'public editorial rendering must execute an accepted composition plan');
   assert.ok((oracle.diagnostics.composition?.plan.lines.length ?? 0) > 0, 'public editorial rendering must expose concrete planner lines');
   const shadowPdf = newPdf();
-  const shadow = planReportCompositionShadow(shadowPdf, compiled, geometry, input, { family: 'DejaVu', maxPages: 3 });
+  const shadow = planReportComposition(shadowPdf, compiled, geometry, input, { family: 'DejaVu', maxPages: 3 });
   assert.equal(shadow.evaluation.status, 'accepted', JSON.stringify(shadow.evaluation));
   const shadowArtifact = renderComposition(shadow.document, shadow, createJsPdfTextBackend(shadowPdf, 'DejaVu', (await import(shadowBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
   const shadowPath = join(temporary, 'shadow.pdf');
@@ -273,7 +273,7 @@ try {
       assert.ok(right.number > left.number, `PDF number ${right.number} must not appear to the right and above number ${left.number}`);
     }
   }
-  const integrated = await renderReportCompositionShadowPdf('pages/editorial-two-column', input);
+  const integrated = await renderReportCompositionPdf('pages/editorial-two-column', input);
   const integratedPath = join(temporary, 'integrated-shadow.pdf');
   await writeFile(integratedPath, integrated.buffer);
   const integratedText = execFileSync('pdftotext', ['-layout', integratedPath, '-'], { encoding: 'utf8' });
@@ -311,7 +311,7 @@ try {
     if (reference === 'root://tall-authored.png') return tallImagePath;
     assert.fail(`unexpected image reference: ${reference}`);
   } };
-  const authoredImage = await renderReportCompositionShadowPdf('pages/editorial-two-column', legacyFixtureToCompositionInput(authoredImageData), undefined, authoredImageContext);
+  const authoredImage = await renderReportCompositionPdf('pages/editorial-two-column', legacyFixtureToCompositionInput(authoredImageData), undefined, authoredImageContext);
   assert.equal(authoredImage.composition.evaluation.status, 'accepted', JSON.stringify(authoredImage.composition.evaluation));
   const authoredImagePlacement = authoredImage.composition.plan.blockPlacements.find((placement) => placement.kind === 'image');
   assert.ok(authoredImagePlacement?.imageBox, 'image placement should expose its resolved image box');
@@ -326,7 +326,7 @@ try {
   const imageList = execFileSync('pdfimages', ['-list', authoredImagePdfPath], { encoding: 'utf8' });
   assert.match(imageList, /image\s+no/u);
   assert.match(imageList, /320\s+180/u);
-  const introAuthoredImage = await renderReportCompositionShadowPdf('pages/editorial-two-column', legacyFixtureToCompositionInput({
+  const introAuthoredImage = await renderReportCompositionPdf('pages/editorial-two-column', legacyFixtureToCompositionInput({
     intro: 'Intro text before the image.\n\n![Intro fixture](root://authored.png)\n\nIntro text after the image.',
     footer: 'Intro image fixture',
   }), undefined, authoredImageContext);
@@ -334,7 +334,7 @@ try {
   assert.deepEqual(introAuthoredImage.composition.plan.blockPlacements.filter((placement) => placement.kind === 'image').length, 1);
   assert.ok(introAuthoredImage.composition.plan.lines.some((line) => line.text.includes('Intro text before')));
   assert.ok(introAuthoredImage.composition.plan.lines.some((line) => line.text.includes('Intro text after')));
-  const tallImage = await renderReportCompositionShadowPdf('pages/editorial-two-column', legacyFixtureToCompositionInput({
+  const tallImage = await renderReportCompositionPdf('pages/editorial-two-column', legacyFixtureToCompositionInput({
     sections: [{ heading: 'Tall authored image', content: [{ type: 'image', src: 'root://tall-authored.png', alt: 'Tall blue fixture' }] }],
     footer: 'Tall authored image fixture',
   }), undefined, authoredImageContext);

@@ -459,11 +459,6 @@ export async function renderReportCompositionPdf(name: string, data: Composition
   return { buffer: Buffer.from(doc.output('arraybuffer')), composition, drawings };
 }
 
-/** Alias retained for the prototype harness; it executes the same planner route. */
-export async function renderReportCompositionShadowPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext) {
-  return renderReportCompositionPdf(name, data, theme, sourceContext);
-}
-
 export function resolveReportPlanOnly(name: string, data: CompositionInput, theme = defaultRenderTheme()): ResolvedReportPlan {
   const { geometry } = compositionGeometry(name);
   const plan = resolveReportPlan({ templateRef: name, theme, geometry, pageCount: 1, compositionDocument: compositionDocumentFromInput(data) });

@@ -35,7 +35,7 @@ const validEditorialInput = (body) => legacyFixtureToCompositionInput({
 });
 
 try {
-  const { planReportCompositionShadow } = await import(bundles.shadow);
+  const { planReportComposition } = await import(bundles.shadow);
   const { newPdf } = await import(bundles.primitives);
   const { compileTemplateSource } = await import(bundles.template);
   const { pageGeometryFromTemplate } = await import(bundles.geometry);
@@ -43,7 +43,7 @@ try {
   const compiled = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(compiled);
 
-  const onePageLimit = planReportCompositionShadow(
+  const onePageLimit = planReportComposition(
     newPdf('portrait', [geometry.width, geometry.height]),
     compiled,
     geometry,
@@ -55,7 +55,7 @@ try {
   assert.ok(onePageLimit.plan.residualContent.length > 0, 'content beyond the configured limit must remain visible as residual content');
   assert.ok(onePageLimit.plan.lines.some((line) => line.blockId === 'intro'), 'the valid intro fixture must be placed before the page limit is reached');
 
-  const genuinelyTooLong = planReportCompositionShadow(
+  const genuinelyTooLong = planReportComposition(
     newPdf('portrait', [geometry.width, geometry.height]),
     compiled,
     geometry,

@@ -466,7 +466,7 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
 }
 
 try {
-  const { planReportCompositionShadow, compositionStylesFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig } = await import(shadowBundle);
+  const { planReportComposition, compositionStylesFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig } = await import(shadowBundle);
   const { compareCompositionEvaluations, evaluateCompositionPlan } = await import(backendBundle);
   const { createJsPdfTextBackend, renderComposition } = await import(backendBundle);
   const { newPdf } = await import(primitivesBundle);
@@ -485,7 +485,7 @@ try {
   assert.equal(fixture.sourceShape.filter((block) => block.role === 'quote').length, 4, 'fixture must retain all four authored quote insertions');
 
   const pdf = newPdf('portrait', [geometry.width, geometry.height]);
-  const result = planReportCompositionShadow(pdf, template, geometry, fixture.input, {
+  const result = planReportComposition(pdf, template, geometry, fixture.input, {
     family: 'DejaVu',
     maxPages: 12,
     styles: compositionStylesFromRenderConfig({
@@ -516,7 +516,7 @@ try {
     },
   };
   const movablePdf = newPdf('portrait', [geometry.width, geometry.height]);
-  const movableResult = planReportCompositionShadow(movablePdf, template, geometry, fixture.input, {
+  const movableResult = planReportComposition(movablePdf, template, geometry, fixture.input, {
     family: 'DejaVu',
     maxPages: 12,
     policy: movableQuotePolicy,
@@ -784,7 +784,7 @@ try {
     text: 'Kierowców brakuje już niemal w każdym powiecie. Branża stawia na technologie i nowe kompetencje',
   };
   const headerOverflowPdf = newPdf('portrait', [geometry.width, geometry.height]);
-  const headerOverflow = planReportCompositionShadow(headerOverflowPdf, template, geometry, headerOverflowInput, { family: 'DejaVu', maxPages: 12 });
+  const headerOverflow = planReportComposition(headerOverflowPdf, template, geometry, headerOverflowInput, { family: 'DejaVu', maxPages: 12 });
   assert.equal(headerOverflow.evaluation.status, 'accepted', JSON.stringify(headerOverflow.evaluation));
   const headerOverflowArtifact = renderComposition(headerOverflow.document, headerOverflow, createJsPdfTextBackend(headerOverflowPdf, 'DejaVu', compositionStylesFromRenderConfig({
     foreground: [25, 51, 79],

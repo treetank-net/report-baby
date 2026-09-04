@@ -67,7 +67,7 @@ const buildGeometry = runProcess('npx', [
 if (buildGeometry.status !== 0) throw new Error(`composition shadow geometry bundle failed: ${buildGeometry.stderr || buildGeometry.stdout}`);
 
 try {
-  const { compositionChartStyleFromRenderConfig, compositionMetricStyleFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig, compositionStylesFromRenderConfig, compositionTableStyleFromRenderConfig, planReportCompositionShadow } = await import(bundle);
+  const { compositionChartStyleFromRenderConfig, compositionMetricStyleFromRenderConfig, compositionPdfBackendOptionsFromRenderConfig, compositionStylesFromRenderConfig, compositionTableStyleFromRenderConfig, planReportComposition } = await import(bundle);
   const { combineJsPdfCompositionBlockCapabilities, createJsPdfChartBlockCapabilities, createJsPdfMetricBlockCapabilities, createJsPdfTableBlockCapabilities, createJsPdfTextBackend, renderComposition } = await import(backendBundle);
   const { newPdf } = await import(primitivesBundle);
   const { compileTemplateSource } = await import(templateBundle);
@@ -83,7 +83,7 @@ try {
   };
   const intro = Array.from({ length: 12 }, () => loremIpsum({ count: 1, units: 'sentences', sentenceLowerBound: 8, sentenceUpperBound: 14, random })).join(' ');
   const body = Array.from({ length: 70 }, () => loremIpsum({ count: 1, units: 'sentences', sentenceLowerBound: 8, sentenceUpperBound: 14, random })).join(' ');
-  const result = planReportCompositionShadow(pdf, compiled, geometry, legacyFixtureToCompositionInput({
+  const result = planReportComposition(pdf, compiled, geometry, legacyFixtureToCompositionInput({
     intro,
     sections: [{ heading: 'A measured continuation', body }],
     footer: 'Prepared for the editorial team.',
@@ -103,7 +103,7 @@ try {
   await writeFile(artifactPath, artifact);
   assert.equal(artifact.subarray(0, 5).toString(), '%PDF-');
   assert.equal(pdf.getNumberOfPages(), result.plan.pages.length);
-  const unsupported = planReportCompositionShadow(newPdf(), compiled, geometry, legacyFixtureToCompositionInput({
+  const unsupported = planReportComposition(newPdf(), compiled, geometry, legacyFixtureToCompositionInput({
     title: 'This title needs the report chrome backend.',
     kpis: [{ label: 'Reach', value: '184k' }],
     sections: [{ heading: 'Body', body: 'The body is still represented, but the title and KPI are not.' }],
@@ -129,7 +129,7 @@ try {
     valueColor: [25, 35, 50],
     deltaColor: [20, 120, 70],
   }));
-  const metricResult = planReportCompositionShadow(metricPdf, metricCompiled, metricGeometry, legacyFixtureToCompositionInput({
+  const metricResult = planReportComposition(metricPdf, metricCompiled, metricGeometry, legacyFixtureToCompositionInput({
     kpis: [
       { label: 'Reach', value: 1200, delta: '+12%', trend: 'up' },
       { label: 'Leads', value: 84 },
@@ -166,7 +166,7 @@ try {
     gridColor: [225, 230, 238],
     palette: [[50, 110, 210], [210, 110, 70], [80, 155, 100]],
   }));
-  const chartResult = planReportCompositionShadow(chartPdf, chartCompiled, chartGeometry, legacyFixtureToCompositionInput({
+  const chartResult = planReportComposition(chartPdf, chartCompiled, chartGeometry, legacyFixtureToCompositionInput({
     charts: [{ type: 'bar', title: 'Reach by channel', subtitle: 'Qualified visits', data: [{ label: 'Search', value: 12 }, { label: 'Social', value: 8 }] }],
     sections: [{ heading: 'Narrative after chart', body: 'A chart is an atomic block and the narrative starts in the remaining text band.' }],
   }), { family: 'DejaVu', maxPages: 2, measureBlock: chartCapabilities.measureBlock });
@@ -230,7 +230,7 @@ try {
     metric: { measureBlock: fluxMetricCapabilities.measureBlock, renderer: fluxMetricCapabilities.renderer },
     chart: { measureBlock: fluxChartCapabilities.measureBlock, renderer: fluxChartCapabilities.renderer },
   });
-  const fluxResult = planReportCompositionShadow(fluxPdf, fluxCompiled, fluxGeometry, fluxInput, {
+  const fluxResult = planReportComposition(fluxPdf, fluxCompiled, fluxGeometry, fluxInput, {
     family: 'DejaVu',
     maxPages: 2,
     measureBlock: fluxCapabilities.measureBlock,
@@ -257,7 +257,7 @@ try {
     textColor: [20, 30, 45],
     lineColor: [180, 190, 205],
   }));
-  const tableResult = planReportCompositionShadow(tablePdf, tableCompiled, tableGeometry, legacyFixtureToCompositionInput({
+  const tableResult = planReportComposition(tablePdf, tableCompiled, tableGeometry, legacyFixtureToCompositionInput({
     table: {
       head: ['Channel', 'Reach'],
       body: Array.from({ length: 10 }, (_, index) => [`Channel ${index + 1}`, index + 1]),
@@ -295,7 +295,7 @@ try {
     textColor: [20, 30, 45],
     lineColor: [180, 190, 205],
   }));
-  const tableGapResult = planReportCompositionShadow(tableGapPdf, tableGapCompiled, tableGapGeometry, {
+  const tableGapResult = planReportComposition(tableGapPdf, tableGapCompiled, tableGapGeometry, {
     flows: {
       main: {
         continuation: 'forbidden',

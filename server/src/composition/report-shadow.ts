@@ -49,7 +49,7 @@ function pdfNumber(pdf: Record<string, number>, key: string): number {
 }
 
 /**
- * Keep the composition shadow on the same typography seam as the report
+ * Keep the composition adapter on the same typography seam as the report
  * renderer. The planner receives measured widths from jsPDF, while every
  * tunable size, line height and baseline offset comes from render-config.yml.
  */
@@ -358,18 +358,4 @@ export function planReportComposition(
   };
   const result = createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics);
   return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };
-}
-
-/** Compatibility names retained for the prototype harness. */
-export type ReportCompositionShadowOptions = ReportCompositionOptions;
-export type ReportCompositionShadowResult = ReportCompositionResult;
-
-export function planReportCompositionShadow(
-  doc: jsPDF,
-  compiled: CompiledTemplate,
-  geometry: PageGeometry,
-  data: CompositionInput,
-  options: ReportCompositionShadowOptions,
-): ReportCompositionShadowResult {
-  return planReportComposition(doc, compiled, geometry, data, options);
 }
