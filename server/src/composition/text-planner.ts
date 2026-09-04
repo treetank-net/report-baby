@@ -36,6 +36,7 @@ import {
 } from './flow-barriers.js';
 import { placeGlyphObjects } from './glyph-objects.js';
 import { glyphSamplingBoxes } from './glyph-sampling.js';
+import { hasRoleEligibleSlot, isAtomicBlock, slotFor } from './route-slots.js';
 import { obstructionAcrossLineBands, wrapText, type WrappedLine } from './text-wrapping.js';
 import {
   movableInsertionProposalCandidates,
@@ -93,14 +94,6 @@ function wordsOf(text: string): string[] {
 
 function textOf(block: CompositionBlock): string {
   return block.text?.trim() ?? '';
-}
-
-function isAtomicBlock(block: CompositionBlock): boolean {
-  return block.atomic === true || block.kind === 'metric' || block.kind === 'chart';
-}
-
-function requiresBlockSlot(block: CompositionBlock): boolean {
-  return isAtomicBlock(block) && (block.kind !== 'image' || block.role === 'chart' || block.role === 'metric');
 }
 
 function styleFor(block: CompositionBlock): string {
@@ -162,58 +155,8 @@ function insertionSlotFor(
   return candidates.find((slot) => slot.box.y + 0.001 >= currentBottom);
 }
 
-function slotFor(
-  layout: CompositionLayoutTemplate,
-  slotIds: string[],
-  routeIndex: number,
-  flowId: string,
-  block: CompositionBlock,
-  slots?: Map<string, CompositionSlot>,
-  pageState?: PageState,
-): { definition: CompositionSlotTemplate; routeIndex: number } | undefined {
-  const routeHasBlockSlot = slotIds.some((id) => layout.slots.some((slot) => slot.id === id && slot.kind === 'block'));
-  for (let index = routeIndex; index < slotIds.length; index += 1) {
-    const id = slotIds[index];
-    const definition = layout.slots.find((slot) => slot.id === id && (slot.flowId === undefined || slot.flowId === flowId));
-    if (!definition) continue;
-    if (definition.allowedRoles?.includes('quote') && slots?.get(id)?.state === 'exhausted') continue;
-    if (definition.allowedRoles && !definition.allowedRoles.includes(block.role)) continue;
-    if (definition.allowedBlockIds && !blockMatchesAllowedId(block.id, definition.allowedBlockIds)) continue;
-    if (definition.kind === 'block' && !isAtomicBlock(block) && block.kind !== 'table') continue;
-    if (definition.allowedBlockKinds && !definition.allowedBlockKinds.includes(block.kind)) continue;
-    if (definition.kind === 'text' && routeHasBlockSlot && (requiresBlockSlot(block) || block.kind === 'table') && !definition.allowedBlockKinds?.includes(block.kind)) continue;
-    return { definition, routeIndex: index };
-  }
-  return undefined;
-}
-
-function hasRoleEligibleSlot(
-  layout: CompositionLayoutTemplate,
-  slotIds: string[],
-  routeIndex: number,
-  flowId: string,
-  block: CompositionBlock,
-  slots?: Map<string, CompositionSlot>,
-  pageState?: PageState,
-): boolean {
-  const routeHasBlockSlot = slotIds.some((id) => layout.slots.some((slot) => slot.id === id && slot.kind === 'block'));
-  return slotIds.slice(routeIndex).some((id) => layout.slots.some((slot) => {
-    if (slot.id !== id || (slot.flowId !== undefined && slot.flowId !== flowId)) return false;
-    if (slot.allowedRoles?.includes('quote') && slots?.get(id)?.state === 'exhausted') return false;
-    if (slot.allowedRoles && !slot.allowedRoles.includes(block.role)) return false;
-    if (slot.kind === 'block' && !isAtomicBlock(block) && block.kind !== 'table') return false;
-    if (slot.allowedBlockKinds && !slot.allowedBlockKinds.includes(block.kind)) return false;
-    if (slot.kind === 'text' && routeHasBlockSlot && (requiresBlockSlot(block) || block.kind === 'table') && !slot.allowedBlockKinds?.includes(block.kind)) return false;
-    return !slot.allowedBlockIds || blockMatchesAllowedId(block.id, slot.allowedBlockIds);
-  }));
-}
-
 function slotId(page: number, id: string): string {
   return `${page}:${id}`;
-}
-
-function blockMatchesAllowedId(blockId: string, allowedIds: string[]): boolean {
-  return allowedIds.some((allowedId) => blockId === allowedId || blockId.startsWith(`${allowedId}:`));
 }
 
 function lineHeight(metrics: CompositionTextMetrics, block: CompositionBlock): number {
@@ -1391,7 +1334,7 @@ function planFlow(
     // behind the next ordinary block merely to fill an earlier segment.
     let selectedSlot = insertionDefinition
       ? { definition: insertionDefinition, routeIndex: cursor.routeIndex }
-      : slotFor(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots, currentPage);
+      : slotFor(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots);
     if (block.role !== 'quote' && cursor.startWord > 0 && selectedSlot) {
       const insertionIndex = availableRouteSlots.findIndex((slotId, index) => index >= cursor.routeIndex
         && index < selectedSlot!.routeIndex
@@ -1399,11 +1342,11 @@ function planFlow(
         && currentPage.slots.get(slotId)?.state === 'open');
       if (insertionIndex >= 0) {
         collapseInsertionBeforeContinuation(currentPage, availableRouteSlots, insertionIndex, plan, flowId, block.id);
-        selectedSlot = slotFor(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots, currentPage);
+        selectedSlot = slotFor(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots);
       }
     }
     if (!selectedSlot || (selectedSlot.definition.kind !== 'text' && selectedSlot.definition.kind !== 'block')) {
-      if (selectedSlot === undefined && !hasRoleEligibleSlot(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots, currentPage)) {
+      if (selectedSlot === undefined && !hasRoleEligibleSlot(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots)) {
         if (block.role === 'quote' && route.continuation === 'allowed' && cursor.page === startPage && !deferredQuote) {
           const nextLayout = routeLayout(route, template, cursor.page + 1);
           const nextSlotIds = nextLayout ? routeSlots(route, nextLayout) : [];

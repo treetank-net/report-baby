@@ -28,6 +28,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/flow-barriers.ts` | Flow-placement projection and renderer-neutral splitting of text areas around wrapping graphics | `text-planner.ts`, trace/evaluator consumers through `CompositionPlan` | page orchestration, text measurement, candidate ranking, PDF drawing |
 | `composition/glyph-objects.ts` | Resolution of authored and generated decorative glyphs against final text or graphic bounds | `text-planner.ts`, glyph/rendering tests through `CompositionPlan` | text flow, obstacle reservation, candidate ranking, PDF drawing |
 | `composition/glyph-sampling.ts` | Renderer-neutral character-cell geometry and foreground metadata for contrast sampling | `text-planner.ts`, contrast tests through `CompositionLine` | raster decoding, contrast scoring, placement decisions, PDF drawing |
+| `composition/route-slots.ts` | Pure compatibility checks and first-compatible-slot selection for a block in a route | `text-planner.ts` | page mutation, occupied-space checks, insertion placement, scoring |
 | `composition/engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | text engine, composition tests | wrapping, geometry invention, PDF drawing |
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
@@ -44,7 +45,7 @@ make composition decisions.
 
 `text-planner.ts` exposes `CompositionPlanner` through
 `createTextCompositionPlanner`. Its implementation may use private modules for
-wrapping, flow-barrier geometry or candidate geometry, but callers should not
+wrapping, route-slot compatibility, flow-barrier geometry or candidate geometry, but callers should not
 need to know those modules separately. `text-wrapping.ts` has a private
 implementation seam used by the planner's `wrapBlock` adapter; it is not a
 second planner interface. `flow-barriers.ts` similarly projects already
@@ -80,5 +81,8 @@ existing text or graphic geometry into painted decoration placements; it does
 not reserve space or decide where the target should go. Glyph sampling is a
 separate geometry seam: it describes a full line-height cell per visible
 character, while the contrast provider owns sampling and scoring. Tests
-continue to call the public planner and engine interfaces; they do not import
-the extracted implementation merely to increase coverage.
+continue to call the public planner and engine interfaces. Route-slot selection
+is likewise a pure compatibility decision; the planner remains responsible for
+advancing its cursor, checking occupied geometry and recording the resulting
+decision. Tests do not import extracted implementations merely to increase
+coverage.
