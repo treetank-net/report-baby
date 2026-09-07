@@ -449,3 +449,29 @@ materialized only by a named non-`main` insertion flow. The template and input
 contracts reject `routes.main.insertionSlots` and `role: quote` blocks in the
 `main` flow, and the affected fixtures assert this rejection or use a
 dedicated `quotes` flow.
+
+### Text-planner decomposition — 2026-09-07
+
+The same mechanical relocation was applied to `text-planner.ts`:
+
+- `text-planner.ts` now contains only the public planner factory and candidate
+  orchestration (`planCandidates`, `planRefinedCandidates`); its local
+  function declarations were promoted to module-level helpers;
+- `document-layout.ts` owns one complete plan lifecycle and document-flow
+  ordering;
+- `insertion-planning.ts` owns non-main insertion proposal, obstacle, fit, and
+  placement work;
+- `graphic-planning.ts` owns graphic geometry, validation, proposal, and page
+  materialization;
+- `measureInsertionText` is the shared calculator for insertion fit and
+  placement, so the same wrapping/box arithmetic is not performed twice;
+- `flow-planner.ts` imports graphic placement from `graphic-planning.ts`,
+  removing the previous implementation cycle through `text-planner.ts`.
+
+The current physical sizes are approximately 152 LOC (`text-planner.ts`), 419
+(`document-layout.ts`), 405 (`insertion-planning.ts`), and 217
+(`graphic-planning.ts`). Inventory reports 159 named functions across 17
+modules. Build, architecture, documentation, and the 13-check composition
+suite pass. The full editorial-flow suite still has the known
+`FLOW_SLOT_UNDERFILLED` reproducer; a clean `HEAD` run shows the same failure,
+so it is not attributed to this relocation.

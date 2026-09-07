@@ -1,78 +1,33 @@
 import type {
   CompositionBlock,
-  CompositionRect,
   CompositionSlotTemplate,
 } from './model.js';
 import type {
   CompositionBlockMeasurement,
   CompositionBlockPlacement,
-  CompositionDiagnostic,
   CompositionPlan,
-  CompositionSlot,
   CompositionTableMeasurement,
-  CompositionTextMetrics,
 } from './engine.js';
+import type { PageState } from './page-management.js';
 import { compositionStyleName } from './style-name.js';
 import { isAtomicBlock } from './route-slots.js';
-
-export interface StructuredBlockPage {
-  page: number;
-  slots: Map<string, CompositionSlot>;
-}
-
-export interface StructuredBlockCursor {
-  blockIndex: number;
-  startWord: number;
-  startRow: number;
-  page: number;
-  routeIndex: number;
-}
-
-export interface StructuredBlockPlacementContext {
-  pageState: StructuredBlockPage;
-  definition: CompositionSlotTemplate;
-  block: CompositionBlock;
-  flowId: string;
-  routeIndex: number;
-  plan: CompositionPlan;
-  cursor: StructuredBlockCursor;
-  blocksLength: number;
-  availableRouteSlots: string[];
-  metrics: CompositionTextMetrics;
-  geometryTolerance: number;
-  previousBlockInSlot: (slotId: string, blockId: string) => CompositionBlock | undefined;
-  contentStartBottom: (slot: CompositionSlot) => number;
-  advanceCursor: (cursor: StructuredBlockCursor, routeSlotsForPage: string[]) => void;
-  growSlot: (requiredBottom: number) => void;
-}
-
-/**
- * @planner-target composition/page-management.ts
- * @planner-responsibility Keep the current rectBottom implementation intact until its target seam is extracted.
- */
-function rectBottom(rect: CompositionRect): number {
-  return rect.y + rect.height;
-}
-
-/**
- * @planner-target composition/planning-records.ts
- * @planner-responsibility Keep the current diagnostic implementation intact until its target seam is extracted.
- */
-function diagnostic(
-  severity: CompositionDiagnostic['severity'],
-  code: string,
-  message: string,
-  extra: Partial<CompositionDiagnostic> = {},
-): CompositionDiagnostic {
-  return { severity, code, message, ...extra };
-}
+import { diagnostic } from './planning-records.js';
+import { rectBottom } from './page-management.js';
+import type {
+  FlowPlanningContext,
+  FlowRuntime,
+  FlowTarget,
+} from './flow-planning-types.js';
+import { advanceCursor } from './flow-cursor.js';
+import { contentStartBottom, previousBlockInSlot } from './flow-occupancy.js';
+import { growSlot } from './slot-growth.js';
 
 /**
  * @planner-target composition/structured-block-placement.ts
  * @planner-responsibility Keep the current placeAtomicBlock implementation intact until its target seam is extracted.
  */
 function placeAtomicBlock(
-  pageState: StructuredBlockPage,
+  pageState: PageState,
   definition: CompositionSlotTemplate,
   block: CompositionBlock,
   measurement: CompositionBlockMeasurement,
@@ -138,7 +93,7 @@ function placeAtomicBlock(
  * @planner-responsibility Keep the current placeTableFragment implementation intact until its target seam is extracted.
  */
 function placeTableFragment(
-  pageState: StructuredBlockPage,
+  pageState: PageState,
   definition: CompositionSlotTemplate,
   block: CompositionBlock,
   measurement: CompositionTableMeasurement,
@@ -175,24 +130,21 @@ function placeTableFragment(
  * @planner-target composition/structured-block-placement.ts
  * @planner-responsibility Dispatch one structured block to its atomic or table placement routine.
  */
-export function placeStructuredBlock(context: StructuredBlockPlacementContext): boolean {
+export function placeStructuredBlock(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+): boolean {
   const {
-    pageState,
+    currentPage: pageState,
     definition,
     block,
-    flowId,
-    routeIndex,
-    plan,
-    cursor,
-    blocksLength,
+    selectedSlot,
     availableRouteSlots,
-    metrics,
-    geometryTolerance,
-    previousBlockInSlot,
-    contentStartBottom,
-    advanceCursor,
-    growSlot,
-  } = context;
+  } = target;
+  const { document, flowId, geometryTolerance, metrics, plan } = context;
+  const { cursor } = runtime;
+  const routeIndex = selectedSlot.routeIndex;
 
   if (block.kind === 'table') {
     const table = block.table;
@@ -211,10 +163,10 @@ export function placeStructuredBlock(context: StructuredBlockPlacementContext): 
       return true;
     }
     const slot = pageState.slots.get(definition.id)!;
-    const tablePrevious = definition.kind === 'text' ? previousBlockInSlot(slot.id, block.id) : undefined;
+    const tablePrevious = definition.kind === 'text' ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
     const tableGap = tablePrevious ? metrics.blockGap?.(compositionStyleName(tablePrevious), compositionStyleName(block)) ?? 0 : 0;
     const tableTop = definition.kind === 'text'
-      ? contentStartBottom(slot) + tableGap
+      ? contentStartBottom(pageState, plan, slot, document) + tableGap
       : slot.box.y;
     const tableBox = { ...slot.box, y: tableTop, height: Math.max(0, rectBottom(slot.box) - tableTop) };
     const repeatsHeader = cursor.startRow > 0
@@ -270,10 +222,10 @@ export function placeStructuredBlock(context: StructuredBlockPlacementContext): 
     return true;
   }
   const slot = pageState.slots.get(definition.id)!;
-  const previous = definition.kind === 'text' ? previousBlockInSlot(slot.id, block.id) : undefined;
+  const previous = definition.kind === 'text' ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
   const blockGap = previous ? metrics.blockGap?.(compositionStyleName(previous), compositionStyleName(block)) ?? 0 : 0;
   const blockTop = definition.kind === 'text'
-    ? contentStartBottom(slot) + blockGap
+    ? contentStartBottom(pageState, plan, slot, document) + blockGap
     : slot.box.y;
   const blockMeasureBottom = definition.kind === 'text' && definition.grow?.axis === 'y'
     ? definition.box.y + definition.grow.maxHeight
@@ -294,7 +246,7 @@ export function placeStructuredBlock(context: StructuredBlockPlacementContext): 
     cursor.startWord = 0;
     return true;
   }
-  if (definition.kind === 'text' && definition.grow?.axis === 'y') growSlot(blockTop + measurement.height);
+  if (definition.kind === 'text' && definition.grow?.axis === 'y') growSlot(context, runtime, target, blockTop + measurement.height);
   const availableBlockHeight = rectBottom(slot.box) - blockTop;
   if (measurement.height > availableBlockHeight + geometryTolerance) {
     plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'atomic-block-does-not-fit' });
@@ -313,6 +265,6 @@ export function placeStructuredBlock(context: StructuredBlockPlacementContext): 
   plan.decisions.push({ code: 'ATOMIC_BLOCK_PLACED', flowId, blockId: block.id, slotId: slot.id, page: pageState.page, height: measurement.height });
   cursor.blockIndex += 1;
   cursor.startWord = 0;
-  if (cursor.blockIndex < blocksLength && definition.kind !== 'text') advanceCursor(cursor, availableRouteSlots);
+  if (cursor.blockIndex < context.blocks.length && definition.kind !== 'text') advanceCursor(cursor, availableRouteSlots);
   return true;
 }
