@@ -100,6 +100,31 @@ składa istniejące dane, fonty, assety, kontrast, capability i backend wokół
 `report-composition-entrypoint.ts`. Chrome i zapis finalnego artefaktu pozostają
 w `report-renderer.ts`.
 
+## Ustalenie dla następnej fazy redukcji kodu (2026-09-07)
+
+Nie rozcinamy funkcji ani plików tylko dlatego, że mają dużo linii. Najpierw
+przenosimy całe istniejące funkcje do właściciela odpowiedzialności, a dopiero
+potem sprawdzamy, czy w module zostały powtórzenia lub ręczne obliczenia,
+które powinny stać się małymi, nazwanymi funkcjami obliczeniowymi. Długi plik
+jest dopuszczalny, jeśli opisuje jedną spójną dziedzinę; długość jest sygnałem
+do przeglądu, nie kryterium podziału.
+
+Zapisy decyzji mają być jednym seamem. `recordFlowDecision` przyjmuje istniejący
+`FlowPlanningContext`, nazwę zdarzenia oraz opcjonalne obiekty `FlowRuntime` i
+`FlowTarget` (tylko te, które dana funkcja już posiada), a z nich sam buduje
+opcjonalne pola `flowId`, `blockId`, `page`, `slotId` i `routeIndex`. Wywołujący
+nie konstruuje obiektu decyzji ani nie przekazuje ponownie identyfikatorów;
+może dodać jedynie `reason`. Brakującego obiektu lub pola nie zastępujemy
+syntetyczną wartością — pole pomijamy. Szczegóły specyficzne dla zdarzenia
+muszą pozostać w stanie próby albo zostać później przypisane do właściwej
+funkcji obliczeniowej, a nie wracać jako literal przy wywołaniu recordera.
+
+Po każdym takim kroku ponownie generujemy inventory zależności i sprawdzamy,
+czy evaluator nie opiera się na polu, które zostało usunięte z artefaktu
+decyzji. Najpierw wykrywamy dokładne i semantyczne duplikaty, wybieramy jednego
+właściciela i dopiero wtedy usuwamy kopie. Rozdzielenie funkcji jest skutkiem
+przekroczenia granicy odpowiedzialności, nigdy celem samym w sobie.
+
 ## Kroki
 
 1. Zabezpieczyć obecne zachowanie testami przez istniejące publiczne seamy.

@@ -40,6 +40,7 @@ import { obstructionAcrossLineBands } from './text-wrapping.js';
 import { availableLineCount } from './line-capacity.js';
 import { placeStructuredBlock } from './structured-block-placement.js';
 import type { PlannedInsertion } from './text-planner-candidates.js';
+import { recordFlowDecision } from './planning-records.js';
 
 /**
  * Flow-level planning owns authored block order, route progression, and the
@@ -47,7 +48,7 @@ import type { PlannedInsertion } from './text-planner-candidates.js';
  * creation remains a document-level operation (`ensurePage`) until the
  * document orchestration is extracted in a later step.
  */
-interface FlowCursor {
+export interface FlowCursor {
   blockIndex: number;
   startWord: number;
   startRow: number;
@@ -278,21 +279,11 @@ function movePushedSlots(
  * @planner-responsibility Keep the current recordSlotGrowth implementation intact until its target seam is extracted.
  */
 function recordSlotGrowth(
-  plan: CompositionPlan,
-  slot: CompositionSlot,
-  delta: number,
-  flowId: string,
-  blockId: string,
-  pushedSlots: string[],
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
 ): void {
-  plan.decisions.push({
-    code: 'SLOT_GROWN',
-    flowId,
-    blockId,
-    slotId: slot.id,
-    delta,
-    pushedSlots,
-  });
+  recordFlowDecision(context, 'SLOT_GROWN', runtime, target);
 }
 
 /**
@@ -303,9 +294,9 @@ function growSlot(
   pageState: PageState,
   definition: CompositionSlotTemplate,
   requiredBottom: number,
-  plan: CompositionPlan,
-  flowId: string,
-  blockId: string,
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
 ): void {
   const slot = pageState.slots.get(definition.id);
   if (!slot) return;
@@ -313,7 +304,7 @@ function growSlot(
   if (delta <= 0) return;
   resizeGrownSlot(slot, delta);
   movePushedSlots(pageState, definition, delta);
-  recordSlotGrowth(plan, slot, delta, flowId, blockId, definition.grow?.pushes ?? []);
+  recordSlotGrowth(context, runtime, target);
 }
 
 /**
@@ -504,14 +495,13 @@ function collapseUnusedInsertions(
   routeSlotIds: string[],
   fromRouteIndex: number,
   toRouteIndex: number,
-  plan: CompositionPlan,
-  flowId: string,
-  blockId: string,
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
 ): void {
   for (let index = fromRouteIndex; index < toRouteIndex; index += 1) {
     const definition = pageState.layout.slots.find((slot) => slot.id === routeSlotIds[index]);
     const insertion = definition ? pageState.slots.get(definition.id) : undefined;
-    collapseInsertion(pageState, definition, insertion, index, plan, flowId, blockId, 'no-insertion-content-on-page');
+    collapseInsertion(pageState, definition, insertion, context, runtime, 'no-insertion-content-on-page');
   }
 }
 
@@ -523,13 +513,12 @@ function collapseInsertionBeforeContinuation(
   pageState: PageState,
   routeSlotIds: string[],
   routeIndex: number,
-  plan: CompositionPlan,
-  flowId: string,
-  blockId: string,
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
 ): void {
   const definition = pageState.layout.slots.find((slot) => slot.id === routeSlotIds[routeIndex]);
   const insertion = definition ? pageState.slots.get(definition.id) : undefined;
-  collapseInsertion(pageState, definition, insertion, routeIndex, plan, flowId, blockId, 'continuation-needs-uninterrupted-column');
+  collapseInsertion(pageState, definition, insertion, context, runtime, 'continuation-needs-uninterrupted-column');
 }
 
 /**
@@ -540,10 +529,8 @@ function collapseInsertion(
   pageState: PageState,
   definition: CompositionSlotTemplate | undefined,
   insertion: CompositionSlot | undefined,
-  routeIndex: number,
-  plan: CompositionPlan,
-  flowId: string,
-  blockId: string,
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
   reason: string,
 ): void {
   if (!definition?.allowedRoles?.includes('quote') || !insertion || insertion.state !== 'open') return;
@@ -557,15 +544,7 @@ function collapseInsertion(
   // two columns into independently positioned blocks and can pull a right
   // column above the left-column content.
   insertion.state = 'exhausted';
-  plan.decisions.push({
-    code: 'OPTIONAL_INSERTION_COLLAPSED',
-    flowId,
-    blockId,
-    page: pageState.page,
-    routeIndex,
-    delta,
-    reason,
-  });
+  recordFlowDecision(context, 'OPTIONAL_INSERTION_COLLAPSED', runtime, undefined, reason);
 }
 
 /**
@@ -621,7 +600,7 @@ type ActiveDeferredQuote = {
   };
 };
 
-interface FlowPlanningContext {
+export interface FlowPlanningContext {
   document: CompositionDocument;
   metrics: CompositionTextMetrics;
   template: CompositionTemplate;
@@ -639,19 +618,19 @@ interface FlowPlanningContext {
   geometryTolerance: number;
 }
 
-interface FlowRuntime {
+export interface FlowRuntime {
   cursor: FlowCursor;
   deferredQuote?: DeferredQuote;
   activeDeferredQuote?: ActiveDeferredQuote;
   lastLegalSlotId?: string;
 }
 
-interface SelectedFlowSlot {
+export interface SelectedFlowSlot {
   definition: CompositionSlotTemplate;
   routeIndex: number;
 }
 
-interface FlowTarget {
+export interface FlowTarget {
   currentPage: PageState;
   availableRouteSlots: string[];
   block: CompositionBlock;
@@ -799,7 +778,6 @@ function ensureCurrentFlowPage(context: FlowPlanningContext, runtime: FlowRuntim
 function holdFlowForPreplannedInsertion(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
-  currentPage: PageState,
 ): boolean {
   const block = currentFlowBlock(context, runtime);
   const authoredIndex = context.authoredIndexOf(block.id);
@@ -810,10 +788,10 @@ function holdFlowForPreplannedInsertion(
     .filter((page): page is number => page !== undefined)
     .sort((left, right) => right - left)[0];
   if (precedingInsertionPage === undefined || runtime.cursor.page >= precedingInsertionPage) return false;
+  recordFlowDecision(context, 'FLOW_HELD_FOR_PREPLANNED_INSERTION', runtime, undefined, 'successor-must-not-pass-earlier-insertion');
   runtime.cursor.page = precedingInsertionPage;
   runtime.cursor.routeIndex = 0;
   runtime.cursor.resumeY = undefined;
-  context.plan.decisions.push({ code: 'FLOW_HELD_FOR_PREPLANNED_INSERTION', flowId: context.flowId, blockId: block.id, page: currentPage.page, reason: 'successor-must-not-pass-earlier-insertion', details: { insertionPage: precedingInsertionPage } });
   return true;
 }
 
@@ -833,7 +811,7 @@ function restoreDeferredQuoteOnCurrentPage(context: FlowPlanningContext, runtime
   runtime.cursor.startWord = 0;
   runtime.cursor.startRow = 0;
   runtime.cursor.routeIndex = deferred.routeIndex;
-  context.plan.decisions.push({ code: 'INSERTION_REPOSITIONED_PLACED', flowId: context.flowId, blockId: context.blocks[runtime.cursor.blockIndex].id, page: runtime.cursor.page, routeIndex: runtime.cursor.routeIndex, reason: 'earlier-route-segment-was-empty' });
+  recordFlowDecision(context, 'INSERTION_REPOSITIONED_PLACED', runtime, undefined, 'earlier-route-segment-was-empty');
 }
 
 /**
@@ -852,7 +830,7 @@ function restoreDeferredQuoteOnNextPage(context: FlowPlanningContext, runtime: F
   runtime.cursor.startWord = 0;
   runtime.cursor.startRow = 0;
   runtime.cursor.routeIndex = 0;
-  context.plan.decisions.push({ code: 'DEFERRED_INSERTION_PLACED', flowId: context.flowId, blockId: context.blocks[runtime.cursor.blockIndex].id, page: runtime.cursor.page, reason: 'next-page-insertion-slot' });
+  recordFlowDecision(context, 'DEFERRED_INSERTION_PLACED', runtime, undefined, 'next-page-insertion-slot');
 }
 
 /**
@@ -911,13 +889,12 @@ function insertionDefinitionForBlock(
 function advanceForMissingInsertion(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
-  currentPage: PageState,
 ): boolean {
   const block = currentFlowBlock(context, runtime);
   if (context.route.continuation !== 'allowed' || runtime.cursor.page >= context.template.maxPages) return false;
+  recordFlowDecision(context, 'INSERTION_PUSHED_TO_NEXT_PAGE', runtime, undefined, 'no-insertion-slot-after-current-flow-position');
   runtime.cursor.page += 1;
   runtime.cursor.routeIndex = 0;
-  context.plan.decisions.push({ code: 'INSERTION_PUSHED_TO_NEXT_PAGE', flowId: context.flowId, blockId: block.id, page: currentPage.page, reason: 'no-insertion-slot-after-current-flow-position' });
   return true;
 }
 
@@ -946,12 +923,12 @@ function deferInsertionToNextPage(
   const block = currentFlowBlock(context, runtime);
   if (block.role !== 'quote' || context.route.continuation !== 'allowed' || runtime.cursor.page !== context.startPage || runtime.deferredQuote) return false;
   if (!hasInsertionSlotOnNextPage(context, runtime, block)) return false;
+  recordFlowDecision(context, 'INSERTION_DEFERRED', runtime, undefined, 'insertion-slot-only-on-continuation');
   runtime.deferredQuote = { blockIndex: runtime.cursor.blockIndex, deferredPage: runtime.cursor.page };
   runtime.cursor.blockIndex += 1;
   runtime.cursor.startWord = 0;
   runtime.cursor.startRow = 0;
   runtime.cursor.routeIndex = 0;
-  context.plan.decisions.push({ code: 'INSERTION_DEFERRED', flowId: context.flowId, blockId: block.id, page: runtime.cursor.page, reason: 'insertion-slot-only-on-continuation' });
   return true;
 }
 
@@ -970,7 +947,7 @@ function resolveUnavailableFlowSlot(
   if (selectedSlot === undefined && !hasRoleEligibleSlot(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots)) {
     if (deferInsertionToNextPage(context, runtime)) return { kind: 'continue' };
     if (context.route.continuation === 'allowed') {
-      context.plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_PAGE', flowId: context.flowId, blockId: block.id, page: currentPage.page, reason: 'no-eligible-slot-on-page' });
+      recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_PAGE', runtime, undefined, 'no-eligible-slot-on-page');
       advanceCursor(runtime.cursor, availableRouteSlots);
       return { kind: 'continue' };
     }
@@ -1001,7 +978,7 @@ function selectFlowSlot(
     && currentPage.layout.slots.some((slot) => slot.id === slotId && slot.allowedRoles?.includes('quote'))
     && currentPage.slots.get(slotId)?.state === 'open');
   if (insertionIndex < 0) return selectedSlot;
-  collapseInsertionBeforeContinuation(currentPage, availableRouteSlots, insertionIndex, context.plan, context.flowId, block.id);
+  collapseInsertionBeforeContinuation(currentPage, availableRouteSlots, insertionIndex, context, runtime);
   return slotFor(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots);
 }
 
@@ -1021,7 +998,7 @@ function resolveFlowTarget(
   if (insertionPassedItsPlannedPage(context, runtime, currentPage, plannedInsertion)) return { kind: 'stop' };
   const insertionDefinition = insertionDefinitionForBlock(context, runtime, currentPage, availableRouteSlots, plannedInsertion);
   if (block.role === 'quote' && (context.route.insertionSlots?.length ?? 0) > 0 && !insertionDefinition) {
-    if (advanceForMissingInsertion(context, runtime, currentPage)) return { kind: 'continue' };
+    if (advanceForMissingInsertion(context, runtime)) return { kind: 'continue' };
     context.plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Flow '${context.flowId}' cannot place insertion '${block.id}' after the current flow position.`, { flowId: context.flowId, blockId: block.id, page: currentPage.page }));
     recordFlowResidual(context, runtime, 'insertion-slot-not-found');
     return { kind: 'stop' };
@@ -1034,7 +1011,7 @@ function resolveFlowTarget(
   runtime.cursor.routeIndex = selectedSlot.routeIndex;
   const continuousInsertion = block.role === 'quote' && (context.route.insertionSlots?.includes(selectedSlot.definition.id) ?? false);
   if (block.role !== 'quote') {
-    collapseUnusedInsertions(currentPage, availableRouteSlots, routeStartIndex, selectedSlot.routeIndex, context.plan, context.flowId, block.id);
+    collapseUnusedInsertions(currentPage, availableRouteSlots, routeStartIndex, selectedSlot.routeIndex, context, runtime);
   }
   return {
     kind: 'ready',
@@ -1065,7 +1042,7 @@ function handleNonTextFlowPlacement(
   // reserved lockup. The lockup is a paint reservation, not a competing
   // content block, so it must not push the auxiliary flow to another page.
   if (flowId !== 'title' && flowId !== 'header' && flowId !== 'footer' && slotCollidesWithPlacedBlock(currentPage, definition.id, plan, flowId)) {
-    plan.decisions.push({ code: 'TEXT_SLOT_COLLISION_PUSHED', flowId, blockId: block.id, slotId: definition.id, page: currentPage.page, reason: 'slot-overlaps-placed-block' });
+    recordFlowDecision(context, 'TEXT_SLOT_COLLISION_PUSHED', runtime, target, 'slot-overlaps-placed-block');
     advanceCursor(cursor, availableRouteSlots);
     return true;
   }
@@ -1090,7 +1067,7 @@ function handleNonTextFlowPlacement(
     previousBlockInSlot: (slotId, blockId) => previousBlockInSlot(plan, slotId, blockId, document),
     contentStartBottom: (slot) => contentStartBottom(currentPage, plan, slot, document),
     advanceCursor,
-    growSlot: (requiredBottom) => growSlot(currentPage, definition, requiredBottom, plan, flowId, block.id),
+    growSlot: (requiredBottom) => growSlot(currentPage, definition, requiredBottom, context, runtime, target),
   });
 }
 
@@ -1159,14 +1136,7 @@ function prepareTextPlacement(
     ? []
     : flowBarrierBoxCandidatesForSlot(currentPage.page, slot, flowId, plan.graphicPlacements);
   if (flowBarrierBoxCandidates.length > 0) {
-    plan.decisions.push({
-      code: 'FLOW_BARRIER_BOXES_CONSUMED',
-      flowId,
-      blockId: block.id,
-      slotId: slot.id,
-      page: currentPage.page,
-      details: { candidateIds: flowBarrierBoxCandidates.map((candidate) => candidate.id) },
-    });
+    recordFlowDecision(context, 'FLOW_BARRIER_BOXES_CONSUMED', runtime, target);
   }
   const previous = cursor.startWord === 0 ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
   // A resume boundary created by an obstacle is already the start of a new
@@ -1192,7 +1162,7 @@ function prepareTextPlacement(
     const noGapWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
     const noGapComplete = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
     if (noGapComplete.length <= availableWithoutGap && noGapWrapped.length === noGapComplete.length) {
-      plan.decisions.push({ code: 'BLOCK_GAP_COMPRESSED', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, from: blockGap, to: 0, reason: 'keep-heading-whole-without-empty-column' });
+      recordFlowDecision(context, 'BLOCK_GAP_COMPRESSED', runtime, target, 'keep-heading-whole-without-empty-column');
       blockGap = 0;
       wrapped = noGapWrapped;
       completeWrapped = noGapComplete;
@@ -1371,7 +1341,7 @@ function placeInsertionObstacleAfterQuote(
   if (!target.continuousInsertion) return;
   const { currentPage, block } = target;
   const { cursor } = runtime;
-  const { flowId, plan } = context;
+  const { plan } = context;
   const { slot } = prepared;
   if (plan.graphicPlacements.some((graphic) => graphic.graphicId === `insertion:${block.id}` && graphic.page === currentPage.page)) return;
   plan.graphicPlacements.push({
@@ -1384,7 +1354,7 @@ function placeInsertionObstacleAfterQuote(
     paint: false,
     box: { ...slot.box },
   });
-  plan.decisions.push({ code: 'FLOW_INSERTION_OBSTACLE_PLACED', flowId, blockId: block.id, page: currentPage.page, slotId: slot.id, box: { ...slot.box } });
+  recordFlowDecision(context, 'FLOW_INSERTION_OBSTACLE_PLACED', runtime, target);
   cursor.resumeY = Math.max(cursor.resumeY ?? Number.NEGATIVE_INFINITY, rectBottom(slot.box));
   cursor.resumeSlotId = slot.id;
 }
@@ -1437,10 +1407,10 @@ function commitSelectedTextLines(
       placeInsertionObstacleAfterQuote(context, runtime, target, prepared);
       resumeDeferredQuoteAfterPlacement(context, runtime, target);
     }
-    plan.decisions.push({ code: 'BLOCK_PLACED', flowId, blockId: block.id, slotId: slot.id });
+    recordFlowDecision(context, 'BLOCK_PLACED', runtime, target);
   } else {
     cursor.startWord = consumedEnd;
-    plan.decisions.push({ code: 'BLOCK_CONTINUED', flowId, blockId: block.id, slotId: slot.id });
+    recordFlowDecision(context, 'BLOCK_CONTINUED', runtime, target);
   }
   return { consumedEnd, completed };
 }
@@ -1474,7 +1444,7 @@ function resolveInsertionBoundaryAfterText(
   cursor.startWord = consumedEnd;
   cursor.resumeY = boundary.box.y + boundary.box.height;
   cursor.resumeSlotId = target.definition.id;
-  plan.decisions.push({ code: 'FLOW_RESUMED_BELOW_INSERTION', flowId, blockId: block.id, page: currentPage.page, slotId: target.definition.id, consumedEnd, obstacleY: boundary.box.y, obstacleBottom: cursor.resumeY });
+  recordFlowDecision(context, 'FLOW_RESUMED_BELOW_INSERTION', runtime, target);
   return { kind: 'continue' };
 }
 
@@ -1486,15 +1456,11 @@ function advanceFlowAfterTextPlacement(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
   target: FlowTarget,
-  prepared: PreparedTextPlacement,
-  selected: ReturnType<typeof wrapBlock>,
   consumedEnd: number,
-  currentBox: CompositionRect,
-  currentAvailableLines: number,
 ): void {
   const { cursor } = runtime;
-  const { currentPage, availableRouteSlots, block, selectedSlot, continuousInsertion } = target;
-  const { blocks, document, flowId, metrics, plan, route } = context;
+  const { currentPage, availableRouteSlots, block, continuousInsertion } = target;
+  const { blocks, document, plan, route } = context;
   if (consumedEnd >= wordsForBlock(block).length && cursor.blockIndex >= blocks.length) return;
   const nextBlock = blocks[cursor.blockIndex];
   // Keep the current column alive for an authored insertion that follows
@@ -1502,46 +1468,12 @@ function advanceFlowAfterTextPlacement(
   // not a reason to finish the page before we have tried its next legal band.
   const nextInsertionFitsCurrentPage = nextBlock?.role === 'quote'
     && insertionSlotFor(route, currentPage.layout, currentPage, plan, availableRouteSlots, cursor.routeIndex, document) !== undefined;
-  // A completed block does not end the continuous flow. Re-enter the
-  // placement loop so the next authored block gets the remaining vertical
-  // band in this same slot; only an unfinished block must advance now.
-  // Treating `selected.length === currentAvailableLines` as a reason to
-  // advance was the source of false holes: that count describes the
-  // current block's starting capacity, not the remaining capacity after
-  // its last line (and it ignores the next block's actual line-height and
-  // gap).
   if (!continuousInsertion && !nextInsertionFitsCurrentPage && consumedEnd < wordsForBlock(block).length) {
-    const nextLeading = nextBlock ? lineHeight(metrics, nextBlock) : undefined;
-    const nextBlockGap = nextBlock ? metrics.blockGap?.(styleFor(block), styleFor(nextBlock)) ?? 0 : 0;
-    const lastLineBottom = selected.at(-1)
-      ? prepared.initialBox.y + (selected.at(-1)!.lineOffset + 1) * prepared.leading
-      : prepared.initialBox.y;
-    const nextBlockAvailableLines = nextLeading === undefined
-      ? undefined
-      : availableLineCount(rectBottom(currentBox) - lastLineBottom - nextBlockGap, nextLeading);
-    plan.decisions.push({
-      code: 'FLOW_SEGMENT_ADVANCED',
-      flowId,
-      blockId: block.id,
-      page: currentPage.page,
-      slotId: prepared.slot.id,
-      routeIndex: selectedSlot.routeIndex,
-      details: { selectedLines: selected.length, currentAvailableLines, consumedEnd, totalWords: wordsForBlock(block).length },
-    });
-    const transition = plan.decisions.at(-1)!;
-    if (nextBlock && nextLeading !== undefined) {
-      transition.details = {
-        ...(transition.details as Record<string, unknown>),
-        nextBlockId: nextBlock.id,
-        nextBlockAvailableLines,
-        nextBlockLineHeight: nextLeading,
-        nextBlockGap,
-      };
-    }
+    recordFlowDecision(context, 'FLOW_SEGMENT_ADVANCED', runtime, target);
     const pageBeforeAdvance = cursor.page;
     advanceCursor(cursor, availableRouteSlots);
     if (cursor.page > pageBeforeAdvance && cursor.blockIndex < blocks.length) {
-      plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_PAGE', flowId, blockId: blocks[cursor.blockIndex].id, page: cursor.page, reason: 'previous-slot-exhausted' });
+      recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_PAGE', runtime, undefined, 'previous-slot-exhausted');
     }
   }
 }
@@ -1568,26 +1500,10 @@ function advanceTextBlockWhenNoLinesFit(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
   target: FlowTarget,
-  prepared: PreparedTextPlacement,
 ): void {
   const { cursor } = runtime;
-  const { currentPage, availableRouteSlots, block } = target;
-  const { flowId, plan } = context;
-  const { leading, slot, initialBox, startLineOffset, blockGap } = prepared;
-  plan.decisions.push({
-    code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
-    flowId,
-    blockId: block.id,
-    slotId: slot.id,
-    page: currentPage.page,
-    reason: 'no-available-text-band',
-    details: {
-      availableLines: availableLineCount(rectBottom(initialBox) - (initialBox.y + startLineOffset * leading), leading),
-      lineHeight: leading,
-      blockGap,
-      startLineOffset,
-    },
-  });
+  recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'no-available-text-band');
+  const { availableRouteSlots } = target;
   advanceCursor(cursor, availableRouteSlots);
 }
 
@@ -1605,7 +1521,7 @@ function growTextSlotForInitialPlacement(
   const { currentPage, block, definition } = target;
   if (definition.grow?.axis !== 'y' || cursor.startWord !== 0) return;
   const requiredBottom = prepared.initialBox.y + (prepared.wrapped.at(-1)!.lineOffset + 1) * prepared.leading;
-  growSlot(currentPage, definition, requiredBottom, context.plan, context.flowId, block.id);
+  growSlot(currentPage, definition, requiredBottom, context, runtime, target);
 }
 
 /**
@@ -1621,21 +1537,8 @@ function pushHeadingWhenWholeHeadingDoesNotFit(
 ): boolean {
   if (!headingExceedsAvailableLines(prepared, currentAvailableLines)) return false;
   const { cursor } = runtime;
-  const { currentPage, availableRouteSlots, block } = target;
-  const { flowId, plan } = context;
-  plan.decisions.push({
-    code: 'HEADING_PUSHED_TO_NEXT_SLOT',
-    flowId,
-    blockId: block.id,
-    slotId: prepared.slot.id,
-    reason: 'keep-heading-together',
-    details: {
-      requiredLines: prepared.completeWrapped.length,
-      availableLines: currentAvailableLines,
-      startLineOffset: prepared.startLineOffset,
-      blockGap: prepared.blockGap,
-    },
-  });
+  const { availableRouteSlots } = target;
+  recordFlowDecision(context, 'HEADING_PUSHED_TO_NEXT_SLOT', runtime, target, 'keep-heading-together');
   advanceCursor(cursor, availableRouteSlots);
   return true;
 }
@@ -1650,20 +1553,7 @@ function recordListItemSplitDecision(
   decision: ListItemKeepDecision | undefined,
 ): void {
   if (decision?.kind !== 'split') return;
-  const { block } = target;
-  context.plan.decisions.push({
-    code: 'LIST_ITEM_SPLIT_TO_AVOID_HOLE',
-    flowId: context.flowId,
-    blockId: block.id,
-    slotId: target.selectedSlot.definition.id,
-    page: target.currentPage.page,
-    reason: 'available-fragment-meets-minimum-and-whole-item-would-leave-hole',
-    details: {
-      availableLines: decision.availableLines,
-      minimumFragmentLines: decision.minimumFragmentLines,
-      completeLines: decision.completeLines,
-    },
-  });
+  recordFlowDecision(context, 'LIST_ITEM_SPLIT_TO_AVOID_HOLE', undefined, target, 'available-fragment-meets-minimum-and-whole-item-would-leave-hole');
 }
 
 /**
@@ -1678,15 +1568,8 @@ function pushListItemWhenMinimumFragmentWouldBeBroken(
 ): boolean {
   if (decision?.kind !== 'push') return false;
   const { cursor } = runtime;
-  const { currentPage, availableRouteSlots, block } = target;
-  context.plan.decisions.push({
-    code: 'LIST_ITEM_PUSHED_TO_NEXT_SLOT',
-    flowId: context.flowId,
-    blockId: block.id,
-    slotId: target.selectedSlot.definition.id,
-    page: currentPage.page,
-    reason: 'keep-list-item-together-below-minimum-fragment',
-  });
+  const { availableRouteSlots } = target;
+  recordFlowDecision(context, 'LIST_ITEM_PUSHED_TO_NEXT_SLOT', runtime, target, 'keep-list-item-together-below-minimum-fragment');
   advanceCursor(cursor, availableRouteSlots);
   return true;
 }
@@ -1705,40 +1588,14 @@ function handleHeadingClusterObstacleBeforeTextPlacement(
   const decision = evaluateHeadingClusterObstacle(context, runtime, target, prepared, currentBox);
   if (!decision) return undefined;
   const { cursor } = runtime;
-  const { currentPage, availableRouteSlots, block } = target;
-  const { flowId, plan } = context;
+  const { availableRouteSlots } = target;
   if (decision.kind === 'resume-below-obstacle') {
     cursor.resumeY = decision.resumeY;
     cursor.resumeSlotId = prepared.slot.id;
-    plan.decisions.push({
-      code: 'HEADING_CLUSTER_PUSHED_BELOW_OBSTACLE',
-      flowId,
-      blockId: block.id,
-      slotId: prepared.slot.id,
-      page: currentPage.page,
-      reason: 'keep-heading-and-lead-together',
-      details: {
-        obstacleId: decision.obstacleId,
-        resumeY: decision.resumeY,
-        requiredClusterLines: decision.requiredClusterLines,
-        availableAfterObstacle: decision.availableAfterObstacle,
-      },
-    });
+    recordFlowDecision(context, 'HEADING_CLUSTER_PUSHED_BELOW_OBSTACLE', runtime, target, 'keep-heading-and-lead-together');
     return { kind: 'continue' };
   }
-  plan.decisions.push({
-    code: 'HEADING_CLUSTER_PUSHED_TO_NEXT_SLOT',
-    flowId,
-    blockId: block.id,
-    slotId: prepared.slot.id,
-    page: currentPage.page,
-    reason: 'keep-heading-and-lead-together',
-    details: {
-      obstacleId: decision.obstacleId,
-      requiredClusterLines: decision.requiredClusterLines,
-      availableAfterObstacle: decision.availableAfterObstacle,
-    },
-  });
+  recordFlowDecision(context, 'HEADING_CLUSTER_PUSHED_TO_NEXT_SLOT', runtime, target, 'keep-heading-and-lead-together');
   advanceCursor(cursor, availableRouteSlots);
   return { kind: 'continue' };
 }
@@ -1758,18 +1615,8 @@ function pushKeepClusterWhenItCannotFit(
 ): boolean {
   if (!keepClusterExceedsAvailableLines(prepared, keepRequired, currentAvailableLines, usedLines)) return false;
   const { cursor } = runtime;
-  const { currentPage, availableRouteSlots, block } = target;
-  const { flowId, plan } = context;
-  plan.decisions.push({
-    code: 'KEEP_CLUSTER_PUSHED',
-    flowId,
-    blockId: block.id,
-    from: prepared.slot.id,
-    slotId: prepared.slot.id,
-    page: currentPage.page,
-    reason: 'insufficient-local-capacity',
-    details: { requiredLines: keepRequired, availableLines: currentAvailableLines },
-  });
+  const { availableRouteSlots } = target;
+  recordFlowDecision(context, 'KEEP_CLUSTER_PUSHED', runtime, target, 'insufficient-local-capacity');
   advanceCursor(cursor, availableRouteSlots);
   return true;
 }
@@ -1786,13 +1633,7 @@ function recordRelaxedKeepCluster(
   currentAvailableLines: number,
 ): void {
   if (!keepClusterCanBeRelaxed(prepared, target.block, keepRequired, currentAvailableLines)) return;
-  context.plan.decisions.push({
-    code: 'KEEP_CLUSTER_RELAXED',
-    flowId: context.flowId,
-    blockId: target.block.id,
-    from: prepared.slot.id,
-    reason: 'whole-block-fits-but-following-block-does-not',
-  });
+  recordFlowDecision(context, 'KEEP_CLUSTER_RELAXED', undefined, target, 'whole-block-fits-but-following-block-does-not');
 }
 
 /**
@@ -1811,20 +1652,7 @@ function advanceTextBlockWhenNoCapacity(
   const { currentPage, availableRouteSlots, block } = target;
   const { flowId, plan, route } = context;
   runtime.lastLegalSlotId = prepared.slot.id;
-  plan.decisions.push({
-    code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
-    flowId,
-    blockId: block.id,
-    slotId: prepared.slot.id,
-    page: currentPage.page,
-    reason: 'next-block-spacing-or-line-height-does-not-fit',
-    details: {
-      availableLines: currentAvailableLines,
-      lineHeight: prepared.leading,
-      blockGap: prepared.blockGap,
-      startLineOffset: prepared.startLineOffset,
-    },
-  });
+  recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'next-block-spacing-or-line-height-does-not-fit');
   if (route.continuation === 'forbidden' && cursor.routeIndex >= availableRouteSlots.length - 1) {
     plan.diagnostics.push(diagnostic('error', 'FLOW_CONTINUATION_FORBIDDEN', `Flow '${flowId}' cannot continue beyond its available slots on page ${currentPage.page}.`, { flowId, blockId: block.id, page: currentPage.page, slotId: prepared.slot.id }));
     addResidual(plan.residualContent, flowId, block, cursor.startWord, runtime.lastLegalSlotId, 'flow-continuation-forbidden');
@@ -1849,24 +1677,9 @@ function resolveTextLineSelectionFailure(
   if (lineSelection.kind === 'ready') return undefined;
   const { cursor } = runtime;
   const { currentPage, availableRouteSlots, block } = target;
-  const { flowId, plan, policy } = context;
+  const { flowId, plan } = context;
   if (lineSelection.kind === 'advance-for-minimum-start') {
-    plan.decisions.push({
-      code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
-      flowId,
-      blockId: block.id,
-      slotId: prepared.slot.id,
-      page: currentPage.page,
-      reason: 'minimum-fragment-start-would-be-violated',
-      details: {
-        availableLines: currentAvailableLines,
-        attemptedLines: lineSelection.attemptedLines,
-        minimumFragmentLines: policy.minimumLinesAtStart,
-        lineHeight: prepared.leading,
-        blockGap: prepared.blockGap,
-        startLineOffset: prepared.startLineOffset + prepared.blockGap / prepared.leading,
-      },
-    });
+    recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'minimum-fragment-start-would-be-violated');
     advanceCursor(cursor, availableRouteSlots);
     return { kind: 'continue' };
   }
@@ -1876,37 +1689,11 @@ function resolveTextLineSelectionFailure(
     return { kind: 'stop' };
   }
   if (lineSelection.kind === 'advance-for-orphan-adjustment') {
-    plan.decisions.push({
-      code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
-      flowId,
-      blockId: block.id,
-      slotId: prepared.slot.id,
-      page: currentPage.page,
-      reason: 'minimum-fragment-orphan-adjustment-left-no-lines',
-      details: {
-        availableLines: currentAvailableLines,
-        attemptedLines: lineSelection.attemptedLines,
-        lineHeight: prepared.leading,
-        blockGap: prepared.blockGap,
-        startLineOffset: prepared.startLineOffset + prepared.blockGap / prepared.leading,
-      },
-    });
+    recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'minimum-fragment-orphan-adjustment-left-no-lines');
     advanceCursor(cursor, availableRouteSlots);
     return { kind: 'continue' };
   }
-  plan.decisions.push({
-    code: 'HEADING_PUSHED_TO_NEXT_SLOT',
-    flowId,
-    blockId: block.id,
-    slotId: prepared.slot.id,
-    reason: 'keep-heading-together',
-    details: {
-      requiredLines: prepared.completeWrapped.length,
-      availableLines: currentAvailableLines,
-      startLineOffset: prepared.startLineOffset,
-      blockGap: prepared.blockGap,
-    },
-  });
+  recordFlowDecision(context, 'HEADING_PUSHED_TO_NEXT_SLOT', runtime, target, 'keep-heading-together');
   advanceCursor(cursor, availableRouteSlots);
   return { kind: 'continue' };
 }
@@ -1929,7 +1716,7 @@ function planTextBlockAttempt(
       completeEmptyTextBlock(runtime);
       return { kind: 'continue' };
     }
-    advanceTextBlockWhenNoLinesFit(context, runtime, target, prepared);
+    advanceTextBlockWhenNoLinesFit(context, runtime, target);
     return { kind: 'continue' };
   }
   growTextSlotForInitialPlacement(context, runtime, target, prepared);
@@ -1986,7 +1773,7 @@ function planTextBlockAttempt(
   const insertionBoundaryResolution = resolveInsertionBoundaryAfterText(context, runtime, target, prepared, consumedEnd);
   if (insertionBoundaryResolution.kind === 'stop') return { kind: 'stop' };
   if (insertionBoundaryResolution.kind === 'continue') return { kind: 'continue' };
-  advanceFlowAfterTextPlacement(context, runtime, target, prepared, selected, consumedEnd, currentBox, currentAvailableLines);
+  advanceFlowAfterTextPlacement(context, runtime, target, consumedEnd);
   return { kind: 'done' };
 }
 
@@ -2016,7 +1803,7 @@ export function planFlow(
     if (flowReachedTerminalPage(context, runtime)) return;
     const currentPage = ensureCurrentFlowPage(context, runtime);
     if (!currentPage) return;
-    if (holdFlowForPreplannedInsertion(context, runtime, currentPage)) continue;
+    if (holdFlowForPreplannedInsertion(context, runtime)) continue;
     restoreDeferredQuoteOnCurrentPage(context, runtime);
     restoreDeferredQuoteOnNextPage(context, runtime);
     const resolution = resolveFlowTarget(context, runtime, currentPage);

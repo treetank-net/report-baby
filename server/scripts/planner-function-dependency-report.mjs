@@ -23,6 +23,7 @@ const scannedRelativeFiles = [
   'composition/structured-block-placement.ts',
   'composition/text-planner-candidates.ts',
   'composition/engine.ts',
+  'composition/planning-records.ts',
 ];
 
 const scannedFiles = scannedRelativeFiles.map((relative) => path.join(sourceRoot, relative));
