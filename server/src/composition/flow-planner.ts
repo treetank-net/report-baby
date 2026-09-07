@@ -364,37 +364,22 @@ function previousBlockInSlot(plan: CompositionPlan, slotId: string, currentBlock
 
 /**
  * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current collapseUnusedInsertions implementation intact until its target seam is extracted.
+ * @planner-responsibility Collapse the insertion slots in one route range for a specific flow transition.
  */
-function collapseUnusedInsertions(
+function collapseInsertionsInRouteRange(
   pageState: PageState,
   routeSlotIds: string[],
   fromRouteIndex: number,
   toRouteIndex: number,
   context: FlowPlanningContext,
   runtime: FlowRuntime,
+  reason: string,
 ): void {
   for (let index = fromRouteIndex; index < toRouteIndex; index += 1) {
     const definition = pageState.layout.slots.find((slot) => slot.id === routeSlotIds[index]);
     const insertion = definition ? pageState.slots.get(definition.id) : undefined;
-    collapseInsertion(pageState, definition, insertion, context, runtime, 'no-insertion-content-on-page');
+    collapseInsertion(pageState, definition, insertion, context, runtime, reason);
   }
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current collapseInsertionBeforeContinuation implementation intact until its target seam is extracted.
- */
-function collapseInsertionBeforeContinuation(
-  pageState: PageState,
-  routeSlotIds: string[],
-  routeIndex: number,
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-): void {
-  const definition = pageState.layout.slots.find((slot) => slot.id === routeSlotIds[routeIndex]);
-  const insertion = definition ? pageState.slots.get(definition.id) : undefined;
-  collapseInsertion(pageState, definition, insertion, context, runtime, 'continuation-needs-uninterrupted-column');
 }
 
 /**
@@ -837,7 +822,15 @@ function selectFlowSlot(
     && currentPage.layout.slots.some((slot) => slot.id === slotId && slot.allowedRoles?.includes('quote'))
     && currentPage.slots.get(slotId)?.state === 'open');
   if (insertionIndex < 0) return selectedSlot;
-  collapseInsertionBeforeContinuation(currentPage, availableRouteSlots, insertionIndex, context, runtime);
+  collapseInsertionsInRouteRange(
+    currentPage,
+    availableRouteSlots,
+    insertionIndex,
+    insertionIndex + 1,
+    context,
+    runtime,
+    'continuation-needs-uninterrupted-column',
+  );
   return slotFor(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots);
 }
 
@@ -864,7 +857,15 @@ function resolveFlowTarget(
   runtime.cursor.routeIndex = selectedSlot.routeIndex;
   const continuousInsertion = block.role === 'quote' && (context.route.insertionSlots?.includes(selectedSlot.definition.id) ?? false);
   if (block.role !== 'quote') {
-    collapseUnusedInsertions(currentPage, availableRouteSlots, routeStartIndex, selectedSlot.routeIndex, context, runtime);
+    collapseInsertionsInRouteRange(
+      currentPage,
+      availableRouteSlots,
+      routeStartIndex,
+      selectedSlot.routeIndex,
+      context,
+      runtime,
+      'no-insertion-content-on-page',
+    );
   }
   return {
     kind: 'ready',
@@ -940,6 +941,182 @@ interface PreparedTextPlacement {
 
 /**
  * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Determine the physical bottom available to a text block before insertion boundaries.
+ */
+function textPlacementGrowthBottom(target: FlowTarget, initialBox: CompositionRect): number {
+  return target.definition.grow?.axis === 'y'
+    ? target.definition.box.y + target.definition.grow.maxHeight
+    : rectBottom(initialBox);
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Resolve the next hard insertion boundary for a text block.
+ */
+function textPlacementInsertionBoundary(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+): number | undefined {
+  if (target.block.role === 'quote') return undefined;
+  return nextInsertionBoundary(
+    context.route,
+    context.authoredBlocks,
+    context.authoredIndexOf(target.block.id),
+    target.currentPage.page,
+    context.insertionProposals,
+    context.flowId,
+    runtime.cursor.resumeY,
+  );
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Find the latest authored insertion that precedes the current block on this page.
+ */
+function previousInsertionForTextPlacement(
+  context: FlowPlanningContext,
+  target: FlowTarget,
+): PlannedInsertion | undefined {
+  const authoredIndex = context.authoredIndexOf(target.block.id);
+  return context.authoredBlocks
+    .slice(0, authoredIndex)
+    .filter((candidate) => candidate.role === 'quote')
+    .map((candidate) => context.insertionProposals.get(insertionKey(context.flowId, candidate.id)))
+    .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === target.currentPage.page)
+    .sort((left, right) => right.box.y - left.box.y)[0];
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Calculate the first line offset after existing flow, insertion, and obstacle occupancy.
+ */
+function textPlacementStartLineOffset(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+  slot: CompositionSlot,
+  initialBox: CompositionRect,
+  leading: number,
+): { startLineOffset: number; localBottom: number } {
+  const localBottom = flowingTextBottom(context.plan, slot.id, initialBox.y, context.document);
+  const crossSlotBottom = occupiedBottomInOverlappingSlots(target.currentPage, context.plan, slot, localBottom);
+  const previousInsertion = previousInsertionForTextPlacement(context, target);
+  const previousInsertionBottom = previousInsertion ? previousInsertion.box.y + previousInsertion.box.height : undefined;
+  const insertionIsBeforeCurrentColumn = previousInsertion !== undefined
+    && initialBox.x + initialBox.width / 2 <= previousInsertion.box.x + previousInsertion.box.width / 2;
+  const usedBottom = Math.max(
+    localBottom,
+    crossSlotBottom,
+    ...(insertionIsBeforeCurrentColumn && previousInsertionBottom !== undefined ? [previousInsertionBottom] : []),
+    runtime.cursor.resumeSlotId === slot.id ? runtime.cursor.resumeY ?? Number.NEGATIVE_INFINITY : Number.NEGATIVE_INFINITY,
+  );
+  return { startLineOffset: Math.max(0, (usedBottom - initialBox.y) / leading), localBottom };
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Collect graphics and flow-barrier geometry visible to a text block.
+ */
+function textPlacementObstacles(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+  slot: CompositionSlot,
+): {
+  pageGraphics: CompositionPlan['graphicPlacements'];
+  flowBarrierBoxCandidates: ReturnType<typeof flowBarrierBoxCandidatesForSlot>;
+} {
+  const pageGraphics = context.plan.graphicPlacements.filter((graphic) => graphic.page === target.currentPage.page && graphic.graphicId !== `insertion:${target.block.id}`);
+  const flowBarrierBoxCandidates = target.block.role === 'quote'
+    ? []
+    : flowBarrierBoxCandidatesForSlot(target.currentPage.page, slot, context.flowId, context.plan.graphicPlacements);
+  if (flowBarrierBoxCandidates.length > 0) {
+    recordFlowDecision(context, 'FLOW_BARRIER_BOXES_CONSUMED', runtime, target);
+  }
+  return { pageGraphics, flowBarrierBoxCandidates };
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Calculate the configured gap before a text block, including obstacle resumes.
+ */
+function textPlacementBlockGap(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+  slot: CompositionSlot,
+  localBottom: number,
+): number {
+  // A resume boundary created by an obstacle is already the start of a new
+  // legal content segment. The previous authored block is separated from
+  // this heading by that barrier, so its margin-before must not be added a
+  // second time after resumeY.
+  const previous = runtime.cursor.startWord === 0
+    ? previousBlockInSlot(context.plan, slot.id, target.block.id, context.document)
+    : undefined;
+  const resumedAfterFlowBarrier = runtime.cursor.resumeSlotId === slot.id
+    && runtime.cursor.resumeY !== undefined
+    && runtime.cursor.resumeY > localBottom + context.geometryTolerance;
+  return resumedAfterFlowBarrier
+    ? 0
+    : previous ? context.metrics.blockGap?.(styleFor(previous), styleFor(target.block)) ?? 0 : 0;
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Wrap the current text block with and without its configured block gap.
+ */
+function wrapTextPlacement(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+  initialBox: CompositionRect,
+  startLineOffset: number,
+  textBottom: number,
+  pageGraphics: CompositionPlan['graphicPlacements'],
+  flowBarrierBoxCandidates: ReturnType<typeof flowBarrierBoxCandidatesForSlot>,
+  leading: number,
+  blockGap: number,
+): { wrapped: ReturnType<typeof wrapBlock>; completeWrapped: ReturnType<typeof wrapBlock> } {
+  const { metrics, policy, geometryTolerance } = context;
+  const { block } = target;
+  const wrapped = wrapBlock(metrics, block, runtime.cursor.startWord, initialBox, startLineOffset + blockGap / leading, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
+  const completeWrapped = wrapBlock(metrics, block, runtime.cursor.startWord, initialBox, startLineOffset + blockGap / leading, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
+  return { wrapped, completeWrapped };
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Compress a heading gap only when doing so keeps the heading whole.
+ */
+function compressHeadingGapIfNeeded(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+  initialBox: CompositionRect,
+  startLineOffset: number,
+  textBottom: number,
+  pageGraphics: CompositionPlan['graphicPlacements'],
+  flowBarrierBoxCandidates: ReturnType<typeof flowBarrierBoxCandidatesForSlot>,
+  leading: number,
+  blockGap: number,
+  wrapped: ReturnType<typeof wrapBlock>,
+  completeWrapped: ReturnType<typeof wrapBlock>,
+): { blockGap: number; wrapped: ReturnType<typeof wrapBlock>; completeWrapped: ReturnType<typeof wrapBlock> } {
+  const { metrics, policy, geometryTolerance } = context;
+  const isHeadingBlock = target.block.kind === 'heading' || target.block.role === 'heading' || target.block.role === 'title';
+  const availableWithoutGap = availableLineCount(rectBottom(initialBox) - (initialBox.y + startLineOffset * leading), leading);
+  if (!isHeadingBlock || blockGap <= 0 || wrapped.length >= completeWrapped.length) return { blockGap, wrapped, completeWrapped };
+  const noGapWrapped = wrapBlock(metrics, target.block, runtime.cursor.startWord, initialBox, startLineOffset, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
+  const noGapComplete = wrapBlock(metrics, target.block, runtime.cursor.startWord, initialBox, startLineOffset, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
+  if (noGapComplete.length > availableWithoutGap || noGapWrapped.length !== noGapComplete.length) return { blockGap, wrapped, completeWrapped };
+  recordFlowDecision(context, 'BLOCK_GAP_COMPRESSED', runtime, target, 'keep-heading-whole-without-empty-column');
+  return { blockGap: 0, wrapped: noGapWrapped, completeWrapped: noGapComplete };
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
  * @planner-responsibility Build the read-only inputs for one text-placement attempt.
  */
 function prepareTextPlacement(
@@ -948,77 +1125,22 @@ function prepareTextPlacement(
   target: FlowTarget,
 ): PreparedTextPlacement {
   const { currentPage, block, definition } = target;
-  const { cursor } = runtime;
-  const { authoredBlocks, authoredIndexOf, document, flowId, geometryTolerance, insertionProposals, metrics, plan, policy, route } = context;
+  const { metrics } = context;
   const leading = lineHeight(metrics, block);
   const slot = currentPage.slots.get(definition.id)!;
   const initialBox = slotBox(currentPage, definition);
-  const growthBottom = definition.grow?.axis === 'y'
-    ? definition.box.y + definition.grow.maxHeight
-    : rectBottom(initialBox);
-  const insertionBoundary = block.role === 'quote'
-    ? undefined
-    : nextInsertionBoundary(route, authoredBlocks, authoredIndexOf(block.id), currentPage.page, insertionProposals, flowId, cursor.resumeY);
+  const growthBottom = textPlacementGrowthBottom(target, initialBox);
+  const insertionBoundary = textPlacementInsertionBoundary(context, runtime, target);
   const textBottom = insertionBoundary === undefined
     ? growthBottom
     : Math.min(growthBottom, insertionBoundary);
-  const localBottom = flowingTextBottom(plan, slot.id, initialBox.y, document);
-  const crossSlotBottom = occupiedBottomInOverlappingSlots(currentPage, plan, slot, localBottom);
-  const crossSlotGap = 0;
-  const previousInsertion = authoredBlocks
-    .slice(0, authoredIndexOf(block.id))
-    .filter((candidate) => candidate.role === 'quote')
-    .map((candidate) => insertionProposals.get(insertionKey(flowId, candidate.id)))
-    .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === currentPage.page)
-    .sort((left, right) => right.box.y - left.box.y)[0];
-  const previousInsertionBottom = previousInsertion ? previousInsertion.box.y + previousInsertion.box.height : undefined;
-  const insertionIsBeforeCurrentColumn = previousInsertion !== undefined
-    && initialBox.x + initialBox.width / 2 <= previousInsertion.box.x + previousInsertion.box.width / 2;
-  const usedBottom = Math.max(
-    localBottom,
-    crossSlotBottom,
-    ...(insertionIsBeforeCurrentColumn && previousInsertionBottom !== undefined ? [previousInsertionBottom] : []),
-    cursor.resumeSlotId === slot.id ? cursor.resumeY ?? Number.NEGATIVE_INFINITY : Number.NEGATIVE_INFINITY,
-  ) + crossSlotGap;
-  const startLineOffset = Math.max(0, (usedBottom - initialBox.y) / leading);
-  const pageGraphics = plan.graphicPlacements.filter((graphic) => graphic.page === currentPage.page && graphic.graphicId !== `insertion:${block.id}`);
-  const flowBarrierBoxCandidates = block.role === 'quote'
-    ? []
-    : flowBarrierBoxCandidatesForSlot(currentPage.page, slot, flowId, plan.graphicPlacements);
-  if (flowBarrierBoxCandidates.length > 0) {
-    recordFlowDecision(context, 'FLOW_BARRIER_BOXES_CONSUMED', runtime, target);
-  }
-  const previous = cursor.startWord === 0 ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
-  // A resume boundary created by an obstacle is already the start of a new
-  // legal content segment. The previous authored block is separated from
-  // this heading by that barrier, so its margin-before must not be added a
-  // second time after resumeY.
-  const resumedAfterFlowBarrier = cursor.resumeSlotId === slot.id
-    && cursor.resumeY !== undefined
-    && cursor.resumeY > localBottom + geometryTolerance;
-  let blockGap = resumedAfterFlowBarrier
-    ? 0
-    : previous ? metrics.blockGap?.(styleFor(previous), styleFor(block)) ?? 0 : 0;
+  const start = textPlacementStartLineOffset(context, runtime, target, slot, initialBox, leading);
+  const blockGap = textPlacementBlockGap(context, runtime, target, slot, start.localBottom);
   const isHeadingBlock = block.kind === 'heading' || block.role === 'heading' || block.role === 'title';
-  let wrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-  let completeWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-  // If only the inter-block gap prevents a whole heading from fitting in
-  // the remaining physical lines, use the configured gap as a soft value
-  // and compress it to zero for this boundary. Keeping a heading whole is
-  // more important than creating a four-line hole at the end of a column;
-  // ordinary body-to-body spacing remains unchanged.
-  const availableWithoutGap = availableLineCount(rectBottom(initialBox) - (initialBox.y + startLineOffset * leading), leading);
-  if (isHeadingBlock && blockGap > 0 && wrapped.length < completeWrapped.length) {
-    const noGapWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-    const noGapComplete = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-    if (noGapComplete.length <= availableWithoutGap && noGapWrapped.length === noGapComplete.length) {
-      recordFlowDecision(context, 'BLOCK_GAP_COMPRESSED', runtime, target, 'keep-heading-whole-without-empty-column');
-      blockGap = 0;
-      wrapped = noGapWrapped;
-      completeWrapped = noGapComplete;
-    }
-  }
-  return { leading, slot, initialBox, insertionBoundary, startLineOffset, pageGraphics, flowBarrierBoxCandidates, blockGap, isHeadingBlock, wrapped, completeWrapped };
+  const { pageGraphics, flowBarrierBoxCandidates } = textPlacementObstacles(context, runtime, target, slot);
+  const wraps = wrapTextPlacement(context, runtime, target, initialBox, start.startLineOffset, textBottom, pageGraphics, flowBarrierBoxCandidates, leading, blockGap);
+  const compressed = compressHeadingGapIfNeeded(context, runtime, target, initialBox, start.startLineOffset, textBottom, pageGraphics, flowBarrierBoxCandidates, leading, blockGap, wraps.wrapped, wraps.completeWrapped);
+  return { leading, slot, initialBox, insertionBoundary, startLineOffset: start.startLineOffset, pageGraphics, flowBarrierBoxCandidates, blockGap: compressed.blockGap, isHeadingBlock, wrapped: compressed.wrapped, completeWrapped: compressed.completeWrapped };
 }
 
 type ListItemKeepDecision =
@@ -1066,6 +1188,43 @@ type HeadingClusterObstacleDecision =
   | { kind: 'resume-below-obstacle'; obstacleId: string; resumeY: number; requiredClusterLines: number; availableAfterObstacle: number }
   | { kind: 'push-to-next-slot'; obstacleId: string; requiredClusterLines: number; availableAfterObstacle: number };
 
+type HeadingClusterProbes = {
+  headingProbe: ReturnType<typeof wrapBlock>;
+  leadProbe: ReturnType<typeof wrapBlock>;
+  keepLines: number;
+  nextLeading: number;
+};
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Probe a heading and its kept lead without page obstacles.
+ */
+function headingClusterProbes(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+  prepared: PreparedTextPlacement,
+  currentBox: CompositionRect,
+): HeadingClusterProbes | undefined {
+  const next = context.blocks[runtime.cursor.blockIndex + 1];
+  const keepLines = target.block.keepWithNextLines
+    ?? (target.block.kind === 'heading' ? context.policy.headingKeepWithNextLines ?? 0 : 0);
+  if (!prepared.isHeadingBlock || keepLines <= 0 || !next) return undefined;
+  const nextLeading = lineHeight(context.metrics, next);
+  const headingStartOffset = prepared.startLineOffset + prepared.blockGap / prepared.leading;
+  // Probe the cluster without obstacles first. Using the wrapped result
+  // from the real page here is insufficient: wrapBlock can skip lines
+  // under an obstacle, making a quote that cuts through the lead look
+  // like a normal gap instead of a violation of the keep rule.
+  const headingProbe = wrapBlock(context.metrics, target.block, runtime.cursor.startWord, prepared.initialBox, headingStartOffset, Number.POSITIVE_INFINITY, [], prepared.leading, context.policy.minimumWrapWidth);
+  const headingBottom = headingProbe.length > 0
+    ? prepared.initialBox.y + (headingProbe.at(-1)!.lineOffset + 1) * prepared.leading
+    : prepared.initialBox.y + headingStartOffset * prepared.leading;
+  const nextProbeStart = (headingBottom + prepared.blockGap - currentBox.y) / nextLeading;
+  const leadProbe = wrapBlock(context.metrics, next, 0, currentBox, nextProbeStart, Number.POSITIVE_INFINITY, [], nextLeading, context.policy.minimumWrapWidth);
+  return { headingProbe, leadProbe, keepLines, nextLeading };
+}
+
 /**
  * @planner-target composition/flow-text-decision.ts
  * @planner-responsibility Keep the current evaluateHeadingClusterObstacle implementation intact until its target seam is extracted.
@@ -1078,35 +1237,19 @@ function evaluateHeadingClusterObstacle(
   currentBox: CompositionRect,
 ): HeadingClusterObstacleDecision | undefined {
   const { cursor } = runtime;
-  const { block } = target;
-  const { blocks, geometryTolerance, metrics, policy } = context;
-  const { leading, initialBox, pageGraphics, blockGap, startLineOffset } = prepared;
-  const next = blocks[cursor.blockIndex + 1];
-  const keepLines = block.keepWithNextLines
-    ?? (block.kind === 'heading' ? policy.headingKeepWithNextLines ?? 0 : 0);
-  if (!prepared.isHeadingBlock || keepLines <= 0 || !next) return undefined;
-  const nextLeading = lineHeight(metrics, next);
-  const headingStartOffset = startLineOffset + blockGap / leading;
-  // Probe the cluster without obstacles first. Using the wrapped result
-  // from the real page here is insufficient: wrapBlock can skip lines
-  // under an obstacle, making a quote that cuts through the lead look
-  // like a normal gap instead of a violation of the keep rule.
-  const headingProbe = wrapBlock(metrics, block, cursor.startWord, initialBox, headingStartOffset, Number.POSITIVE_INFINITY, [], leading, policy.minimumWrapWidth);
-  const headingBottom = headingProbe.length > 0
-    ? initialBox.y + (headingProbe.at(-1)!.lineOffset + 1) * leading
-    : initialBox.y + headingStartOffset * leading;
-  const nextProbeStart = (headingBottom + blockGap - currentBox.y) / nextLeading;
-  const leadProbe = wrapBlock(metrics, next, 0, currentBox, nextProbeStart, Number.POSITIVE_INFINITY, [], nextLeading, policy.minimumWrapWidth);
-  if (leadProbe.length < keepLines) return undefined;
+  const { geometryTolerance, policy } = context;
+  const { leading, initialBox, pageGraphics } = prepared;
+  const probes = headingClusterProbes(context, runtime, target, prepared, currentBox);
+  if (!probes || probes.leadProbe.length < probes.keepLines) return undefined;
   const clusterObstacle = obstructionAcrossLineBands(
-    [{ lines: headingProbe, lineHeight: leading }, { lines: leadProbe.slice(0, keepLines), lineHeight: nextLeading }],
+    [{ lines: probes.headingProbe, lineHeight: leading }, { lines: probes.leadProbe.slice(0, probes.keepLines), lineHeight: probes.nextLeading }],
     initialBox,
     initialBox.y,
     pageGraphics,
     geometryTolerance,
   );
   if (!clusterObstacle) return undefined;
-  const requiredClusterLines = headingProbe.length + keepLines;
+  const requiredClusterLines = probes.headingProbe.length + probes.keepLines;
   const resumeY = Math.max(cursor.resumeY ?? initialBox.y, rectBottom(clusterObstacle.box));
   const availableAfterObstacle = availableLineCount(rectBottom(currentBox) - resumeY, leading);
   if (availableAfterObstacle >= requiredClusterLines) {

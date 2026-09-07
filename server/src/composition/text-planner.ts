@@ -276,6 +276,34 @@ function fitInsertionProposal(
   };
 }
 
+type InsertionSlotCandidate = {
+  page: number;
+  slotId: string;
+  box: CompositionRect;
+};
+
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Enumerate quote-eligible insertion slots in reading order.
+ */
+function insertionSlotCandidates(
+  template: CompositionTemplate,
+  route: CompositionFlowRoute,
+): InsertionSlotCandidate[] {
+  if (!route.insertionSlots?.length) return [];
+  const candidates: InsertionSlotCandidate[] = [];
+  const firstPage = route.startPage ?? 1;
+  for (let page = firstPage; page <= template.maxPages; page += 1) {
+    const layout = routeLayout(route, template, page);
+    if (!layout) continue;
+    for (const slotId of route.insertionSlots) {
+      const slot = layout.slots.find((candidate) => candidate.id === slotId && candidate.allowedRoles?.includes('quote'));
+      if (slot) candidates.push({ page, slotId, box: { ...slot.box } });
+    }
+  }
+  return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
+}
+
 /**
  * Read the insertion proposal produced by a previous planning pass. The
  * proposal is deliberately derived from the plan rather than from a fixed
@@ -291,17 +319,7 @@ function insertionProposalsFromPlan(document: CompositionDocument, template: Com
   for (const [flowId, flow] of Object.entries(document.flows)) {
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
-    const candidates: Array<{ page: number; slotId: string; box: CompositionRect }> = [];
-    const firstPage = route.startPage ?? 1;
-    for (let page = firstPage; page <= template.maxPages; page += 1) {
-      const layout = routeLayout(route, template, page);
-      if (!layout) continue;
-      for (const slotId of route.insertionSlots) {
-        const slot = layout.slots.find((candidate) => candidate.id === slotId && candidate.allowedRoles?.includes('quote'));
-        if (slot) candidates.push({ page, slotId, box: { ...slot.box } });
-      }
-    }
-    candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
+    const candidates = insertionSlotCandidates(template, route);
     const blockIndexes = new Map(flow.blocks.map((block, index) => [block.id, index]));
     const placedItems = [
       ...plan.lines.filter((line) => line.flowId === flowId && line.layer !== 'insertion'),
@@ -336,19 +354,30 @@ function insertionProposalsFromPlan(document: CompositionDocument, template: Com
   return proposals;
 }
 
+type MovableBoundsPolicy = {
+  bounds?: CompositionRect;
+  candidateCount: number;
+};
+
 /**
  * @planner-target composition/document-layout.ts
- * @planner-responsibility Keep the current validateMovableInsertionBounds implementation intact until its target seam is extracted.
+ * @planner-responsibility Validate one family of movable placement frames and emit its domain-specific diagnostics.
  */
-function validateMovableInsertionBounds(
-  insertionProposals: Map<string, PlannedInsertion>,
-  policy: TextCompositionPlannerPolicy,
+function validateMovableBounds(
+  proposals: Map<string, { box: CompositionRect }>,
+  policies: Record<string, MovableBoundsPolicy>,
   plan: CompositionPlan,
+  kind: 'insertion' | 'graphic',
 ): void {
-  for (const [key, movable] of Object.entries(policy.movableInsertionBounds ?? {})) {
-    const proposal = insertionProposals.get(key);
+  for (const [key, movable] of Object.entries(policies)) {
+    const proposal = proposals.get(key);
     if (!proposal) {
-      plan.diagnostics.push(diagnostic('error', 'MOVABLE_INSERTION_TARGET_NOT_FOUND', `Movable insertion policy '${key}' does not match a planned insertion.`, { details: { key } }));
+      plan.diagnostics.push(diagnostic(
+        'error',
+        `MOVABLE_${kind.toUpperCase()}_TARGET_NOT_FOUND`,
+        `Movable ${kind} policy '${key}' does not match a planned ${kind}.`,
+        { details: { key } },
+      ));
       continue;
     }
     const { bounds } = movable;
@@ -356,34 +385,39 @@ function validateMovableInsertionBounds(
     const validShape = Boolean(bounds && bounds.width > 0 && bounds.height > 0);
     const containsMeasuredBox = Boolean(bounds && proposal.box.width <= bounds.width && proposal.box.height <= bounds.height);
     if (!validNumbers || !validShape || !containsMeasuredBox || !Number.isInteger(movable.candidateCount) || movable.candidateCount < 1) {
-      plan.diagnostics.push(diagnostic('error', 'MOVABLE_INSERTION_BOUNDS_INVALID', `Movable insertion frame '${key}' cannot contain its measured insertion box or candidate count.`, { details: { key, bounds, measuredBox: proposal.box, candidateCount: movable.candidateCount } }));
+      const noun = kind === 'insertion' ? 'insertion' : 'graphic';
+      plan.diagnostics.push(diagnostic(
+        'error',
+        `MOVABLE_${kind.toUpperCase()}_BOUNDS_INVALID`,
+        `Movable ${kind} frame '${key}' cannot contain its measured ${noun} box or candidate count.`,
+        { details: { key, bounds, measuredBox: proposal.box, candidateCount: movable.candidateCount } },
+      ));
     }
   }
 }
 
 /**
  * @planner-target composition/document-layout.ts
- * @planner-responsibility Keep the current validateMovableGraphicBounds implementation intact until its target seam is extracted.
+ * @planner-responsibility Validate movable insertion frames.
+ */
+function validateMovableInsertionBounds(
+  insertionProposals: Map<string, PlannedInsertion>,
+  policy: TextCompositionPlannerPolicy,
+  plan: CompositionPlan,
+): void {
+  validateMovableBounds(insertionProposals, policy.movableInsertionBounds ?? {}, plan, 'insertion');
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Validate movable graphic frames.
  */
 function validateMovableGraphicBounds(
   graphicProposals: Map<string, PlannedGraphic>,
   policy: TextCompositionPlannerPolicy,
   plan: CompositionPlan,
 ): void {
-  for (const [key, movable] of Object.entries(policy.movableGraphicBounds ?? {})) {
-    const proposal = graphicProposals.get(key);
-    if (!proposal) {
-      plan.diagnostics.push(diagnostic('error', 'MOVABLE_GRAPHIC_TARGET_NOT_FOUND', `Movable graphic policy '${key}' does not match a planned graphic.`, { details: { key } }));
-      continue;
-    }
-    const { bounds } = movable;
-    const validNumbers = [bounds?.x, bounds?.y, bounds?.width, bounds?.height].every(Number.isFinite);
-    const validShape = Boolean(bounds && bounds.width > 0 && bounds.height > 0);
-    const containsMeasuredBox = Boolean(bounds && proposal.box.width <= bounds.width && proposal.box.height <= bounds.height);
-    if (!validNumbers || !validShape || !containsMeasuredBox || !Number.isInteger(movable.candidateCount) || movable.candidateCount < 1) {
-      plan.diagnostics.push(diagnostic('error', 'MOVABLE_GRAPHIC_BOUNDS_INVALID', `Movable graphic frame '${key}' cannot contain its measured graphic box or candidate count.`, { details: { key, bounds, measuredBox: proposal.box, candidateCount: movable.candidateCount } }));
-    }
-  }
+  validateMovableBounds(graphicProposals, policy.movableGraphicBounds ?? {}, plan, 'graphic');
 }
 
 /**
@@ -399,6 +433,113 @@ function graphicBox(graphic: NonNullable<CompositionDocument['graphics']>[number
     width,
     height,
   };
+}
+
+type DocumentGraphic = NonNullable<CompositionDocument['graphics']>[number];
+
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Find the graphic slot definition on one materialized page.
+ */
+function graphicDefinitionForPage(pageState: PageState, graphic: DocumentGraphic): CompositionSlotTemplate | undefined {
+  const definition = pageState.layout.slots.find((slot) => slot.id === graphic.slotId);
+  return definition?.kind === 'graphic' ? definition : undefined;
+}
+
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Validate shape-specific graphic parameters.
+ */
+function graphicShapeValidationError(graphic: DocumentGraphic): string | undefined {
+  const invalidStar = !Number.isInteger(graphic.vertexCount)
+    || (graphic.vertexCount ?? 0) < 3
+    || graphic.innerRatio === undefined
+    || graphic.innerRatio <= 0
+    || graphic.innerRatio >= 1;
+  if (graphic.shape === 'star' && invalidStar) {
+    return `Star '${graphic.id}' needs a vertexCount of at least 3 and an innerRatio between 0 and 1.`;
+  }
+  const invalidPolygon = !graphic.points
+    || graphic.points.length < 3
+    || graphic.points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y) || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1);
+  if (graphic.shape === 'polygon' && invalidPolygon) {
+    return `Polygon '${graphic.id}' needs at least three normalized points inside its slot.`;
+  }
+  return undefined;
+}
+
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Check whether a proposed graphic box remains inside its slot.
+ */
+function graphicBoxFitsSlot(box: CompositionRect, definition: CompositionSlotTemplate): boolean {
+  return box.x >= definition.box.x
+    && box.y >= definition.box.y
+    && box.x + box.width <= definition.box.x + definition.box.width
+    && box.y + box.height <= definition.box.y + definition.box.height;
+}
+
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Build the renderer-neutral placement record for a graphic.
+ */
+function createGraphicPlacement(
+  pageState: PageState,
+  definition: CompositionSlotTemplate,
+  graphic: DocumentGraphic,
+  box: CompositionRect,
+): CompositionGraphicPlacement {
+  const points = absoluteGraphicPoints(graphic, box);
+  const placement: CompositionGraphicPlacement = {
+    id: `graphic:${graphic.id}`,
+    graphicId: graphic.id,
+    ...(graphic.assetId === undefined ? {} : { assetId: graphic.assetId }),
+    slotId: slotId(pageState.page, definition.id),
+    page: pageState.page,
+    shape: graphic.shape,
+    wrap: graphic.wrap ?? 'around',
+    box: { ...box },
+    ...(points ? { points } : {}),
+    ...(graphic.vertexCount === undefined ? {} : { vertexCount: graphic.vertexCount }),
+    ...(graphic.innerRatio === undefined ? {} : { innerRatio: graphic.innerRatio }),
+  };
+  if (placement.shape !== 'ellipse' && placement.shape !== 'rectangle' && !placement.points) placement.points = polygonPoints(placement);
+  return placement;
+}
+
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Validate and materialize one graphic on its target page.
+ */
+function placeGraphicForPage(
+  document: CompositionDocument,
+  pageState: PageState,
+  plan: CompositionPlan,
+  graphicProposals: Map<string, PlannedGraphic>,
+  graphic: DocumentGraphic,
+): void {
+  if ((graphic.page ?? 1) !== pageState.page || plan.graphicPlacements.some((placement) => placement.graphicId === graphic.id)) return;
+  const definition = graphicDefinitionForPage(pageState, graphic);
+  if (!definition) {
+    plan.diagnostics.push(diagnostic('error', 'GRAPHIC_SLOT_NOT_FOUND', `Graphic '${graphic.id}' cannot use graphic slot '${graphic.slotId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId }));
+    return;
+  }
+  const shapeError = graphicShapeValidationError(graphic);
+  if (shapeError) {
+    plan.diagnostics.push(diagnostic('error', 'GRAPHIC_SHAPE_PARAMETER_INVALID', shapeError, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId }));
+    return;
+  }
+  if (graphic.assetId !== undefined && !document.assets?.some((asset) => asset.id === graphic.assetId)) {
+    plan.diagnostics.push(diagnostic('error', 'GRAPHIC_ASSET_NOT_FOUND', `Graphic '${graphic.id}' references missing asset '${graphic.assetId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId, details: { assetId: graphic.assetId } }));
+    return;
+  }
+  const proposal = graphicProposals.get(graphic.id);
+  const box = proposal?.box ?? graphicBox(graphic, definition);
+  if (!graphicBoxFitsSlot(box, definition)) {
+    plan.diagnostics.push(diagnostic('error', 'GRAPHIC_BOX_OUTSIDE_SLOT', `Graphic '${graphic.id}' leaves graphic slot '${graphic.slotId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId, details: { box, slot: definition.box } }));
+    return;
+  }
+  plan.graphicPlacements.push(createGraphicPlacement(pageState, definition, graphic, box));
 }
 
 /**
@@ -433,17 +574,7 @@ function seedInsertionProposals(document: CompositionDocument, template: Composi
   for (const [flowId, flow] of Object.entries(document.flows)) {
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
-    const candidates: Array<{ page: number; slotId: string; box: CompositionRect }> = [];
-    const firstPage = route.startPage ?? 1;
-    for (let page = firstPage; page <= template.maxPages; page += 1) {
-      const layout = routeLayout(route, template, page);
-      if (!layout) continue;
-      for (const slotId of route.insertionSlots) {
-        const slot = layout.slots.find((candidate) => candidate.id === slotId && candidate.allowedRoles?.includes('quote'));
-        if (slot) candidates.push({ page, slotId, box: { ...slot.box } });
-      }
-    }
-    candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
+    const candidates = insertionSlotCandidates(template, route);
     const quoteBlocks = flow.blocks.filter((block) => block.role === 'quote');
     quoteBlocks.forEach((block, index) => {
       const candidate = candidates[index];
@@ -463,39 +594,49 @@ function seedInsertionProposals(document: CompositionDocument, template: Composi
  * @planner-target composition/insertion-planning.ts
  * @planner-responsibility Reserve insertion rectangles that must obstruct flowing content.
  */
-function reserveInsertionObstacles(
+function reserveInsertionObstacle(
+  template: CompositionTemplate,
+  pages: PageState[],
+  plan: CompositionPlan,
+  proposal: PlannedInsertion,
+): void {
+  const route = template.routes[proposal.flowId] ?? template.routes.main;
+  if (!route) {
+    plan.diagnostics.push(diagnostic('error', 'INSERTION_ROUTE_NOT_FOUND', `Insertion '${proposal.blockId}' has no route.`, { flowId: proposal.flowId, blockId: proposal.blockId }));
+    return;
+  }
+  const page = ensurePage(pages, template, route, proposal.page, plan.diagnostics, proposal.flowId);
+  if (!page) return;
+  const definition = page.layout.slots.find((slot) => slot.id === proposal.slotId && slot.allowedRoles?.includes('quote'));
+  const slot = definition ? page.slots.get(definition.id) : undefined;
+  if (!definition || !slot) {
+    plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Insertion '${proposal.blockId}' cannot reserve slot '${proposal.slotId}'.`, { flowId: proposal.flowId, blockId: proposal.blockId, page: proposal.page, slotId: proposal.slotId }));
+    return;
+  }
+  slot.box = { ...proposal.box };
+  plan.graphicPlacements.push({
+    id: `graphic:insertion:${proposal.blockId}`,
+    graphicId: `insertion:${proposal.blockId}`,
+    slotId: slot.id,
+    page: proposal.page,
+    shape: 'rectangle',
+    wrap: 'around',
+    paint: false,
+    box: { ...slot.box },
+  });
+  plan.decisions.push({ code: 'INSERTION_OBSTACLE_RESERVED', flowId: proposal.flowId, blockId: proposal.blockId, page: proposal.page, slotId: slot.id, box: { ...slot.box } });
+}
+
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Collapse open insertion slots without an authored proposal on their page.
+ */
+function collapseUnassignedInsertionSlots(
   template: CompositionTemplate,
   pages: PageState[],
   plan: CompositionPlan,
   proposals: Map<string, PlannedInsertion>,
 ): void {
-  for (const proposal of proposals.values()) {
-    const route = template.routes[proposal.flowId] ?? template.routes.main;
-    if (!route) {
-      plan.diagnostics.push(diagnostic('error', 'INSERTION_ROUTE_NOT_FOUND', `Insertion '${proposal.blockId}' has no route.`, { flowId: proposal.flowId, blockId: proposal.blockId }));
-      continue;
-    }
-    const page = ensurePage(pages, template, route, proposal.page, plan.diagnostics, proposal.flowId);
-    if (!page) continue;
-    const definition = page.layout.slots.find((slot) => slot.id === proposal.slotId && slot.allowedRoles?.includes('quote'));
-    const slot = definition ? page.slots.get(definition.id) : undefined;
-    if (!definition || !slot) {
-      plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Insertion '${proposal.blockId}' cannot reserve slot '${proposal.slotId}'.`, { flowId: proposal.flowId, blockId: proposal.blockId, page: proposal.page, slotId: proposal.slotId }));
-      continue;
-    }
-    slot.box = { ...proposal.box };
-    plan.graphicPlacements.push({
-      id: `graphic:insertion:${proposal.blockId}`,
-      graphicId: `insertion:${proposal.blockId}`,
-      slotId: slot.id,
-      page: proposal.page,
-      shape: 'rectangle',
-      wrap: 'around',
-      paint: false,
-      box: { ...slot.box },
-    });
-    plan.decisions.push({ code: 'INSERTION_OBSTACLE_RESERVED', flowId: proposal.flowId, blockId: proposal.blockId, page: proposal.page, slotId: slot.id, box: { ...slot.box } });
-  }
   for (const page of pages) {
     for (const [flowId, route] of Object.entries(template.routes)) {
       if (!route.insertionSlots?.length) continue;
@@ -514,12 +655,169 @@ function reserveInsertionObstacles(
 }
 
 /**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Reserve all planned insertion rectangles and collapse unused slots.
+ */
+function reserveInsertionObstacles(
+  template: CompositionTemplate,
+  pages: PageState[],
+  plan: CompositionPlan,
+  proposals: Map<string, PlannedInsertion>,
+): void {
+  for (const proposal of proposals.values()) reserveInsertionObstacle(template, pages, plan, proposal);
+  collapseUnassignedInsertionSlots(template, pages, plan, proposals);
+}
+
+/**
  * Lay out authored insertions before the ordinary flow.  The old planner only
  * reserved their rectangles and then sent the quote back through the main
  * block loop, which made a quote look like another route segment and allowed
  * the text cursor to decide its placement.  Here the quote is measured and
  * painted as a separate layer first; the main cursor only sees its obstacle.
  */
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Validate, measure, and materialize planned insertion blocks on a page.
+ */
+type InsertionBlockTarget = {
+  key: string;
+  proposal: PlannedInsertion;
+  page: PageState;
+  definition: CompositionSlotTemplate;
+  slot: CompositionSlot;
+};
+
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Resolve the planned page slot for one authored insertion.
+ */
+function resolveInsertionBlockTarget(
+  template: CompositionTemplate,
+  plan: CompositionPlan,
+  pages: PageState[],
+  proposals: Map<string, PlannedInsertion>,
+  route: CompositionFlowRoute,
+  flowId: string,
+  block: CompositionBlock,
+): InsertionBlockTarget | undefined {
+  const key = insertionKey(flowId, block.id);
+  const proposal = proposals.get(key);
+  if (!proposal) {
+    plan.diagnostics.push(diagnostic('error', 'INSERTION_PLAN_MISSING', `Insertion '${block.id}' has no planned obstacle slot.`, { flowId, blockId: block.id }));
+    addResidual(plan.residualContent, flowId, block, 0, undefined, 'insertion-plan-missing');
+    return undefined;
+  }
+  const page = ensurePage(pages, template, route, proposal.page, plan.diagnostics, flowId);
+  const definition = page?.layout.slots.find((slot) => slot.id === proposal.slotId && slot.allowedRoles?.includes('quote'));
+  const slot = definition && page ? page.slots.get(definition.id) : undefined;
+  if (!page || !definition || !slot) {
+    plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Insertion '${block.id}' cannot place its planned slot '${proposal.slotId}'.`, { flowId, blockId: block.id, page: proposal.page, slotId: proposal.slotId }));
+    addResidual(plan.residualContent, flowId, block, 0, undefined, 'insertion-slot-not-found');
+    return undefined;
+  }
+  return { key, proposal, page, definition, slot };
+}
+
+type MeasuredInsertionBlock = {
+  leading: number;
+  padding: { top: number; bottom: number };
+  lines: ReturnType<typeof wrapBlock>;
+  wordCount: number;
+  consumed: number;
+};
+
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Measure one insertion against its planned obstacle box.
+ */
+function measureInsertionBlock(
+  metrics: CompositionTextMetrics,
+  target: InsertionBlockTarget,
+  block: CompositionBlock,
+): MeasuredInsertionBlock {
+  const { definition, slot } = target;
+  const leading = lineHeight(metrics, block);
+  const padding = textPadding(metrics, block);
+  const measurementBox = definition.fitContent && definition.grow?.axis === 'y'
+    ? { ...slot.box, height: Math.max(slot.box.height, definition.grow.maxHeight) }
+    : slot.box;
+  const contentBox = {
+    ...measurementBox,
+    y: measurementBox.y + padding.top,
+    height: Math.max(0, measurementBox.height - padding.top - padding.bottom),
+  };
+  const lines = wrapBlock(metrics, block, 0, contentBox, 0, rectBottom(contentBox), [], leading);
+  return { leading, padding, lines, wordCount: wordsForBlock(block).length, consumed: lines.at(-1)?.endWord ?? 0 };
+}
+
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Apply fit-content sizing to a measured insertion slot.
+ */
+function fitInsertionSlotContent(
+  plan: CompositionPlan,
+  target: InsertionBlockTarget,
+  block: CompositionBlock,
+  measurement: MeasuredInsertionBlock,
+): void {
+  const { definition, slot, page, proposal } = target;
+  if (!definition.fitContent || measurement.lines.length === 0) return;
+  const contentHeight = (measurement.lines.at(-1)!.lineOffset + 1) * measurement.leading;
+  const maxHeight = definition.grow?.axis === 'y' ? definition.grow.maxHeight : slot.box.height;
+  const fittedHeight = Math.min(maxHeight, measurement.padding.top + contentHeight + measurement.padding.bottom);
+  slot.box.height = fittedHeight;
+  plan.decisions.push({
+    code: 'INSERTION_SLOT_FIT_CONTENT',
+    flowId: proposal.flowId,
+    blockId: block.id,
+    page: page.page,
+    slotId: slot.id,
+    fromHeight: proposal.box.height,
+    toHeight: fittedHeight,
+    contentHeight,
+    maxHeight,
+  });
+}
+
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Synchronize a materialized insertion obstacle with its fitted slot box.
+ */
+function synchronizeInsertionObstacle(plan: CompositionPlan, target: InsertionBlockTarget, block: CompositionBlock): void {
+  const obstacle = plan.graphicPlacements.find((graphic) => graphic.graphicId === `insertion:${block.id}` && graphic.page === target.page.page);
+  if (obstacle) obstacle.box = { ...target.slot.box };
+}
+
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Validate, measure, and materialize one planned insertion block.
+ */
+function placeInsertionBlock(
+  metrics: CompositionTextMetrics,
+  template: CompositionTemplate,
+  plan: CompositionPlan,
+  pages: PageState[],
+  proposals: Map<string, PlannedInsertion>,
+  route: CompositionFlowRoute,
+  flowId: string,
+  block: CompositionBlock,
+): string | undefined {
+  const target = resolveInsertionBlockTarget(template, plan, pages, proposals, route, flowId, block);
+  if (!target) return undefined;
+  const measurement = measureInsertionBlock(metrics, target, block);
+  if (measurement.consumed < measurement.wordCount) {
+    plan.diagnostics.push(diagnostic('error', 'INSERTION_OVERFLOW', `Insertion '${block.id}' does not fit in its measured obstacle box.`, { flowId, blockId: block.id, page: target.page.page, slotId: target.slot.id, details: { consumed: measurement.consumed, wordCount: measurement.wordCount, box: { ...target.slot.box } } }));
+    addResidual(plan.residualContent, flowId, block, measurement.consumed, target.slot.id, 'insertion-overflow');
+    return undefined;
+  }
+  fitInsertionSlotContent(plan, target, block, measurement);
+  placeLines(target.page, target.definition, block, metrics, flowId, undefined, measurement.lines, measurement.leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion', measurement.padding);
+  target.slot.state = 'exhausted';
+  synchronizeInsertionObstacle(plan, target, block);
+  plan.decisions.push({ code: 'INSERTION_LAYER_PLACED', flowId, blockId: block.id, page: target.page.page, slotId: target.slot.id, lineCount: measurement.lines.length, box: { ...target.slot.box } });
+  return target.key;
+}
+
 /**
  * @planner-target composition/insertion-planning.ts
  * @planner-responsibility Validate, measure, and materialize planned insertion blocks on a page.
@@ -537,62 +835,8 @@ function placeInsertionLayer(
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
     for (const block of flow.blocks.filter((candidate) => candidate.role === 'quote')) {
-      const key = insertionKey(flowId, block.id);
-      const proposal = proposals.get(key);
-      if (!proposal) {
-        plan.diagnostics.push(diagnostic('error', 'INSERTION_PLAN_MISSING', `Insertion '${block.id}' has no planned obstacle slot.`, { flowId, blockId: block.id }));
-        addResidual(plan.residualContent, flowId, block, 0, undefined, 'insertion-plan-missing');
-        continue;
-      }
-      const page = ensurePage(pages, template, route, proposal.page, plan.diagnostics, flowId);
-      const definition = page?.layout.slots.find((slot) => slot.id === proposal.slotId && slot.allowedRoles?.includes('quote'));
-      const slot = definition && page ? page.slots.get(definition.id) : undefined;
-      if (!page || !definition || !slot) {
-        plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Insertion '${block.id}' cannot place its planned slot '${proposal.slotId}'.`, { flowId, blockId: block.id, page: proposal.page, slotId: proposal.slotId }));
-        addResidual(plan.residualContent, flowId, block, 0, undefined, 'insertion-slot-not-found');
-        continue;
-      }
-      const leading = lineHeight(metrics, block);
-      const padding = textPadding(metrics, block);
-      const measurementBox = definition.fitContent && definition.grow?.axis === 'y'
-        ? { ...slot.box, height: Math.max(slot.box.height, definition.grow.maxHeight) }
-        : slot.box;
-      const contentBox = {
-        ...measurementBox,
-        y: measurementBox.y + padding.top,
-        height: Math.max(0, measurementBox.height - padding.top - padding.bottom),
-      };
-      const lines = wrapBlock(metrics, block, 0, contentBox, 0, rectBottom(contentBox), [], leading);
-      const wordCount = wordsForBlock(block).length;
-      const consumed = lines.at(-1)?.endWord ?? 0;
-      if (consumed < wordCount) {
-        plan.diagnostics.push(diagnostic('error', 'INSERTION_OVERFLOW', `Insertion '${block.id}' does not fit in its measured obstacle box.`, { flowId, blockId: block.id, page: page.page, slotId: slot.id, details: { consumed, wordCount, box: { ...slot.box } } }));
-        addResidual(plan.residualContent, flowId, block, consumed, slot.id, 'insertion-overflow');
-        continue;
-      }
-      if (definition.fitContent && lines.length > 0) {
-        const contentHeight = (lines.at(-1)!.lineOffset + 1) * leading;
-        const maxHeight = definition.grow?.axis === 'y' ? definition.grow.maxHeight : slot.box.height;
-        const fittedHeight = Math.min(maxHeight, padding.top + contentHeight + padding.bottom);
-        slot.box.height = fittedHeight;
-        plan.decisions.push({
-          code: 'INSERTION_SLOT_FIT_CONTENT',
-          flowId,
-          blockId: block.id,
-          page: page.page,
-          slotId: slot.id,
-          fromHeight: proposal.box.height,
-          toHeight: fittedHeight,
-          contentHeight,
-          maxHeight,
-        });
-      }
-      placeLines(page, definition, block, metrics, flowId, undefined, lines, leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion', padding);
-      slot.state = 'exhausted';
-      const obstacle = plan.graphicPlacements.find((graphic) => graphic.graphicId === `insertion:${block.id}` && graphic.page === page.page);
-      if (obstacle) obstacle.box = { ...slot.box };
-      plan.decisions.push({ code: 'INSERTION_LAYER_PLACED', flowId, blockId: block.id, page: page.page, slotId: slot.id, lineCount: lines.length, box: { ...slot.box } });
-      placed.add(key);
+      const key = placeInsertionBlock(metrics, template, plan, pages, proposals, route, flowId, block);
+      if (key) placed.add(key);
     }
   }
   return placed;
@@ -617,51 +861,7 @@ export function placeGraphicsForPage(
   plan: CompositionPlan,
   graphicProposals: Map<string, PlannedGraphic> = new Map(),
 ): void {
-  for (const graphic of document.graphics ?? []) {
-    if ((graphic.page ?? 1) !== pageState.page || plan.graphicPlacements.some((placement) => placement.graphicId === graphic.id)) continue;
-    const definition = pageState.layout.slots.find((slot) => slot.id === graphic.slotId);
-    if (!definition || definition.kind !== 'graphic') {
-      plan.diagnostics.push(diagnostic('error', 'GRAPHIC_SLOT_NOT_FOUND', `Graphic '${graphic.id}' cannot use graphic slot '${graphic.slotId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId }));
-      continue;
-    }
-    const invalidStar = !Number.isInteger(graphic.vertexCount) || (graphic.vertexCount ?? 0) < 3 || graphic.innerRatio === undefined || graphic.innerRatio <= 0 || graphic.innerRatio >= 1;
-    if (graphic.shape === 'star' && invalidStar) {
-      plan.diagnostics.push(diagnostic('error', 'GRAPHIC_SHAPE_PARAMETER_INVALID', `Star '${graphic.id}' needs a vertexCount of at least 3 and an innerRatio between 0 and 1.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId }));
-      continue;
-    }
-    if (graphic.shape === 'polygon' && (!graphic.points || graphic.points.length < 3 || graphic.points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y) || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1))) {
-      plan.diagnostics.push(diagnostic('error', 'GRAPHIC_SHAPE_PARAMETER_INVALID', `Polygon '${graphic.id}' needs at least three normalized points inside its slot.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId }));
-      continue;
-    }
-    if (graphic.assetId !== undefined && !document.assets?.some((asset) => asset.id === graphic.assetId)) {
-      plan.diagnostics.push(diagnostic('error', 'GRAPHIC_ASSET_NOT_FOUND', `Graphic '${graphic.id}' references missing asset '${graphic.assetId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId, details: { assetId: graphic.assetId } }));
-      continue;
-    }
-    const proposal = graphicProposals.get(graphic.id);
-    const box = proposal?.box ?? graphicBox(graphic, definition);
-    if (box.x < definition.box.x || box.y < definition.box.y
-      || box.x + box.width > definition.box.x + definition.box.width
-      || box.y + box.height > definition.box.y + definition.box.height) {
-      plan.diagnostics.push(diagnostic('error', 'GRAPHIC_BOX_OUTSIDE_SLOT', `Graphic '${graphic.id}' leaves graphic slot '${graphic.slotId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId, details: { box, slot: definition.box } }));
-      continue;
-    }
-    const points = absoluteGraphicPoints(graphic, box);
-    const placement: CompositionGraphicPlacement = {
-      id: `graphic:${graphic.id}`,
-      graphicId: graphic.id,
-      ...(graphic.assetId === undefined ? {} : { assetId: graphic.assetId }),
-      slotId: slotId(pageState.page, definition.id),
-      page: pageState.page,
-      shape: graphic.shape,
-      wrap: graphic.wrap ?? 'around',
-      box: { ...box },
-      ...(points ? { points } : {}),
-      ...(graphic.vertexCount === undefined ? {} : { vertexCount: graphic.vertexCount }),
-      ...(graphic.innerRatio === undefined ? {} : { innerRatio: graphic.innerRatio }),
-    };
-    if (placement.shape !== 'ellipse' && placement.shape !== 'rectangle' && !placement.points) placement.points = polygonPoints(placement);
-    plan.graphicPlacements.push(placement);
-  }
+  for (const graphic of document.graphics ?? []) placeGraphicForPage(document, pageState, plan, graphicProposals, graphic);
 }
 
 /**
@@ -746,22 +946,25 @@ export function rectsOverlap(first: CompositionRect, second: CompositionRect): b
  * @planner-target composition/text-placement.ts
  * @planner-responsibility Keep the current placeLines implementation intact until its target seam is extracted.
  */
-export function placeLines(
-  pageState: PageState,
+type LinePlacementGeometry = {
+  firstY: number;
+  lastBottom: number;
+  left: number;
+  right: number;
+  verticalOffset: number;
+};
+
+/**
+ * @planner-target composition/text-placement.ts
+ * @planner-responsibility Calculate the shared placement geometry for a batch of wrapped lines.
+ */
+function linePlacementGeometry(
+  slot: CompositionSlot,
   definition: CompositionSlotTemplate,
-  block: CompositionBlock,
-  metrics: CompositionTextMetrics,
-  flowId: string,
-  routeIndex: number | undefined,
   lines: WrappedLine[],
   lineHeightValue: number,
-  placements: CompositionPlacement[],
-  outputLines: CompositionLine[],
-  layer: 'flow' | 'insertion' = 'flow',
-  padding: { top: number; bottom: number } = { top: 0, bottom: 0 },
-): void {
-  const slot = pageState.slots.get(definition.id);
-  if (!slot || lines.length === 0) return;
+  padding: { top: number; bottom: number },
+): LinePlacementGeometry {
   const box = slot.box;
   const first = lines[0];
   const last = lines.at(-1)!;
@@ -772,29 +975,50 @@ export function placeLines(
     : definition.verticalAlign === 'bottom'
       ? freeHeight
       : 0;
-  const firstY = box.y + padding.top + first.lineOffset * lineHeightValue + verticalOffset;
-  const lastBottom = box.y + padding.top + (last.lineOffset + 1) * lineHeightValue + verticalOffset;
-  const left = Math.min(...lines.map((line) => line.x));
-  const right = Math.max(...lines.map((line) => line.x + line.width));
-  placements.push({
-    id: `placement:${placements.length + 1}`,
-    blockId: block.id,
-    slotId: slot.id,
-    page: pageState.page,
-    ...(routeIndex === undefined ? {} : { routeIndex }),
-    box: { x: left, y: firstY, width: right - left, height: lastBottom - firstY },
-    startWord: first.startWord,
-    endWord: last.endWord,
-    ...(layer === 'flow' ? {} : { layer }),
-  });
+  return {
+    firstY: box.y + padding.top + first.lineOffset * lineHeightValue + verticalOffset,
+    lastBottom: box.y + padding.top + (last.lineOffset + 1) * lineHeightValue + verticalOffset,
+    left: Math.min(...lines.map((line) => line.x)),
+    right: Math.max(...lines.map((line) => line.x + line.width)),
+    verticalOffset,
+  };
+}
+
+/**
+ * @planner-target composition/text-placement.ts
+ * @planner-responsibility Resolve the aligned x-coordinate for one wrapped line.
+ */
+function alignedLineX(definition: CompositionSlotTemplate, line: WrappedLine): number {
+  return definition.textAlign === 'right'
+    ? line.x + line.width - line.naturalWidth
+    : definition.textAlign === 'center'
+      ? line.x + (line.width - line.naturalWidth) / 2
+      : line.x;
+}
+
+/**
+ * @planner-target composition/text-placement.ts
+ * @planner-responsibility Append renderer-neutral line records for one placed line batch.
+ */
+function appendPlacedLines(
+  pageState: PageState,
+  definition: CompositionSlotTemplate,
+  block: CompositionBlock,
+  metrics: CompositionTextMetrics,
+  flowId: string,
+  routeIndex: number | undefined,
+  lines: WrappedLine[],
+  lineHeightValue: number,
+  padding: { top: number; bottom: number },
+  verticalOffset: number,
+  outputLines: CompositionLine[],
+  layer: 'flow' | 'insertion',
+): void {
+  const slot = pageState.slots.get(definition.id)!;
   lines.forEach((line) => {
-    const lineY = box.y + padding.top + line.lineOffset * lineHeightValue + verticalOffset;
-    const textX = definition.textAlign === 'right'
-      ? line.x + line.width - line.naturalWidth
-      : definition.textAlign === 'center'
-        ? line.x + (line.width - line.naturalWidth) / 2
-        : line.x;
-    const outputLine: CompositionLine = {
+    const lineY = slot.box.y + padding.top + line.lineOffset * lineHeightValue + verticalOffset;
+    const textX = alignedLineX(definition, line);
+    outputLines.push({
       blockId: block.id,
       flowId,
       slotId: slot.id,
@@ -813,11 +1037,52 @@ export function placeLines(
       endWord: line.endWord,
       glyphSamplingBoxes: glyphSamplingBoxes(metrics, block, line.text, textX, lineY, line.naturalWidth, lineHeightValue),
       ...(layer === 'flow' ? {} : { layer }),
-    };
-    outputLines.push(outputLine);
+    });
   });
-  const occupiedBottom = lastBottom;
-  slot.state = occupiedBottom >= rectBottom(box) ? 'exhausted' : 'partial';
+}
+
+/**
+ * @planner-target composition/text-placement.ts
+ * @planner-responsibility Update slot occupancy after line placement.
+ */
+function markLinePlacementOccupancy(slot: CompositionSlot, lastBottom: number): void {
+  slot.state = lastBottom >= rectBottom(slot.box) ? 'exhausted' : 'partial';
+}
+
+/**
+ * @planner-target composition/text-placement.ts
+ * @planner-responsibility Place wrapped lines, then update slot occupancy.
+ */
+export function placeLines(
+  pageState: PageState,
+  definition: CompositionSlotTemplate,
+  block: CompositionBlock,
+  metrics: CompositionTextMetrics,
+  flowId: string,
+  routeIndex: number | undefined,
+  lines: WrappedLine[],
+  lineHeightValue: number,
+  placements: CompositionPlacement[],
+  outputLines: CompositionLine[],
+  layer: 'flow' | 'insertion' = 'flow',
+  padding: { top: number; bottom: number } = { top: 0, bottom: 0 },
+): void {
+  const slot = pageState.slots.get(definition.id);
+  if (!slot || lines.length === 0) return;
+  const geometry = linePlacementGeometry(slot, definition, lines, lineHeightValue, padding);
+  placements.push({
+    id: `placement:${placements.length + 1}`,
+    blockId: block.id,
+    slotId: slot.id,
+    page: pageState.page,
+    ...(routeIndex === undefined ? {} : { routeIndex }),
+    box: { x: geometry.left, y: geometry.firstY, width: geometry.right - geometry.left, height: geometry.lastBottom - geometry.firstY },
+    startWord: lines[0].startWord,
+    endWord: lines.at(-1)!.endWord,
+    ...(layer === 'flow' ? {} : { layer }),
+  });
+  appendPlacedLines(pageState, definition, block, metrics, flowId, routeIndex, lines, lineHeightValue, padding, geometry.verticalOffset, outputLines, layer);
+  markLinePlacementOccupancy(slot, geometry.lastBottom);
 }
 
 /**
@@ -942,18 +1207,21 @@ function flattenPages(pages: PageState[], plan: CompositionPlan, template: Compo
 
 /**
  * @planner-target composition/document-layout.ts
- * @planner-responsibility Coordinate one complete document-layout run from preflight through finalization.
+ * @planner-responsibility Tell whether a plan has any error diagnostics.
  */
-function planDocumentOnce(
-  document: CompositionDocument,
-  metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+function planHasErrors(plan: CompositionPlan): boolean {
+  return plan.diagnostics.some((item) => item.severity === 'error');
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Materialize movable insertion frames from the active policy and proposals.
+ */
+function movableInsertionFramesForPlan(
   policy: TextCompositionPlannerPolicy,
   insertionProposals: Map<string, PlannedInsertion>,
-  graphicProposals: Map<string, PlannedGraphic>,
-): CompositionPlan {
-  const plan = createPlan(policy.minimumFragmentLines);
-  plan.movableInsertionFrames = Object.entries(policy.movableInsertionBounds ?? {}).flatMap(([key, movable]) => {
+): CompositionMovableInsertionFrame[] {
+  return Object.entries(policy.movableInsertionBounds ?? {}).flatMap(([key, movable]) => {
     const proposal = insertionProposals.get(key);
     if (!proposal) return [];
     return [{
@@ -966,7 +1234,17 @@ function planDocumentOnce(
       candidateCount: movable.candidateCount,
     } satisfies CompositionMovableInsertionFrame];
   });
-  plan.movableGraphicFrames = Object.entries(policy.movableGraphicBounds ?? {}).flatMap(([key, movable]) => {
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Materialize movable graphic frames from the active policy and proposals.
+ */
+function movableGraphicFramesForPlan(
+  policy: TextCompositionPlannerPolicy,
+  graphicProposals: Map<string, PlannedGraphic>,
+): CompositionMovableGraphicFrame[] {
+  return Object.entries(policy.movableGraphicBounds ?? {}).flatMap(([key, movable]) => {
     const proposal = graphicProposals.get(key);
     if (!proposal) return [];
     return [{
@@ -978,10 +1256,39 @@ function planDocumentOnce(
       candidateCount: movable.candidateCount,
     } satisfies CompositionMovableGraphicFrame];
   });
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Attach candidate frames and run all preflight validations for one layout pass.
+ */
+function preparePlanForLayout(
+  document: CompositionDocument,
+  template: CompositionTemplate,
+  policy: TextCompositionPlannerPolicy,
+  insertionProposals: Map<string, PlannedInsertion>,
+  graphicProposals: Map<string, PlannedGraphic>,
+  plan: CompositionPlan,
+): void {
+  plan.movableInsertionFrames = movableInsertionFramesForPlan(policy, insertionProposals);
+  plan.movableGraphicFrames = movableGraphicFramesForPlan(policy, graphicProposals);
   validateMovableInsertionBounds(insertionProposals, policy, plan);
   validateMovableGraphicBounds(graphicProposals, policy, plan);
   validateGrowthPolicies(template, plan);
-  recordPlanningPhase(plan, 'preflight', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { layoutCount: template.layouts.length, flowCount: Object.keys(document.flows).length });
+  recordPlanningPhase(plan, 'preflight', planHasErrors(plan) ? 'failed' : 'completed', { layoutCount: template.layouts.length, flowCount: Object.keys(document.flows).length });
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Create the first document page and reserve planned insertion obstacles.
+ */
+function reserveDocumentObstacles(
+  document: CompositionDocument,
+  template: CompositionTemplate,
+  plan: CompositionPlan,
+  insertionProposals: Map<string, PlannedInsertion>,
+  graphicProposals: Map<string, PlannedGraphic>,
+): PageState[] {
   const pages: PageState[] = [];
   materializeGraphicPages(document, template, pages, plan, graphicProposals);
   // A rendered document always has a first page, even when all content
@@ -990,45 +1297,153 @@ function planDocumentOnce(
   const firstRoute = template.routes.main ?? Object.values(template.routes)[0];
   if (firstRoute) ensurePage(pages, template, firstRoute, 1, plan.diagnostics, 'document');
   reserveInsertionObstacles(template, pages, plan, insertionProposals);
-  recordPlanningPhase(plan, 'obstacle-reservation', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { obstacleCount: plan.graphicPlacements.filter((graphic) => graphic.graphicId.startsWith('insertion:')).length });
+  recordPlanningPhase(plan, 'obstacle-reservation', planHasErrors(plan) ? 'failed' : 'completed', { obstacleCount: plan.graphicPlacements.filter((graphic) => graphic.graphicId.startsWith('insertion:')).length });
+  return pages;
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Materialize all planned insertion text before ordinary flow placement.
+ */
+function placeDocumentInsertions(
+  document: CompositionDocument,
+  metrics: CompositionTextMetrics,
+  template: CompositionTemplate,
+  plan: CompositionPlan,
+  pages: PageState[],
+  insertionProposals: Map<string, PlannedInsertion>,
+): void {
   const insertionKeys = placeInsertionLayer(document, metrics, template, plan, pages, insertionProposals);
-  recordPlanningPhase(plan, 'insertion-placement', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { insertionCount: insertionKeys.size });
-  // Repeated chrome depends on the final number of pages. Plan all ordinary
-  // flows first so a header/footer that starts on page 2 cannot observe the
-  // provisional one-page document and silently disappear.
+  recordPlanningPhase(plan, 'insertion-placement', planHasErrors(plan) ? 'failed' : 'completed', { insertionCount: insertionKeys.size });
+}
+
+type DocumentFlowPlanningContext = {
+  document: CompositionDocument;
+  metrics: CompositionTextMetrics;
+  template: CompositionTemplate;
+  policy: TextCompositionPlannerPolicy;
+  pages: PageState[];
+  plan: CompositionPlan;
+  insertionProposals: Map<string, PlannedInsertion>;
+};
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Plan a repeated flow once for every already-materialized page.
+ */
+function planRepeatedFlow(
+  context: DocumentFlowPlanningContext,
+  flowId: string,
+  route: CompositionFlowRoute,
+): void {
+  context.plan.repeatFlowIds?.push(flowId);
+  const pageCount = Math.max(1, context.pages.length);
+  const firstPage = route.startPage ?? 1;
+  for (let page = firstPage; page <= pageCount; page += 1) {
+    planFlow(context.document, context.metrics, context.template, context.policy, flowId, { ...route, continuation: 'forbidden' }, context.pages, context.plan, page, context.insertionProposals);
+  }
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Validate and plan one ordinary flow from its configured start page.
+ */
+function planOrdinaryFlow(
+  context: DocumentFlowPlanningContext,
+  flowId: string,
+  route: CompositionFlowRoute,
+): void {
+  if (route.startPage !== undefined && (!Number.isInteger(route.startPage) || route.startPage < 1 || route.startPage > context.template.maxPages)) {
+    context.plan.diagnostics.push(diagnostic('error', 'FLOW_START_PAGE_INVALID', `Flow '${flowId}' has an invalid start page ${route.startPage}.`, { flowId }));
+    return;
+  }
+  planFlow(context.document, context.metrics, context.template, context.policy, flowId, route, context.pages, context.plan, route.startPage ?? 1, context.insertionProposals, Boolean(route.insertionSlots?.length));
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Dispatch one flow to its repeated or ordinary planning path.
+ */
+function planDocumentFlow(
+  context: DocumentFlowPlanningContext,
+  flowId: string,
+  flow: CompositionDocument['flows'][string],
+): void {
+  const route = context.template.routes[flowId];
+  if (!route) {
+    if (flow.blocks.length > 0) context.plan.diagnostics.push(diagnostic('error', 'FLOW_ROUTE_NOT_FOUND', `Flow '${flowId}' has no route in template '${context.template.layouts[0]?.id ?? ''}'.`, { flowId }));
+    return;
+  }
+  if (route.repeat === 'each-page') {
+    planRepeatedFlow(context, flowId, route);
+    return;
+  }
+  planOrdinaryFlow(context, flowId, route);
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Preserve the ordinary-before-repeated flow ordering and plan every document flow.
+ */
+function planDocumentFlows(
+  document: CompositionDocument,
+  metrics: CompositionTextMetrics,
+  template: CompositionTemplate,
+  policy: TextCompositionPlannerPolicy,
+  pages: PageState[],
+  plan: CompositionPlan,
+  insertionProposals: Map<string, PlannedInsertion>,
+): void {
+  const context: DocumentFlowPlanningContext = { document, metrics, template, policy, pages, plan, insertionProposals };
   const flowEntries = Object.entries(document.flows);
   const orderedFlowEntries = [
     ...flowEntries.filter(([flowId]) => template.routes[flowId]?.repeat !== 'each-page'),
     ...flowEntries.filter(([flowId]) => template.routes[flowId]?.repeat === 'each-page'),
   ];
-  for (const [flowId, flow] of orderedFlowEntries) {
-    const route = template.routes[flowId];
-    if (!route) {
-      if (flow.blocks.length > 0) plan.diagnostics.push(diagnostic('error', 'FLOW_ROUTE_NOT_FOUND', `Flow '${flowId}' has no route in template '${template.layouts[0]?.id ?? ''}'.`, { flowId }));
-      continue;
-    }
-    if (route.repeat === 'each-page') {
-      plan.repeatFlowIds?.push(flowId);
-      const pageCount = Math.max(1, pages.length);
-      const firstPage = route.startPage ?? 1;
-      for (let page = firstPage; page <= pageCount; page += 1) {
-        planFlow(document, metrics, template, policy, flowId, { ...route, continuation: 'forbidden' }, pages, plan, page, insertionProposals);
-      }
-    } else {
-      if (route.startPage !== undefined && (!Number.isInteger(route.startPage) || route.startPage < 1 || route.startPage > template.maxPages)) {
-        plan.diagnostics.push(diagnostic('error', 'FLOW_START_PAGE_INVALID', `Flow '${flowId}' has an invalid start page ${route.startPage}.`, { flowId }));
-        continue;
-      }
-      planFlow(document, metrics, template, policy, flowId, route, pages, plan, route.startPage ?? 1, insertionProposals, Boolean(route.insertionSlots?.length));
-    }
-  }
+  for (const [flowId, flow] of orderedFlowEntries) planDocumentFlow(context, flowId, flow);
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Finalize page, flow, barrier, glyph, and trace projections after flow planning.
+ */
+function finalizeDocumentPlan(
+  document: CompositionDocument,
+  metrics: CompositionTextMetrics,
+  template: CompositionTemplate,
+  pages: PageState[],
+  plan: CompositionPlan,
+): void {
   flattenPages(pages, plan, template);
   normalizePlanReadingOrder(document, plan);
   plan.flowPlacements = registerFlowPlacements(document, plan);
   plan.flowBarrierBoxCandidates = registerFlowBarrierBoxCandidates(plan);
   placeGlyphObjects(document, metrics, plan);
-  recordPlanningPhase(plan, 'flow-placement', plan.diagnostics.some((item) => item.severity === 'error') ? 'failed' : 'completed', { lineCount: plan.lines.length, pageCount: plan.pages.length });
+  recordPlanningPhase(plan, 'flow-placement', planHasErrors(plan) ? 'failed' : 'completed', { lineCount: plan.lines.length, pageCount: plan.pages.length });
   tracePlan(document, metrics, plan);
+}
+
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Coordinate one complete document-layout run from preflight through finalization.
+ */
+function planDocumentOnce(
+  document: CompositionDocument,
+  metrics: CompositionTextMetrics,
+  template: CompositionTemplate,
+  policy: TextCompositionPlannerPolicy,
+  insertionProposals: Map<string, PlannedInsertion>,
+  graphicProposals: Map<string, PlannedGraphic>,
+): CompositionPlan {
+  const plan = createPlan(policy.minimumFragmentLines);
+  preparePlanForLayout(document, template, policy, insertionProposals, graphicProposals, plan);
+  const pages = reserveDocumentObstacles(document, template, plan, insertionProposals, graphicProposals);
+  placeDocumentInsertions(document, metrics, template, plan, pages, insertionProposals);
+  // Repeated chrome depends on the final number of pages. Plan all ordinary
+  // flows first so a header/footer that starts on page 2 cannot observe the
+  // provisional one-page document and silently disappear.
+  planDocumentFlows(document, metrics, template, policy, pages, plan, insertionProposals);
+  finalizeDocumentPlan(document, metrics, template, pages, plan);
   return plan;
 }
 

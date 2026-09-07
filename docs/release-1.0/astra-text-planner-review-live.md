@@ -380,3 +380,30 @@ current large functions into named constituent functions without changing
 behavior; map each function to its domain; move the unchanged implementations
 to the appropriate modules; then run equivalence checks. No behavioral bug
 fixes or planner redesign are part of that migration.
+
+### Mechanical decomposition milestone — 2026-09-07
+
+The first decomposition pass was applied on top of `cdb5cc6` without moving
+modules or changing the planning contract:
+
+- `planDocumentOnce` now delegates preflight, obstacle reservation, insertion
+  placement, ordered flow planning, and final plan projection to named
+  document-layout functions.
+- `placeGraphicsForPage` delegates slot lookup, shape validation, bounds
+  validation, placement construction, and per-graphic materialization.
+- `placeInsertionLayer` delegates per-insertion target resolution, measuring,
+  fit-content sizing, obstacle synchronization, and placement.
+- `prepareTextPlacement`, heading-cluster probing, `placeLines`, and the
+  insertion-slot reservation loop now expose their separate calculations as
+  named functions with the existing target-module annotations.
+- `collapseUnusedInsertions` and `collapseInsertionBeforeContinuation` were
+  unified as one range helper with an explicit reason parameter.
+- The duplicated insertion-slot enumeration and movable-frame validation are
+  shared helpers. The type-specialized candidate wrappers in
+  `text-planner-candidates.ts` remain public API adapters rather than being
+  collapsed, because their signatures carry different proposal types.
+
+The inventory after this pass reports no target-different function above 80
+lines. The two remaining functions above that threshold are
+`placeStructuredBlock` and `createTextCompositionPlanner`; both remain in
+their current target file and were therefore not split under the agreed rule.
