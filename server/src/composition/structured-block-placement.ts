@@ -46,10 +46,18 @@ export interface StructuredBlockPlacementContext {
   growSlot: (requiredBottom: number) => void;
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current rectBottom implementation intact until its target seam is extracted.
+ */
 function rectBottom(rect: CompositionRect): number {
   return rect.y + rect.height;
 }
 
+/**
+ * @planner-target composition/planning-records.ts
+ * @planner-responsibility Keep the current diagnostic implementation intact until its target seam is extracted.
+ */
 function diagnostic(
   severity: CompositionDiagnostic['severity'],
   code: string,
@@ -59,6 +67,10 @@ function diagnostic(
   return { severity, code, message, ...extra };
 }
 
+/**
+ * @planner-target composition/structured-block-placement.ts
+ * @planner-responsibility Keep the current placeAtomicBlock implementation intact until its target seam is extracted.
+ */
 function placeAtomicBlock(
   pageState: StructuredBlockPage,
   definition: CompositionSlotTemplate,
@@ -121,6 +133,10 @@ function placeAtomicBlock(
   slot.state = top + measurement.height >= rectBottom(slot.box) && !canGrowFurther ? 'exhausted' : 'partial';
 }
 
+/**
+ * @planner-target composition/structured-block-placement.ts
+ * @planner-responsibility Keep the current placeTableFragment implementation intact until its target seam is extracted.
+ */
 function placeTableFragment(
   pageState: StructuredBlockPage,
   definition: CompositionSlotTemplate,
@@ -154,6 +170,10 @@ function placeTableFragment(
  * Returning false means the current block belongs to the ordinary text path.
  * Every structured-block branch returns true, including error and push
  * decisions, so the caller can continue its placement loop unchanged.
+ */
+/**
+ * @planner-target composition/structured-block-placement.ts
+ * @planner-responsibility Dispatch one structured block to its atomic or table placement routine.
  */
 export function placeStructuredBlock(context: StructuredBlockPlacementContext): boolean {
   const {

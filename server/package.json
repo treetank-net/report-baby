@@ -18,6 +18,7 @@
     "test:artifacts": "node scripts/test-harness.mjs --suite artifacts",
     "test:composition": "node scripts/test-harness.mjs --suite composition",
     "test:quality": "node scripts/test-harness.mjs --suite quality",
+    "planner:inventory": "node scripts/planner-function-dependency-report.mjs --annotate --write-report ../docs/release-1.0/planner-function-dependency-inventory.md",
     "dev": "tsc --watch --noEmit",
     "start": "node bundle.cjs"
   },

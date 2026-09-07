@@ -81,18 +81,34 @@ export interface PageState {
   slots: Map<string, CompositionSlot>;
 }
 
+/**
+ * @planner-target composition/text-measurement.ts
+ * @planner-responsibility Keep the current wordsOf implementation intact until its target seam is extracted.
+ */
 function wordsOf(text: string): string[] {
   return text.trim().split(/\s+/u).filter(Boolean);
 }
 
+/**
+ * @planner-target composition/text-measurement.ts
+ * @planner-responsibility Keep the current textOf implementation intact until its target seam is extracted.
+ */
 function textOf(block: CompositionBlock): string {
   return block.text?.trim() ?? '';
 }
 
+/**
+ * @planner-target composition/style-name.ts
+ * @planner-responsibility Keep the current styleFor implementation intact until its target seam is extracted.
+ */
 export function styleFor(block: CompositionBlock): string {
   return compositionStyleName(block);
 }
 
+/**
+ * @planner-target composition/planning-records.ts
+ * @planner-responsibility Keep the current diagnostic implementation intact until its target seam is extracted.
+ */
 export function diagnostic(
   severity: CompositionDiagnostic['severity'],
   code: string,
@@ -102,29 +118,53 @@ export function diagnostic(
   return { severity, code, message, ...extra };
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current layoutById implementation intact until its target seam is extracted.
+ */
 function layoutById(template: CompositionTemplate, id: string): CompositionLayoutTemplate | undefined {
   return template.layouts.find((layout) => layout.id === id);
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current routeLayout implementation intact until its target seam is extracted.
+ */
 export function routeLayout(route: CompositionFlowRoute, template: CompositionTemplate, page: number): CompositionLayoutTemplate | undefined {
   const layoutId = route.layouts?.[Math.min(page - 1, route.layouts.length - 1)] ?? template.layouts[0]?.id;
   return layoutId ? layoutById(template, layoutId) : undefined;
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current routeSlots implementation intact until its target seam is extracted.
+ */
 export function routeSlots(route: CompositionFlowRoute, layout: CompositionLayoutTemplate): string[] {
   return route.slotsByLayout?.[layout.id] ?? route.slots;
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current slotId implementation intact until its target seam is extracted.
+ */
 function slotId(page: number, id: string): string {
   return `${page}:${id}`;
 }
 
+/**
+ * @planner-target composition/text-measurement.ts
+ * @planner-responsibility Keep the current lineHeight implementation intact until its target seam is extracted.
+ */
 export function lineHeight(metrics: CompositionTextMetrics, block: CompositionBlock): number {
   const height = metrics.lineHeight(styleFor(block));
   if (!Number.isFinite(height) || height <= 0) throw new Error(`Text metrics returned an invalid line-height for '${styleFor(block)}': ${height}.`);
   return height;
 }
 
+/**
+ * @planner-target composition/text-measurement.ts
+ * @planner-responsibility Keep the current textPadding implementation intact until its target seam is extracted.
+ */
 export function textPadding(metrics: CompositionTextMetrics, block: CompositionBlock): { top: number; bottom: number } {
   const padding = metrics.textPadding?.(styleFor(block)) ?? { top: 0, bottom: 0 };
   if (!Number.isFinite(padding.top) || !Number.isFinite(padding.bottom) || padding.top < 0 || padding.bottom < 0) {
@@ -133,6 +173,10 @@ export function textPadding(metrics: CompositionTextMetrics, block: CompositionB
   return padding;
 }
 
+/**
+ * @planner-target composition/text-measurement.ts
+ * @planner-responsibility Keep the current wrapBlock implementation intact until its target seam is extracted.
+ */
 export function wrapBlock(
   metrics: CompositionTextMetrics,
   block: CompositionBlock,
@@ -162,10 +206,18 @@ export function wrapBlock(
   );
 }
 
+/**
+ * @planner-target composition/text-measurement.ts
+ * @planner-responsibility Keep the current wordsForBlock implementation intact until its target seam is extracted.
+ */
 export function wordsForBlock(block: CompositionBlock): string[] {
   return wordsOf(textOf(block));
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current newPage implementation intact until its target seam is extracted.
+ */
 function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
   const slots = new Map<string, CompositionSlot>();
   for (const definition of layout.slots) {
@@ -185,6 +237,10 @@ function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
   return { page, layout, slots };
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current fitInsertionProposal implementation intact until its target seam is extracted.
+ */
 function fitInsertionProposal(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
@@ -225,6 +281,10 @@ function fitInsertionProposal(
  * proposal is deliberately derived from the plan rather than from a fixed
  * page number: changing text metrics or a preceding block must be able to
  * move the proposal on the next pass.
+ */
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current insertionProposalsFromPlan implementation intact until its target seam is extracted.
  */
 function insertionProposalsFromPlan(document: CompositionDocument, template: CompositionTemplate, plan: CompositionPlan, metrics: CompositionTextMetrics): Map<string, PlannedInsertion> {
   const proposals = new Map<string, PlannedInsertion>();
@@ -276,6 +336,10 @@ function insertionProposalsFromPlan(document: CompositionDocument, template: Com
   return proposals;
 }
 
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Keep the current validateMovableInsertionBounds implementation intact until its target seam is extracted.
+ */
 function validateMovableInsertionBounds(
   insertionProposals: Map<string, PlannedInsertion>,
   policy: TextCompositionPlannerPolicy,
@@ -297,6 +361,10 @@ function validateMovableInsertionBounds(
   }
 }
 
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Keep the current validateMovableGraphicBounds implementation intact until its target seam is extracted.
+ */
 function validateMovableGraphicBounds(
   graphicProposals: Map<string, PlannedGraphic>,
   policy: TextCompositionPlannerPolicy,
@@ -318,6 +386,10 @@ function validateMovableGraphicBounds(
   }
 }
 
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Keep the current graphicBox implementation intact until its target seam is extracted.
+ */
 function graphicBox(graphic: NonNullable<CompositionDocument['graphics']>[number], slot: CompositionSlotTemplate): CompositionRect {
   const width = graphic.size?.width ?? slot.box.width;
   const height = graphic.size?.height ?? slot.box.height;
@@ -329,6 +401,10 @@ function graphicBox(graphic: NonNullable<CompositionDocument['graphics']>[number
   };
 }
 
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Keep the current seedGraphicProposals implementation intact until its target seam is extracted.
+ */
 function seedGraphicProposals(document: CompositionDocument, template: CompositionTemplate): Map<string, PlannedGraphic> {
   const proposals = new Map<string, PlannedGraphic>();
   const route = template.routes.main ?? Object.values(template.routes)[0];
@@ -347,6 +423,10 @@ function seedGraphicProposals(document: CompositionDocument, template: Compositi
  * Seed hard insertions in reading order. This is intentionally independent of
  * the amount of main text: otherwise the first pass can fill a future quote
  * band and only discover the quote after the band is no longer available.
+ */
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current seedInsertionProposals implementation intact until its target seam is extracted.
  */
 function seedInsertionProposals(document: CompositionDocument, template: CompositionTemplate, metrics: CompositionTextMetrics): Map<string, PlannedInsertion> {
   const proposals = new Map<string, PlannedInsertion>();
@@ -378,6 +458,10 @@ function seedInsertionProposals(document: CompositionDocument, template: Composi
  * Reserve hard insertion geometry before any ordinary flow receives a line.
  * A quote is still rendered from its source block later, but its rectangle is
  * already an exclusion boundary while the main stream is being planned.
+ */
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Reserve insertion rectangles that must obstruct flowing content.
  */
 function reserveInsertionObstacles(
   template: CompositionTemplate,
@@ -435,6 +519,10 @@ function reserveInsertionObstacles(
  * block loop, which made a quote look like another route segment and allowed
  * the text cursor to decide its placement.  Here the quote is measured and
  * painted as a separate layer first; the main cursor only sees its obstacle.
+ */
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Validate, measure, and materialize planned insertion blocks on a page.
  */
 function placeInsertionLayer(
   document: CompositionDocument,
@@ -510,11 +598,19 @@ function placeInsertionLayer(
   return placed;
 }
 
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Keep the current absoluteGraphicPoints implementation intact until its target seam is extracted.
+ */
 function absoluteGraphicPoints(graphic: { points?: Array<{ x: number; y: number }> }, box: CompositionRect): Array<{ x: number; y: number }> | undefined {
   if (!graphic.points || graphic.points.length < 3) return undefined;
   return graphic.points.map((point) => ({ x: box.x + point.x * box.width, y: box.y + point.y * box.height }));
 }
 
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Materialize graphic proposals for one page and register their obstacles.
+ */
 export function placeGraphicsForPage(
   document: CompositionDocument,
   pageState: PageState,
@@ -568,6 +664,10 @@ export function placeGraphicsForPage(
   }
 }
 
+/**
+ * @planner-target composition/graphic-planning.ts
+ * @planner-responsibility Keep the current materializeGraphicPages implementation intact until its target seam is extracted.
+ */
 function materializeGraphicPages(
   document: CompositionDocument,
   template: CompositionTemplate,
@@ -593,6 +693,10 @@ function materializeGraphicPages(
   for (const page of pages) placeGraphicsForPage(document, page, plan, graphicProposals);
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current ensurePage implementation intact until its target seam is extracted.
+ */
 export function ensurePage(
   pages: PageState[],
   template: CompositionTemplate,
@@ -613,10 +717,18 @@ export function ensurePage(
   return pages[page - 1];
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current rectBottom implementation intact until its target seam is extracted.
+ */
 export function rectBottom(rect: CompositionRect): number {
   return rect.y + rect.height;
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current rectsOverlap implementation intact until its target seam is extracted.
+ */
 export function rectsOverlap(first: CompositionRect, second: CompositionRect): boolean {
   const horizontal = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
   const vertical = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
@@ -630,6 +742,10 @@ export function rectsOverlap(first: CompositionRect, second: CompositionRect): b
 
 
 
+/**
+ * @planner-target composition/text-placement.ts
+ * @planner-responsibility Keep the current placeLines implementation intact until its target seam is extracted.
+ */
 export function placeLines(
   pageState: PageState,
   definition: CompositionSlotTemplate,
@@ -704,6 +820,10 @@ export function placeLines(
   slot.state = occupiedBottom >= rectBottom(box) ? 'exhausted' : 'partial';
 }
 
+/**
+ * @planner-target composition/planning-records.ts
+ * @planner-responsibility Keep the current addResidual implementation intact until its target seam is extracted.
+ */
 export function addResidual(
   residualContent: CompositionPlan['residualContent'],
   flowId: string,
@@ -719,6 +839,10 @@ export function addResidual(
   residualContent.push({ flowId, blockId: block.id, reason, consumed, remaining, ...(lastLegalSlotId ? { lastLegalSlotId } : {}) });
 }
 
+/**
+ * @planner-target composition/planning-records.ts
+ * @planner-responsibility Keep the current addTableResidual implementation intact until its target seam is extracted.
+ */
 export function addTableResidual(
   residualContent: CompositionPlan['residualContent'],
   flowId: string,
@@ -733,6 +857,10 @@ export function addTableResidual(
 }
 
 
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Keep the current createPlan implementation intact until its target seam is extracted.
+ */
 function createPlan(minimumFragmentLines?: number): CompositionPlan {
   return {
     pages: [],
@@ -754,6 +882,10 @@ function createPlan(minimumFragmentLines?: number): CompositionPlan {
   };
 }
 
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Keep the current normalizePlanReadingOrder implementation intact until its target seam is extracted.
+ */
 function normalizePlanReadingOrder(document: CompositionDocument, plan: CompositionPlan): void {
   const flowOrder = new Map(Object.keys(document.flows).map((flowId, index) => [flowId, index]));
   const blockOrder = new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block, index) => [`${flowId}:${block.id}`, index] as const)));
@@ -766,6 +898,10 @@ function normalizePlanReadingOrder(document: CompositionDocument, plan: Composit
   });
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current validateGrowthPolicies implementation intact until its target seam is extracted.
+ */
 function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
   for (const layout of template.layouts) {
     const slotIds = new Set(layout.slots.map((slot) => slot.id));
@@ -784,6 +920,10 @@ function validateGrowthPolicies(template: CompositionTemplate, plan: Composition
   }
 }
 
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Keep the current flattenPages implementation intact until its target seam is extracted.
+ */
 function flattenPages(pages: PageState[], plan: CompositionPlan, template: CompositionTemplate): void {
   plan.pages = pages.map((page) => ({ page: page.page, layoutId: page.layout.id, width: page.layout.width, height: page.layout.height }));
   for (const page of pages) {
@@ -800,6 +940,10 @@ function flattenPages(pages: PageState[], plan: CompositionPlan, template: Compo
   plan.slots = pages.flatMap((page) => [...page.slots.values()]);
 }
 
+/**
+ * @planner-target composition/document-layout.ts
+ * @planner-responsibility Coordinate one complete document-layout run from preflight through finalization.
+ */
 function planDocumentOnce(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
@@ -888,10 +1032,18 @@ function planDocumentOnce(
   return plan;
 }
 
+/**
+ * @planner-target composition/text-planner.ts
+ * @planner-responsibility Expose candidate planning while retaining the existing planner contract.
+ */
 export function createTextCompositionPlanner(
   template: CompositionTemplate,
   policy: TextCompositionPlannerPolicy = {},
 ): CompositionPlanner {
+  /**
+   * @planner-target composition/text-planner.ts
+   * @planner-responsibility Keep the current planCandidates implementation intact until its target seam is extracted.
+   */
   function planCandidates(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan[] {
     const maxIterations = policy.maxPlanningIterations ?? 1;
     if (!Number.isInteger(maxIterations) || maxIterations < 1) {
@@ -933,6 +1085,10 @@ export function createTextCompositionPlanner(
   }
 
   return {
+    /**
+     * @planner-target composition/text-planner.ts
+     * @planner-responsibility Keep the current plan implementation intact until its target seam is extracted.
+     */
     plan(document, metrics) {
       return planCandidates(document, metrics).at(-1)!;
     },
@@ -942,6 +1098,10 @@ export function createTextCompositionPlanner(
       ...Object.values(policy.movableInsertionBounds ?? {}).map((bounds) => bounds.refinementRounds ?? 0),
       ...Object.values(policy.movableGraphicBounds ?? {}).map((bounds) => bounds.refinementRounds ?? 0),
     ),
+    /**
+     * @planner-target composition/text-planner.ts
+     * @planner-responsibility Keep the current planRefinedCandidates implementation intact until its target seam is extracted.
+     */
     planRefinedCandidates(document, metrics, selected, round) {
       const seededProposals = seedInsertionProposals(document, template, metrics);
       const seededGraphicProposals = seedGraphicProposals(document, template);

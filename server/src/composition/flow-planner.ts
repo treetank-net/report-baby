@@ -57,6 +57,10 @@ interface FlowCursor {
   resumeSlotId?: string;
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current flowLineCollidesWithSlot implementation intact until its target seam is extracted.
+ */
 function flowLineCollidesWithSlot(
   pageState: PageState,
   slot: CompositionSlot,
@@ -71,6 +75,10 @@ function flowLineCollidesWithSlot(
     && rectsOverlap(box, line.box));
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current blockPlacementCollidesWithSlot implementation intact until its target seam is extracted.
+ */
 function blockPlacementCollidesWithSlot(
   pageState: PageState,
   slot: CompositionSlot,
@@ -82,6 +90,10 @@ function blockPlacementCollidesWithSlot(
     && rectsOverlap(box, placement.box));
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current tablePlacementCollidesWithSlot implementation intact until its target seam is extracted.
+ */
 function tablePlacementCollidesWithSlot(
   pageState: PageState,
   slot: CompositionSlot,
@@ -93,6 +105,10 @@ function tablePlacementCollidesWithSlot(
     && rectsOverlap(box, placement.box));
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current reservedSlotCollidesWithSlot implementation intact until its target seam is extracted.
+ */
 function reservedSlotCollidesWithSlot(
   pageState: PageState,
   slot: CompositionSlot,
@@ -103,6 +119,10 @@ function reservedSlotCollidesWithSlot(
     && rectsOverlap(box, candidate.box));
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current slotCollidesWithPlacedBlock implementation intact until its target seam is extracted.
+ */
 function slotCollidesWithPlacedBlock(pageState: PageState, slotId: string, plan: CompositionPlan, flowId?: string): boolean {
   const slot = pageState.slots.get(slotId);
   const box = slot?.box;
@@ -113,10 +133,18 @@ function slotCollidesWithPlacedBlock(pageState: PageState, slotId: string, plan:
     || reservedSlotCollidesWithSlot(pageState, slot, box);
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current slotBox implementation intact until its target seam is extracted.
+ */
 function slotBox(pageState: PageState, definition: CompositionSlotTemplate): CompositionRect {
   return pageState.slots.get(definition.id)?.box ?? definition.box;
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current insertionCurrentBottom implementation intact until its target seam is extracted.
+ */
 function insertionCurrentBottom(
   layout: CompositionLayoutTemplate,
   pageState: PageState,
@@ -132,6 +160,10 @@ function insertionCurrentBottom(
     : Number.NEGATIVE_INFINITY;
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current insertionCandidates implementation intact until its target seam is extracted.
+ */
 function insertionCandidates(
   layout: CompositionLayoutTemplate,
   pageState: PageState,
@@ -151,6 +183,10 @@ function insertionCandidates(
     .sort((left, right) => left.box.y - right.box.y);
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current insertionOverlapsOccupiedSlot implementation intact until its target seam is extracted.
+ */
 function insertionOverlapsOccupiedSlot(
   slot: CompositionSlotTemplate,
   occupied: Array<{ box: CompositionRect }>,
@@ -158,6 +194,10 @@ function insertionOverlapsOccupiedSlot(
   return occupied.some((item) => rectsOverlap(item.box, slot.box));
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current insertionSlotFor implementation intact until its target seam is extracted.
+ */
 function insertionSlotFor(
   route: CompositionFlowRoute,
   layout: CompositionLayoutTemplate,
@@ -174,6 +214,10 @@ function insertionSlotFor(
   return candidates.find((slot) => slot.box.y + 0.001 >= currentBottom);
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current growthDelta implementation intact until its target seam is extracted.
+ */
 function growthDelta(
   slot: CompositionSlot,
   definition: CompositionSlotTemplate,
@@ -186,10 +230,18 @@ function growthDelta(
   return nextBottom - rectBottom(slot.box);
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current resizeGrownSlot implementation intact until its target seam is extracted.
+ */
 function resizeGrownSlot(slot: CompositionSlot, delta: number): void {
   slot.box.height += delta;
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current resizePushedTextSlot implementation intact until its target seam is extracted.
+ */
 function resizePushedTextSlot(
   pageState: PageState,
   pushedId: string,
@@ -207,6 +259,10 @@ function resizePushedTextSlot(
   if (pushed.box.height === 0) pushed.state = 'exhausted';
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current movePushedSlots implementation intact until its target seam is extracted.
+ */
 function movePushedSlots(
   pageState: PageState,
   definition: CompositionSlotTemplate,
@@ -217,6 +273,10 @@ function movePushedSlots(
   }
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current recordSlotGrowth implementation intact until its target seam is extracted.
+ */
 function recordSlotGrowth(
   plan: CompositionPlan,
   slot: CompositionSlot,
@@ -235,6 +295,10 @@ function recordSlotGrowth(
   });
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Apply one legal slot-growth operation and move affected slots.
+ */
 function growSlot(
   pageState: PageState,
   definition: CompositionSlotTemplate,
@@ -252,6 +316,10 @@ function growSlot(
   recordSlotGrowth(plan, slot, delta, flowId, blockId, definition.grow?.pushes ?? []);
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current flowingTextBottom implementation intact until its target seam is extracted.
+ */
 export function flowingTextBottom(plan: CompositionPlan, slotId: string, fallback: number, document: CompositionDocument): number {
   const wrappedImages = wrappedImageIds(document);
   const lineBottom = flowingLineBottom(plan, slotId, fallback);
@@ -259,18 +327,30 @@ export function flowingTextBottom(plan: CompositionPlan, slotId: string, fallbac
   return flowingTableBottom(plan, slotId, blockBottom);
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current wrappedImageIds implementation intact until its target seam is extracted.
+ */
 function wrappedImageIds(document: CompositionDocument): Set<string> {
   return new Set(Object.values(document.flows).flatMap((flow) => flow.blocks)
     .filter((block) => block.kind === 'image' && (block.image?.wrap === 'left' || block.image?.wrap === 'right'))
     .map((block) => block.id));
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current flowingLineBottom implementation intact until its target seam is extracted.
+ */
 function flowingLineBottom(plan: CompositionPlan, slotId: string, fallback: number): number {
   return plan.lines
     .filter((line) => line.slotId === slotId && line.layer !== 'insertion')
     .reduce((bottom, line) => Math.max(bottom, line.box.y + line.box.height), fallback);
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current flowingBlockBottom implementation intact until its target seam is extracted.
+ */
 function flowingBlockBottom(
   plan: CompositionPlan,
   slotId: string,
@@ -282,17 +362,29 @@ function flowingBlockBottom(
     .reduce((bottom, placement) => Math.max(bottom, placement.box.y + placement.box.height), fallback);
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current flowingTableBottom implementation intact until its target seam is extracted.
+ */
 function flowingTableBottom(plan: CompositionPlan, slotId: string, fallback: number): number {
   return plan.tablePlacements
     .filter((placement) => placement.slotId === slotId)
     .reduce((bottom, placement) => Math.max(bottom, placement.box.y + placement.box.height), fallback);
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current horizontalOverlap implementation intact until its target seam is extracted.
+ */
 function horizontalOverlap(first: CompositionRect, second: CompositionRect): boolean {
   const overlap = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
   return overlap > Number.EPSILON * Math.max(1, Math.abs(first.x), Math.abs(first.width), Math.abs(second.x), Math.abs(second.width)) * 32;
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current occupiedBottomInOverlappingSlots implementation intact until its target seam is extracted.
+ */
 export function occupiedBottomInOverlappingSlots(
   pageState: PageState,
   plan: CompositionPlan,
@@ -308,12 +400,20 @@ export function occupiedBottomInOverlappingSlots(
   );
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current occupiedSlotMap implementation intact until its target seam is extracted.
+ */
 function occupiedSlotMap(pageState: PageState): Map<string, CompositionSlot> {
   return new Map<string, CompositionSlot>(
     [...pageState.slots.values()].map((slot) => [slot.id, slot]),
   );
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current overlappingItemBottom implementation intact until its target seam is extracted.
+ */
 function overlappingItemBottom(
   item: { page: number; slotId: string; box: CompositionRect; layer?: string },
   pageState: PageState,
@@ -330,6 +430,10 @@ function overlappingItemBottom(
   return item.box.y + item.box.height;
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current previousBlockInOverlappingSlots implementation intact until its target seam is extracted.
+ */
 function previousBlockInOverlappingSlots(
   pageState: PageState,
   plan: CompositionPlan,
@@ -341,6 +445,10 @@ function previousBlockInOverlappingSlots(
   return blockFromLastPlacement(candidates, blocks);
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current previousBlockInSlot implementation intact until its target seam is extracted.
+ */
 function previousBlockInSlot(plan: CompositionPlan, slotId: string, currentBlockId: string, document: CompositionDocument): CompositionBlock | undefined {
   const blocks = new Map(Object.values(document.flows).flatMap((flow) => flow.blocks).map((block) => [block.id, block]));
   const candidates = [
@@ -351,6 +459,10 @@ function previousBlockInSlot(plan: CompositionPlan, slotId: string, currentBlock
   return candidates.at(-1) ? blocks.get(candidates.at(-1)!.blockId) : undefined;
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current overlappingPlacementCandidates implementation intact until its target seam is extracted.
+ */
 function overlappingPlacementCandidates(
   pageState: PageState,
   plan: CompositionPlan,
@@ -371,6 +483,10 @@ function overlappingPlacementCandidates(
   }).sort((left, right) => (left.box.y + left.box.height) - (right.box.y + right.box.height));
 }
 
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current blockFromLastPlacement implementation intact until its target seam is extracted.
+ */
 function blockFromLastPlacement(
   placements: Array<{ blockId: string }>,
   blocks: Map<string, CompositionBlock>,
@@ -379,6 +495,10 @@ function blockFromLastPlacement(
   return last ? blocks.get(last.blockId) : undefined;
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current collapseUnusedInsertions implementation intact until its target seam is extracted.
+ */
 function collapseUnusedInsertions(
   pageState: PageState,
   routeSlotIds: string[],
@@ -395,6 +515,10 @@ function collapseUnusedInsertions(
   }
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current collapseInsertionBeforeContinuation implementation intact until its target seam is extracted.
+ */
 function collapseInsertionBeforeContinuation(
   pageState: PageState,
   routeSlotIds: string[],
@@ -408,6 +532,10 @@ function collapseInsertionBeforeContinuation(
   collapseInsertion(pageState, definition, insertion, routeIndex, plan, flowId, blockId, 'continuation-needs-uninterrupted-column');
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current collapseInsertion implementation intact until its target seam is extracted.
+ */
 function collapseInsertion(
   pageState: PageState,
   definition: CompositionSlotTemplate | undefined,
@@ -440,6 +568,10 @@ function collapseInsertion(
   });
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current advanceCursor implementation intact until its target seam is extracted.
+ */
 function advanceCursor(
   cursor: FlowCursor,
   routeSlotsForPage: string[],
@@ -458,6 +590,10 @@ function advanceCursor(
  * Return the first free y-coordinate for structured content in a flow slot.
  * The calculation includes content already placed in overlapping slots of
  * the same flow, so a table or atomic block cannot overlap an earlier band.
+ */
+/**
+ * @planner-target composition/flow-occupancy.ts
+ * @planner-responsibility Keep the current contentStartBottom implementation intact until its target seam is extracted.
  */
 function contentStartBottom(
   pageState: PageState,
@@ -529,6 +665,10 @@ type FlowTargetResolution =
   | { kind: 'continue' }
   | { kind: 'stop' };
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current createFlowPlanningContext implementation intact until its target seam is extracted.
+ */
 function createFlowPlanningContext(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
@@ -567,6 +707,10 @@ function createFlowPlanningContext(
   };
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current createFlowRuntime implementation intact until its target seam is extracted.
+ */
 function createFlowRuntime(context: FlowPlanningContext): FlowRuntime {
   return {
     cursor: {
@@ -579,10 +723,18 @@ function createFlowRuntime(context: FlowPlanningContext): FlowRuntime {
   };
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current currentFlowBlock implementation intact until its target seam is extracted.
+ */
 function currentFlowBlock(context: FlowPlanningContext, runtime: FlowRuntime): CompositionBlock {
   return context.blocks[runtime.cursor.blockIndex];
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current recordFlowResidual implementation intact until its target seam is extracted.
+ */
 function recordFlowResidual(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -596,18 +748,30 @@ function recordFlowResidual(
   addResidual(context.plan.residualContent, context.flowId, block, runtime.cursor.startWord, runtime.lastLegalSlotId, reason);
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current rejectFlowForPageLimit implementation intact until its target seam is extracted.
+ */
 function rejectFlowForPageLimit(context: FlowPlanningContext, runtime: FlowRuntime): void {
   const block = currentFlowBlock(context, runtime);
   context.plan.diagnostics.push(diagnostic('error', 'MAX_PAGES_EXCEEDED', `Flow '${context.flowId}' exceeded the template page limit.`, { flowId: context.flowId, blockId: block.id, page: runtime.cursor.page }));
   recordFlowResidual(context, runtime, 'max-pages');
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current rejectFlowContinuation implementation intact until its target seam is extracted.
+ */
 function rejectFlowContinuation(context: FlowPlanningContext, runtime: FlowRuntime): void {
   const block = currentFlowBlock(context, runtime);
   context.plan.diagnostics.push(diagnostic('error', 'FLOW_CONTINUATION_FORBIDDEN', `Flow '${context.flowId}' cannot continue beyond its first page.`, { flowId: context.flowId, blockId: block.id, page: runtime.cursor.page }));
   recordFlowResidual(context, runtime, 'flow-continuation-forbidden');
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current flowReachedTerminalPage implementation intact until its target seam is extracted.
+ */
 function flowReachedTerminalPage(context: FlowPlanningContext, runtime: FlowRuntime): boolean {
   if (runtime.cursor.page > context.template.maxPages) {
     rejectFlowForPageLimit(context, runtime);
@@ -620,10 +784,18 @@ function flowReachedTerminalPage(context: FlowPlanningContext, runtime: FlowRunt
   return false;
 }
 
+/**
+ * @planner-target composition/page-management.ts
+ * @planner-responsibility Keep the current ensureCurrentFlowPage implementation intact until its target seam is extracted.
+ */
 function ensureCurrentFlowPage(context: FlowPlanningContext, runtime: FlowRuntime): PageState | undefined {
   return ensurePage(context.pages, context.template, context.route, runtime.cursor.page, context.plan.diagnostics, context.flowId);
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current holdFlowForPreplannedInsertion implementation intact until its target seam is extracted.
+ */
 function holdFlowForPreplannedInsertion(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -645,6 +817,10 @@ function holdFlowForPreplannedInsertion(
   return true;
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current restoreDeferredQuoteOnCurrentPage implementation intact until its target seam is extracted.
+ */
 function restoreDeferredQuoteOnCurrentPage(context: FlowPlanningContext, runtime: FlowRuntime): void {
   const deferred = runtime.deferredQuote;
   if (!deferred || runtime.activeDeferredQuote || runtime.cursor.page !== deferred.deferredPage || deferred.routeIndex === undefined || runtime.cursor.routeIndex < deferred.routeIndex) return;
@@ -660,6 +836,10 @@ function restoreDeferredQuoteOnCurrentPage(context: FlowPlanningContext, runtime
   context.plan.decisions.push({ code: 'INSERTION_REPOSITIONED_PLACED', flowId: context.flowId, blockId: context.blocks[runtime.cursor.blockIndex].id, page: runtime.cursor.page, routeIndex: runtime.cursor.routeIndex, reason: 'earlier-route-segment-was-empty' });
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current restoreDeferredQuoteOnNextPage implementation intact until its target seam is extracted.
+ */
 function restoreDeferredQuoteOnNextPage(context: FlowPlanningContext, runtime: FlowRuntime): void {
   const deferred = runtime.deferredQuote;
   if (!deferred || runtime.activeDeferredQuote || runtime.cursor.page <= deferred.deferredPage) return;
@@ -675,6 +855,10 @@ function restoreDeferredQuoteOnNextPage(context: FlowPlanningContext, runtime: F
   context.plan.decisions.push({ code: 'DEFERRED_INSERTION_PLACED', flowId: context.flowId, blockId: context.blocks[runtime.cursor.blockIndex].id, page: runtime.cursor.page, reason: 'next-page-insertion-slot' });
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current plannedInsertionForBlock implementation intact until its target seam is extracted.
+ */
 function plannedInsertionForBlock(
   context: FlowPlanningContext,
   block: CompositionBlock,
@@ -684,6 +868,10 @@ function plannedInsertionForBlock(
     : undefined;
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current insertionPassedItsPlannedPage implementation intact until its target seam is extracted.
+ */
 function insertionPassedItsPlannedPage(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -697,6 +885,10 @@ function insertionPassedItsPlannedPage(
   return true;
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current insertionDefinitionForBlock implementation intact until its target seam is extracted.
+ */
 function insertionDefinitionForBlock(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -712,6 +904,10 @@ function insertionDefinitionForBlock(
   return insertionSlotFor(context.route, currentPage.layout, currentPage, context.plan, availableRouteSlots, runtime.cursor.routeIndex, context.document);
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current advanceForMissingInsertion implementation intact until its target seam is extracted.
+ */
 function advanceForMissingInsertion(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -725,6 +921,10 @@ function advanceForMissingInsertion(
   return true;
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current hasInsertionSlotOnNextPage implementation intact until its target seam is extracted.
+ */
 function hasInsertionSlotOnNextPage(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -735,6 +935,10 @@ function hasInsertionSlotOnNextPage(
   return nextLayout !== undefined && hasRoleEligibleSlot(nextLayout, nextSlotIds, 0, context.flowId, block);
 }
 
+/**
+ * @planner-target composition/insertion-planning.ts
+ * @planner-responsibility Keep the current deferInsertionToNextPage implementation intact until its target seam is extracted.
+ */
 function deferInsertionToNextPage(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -751,6 +955,10 @@ function deferInsertionToNextPage(
   return true;
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current resolveUnavailableFlowSlot implementation intact until its target seam is extracted.
+ */
 function resolveUnavailableFlowSlot(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -772,6 +980,10 @@ function resolveUnavailableFlowSlot(
   return { kind: 'stop' };
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current selectFlowSlot implementation intact until its target seam is extracted.
+ */
 function selectFlowSlot(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -793,6 +1005,10 @@ function selectFlowSlot(
   return slotFor(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots);
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Resolve the legal slot and page target for the next flow block.
+ */
 function resolveFlowTarget(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -833,6 +1049,10 @@ function resolveFlowTarget(
   };
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Dispatch non-text block placement after collision and asset checks.
+ */
 function handleNonTextFlowPlacement(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -888,6 +1108,10 @@ interface PreparedTextPlacement {
   completeWrapped: ReturnType<typeof wrapBlock>;
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Build the read-only inputs for one text-placement attempt.
+ */
 function prepareTextPlacement(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -981,6 +1205,10 @@ type ListItemKeepDecision =
   | { kind: 'push'; minimumFragmentLines: number; completeLines: number; availableLines: number }
   | { kind: 'split'; minimumFragmentLines: number; completeLines: number; availableLines: number };
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current headingExceedsAvailableLines implementation intact until its target seam is extracted.
+ */
 function headingExceedsAvailableLines(
   prepared: PreparedTextPlacement,
   currentAvailableLines: number,
@@ -988,6 +1216,10 @@ function headingExceedsAvailableLines(
   return prepared.isHeadingBlock && prepared.completeWrapped.length > currentAvailableLines;
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current evaluateListItemKeepTogether implementation intact until its target seam is extracted.
+ */
 function evaluateListItemKeepTogether(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1014,6 +1246,10 @@ type HeadingClusterObstacleDecision =
   | { kind: 'resume-below-obstacle'; obstacleId: string; resumeY: number; requiredClusterLines: number; availableAfterObstacle: number }
   | { kind: 'push-to-next-slot'; obstacleId: string; requiredClusterLines: number; availableAfterObstacle: number };
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current evaluateHeadingClusterObstacle implementation intact until its target seam is extracted.
+ */
 function evaluateHeadingClusterObstacle(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1059,6 +1295,10 @@ function evaluateHeadingClusterObstacle(
   return { kind: 'push-to-next-slot', obstacleId: clusterObstacle.graphicId, requiredClusterLines, availableAfterObstacle };
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current keepClusterExceedsAvailableLines implementation intact until its target seam is extracted.
+ */
 function keepClusterExceedsAvailableLines(
   prepared: PreparedTextPlacement,
   keepRequired: number,
@@ -1068,6 +1308,10 @@ function keepClusterExceedsAvailableLines(
   return prepared.isHeadingBlock && keepRequired > currentAvailableLines && usedLines > 0;
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current keepClusterCanBeRelaxed implementation intact until its target seam is extracted.
+ */
 function keepClusterCanBeRelaxed(
   prepared: PreparedTextPlacement,
   block: CompositionBlock,
@@ -1087,6 +1331,10 @@ type TextLineSelection =
   | { kind: 'advance-for-heading-remainder' }
   | { kind: 'ready'; lines: ReturnType<typeof wrapBlock> };
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Choose the lines that fit the current slot and keep rules.
+ */
 function selectTextLinesForPlacement(
   context: FlowPlanningContext,
   prepared: PreparedTextPlacement,
@@ -1110,6 +1358,10 @@ function selectTextLinesForPlacement(
   return { kind: 'ready', lines: wrapped.slice(0, take) };
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current placeInsertionObstacleAfterQuote implementation intact until its target seam is extracted.
+ */
 function placeInsertionObstacleAfterQuote(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1137,6 +1389,10 @@ function placeInsertionObstacleAfterQuote(
   cursor.resumeSlotId = slot.id;
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current resumeDeferredQuoteAfterPlacement implementation intact until its target seam is extracted.
+ */
 function resumeDeferredQuoteAfterPlacement(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1154,6 +1410,10 @@ function resumeDeferredQuoteAfterPlacement(
   cursor.routeIndex = target.selectedSlot.routeIndex + 1;
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Materialize selected lines and update the flow cursor.
+ */
 function commitSelectedTextLines(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1190,6 +1450,10 @@ type InsertionBoundaryResolution =
   | { kind: 'stop' }
   | { kind: 'ready' };
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current resolveInsertionBoundaryAfterText implementation intact until its target seam is extracted.
+ */
 function resolveInsertionBoundaryAfterText(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1214,6 +1478,10 @@ function resolveInsertionBoundaryAfterText(
   return { kind: 'continue' };
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Decide whether the flow continues on this page or moves forward.
+ */
 function advanceFlowAfterTextPlacement(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1283,11 +1551,19 @@ type TextBlockAttemptResult =
   | { kind: 'stop' }
   | { kind: 'done' };
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current completeEmptyTextBlock implementation intact until its target seam is extracted.
+ */
 function completeEmptyTextBlock(runtime: FlowRuntime): void {
   runtime.cursor.blockIndex += 1;
   runtime.cursor.startWord = 0;
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current advanceTextBlockWhenNoLinesFit implementation intact until its target seam is extracted.
+ */
 function advanceTextBlockWhenNoLinesFit(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1315,6 +1591,10 @@ function advanceTextBlockWhenNoLinesFit(
   advanceCursor(cursor, availableRouteSlots);
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current growTextSlotForInitialPlacement implementation intact until its target seam is extracted.
+ */
 function growTextSlotForInitialPlacement(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1328,6 +1608,10 @@ function growTextSlotForInitialPlacement(
   growSlot(currentPage, definition, requiredBottom, context.plan, context.flowId, block.id);
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current pushHeadingWhenWholeHeadingDoesNotFit implementation intact until its target seam is extracted.
+ */
 function pushHeadingWhenWholeHeadingDoesNotFit(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1356,6 +1640,10 @@ function pushHeadingWhenWholeHeadingDoesNotFit(
   return true;
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current recordListItemSplitDecision implementation intact until its target seam is extracted.
+ */
 function recordListItemSplitDecision(
   context: FlowPlanningContext,
   target: FlowTarget,
@@ -1378,6 +1666,10 @@ function recordListItemSplitDecision(
   });
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current pushListItemWhenMinimumFragmentWouldBeBroken implementation intact until its target seam is extracted.
+ */
 function pushListItemWhenMinimumFragmentWouldBeBroken(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1399,6 +1691,10 @@ function pushListItemWhenMinimumFragmentWouldBeBroken(
   return true;
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current handleHeadingClusterObstacleBeforeTextPlacement implementation intact until its target seam is extracted.
+ */
 function handleHeadingClusterObstacleBeforeTextPlacement(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1447,6 +1743,10 @@ function handleHeadingClusterObstacleBeforeTextPlacement(
   return { kind: 'continue' };
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current pushKeepClusterWhenItCannotFit implementation intact until its target seam is extracted.
+ */
 function pushKeepClusterWhenItCannotFit(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1474,6 +1774,10 @@ function pushKeepClusterWhenItCannotFit(
   return true;
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current recordRelaxedKeepCluster implementation intact until its target seam is extracted.
+ */
 function recordRelaxedKeepCluster(
   context: FlowPlanningContext,
   target: FlowTarget,
@@ -1491,6 +1795,10 @@ function recordRelaxedKeepCluster(
   });
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current advanceTextBlockWhenNoCapacity implementation intact until its target seam is extracted.
+ */
 function advanceTextBlockWhenNoCapacity(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1526,6 +1834,10 @@ function advanceTextBlockWhenNoCapacity(
   return { kind: 'continue' };
 }
 
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Keep the current resolveTextLineSelectionFailure implementation intact until its target seam is extracted.
+ */
 function resolveTextLineSelectionFailure(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1599,6 +1911,10 @@ function resolveTextLineSelectionFailure(
   return { kind: 'continue' };
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current planTextBlockAttempt implementation intact until its target seam is extracted.
+ */
 function planTextBlockAttempt(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
@@ -1674,6 +1990,10 @@ function planTextBlockAttempt(
   return { kind: 'done' };
 }
 
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Keep the current planFlow implementation intact until its target seam is extracted.
+ */
 export function planFlow(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,

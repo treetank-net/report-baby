@@ -36,10 +36,18 @@ export interface SelectedInsertionPlacement {
 
 export type MovableInsertionPolicy = Record<string, MovableInsertionBounds>;
 
+/**
+ * @planner-target composition/insertion-order.ts
+ * @planner-responsibility Keep the current insertionKey implementation intact until its target seam is extracted.
+ */
 function insertionKey(flowId: string, blockId: string): string {
   return `${flowId}:${blockId}`;
 }
 
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current clamp implementation intact until its target seam is extracted.
+ */
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -47,6 +55,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
 /**
  * Expand one measured insertion into legal positions inside its frame.
  * The measured rectangle remains unchanged; only its position moves.
+ */
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movablePlacementBoxes implementation intact until its target seam is extracted.
  */
 function movablePlacementBoxes(proposal: { box: CompositionRect }, policy: MovablePlacementBounds): CompositionRect[] {
   const { bounds } = policy;
@@ -77,6 +89,10 @@ function movablePlacementBoxes(proposal: { box: CompositionRect }, policy: Movab
   });
 }
 
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movablePlacementRefinementBoxes implementation intact until its target seam is extracted.
+ */
 function movablePlacementRefinementBoxes(proposal: { box: CompositionRect }, policy: MovablePlacementBounds, round: number): CompositionRect[] {
   const { bounds } = policy;
   const minimumX = bounds.x;
@@ -106,6 +122,10 @@ type PlannedPlacement = { box: CompositionRect };
 type SelectedPlacement = { id: string; page: number; slotId: string; box: CompositionRect };
 type MovablePlacementPolicy = Record<string, MovablePlacementBounds>;
 
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movablePlacementProposalCandidates implementation intact until its target seam is extracted.
+ */
 function movablePlacementProposalCandidates<T extends PlannedPlacement>(
   seed: Map<string, T>,
   policies: MovablePlacementPolicy,
@@ -126,6 +146,10 @@ function movablePlacementProposalCandidates<T extends PlannedPlacement>(
   return variants;
 }
 
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movablePlacementProposalRefinements implementation intact until its target seam is extracted.
+ */
 function movablePlacementProposalRefinements<T extends PlannedPlacement>(
   seeded: Map<string, T>,
   selectedPlacements: readonly SelectedPlacement[],
@@ -163,6 +187,10 @@ function movablePlacementProposalRefinements<T extends PlannedPlacement>(
  * Generate complete proposal variants for every configured movable insertion.
  * Cross-product expansion is deliberate and remains bounded by policy.
  */
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movableInsertionProposalCandidates implementation intact until its target seam is extracted.
+ */
 export function movableInsertionProposalCandidates(
   seed: Map<string, PlannedInsertion>,
   policies: MovableInsertionPolicy,
@@ -174,6 +202,10 @@ export function movableInsertionProposalCandidates(
  * Generate a bounded local neighborhood around the selected placement.
  * The selected plan is represented only by its insertion placements so this
  * module does not depend on the evaluator or the rest of the plan model.
+ */
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movableInsertionProposalRefinements implementation intact until its target seam is extracted.
  */
 export function movableInsertionProposalRefinements(
   seeded: Map<string, PlannedInsertion>,
@@ -192,6 +224,10 @@ export function movableInsertionProposalRefinements(
 
 export type MovableGraphicPolicy = Record<string, MovablePlacementBounds>;
 
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movableGraphicProposalCandidates implementation intact until its target seam is extracted.
+ */
 export function movableGraphicProposalCandidates(
   seed: Map<string, PlannedGraphic>,
   policies: MovableGraphicPolicy,
@@ -206,6 +242,10 @@ export interface SelectedGraphicPlacement {
   box: CompositionRect;
 }
 
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movableGraphicProposalRefinements implementation intact until its target seam is extracted.
+ */
 export function movableGraphicProposalRefinements(
   seeded: Map<string, PlannedGraphic>,
   selectedPlacements: readonly SelectedGraphicPlacement[],
@@ -221,6 +261,10 @@ export function movableGraphicProposalRefinements(
   );
 }
 
+/**
+ * @planner-target composition/text-planner-candidates.ts
+ * @planner-responsibility Keep the current movableInsertionProposalSignature implementation intact until its target seam is extracted.
+ */
 export function movableInsertionProposalSignature(proposals: Map<string, PlannedInsertion>): string {
   return [...proposals.values()]
     .sort((left, right) => insertionKey(left.flowId, left.blockId).localeCompare(insertionKey(right.flowId, right.blockId)))

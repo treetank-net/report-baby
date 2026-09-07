@@ -402,6 +402,10 @@ export interface CompositionScoreComponent {
  * score wins. Equal evaluations intentionally remain a tie so the caller can
  * apply a stable candidate-order tie-break without hiding it here.
  */
+/**
+ * @planner-target composition/engine.ts
+ * @planner-responsibility Keep the current compareCompositionEvaluations implementation intact until its target seam is extracted.
+ */
 export function compareCompositionEvaluations(left: CompositionEvaluation, right: CompositionEvaluation): number {
   const leftLegal = left.status !== 'rejected' && left.hardViolations.length === 0 && left.residualContent.length === 0;
   const rightLegal = right.status !== 'rejected' && right.hardViolations.length === 0 && right.residualContent.length === 0;
@@ -437,6 +441,10 @@ export interface CompositionBackend<Artifact = unknown> {
   render(document: CompositionDocument, plan: CompositionPlan): Artifact | Promise<Artifact>;
 }
 
+/**
+ * @planner-target composition/engine.ts
+ * @planner-responsibility Keep the current renderComposition implementation intact until its target seam is extracted.
+ */
 export function renderComposition<Artifact>(
   document: CompositionDocument,
   result: CompositionPlanResult,
@@ -453,8 +461,16 @@ export function renderComposition<Artifact>(
  * The planner and evaluator have no PDF dependency; a backend consumes the
  * resulting plan in a later adapter step.
  */
+/**
+ * @planner-target composition/engine.ts
+ * @planner-responsibility Evaluate candidates, refine legal alternatives, and select the winning plan.
+ */
 export function createCompositionEngine(planner: CompositionPlanner, evaluator: CompositionEvaluator): CompositionEngine {
   return {
+    /**
+     * @planner-target composition/engine.ts
+     * @planner-responsibility Keep the current plan implementation intact until its target seam is extracted.
+     */
     plan(document, metrics) {
       const candidates = planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)];
       if (candidates.length === 0) throw new Error('Composition planner returned no candidates.');
