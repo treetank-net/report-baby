@@ -790,12 +790,6 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     }
   }
   const sourceBlocks = new Map(Object.values(document.flows).flatMap((flow) => flow.blocks).map((block) => [block.id, block]));
-  const deferredInsertionBlocks = new Set(plan.decisions
-    .filter((decision) => decision.code === 'INSERTION_DEFERRED' && typeof decision.blockId === 'string')
-    .map((decision) => decision.blockId as string));
-  const repositionedInsertionBlocks = new Set(plan.decisions
-    .filter((decision) => decision.code === 'INSERTION_REPOSITIONED' && typeof decision.blockId === 'string')
-    .map((decision) => decision.blockId as string));
   const visualKey = (item: { page: number; routeIndex?: number; box: { x: number; y: number } }): [number, number, number, number] | undefined => item.routeIndex === undefined
     ? undefined
     : [item.page, item.routeIndex, item.box.y, item.box.x];
@@ -813,13 +807,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
     for (const block of flow.blocks) {
       const key = firstVisualPlacement(block.id);
       if (!key) continue;
-      const insertionOrderException = Boolean(
-        previous && (deferredInsertionBlocks.has(previous.blockId)
-          || repositionedInsertionBlocks.has(previous.blockId)
-          || deferredInsertionBlocks.has(block.id)
-          || repositionedInsertionBlocks.has(block.id)),
-      );
-      if (previous && !insertionOrderException && (key[0] < previous.key[0]
+      if (previous && (key[0] < previous.key[0]
         || (key[0] === previous.key[0] && key[1] < previous.key[1])
         || (key[0] === previous.key[0] && key[1] === previous.key[1] && (key[2] < previous.key[2]
           || (key[2] === previous.key[2] && key[3] < previous.key[3]))))) {
@@ -829,15 +817,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
           { flowId: flow.id, blockId: block.id, previousBlockId: previous.blockId, actual: key, previous: previous.key },
         ));
       }
-      if (!insertionOrderException) previous = { blockId: block.id, key };
-    }
-    const insertionRouteIndexes = new Map<number, Set<number>>();
-    for (const block of flow.blocks.filter((candidate) => candidate.role === 'quote')) {
-      for (const line of allLines(plan).filter((candidate) => candidate.blockId === block.id && candidate.routeIndex !== undefined)) {
-        const indexes = insertionRouteIndexes.get(line.page) ?? new Set<number>();
-        indexes.add(line.routeIndex!);
-        insertionRouteIndexes.set(line.page, indexes);
-      }
+      previous = { blockId: block.id, key };
     }
     const flowingBlockIds = new Set(flow.blocks.filter((block) => block.kind !== 'table').map((block) => block.id));
     for (const blockId of flowingBlockIds) {
@@ -849,21 +829,6 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
         const fragment = fragments[index];
         if (previousFragment.page !== fragment.page || fragment.routeIndex === previousFragment.routeIndex) continue;
         if ((fragment.routeIndex ?? 0) < (previousFragment.routeIndex ?? 0)) continue;
-        const insertionIndexes = insertionRouteIndexes.get(fragment.page) ?? new Set<number>();
-        if ([...insertionIndexes].some((routeIndex) => routeIndex > (previousFragment.routeIndex ?? 0) && routeIndex < (fragment.routeIndex ?? 0))) {
-          diagnostics.push(error(
-            'BLOCK_SPLITS_ACROSS_INSERTION',
-            `Block '${blockId}' is split across a full-width insertion in flow '${flow.id}'.`,
-            {
-              flowId: flow.id,
-              blockId,
-              page: fragment.page,
-              previousRouteIndex: previousFragment.routeIndex,
-              routeIndex: fragment.routeIndex,
-            },
-          ));
-          continue;
-        }
         const previousSlot = slotFor(plan, previousFragment.slotId);
         if (!previousSlot) continue;
         const previousBottom = previousFragment.box.y + previousFragment.box.height;
@@ -922,21 +887,6 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
       indexes.add(item.routeIndex);
       occupiedRouteIndexes.set(item.page, indexes);
     }
-    const collapsedRouteIndexes = new Map<number, Set<number>>();
-    const blockedRouteIndexes = new Map<number, Set<number>>();
-    for (const decision of plan.decisions) {
-      if (decision.flowId !== flow.id || typeof decision.routeIndex !== 'number' || typeof decision.page !== 'number') continue;
-      if (decision.code === 'FLOW_SEGMENT_BLOCKED_BY_INSERTION') {
-        const indexes = blockedRouteIndexes.get(decision.page) ?? new Set<number>();
-        indexes.add(decision.routeIndex);
-        blockedRouteIndexes.set(decision.page, indexes);
-        continue;
-      }
-      if (decision.code !== 'OPTIONAL_INSERTION_COLLAPSED') continue;
-      const indexes = collapsedRouteIndexes.get(decision.page) ?? new Set<number>();
-      indexes.add(decision.routeIndex);
-      collapsedRouteIndexes.set(decision.page, indexes);
-    }
     for (const [page, indexes] of occupiedRouteIndexes) {
       if (page === 1) continue;
       // Atomic slots may be intentionally sparse on a continuation page (for
@@ -947,10 +897,8 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
         || plan.tablePlacements.some((placement) => placement.page === page)) continue;
       const ordered = [...indexes].sort((left, right) => left - right);
       if (ordered.length < 2) continue;
-      const collapsed = collapsedRouteIndexes.get(page) ?? new Set<number>();
-      const blocked = blockedRouteIndexes.get(page) ?? new Set<number>();
       for (let index = ordered[0] + 1; index < ordered.at(-1)!; index += 1) {
-        if (indexes.has(index) || collapsed.has(index) || blocked.has(index)) continue;
+        if (indexes.has(index)) continue;
         diagnostics.push({
           severity: 'error',
           code: 'ROUTE_SEGMENT_GAP',

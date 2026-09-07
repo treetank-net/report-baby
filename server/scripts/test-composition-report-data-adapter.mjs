@@ -108,6 +108,11 @@ try {
     page: 1,
     alt: 'Hero panel',
   }]);
+  assert.throws(
+    () => compositionInputSchema.parse({ flows: { main: { blocks: [{ type: 'text', role: 'quote', text: 'Inline quotes are no longer main-flow content.' }] } } }),
+    /main flow cannot contain quote blocks/u,
+    'public input must put quotes in a separate flow',
+  );
 
   const empty = compositionDocumentFromInput({ flows: { main: { blocks: [], continuation: 'allowed' } } });
   assert.deepEqual(Object.keys(empty.flows), ['main']);

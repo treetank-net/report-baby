@@ -6,6 +6,12 @@ format-specific APIs, while the jsPDF adapters execute accepted planner
 placements. Charts are prepared as PNG assets before planning, and the same
 slide plan is used for PDF, PNG and editable PPTX output.
 
+Historical-contract note (2026-09-07): the quote/deferred-insertion examples
+below describe the former inline `main` flow behavior. The active contract
+rejects quote blocks in `main` and `routes.main.insertionSlots`; quotes are
+planned only by a named non-`main` flow that declares insertion slots. The historical text is kept
+for migration context, not as an implementation requirement.
+
 | Report Baby input | Modelled | Planned | Rendered by shadow | Ready for swap |
 | --- | --- | --- | --- | --- |
 | intro and section text | yes | yes | yes, public editorial route | typography/parity corpus pending |

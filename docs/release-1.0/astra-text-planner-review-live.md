@@ -335,9 +335,12 @@ questions suggested:
   considered legal. If no such candidate exists, the engine must report that
   no feasible plan was produced. Keeping rejected candidates for diagnostics
   is separate from selecting a plan for rendering.
-- Both insertion paths remain supported: some insertion slots are planned in
-  advance, while other insertions are supplied by the user during the flow.
-  The refactor must preserve both paths and their current behavior.
+- Quote insertion has one supported runtime path: quote blocks belong to a
+  named non-`main` flow that declares insertion slots; those slots are planned
+  and materialized before ordinary flow placement. The legacy path that placed `role: quote`
+  blocks inline in `main` (including `routes.main.insertionSlots`) is removed.
+  Public input and templates reject that shape; callers needing an insertion
+  must provide a separate flow such as `quotes`.
 - The target planning shape is one generation phase followed by evaluation.
   A possible later search over several distant, similarly scored starting
   candidates is outside the current work and has not been reached. Terms such
@@ -410,6 +413,9 @@ their current target file and were therefore not split under the agreed rule.
 
 ### Flow-planner decomposition correction — 2026-09-07
 
+Historical snapshot from before the quote-path removal below; its
+insertion-boundary and route-range statements are no longer active.
+
 The follow-up pass is focused on the large functions that still lived in
 `flow-planner.ts`, rather than expanding more of `text-planner.ts`:
 
@@ -432,3 +438,14 @@ parts do not currently belong to different target modules, so splitting them
 further would only add same-file indirection and would not advance the agreed
 mechanical relocation. The refreshed inventory records each extracted
 function's inputs, output, direct calls, and intended target module.
+
+### Quote-path removal — 2026-09-07
+
+The decomposition notes above are historical snapshots. The active
+implementation now removes the inline quote path entirely: deferred quotes,
+continuous quote obstacles, insertion-boundary routing, and optional quote
+collapse decisions no longer live in `flow-planner.ts`. Quote text is
+materialized only by a named non-`main` insertion flow. The template and input
+contracts reject `routes.main.insertionSlots` and `role: quote` blocks in the
+`main` flow, and the affected fixtures assert this rejection or use a
+dedicated `quotes` flow.

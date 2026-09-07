@@ -3,9 +3,10 @@
 This is the canonical map of the block kinds currently accepted by the
 composition model. A block kind describes the meaning of one content unit;
 the template and renderer decide how that unit is shown. A quote is not a
-separate block kind: it is an ordinary text block with `role: quote` and an
-insertion route. Glyphs are renderable decorations attached to a planned
-block or graphic, not content blocks.
+separate block kind: it is a text block with `role: quote`, supplied by a
+named insertion flow. The `main` flow is reserved for ordinary document text
+and cannot contain quote blocks or insertion slots. Glyphs are renderable
+decorations attached to a planned block or graphic, not content blocks.
 
 ## Common path
 
@@ -28,7 +29,7 @@ block.
 | Kind | Input and normalized data | Measurement | Placement and collisions | Evaluation | Rendering |
 |---|---|---|---|---|---|
 | `heading` | `type: heading`, text, optional level; normalized to a text block | `CompositionTextMetrics.measureText` and `lineHeight` for the heading style | Lines occupy a text slot; heading keep-with-next may require a later slot; it cannot overlap graphics or another line | Source coverage/order, containment and line legality are hard; following-line bonus and fragmentation are quality terms | Ordinary text backend with heading style; glyphs may target its final line if explicitly declared |
-| `paragraph` | `type: text`, normalized Markdown/structured runs and plain searchable text | Text width, line height, padding, indent and optional glyph metadata from `CompositionTextMetrics` | Lines are wrapped through route slots and flow-barrier intervals; a quote-role paragraph may be planned as an insertion obstacle | Full word coverage/order and geometry are hard; fragmentation, orphan lines, spacing and contrast affect score | Ordinary text backend; normalized runs are retained for styled rendering where supported |
+| `paragraph` | `type: text`, normalized Markdown/structured runs and plain searchable text | Text width, line height, padding, indent and optional glyph metadata from `CompositionTextMetrics` | Ordinary paragraphs use route slots; a `role: quote` paragraph is materialized only by a named non-`main` insertion flow | Full word coverage/order and geometry are hard; fragmentation, orphan lines, spacing and contrast affect score | Ordinary text backend; normalized runs are retained for styled rendering where supported |
 | `list-item` | `type: list-item`, text and optional keep-with-next policy | Same text metrics as a paragraph, with list-item style and keep-together policy | Text lines use ordinary route slots; the planner may keep the item together or split only at a legal line boundary | Same text-flow hard rules; list keep decisions affect whether a candidate is legal or leaves a quality gap | Ordinary text backend with list-item style |
 | `image` | `type: image`, asset reference or source, width, `contain`, optional wrap/caption | Image capability resolves asset dimensions, available width, caption lines and fitted height before placement | Atomic placement occupies a block slot or a growing text slot; `wrap: left/right` creates a graphic obstacle for later text; caption belongs to the image placement | Missing asset, invalid bounds, incomplete atomic placement and collisions are hard; scaling is recorded as a decision, not a failure | Image capability paints the asset and caption; the backend may expose the image as a graphic placement for wrapping |
 | `table` | `type: table`, header and body rows, optional caption | Table capability measures one row fragment at a time and returns `endRow`; header repetition is explicit | Table placement consumes a block slot or a text-slot remainder; continuation is only at row boundaries and its box participates in collision checks | Row coverage/order, source kind, bounds and overlap are hard; table height is never guessed by the planner | Table capability paints header and selected rows using the planned row range |
@@ -37,12 +38,13 @@ block.
 
 ## Roles, insertions and graphics
 
-`role` is an editorial relationship, not a replacement for `kind`. For
-example, a paragraph with `role: quote` remains a paragraph for measurement
-and text rendering, but its route may declare an insertion slot. The planner
-measures the quote, reserves its resulting box as an obstacle, and then wraps
-ordinary flow around that box. The evaluator checks the resulting complete
-plan; it does not give a quote a special pass.
+`role` is an editorial relationship, not a replacement for `kind`. A paragraph
+with `role: quote` remains a paragraph for measurement and text rendering, but
+it must belong to a named insertion flow other than `main`. That flow declares
+the insertion slots; the planner measures the quote, reserves its resulting box
+as an obstacle, and then wraps the ordinary `main` flow around that box. The
+evaluator checks the resulting complete plan; it does not give a quote a
+special pass.
 
 An authored `CompositionGraphic` is different from an image block. It is a
 template-addressed graphic or background obstacle with a shape and optional

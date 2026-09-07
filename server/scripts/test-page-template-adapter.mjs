@@ -240,10 +240,10 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   assert.ok(overflowingFooterResult.plan.residualContent.some((item) => item.flowId === 'footer'));
 
   const genericSource = structuredClone(source);
-  genericSource.id = 'pages/editorial-quote-lead';
-  genericSource.page.flow.lead = 'quote';
+  genericSource.id = 'pages/editorial-intro-lead';
+  genericSource.page.flow.lead = 'intro';
   genericSource.page.blocks = {
-    quote: { frame: { x: 0.081, y: 0.24, width: 0.838, height: 0.10 }, grow: { axis: 'y', max_height: 0.69, pushes: ['narrative'] } },
+    intro: { frame: { x: 0.081, y: 0.24, width: 0.838, height: 0.10 }, grow: { axis: 'y', max_height: 0.69, pushes: ['narrative'] } },
     narrative: genericSource.page.blocks.narrative,
   };
   const genericCompiled = compileTemplateSource(genericSource);
@@ -251,8 +251,8 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const genericTemplate = compositionTemplateFromPageGeometry(genericCompiled, genericGeometry, { maxPages: 3 });
   const genericDocument = {
     flows: { main: { id: 'main', continuation: 'allowed', blocks: [
-      { id: 'quote', kind: 'paragraph', role: 'quote', text: Array.from({ length: 100 }, (_, index) => `quote${index}`).join(' ') },
-      { id: 'body', kind: 'paragraph', role: 'body', text: 'The ordinary body follows a quote lead without knowing anything about intro.' },
+      { id: 'intro', kind: 'paragraph', role: 'intro', text: Array.from({ length: 100 }, (_, index) => `intro${index}`).join(' ') },
+      { id: 'body', kind: 'paragraph', role: 'body', text: 'The ordinary body follows an intro lead without knowing anything about quote insertion.' },
     ] } },
   };
   const genericResult = createTextCompositionEngine(genericTemplate).plan(genericDocument, {
@@ -261,9 +261,9 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
     lineHeight() { return 5; },
   });
   assert.equal(genericResult.evaluation.status, 'accepted', JSON.stringify(genericResult.evaluation));
-  assert.deepEqual(genericTemplate.layouts[0].slots.find((slot) => slot.id === 'block:quote')?.allowedBlockIds, ['quote']);
-  assert.ok(genericResult.plan.lines.some((line) => line.blockId === 'quote' && line.slotId === '1:block:quote'));
-  assert.ok(genericResult.plan.lines.every((line) => !(line.blockId === 'body' && line.slotId === '1:block:quote')));
+  assert.deepEqual(genericTemplate.layouts[0].slots.find((slot) => slot.id === 'block:intro')?.allowedBlockIds, ['intro']);
+  assert.ok(genericResult.plan.lines.some((line) => line.blockId === 'intro' && line.slotId === '1:block:intro'));
+  assert.ok(genericResult.plan.lines.every((line) => !(line.blockId === 'body' && line.slotId === '1:block:intro')));
 
   const metricSource = structuredClone(source);
   metricSource.id = 'pages/editorial-metric-slots';

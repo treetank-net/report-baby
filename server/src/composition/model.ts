@@ -95,9 +95,10 @@ export interface CompositionLayoutTemplate {
 export interface CompositionFlowRoute {
   slots: string[];
   /**
-   * Fixed-position insertions painted into the flow as exclusion obstacles.
-   * They are not route segments: the text stream continues in its current
-   * slot and resumes below the insertion, just like it does around an image.
+   * Fixed-position insertions owned by a named non-main flow and painted as
+   * exclusion obstacles for the ordinary text flow. They are not route
+   * segments of `main`; the main stream continues around the resulting box,
+   * just like it does around an image.
    */
   insertionSlots?: string[];
   continuation: 'allowed' | 'forbidden';

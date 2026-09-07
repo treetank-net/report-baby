@@ -1,5 +1,10 @@
 # Composition planner seam
 
+Status note (2026-09-07): this research predates the adopted
+separate-insertion-flow contract. Quote blocks are now supplied by a named
+non-`main` flow; `main` is reserved for ordinary text and cannot own
+insertion slots.
+
 Date: 2026-08-26
 
 > Status correction (2026-08-28): the implementation described below has

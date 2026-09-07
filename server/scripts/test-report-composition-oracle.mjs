@@ -211,23 +211,27 @@ try {
     layouts: [{ id: 'numbered-inset', width: 100, height: 100, slots: [
       { id: 'left-before', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 20 }, allowedRoles: ['body'] },
       { id: 'right-before', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 20 }, allowedRoles: ['body'] },
-      { id: 'quote-a', regionId: 'main', kind: 'text', box: { x: 5, y: 30, width: 90, height: 10 }, allowedRoles: ['quote'] },
       { id: 'left-after', regionId: 'main', kind: 'text', box: { x: 5, y: 45, width: 40, height: 20 }, allowedRoles: ['body'] },
-      { id: 'quote-b', regionId: 'main', kind: 'text', box: { x: 5, y: 70, width: 90, height: 10 }, allowedRoles: ['quote'] },
       { id: 'right-after', regionId: 'main', kind: 'text', box: { x: 55, y: 45, width: 40, height: 20 }, allowedRoles: ['body'] },
+      { id: 'quote-b', regionId: 'quotes', kind: 'text', box: { x: 5, y: 70, width: 90, height: 10 }, allowedRoles: ['quote'] },
     ] }],
-    routes: { main: { slots: ['left-before', 'quote-a', 'left-after', 'quote-b', 'right-before', 'right-after'], layouts: ['numbered-inset'], continuation: 'forbidden' } },
+    routes: {
+      main: { slots: ['left-before', 'left-after', 'right-before', 'right-after'], layouts: ['numbered-inset'], continuation: 'forbidden' },
+      quotes: { slots: ['quote-b'], insertionSlots: ['quote-b'], layouts: ['numbered-inset'], continuation: 'forbidden' },
+    },
   };
   const numberedHeadingWords = ['lorem1', 'lorem2'];
   const numberedBodyWords = Array.from({ length: 6 }, (_, index) => `lorem${index + numberedHeadingWords.length + 1}`);
   const numberedTailWords = Array.from({ length: 4 }, (_, index) => `lorem${index + numberedHeadingWords.length + numberedBodyWords.length + 1}`);
   const numberedInsetDocument = {
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [
       { id: 'numbered-heading', kind: 'paragraph', role: 'body', text: numberedHeadingWords.join(' ') },
       { id: 'numbered-body', kind: 'paragraph', role: 'body', text: numberedBodyWords.join(' ') },
-      { id: 'numbered-quote', kind: 'paragraph', role: 'quote', text: 'quote-0001 quote-0002' },
       { id: 'numbered-tail', kind: 'paragraph', role: 'body', text: numberedTailWords.join(' ') },
-    ] } },
+      ] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'numbered-quote', kind: 'paragraph', role: 'quote', text: 'quote-0001 quote-0002' }] },
+    },
   };
   const numberedMetrics = {
     units: 'mm',
@@ -334,8 +338,9 @@ try {
 
   const quoteDocument = {
     flows: {
-      main: {
-        id: 'main',
+      main: { id: 'main', blocks: [] },
+      quotes: {
+        id: 'quotes',
         blocks: [{ id: 'quote-fixture', kind: 'paragraph', role: 'quote', text: 'A quote keeps both marks inside its editorial frame.' }],
       },
     },
@@ -343,7 +348,7 @@ try {
   const quoteStyles = (await import(adapterBundle)).compositionStylesFromRenderConfig({ foreground: [0, 0, 0], muted: [100, 100, 100], primary: [1, 92, 146], quote: [1, 92, 146] });
   const quotePlan = {
     pages: [{ page: 1, layoutId: 'quote-fixture', width: 210, height: 297 }],
-    slots: [{ id: '1:quote', page: 1, regionId: 'main', box: { x: 17, y: 40, width: 176, height: 20 }, state: 'partial' }],
+    slots: [{ id: '1:quote', page: 1, regionId: 'quotes', box: { x: 17, y: 40, width: 176, height: 20 }, state: 'partial' }],
     placements: [{ id: 'quote-placement', blockId: 'quote-fixture', slotId: '1:quote', page: 1, routeIndex: 0, box: { x: 25, y: 40, width: 168, height: 11.2 }, startWord: 0, endWord: 9 }],
     blockPlacements: [],
     tablePlacements: [],
@@ -354,7 +359,7 @@ try {
         glyphId: 'quote-fixture:open-quote',
         targetType: 'block',
         targetId: 'quote-fixture',
-        flowId: 'main',
+        flowId: 'quotes',
         page: 1,
         slotId: '1:quote',
         text: '“',
@@ -368,7 +373,7 @@ try {
         glyphId: 'quote-fixture:close-quote',
         targetType: 'block',
         targetId: 'quote-fixture',
-        flowId: 'main',
+        flowId: 'quotes',
         page: 1,
         slotId: '1:quote',
         text: '”',
@@ -378,7 +383,7 @@ try {
         baselineY: 40 + quoteStyles['quote-mark'].baselineOffset,
       },
     ],
-    lines: [{ blockId: 'quote-fixture', flowId: 'main', slotId: '1:quote', page: 1, routeIndex: 0, text: 'A quote keeps both marks inside its editorial frame.', box: { x: 25, y: 40, width: 168, height: 11.2 }, naturalWidth: 0, startWord: 0, endWord: 9 }],
+    lines: [{ blockId: 'quote-fixture', flowId: 'quotes', slotId: '1:quote', page: 1, routeIndex: 0, text: 'A quote keeps both marks inside its editorial frame.', box: { x: 25, y: 40, width: 168, height: 11.2 }, naturalWidth: 0, startWord: 0, endWord: 9 }],
     decisions: [],
     diagnostics: [],
     residualContent: [],

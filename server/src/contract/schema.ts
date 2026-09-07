@@ -218,6 +218,9 @@ export const compositionInputSchema = z.preprocess((value) => {
 }, compositionInputCoreSchema).superRefine((input, context) => {
   for (const [flowId, flow] of Object.entries(input.flows)) {
     flow.blocks.forEach((block, index) => {
+      if (flowId === 'main' && block.role === 'quote') {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['flows', flowId, 'blocks', index], message: 'The main flow cannot contain quote blocks; put quotes in a separate flow.' });
+      }
       if (block.type !== 'image') return;
       if ((block.src === undefined) === (block.asset_id === undefined)) {
         context.addIssue({ code: z.ZodIssueCode.custom, path: ['flows', flowId, 'blocks', index], message: 'An image must provide exactly one of src or asset_id.' });

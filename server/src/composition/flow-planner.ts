@@ -22,7 +22,6 @@ import {
   lineHeight,
   placeGraphicsForPage,
   placeLines,
-  routeLayout,
   routeSlots,
   styleFor,
   textPadding,
@@ -35,11 +34,9 @@ import type {
 } from './text-planner.js';
 import { flowBarrierBoxCandidatesForSlot } from './flow-barriers.js';
 import { hasRoleEligibleSlot, slotFor } from './route-slots.js';
-import { insertionKey, nextInsertionBoundary, nextInsertionProposal } from './insertion-order.js';
 import { obstructionAcrossLineBands } from './text-wrapping.js';
 import { availableLineCount } from './line-capacity.js';
 import { placeStructuredBlock } from './structured-block-placement.js';
-import type { PlannedInsertion } from './text-planner-candidates.js';
 import { recordFlowDecision } from './planning-records.js';
 
 /**
@@ -363,52 +360,6 @@ function previousBlockInSlot(plan: CompositionPlan, slotId: string, currentBlock
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Collapse the insertion slots in one route range for a specific flow transition.
- */
-function collapseInsertionsInRouteRange(
-  pageState: PageState,
-  routeSlotIds: string[],
-  fromRouteIndex: number,
-  toRouteIndex: number,
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  reason: string,
-): void {
-  for (let index = fromRouteIndex; index < toRouteIndex; index += 1) {
-    const definition = pageState.layout.slots.find((slot) => slot.id === routeSlotIds[index]);
-    const insertion = definition ? pageState.slots.get(definition.id) : undefined;
-    collapseInsertion(pageState, definition, insertion, context, runtime, reason);
-  }
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current collapseInsertion implementation intact until its target seam is extracted.
- */
-function collapseInsertion(
-  pageState: PageState,
-  definition: CompositionSlotTemplate | undefined,
-  insertion: CompositionSlot | undefined,
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  reason: string,
-): void {
-  if (!definition?.allowedRoles?.includes('quote') || !insertion || insertion.state !== 'open') return;
-  const delta = insertion.box.height;
-  if (delta <= 0) {
-    insertion.state = 'exhausted';
-    return;
-  }
-  // An insertion is an obstacle in the existing column geometry. The text
-  // stream is split around that obstacle; moving later boxes would turn the
-  // two columns into independently positioned blocks and can pull a right
-  // column above the left-column content.
-  insertion.state = 'exhausted';
-  recordFlowDecision(context, 'OPTIONAL_INSERTION_COLLAPSED', runtime, undefined, reason);
-}
-
-/**
  * @planner-target composition/flow-planner.ts
  * @planner-responsibility Keep the current advanceCursor implementation intact until its target seam is extracted.
  */
@@ -445,22 +396,6 @@ function contentStartBottom(
   return occupiedBottomInOverlappingSlots(pageState, plan, slot, local);
 }
 
-type DeferredQuote = {
-  blockIndex: number;
-  deferredPage: number;
-  routeIndex?: number;
-};
-
-type ActiveDeferredQuote = {
-  blockIndex: number;
-  blockId: string;
-  resume: {
-    blockIndex: number;
-    startWord: number;
-    startRow: number;
-  };
-};
-
 export interface FlowPlanningContext {
   document: CompositionDocument;
   metrics: CompositionTextMetrics;
@@ -471,18 +406,12 @@ export interface FlowPlanningContext {
   pages: PageState[];
   plan: CompositionPlan;
   startPage: number;
-  insertionProposals: Map<string, PlannedInsertion>;
-  skipPreplannedInsertions: boolean;
-  authoredBlocks: CompositionBlock[];
   blocks: CompositionBlock[];
-  authoredIndexOf: (blockId: string) => number;
   geometryTolerance: number;
 }
 
 export interface FlowRuntime {
   cursor: FlowCursor;
-  deferredQuote?: DeferredQuote;
-  activeDeferredQuote?: ActiveDeferredQuote;
   lastLegalSlotId?: string;
 }
 
@@ -497,7 +426,6 @@ export interface FlowTarget {
   block: CompositionBlock;
   selectedSlot: SelectedFlowSlot;
   definition: CompositionSlotTemplate;
-  continuousInsertion: boolean;
 }
 
 type FlowTargetResolution =
@@ -521,13 +449,12 @@ function createFlowPlanningContext(
   pages: PageState[],
   plan: CompositionPlan,
   startPage: number,
-  insertionProposals: Map<string, PlannedInsertion>,
-  skipPreplannedInsertions: boolean,
+  skipPreplannedInsertionBlocks: boolean,
 ): FlowPlanningContext | undefined {
   const flow = document.flows[flowId];
   if (!flow) return undefined;
   const authoredBlocks = flow.blocks;
-  const blocks = skipPreplannedInsertions
+  const blocks = skipPreplannedInsertionBlocks
     ? authoredBlocks.filter((block) => block.role !== 'quote')
     : authoredBlocks;
   return {
@@ -540,11 +467,7 @@ function createFlowPlanningContext(
     pages,
     plan,
     startPage,
-    insertionProposals,
-    skipPreplannedInsertions,
-    authoredBlocks,
     blocks,
-    authoredIndexOf: (blockId) => authoredBlocks.findIndex((candidate) => candidate.id === blockId),
     geometryTolerance: policy.geometryTolerance ?? 0,
   };
 }
@@ -636,150 +559,6 @@ function ensureCurrentFlowPage(context: FlowPlanningContext, runtime: FlowRuntim
 
 /**
  * @planner-target composition/flow-planner.ts
- * @planner-responsibility Keep the current holdFlowForPreplannedInsertion implementation intact until its target seam is extracted.
- */
-function holdFlowForPreplannedInsertion(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-): boolean {
-  const block = currentFlowBlock(context, runtime);
-  const authoredIndex = context.authoredIndexOf(block.id);
-  const precedingInsertionPage = context.authoredBlocks
-    .slice(0, authoredIndex)
-    .filter((candidate) => candidate.role === 'quote')
-    .map((candidate) => context.insertionProposals.get(insertionKey(context.flowId, candidate.id))?.page)
-    .filter((page): page is number => page !== undefined)
-    .sort((left, right) => right - left)[0];
-  if (precedingInsertionPage === undefined || runtime.cursor.page >= precedingInsertionPage) return false;
-  recordFlowDecision(context, 'FLOW_HELD_FOR_PREPLANNED_INSERTION', runtime, undefined, 'successor-must-not-pass-earlier-insertion');
-  runtime.cursor.page = precedingInsertionPage;
-  runtime.cursor.routeIndex = 0;
-  runtime.cursor.resumeY = undefined;
-  return true;
-}
-
-/**
- * @planner-target composition/flow-planner.ts
- * @planner-responsibility Keep the current restoreDeferredQuoteOnCurrentPage implementation intact until its target seam is extracted.
- */
-function restoreDeferredQuoteOnCurrentPage(context: FlowPlanningContext, runtime: FlowRuntime): void {
-  const deferred = runtime.deferredQuote;
-  if (!deferred || runtime.activeDeferredQuote || runtime.cursor.page !== deferred.deferredPage || deferred.routeIndex === undefined || runtime.cursor.routeIndex < deferred.routeIndex) return;
-  runtime.activeDeferredQuote = {
-    blockIndex: deferred.blockIndex,
-    blockId: context.blocks[deferred.blockIndex].id,
-    resume: { blockIndex: runtime.cursor.blockIndex, startWord: runtime.cursor.startWord, startRow: runtime.cursor.startRow },
-  };
-  runtime.cursor.blockIndex = deferred.blockIndex;
-  runtime.cursor.startWord = 0;
-  runtime.cursor.startRow = 0;
-  runtime.cursor.routeIndex = deferred.routeIndex;
-  recordFlowDecision(context, 'INSERTION_REPOSITIONED_PLACED', runtime, undefined, 'earlier-route-segment-was-empty');
-}
-
-/**
- * @planner-target composition/flow-planner.ts
- * @planner-responsibility Keep the current restoreDeferredQuoteOnNextPage implementation intact until its target seam is extracted.
- */
-function restoreDeferredQuoteOnNextPage(context: FlowPlanningContext, runtime: FlowRuntime): void {
-  const deferred = runtime.deferredQuote;
-  if (!deferred || runtime.activeDeferredQuote || runtime.cursor.page <= deferred.deferredPage) return;
-  runtime.activeDeferredQuote = {
-    blockIndex: deferred.blockIndex,
-    blockId: context.blocks[deferred.blockIndex].id,
-    resume: { blockIndex: runtime.cursor.blockIndex, startWord: runtime.cursor.startWord, startRow: runtime.cursor.startRow },
-  };
-  runtime.cursor.blockIndex = deferred.blockIndex;
-  runtime.cursor.startWord = 0;
-  runtime.cursor.startRow = 0;
-  runtime.cursor.routeIndex = 0;
-  recordFlowDecision(context, 'DEFERRED_INSERTION_PLACED', runtime, undefined, 'next-page-insertion-slot');
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current plannedInsertionForBlock implementation intact until its target seam is extracted.
- */
-function plannedInsertionForBlock(
-  context: FlowPlanningContext,
-  block: CompositionBlock,
-): PlannedInsertion | undefined {
-  return block.role === 'quote'
-    ? context.insertionProposals.get(insertionKey(context.flowId, block.id))
-    : undefined;
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current insertionPassedItsPlannedPage implementation intact until its target seam is extracted.
- */
-function insertionPassedItsPlannedPage(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  currentPage: PageState,
-  plannedInsertion: PlannedInsertion | undefined,
-): boolean {
-  if (!plannedInsertion || currentPage.page <= plannedInsertion.page) return false;
-  const block = currentFlowBlock(context, runtime);
-  context.plan.diagnostics.push(diagnostic('error', 'INSERTION_PLAN_PASSED', `Insertion '${block.id}' passed its stabilized page ${plannedInsertion.page}.`, { flowId: context.flowId, blockId: block.id, page: currentPage.page, details: { plannedPage: plannedInsertion.page, plannedSlotId: plannedInsertion.slotId } }));
-  recordFlowResidual(context, runtime, 'insertion-plan-passed');
-  return true;
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current insertionDefinitionForBlock implementation intact until its target seam is extracted.
- */
-function insertionDefinitionForBlock(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  currentPage: PageState,
-  plannedInsertion: PlannedInsertion | undefined,
-): CompositionSlotTemplate | undefined {
-  const block = currentFlowBlock(context, runtime);
-  if (block.role !== 'quote') return undefined;
-  if (plannedInsertion && currentPage.page === plannedInsertion.page) {
-    return currentPage.layout.slots.find((slot) => slot.id === plannedInsertion.slotId && slot.allowedRoles?.includes('quote'));
-  }
-  return undefined;
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current hasInsertionSlotOnNextPage implementation intact until its target seam is extracted.
- */
-function hasInsertionSlotOnNextPage(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  block: CompositionBlock,
-): boolean {
-  const nextLayout = routeLayout(context.route, context.template, runtime.cursor.page + 1);
-  const nextSlotIds = nextLayout ? routeSlots(context.route, nextLayout) : [];
-  return nextLayout !== undefined && hasRoleEligibleSlot(nextLayout, nextSlotIds, 0, context.flowId, block);
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current deferInsertionToNextPage implementation intact until its target seam is extracted.
- */
-function deferInsertionToNextPage(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-): boolean {
-  const block = currentFlowBlock(context, runtime);
-  if (block.role !== 'quote' || context.route.continuation !== 'allowed' || runtime.cursor.page !== context.startPage || runtime.deferredQuote) return false;
-  if (!hasInsertionSlotOnNextPage(context, runtime, block)) return false;
-  recordFlowDecision(context, 'INSERTION_DEFERRED', runtime, undefined, 'insertion-slot-only-on-continuation');
-  runtime.deferredQuote = { blockIndex: runtime.cursor.blockIndex, deferredPage: runtime.cursor.page };
-  runtime.cursor.blockIndex += 1;
-  runtime.cursor.startWord = 0;
-  runtime.cursor.startRow = 0;
-  runtime.cursor.routeIndex = 0;
-  return true;
-}
-
-/**
- * @planner-target composition/flow-planner.ts
  * @planner-responsibility Keep the current resolveUnavailableFlowSlot implementation intact until its target seam is extracted.
  */
 function resolveUnavailableFlowSlot(
@@ -791,7 +570,6 @@ function resolveUnavailableFlowSlot(
 ): FlowTargetUnavailableResolution {
   const block = currentFlowBlock(context, runtime);
   if (selectedSlot === undefined && !hasRoleEligibleSlot(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots)) {
-    if (deferInsertionToNextPage(context, runtime)) return { kind: 'continue' };
     if (context.route.continuation === 'allowed') {
       recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_PAGE', runtime, undefined, 'no-eligible-slot-on-page');
       advanceCursor(runtime.cursor, availableRouteSlots);
@@ -813,31 +591,12 @@ function selectFlowSlot(
   currentPage: PageState,
   availableRouteSlots: string[],
   block: CompositionBlock,
-  insertionDefinition: CompositionSlotTemplate | undefined,
 ): SelectedFlowSlot | undefined {
-  const selectedSlot = insertionDefinition
-    ? { definition: insertionDefinition, routeIndex: runtime.cursor.routeIndex }
-    : slotFor(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots);
-  if (block.role === 'quote' || runtime.cursor.startWord === 0 || !selectedSlot) return selectedSlot;
-  const insertionIndex = availableRouteSlots.findIndex((slotId, index) => index >= runtime.cursor.routeIndex
-    && index < selectedSlot.routeIndex
-    && currentPage.layout.slots.some((slot) => slot.id === slotId && slot.allowedRoles?.includes('quote'))
-    && currentPage.slots.get(slotId)?.state === 'open');
-  if (insertionIndex < 0) return selectedSlot;
-  collapseInsertionsInRouteRange(
-    currentPage,
-    availableRouteSlots,
-    insertionIndex,
-    insertionIndex + 1,
-    context,
-    runtime,
-    'continuation-needs-uninterrupted-column',
-  );
   return slotFor(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots);
 }
 
 type FlowTargetSelectionResolution =
-  | { kind: 'ready'; target: FlowTarget; routeStartIndex: number }
+  | { kind: 'ready'; target: FlowTarget }
   | { kind: 'continue' }
   | { kind: 'stop' };
 
@@ -858,7 +617,6 @@ function createFlowTarget(
     block,
     selectedSlot,
     definition: selectedSlot.definition,
-    continuousInsertion: block.role === 'quote' && (context.route.insertionSlots?.includes(selectedSlot.definition.id) ?? false),
   };
 }
 
@@ -873,16 +631,12 @@ function selectFlowTarget(
   availableRouteSlots: string[],
 ): FlowTargetSelectionResolution {
   const block = currentFlowBlock(context, runtime);
-  const plannedInsertion = plannedInsertionForBlock(context, block);
-  if (insertionPassedItsPlannedPage(context, runtime, currentPage, plannedInsertion)) return { kind: 'stop' };
-  const insertionDefinition = insertionDefinitionForBlock(context, runtime, currentPage, plannedInsertion);
-  const selectedSlot = selectFlowSlot(context, runtime, currentPage, availableRouteSlots, block, insertionDefinition);
+  const selectedSlot = selectFlowSlot(context, runtime, currentPage, availableRouteSlots, block);
   if (!selectedSlot || (selectedSlot.definition.kind !== 'text' && selectedSlot.definition.kind !== 'block')) {
     return resolveUnavailableFlowSlot(context, runtime, currentPage, availableRouteSlots, selectedSlot);
   }
   return {
     kind: 'ready',
-    routeStartIndex: runtime.cursor.routeIndex,
     target: createFlowTarget(context, currentPage, availableRouteSlots, block, selectedSlot),
   };
 }
@@ -901,17 +655,6 @@ function resolveFlowTarget(
   const selection = selectFlowTarget(context, runtime, currentPage, availableRouteSlots);
   if (selection.kind !== 'ready') return selection;
   runtime.cursor.routeIndex = selection.target.selectedSlot.routeIndex;
-  if (selection.target.block.role !== 'quote') {
-    collapseInsertionsInRouteRange(
-      currentPage,
-      availableRouteSlots,
-      selection.routeStartIndex,
-      selection.target.selectedSlot.routeIndex,
-      context,
-      runtime,
-      'no-insertion-content-on-page',
-    );
-  }
   return { kind: 'ready', target: selection.target };
 }
 
@@ -991,7 +734,6 @@ interface PreparedTextPlacement {
   leading: number;
   slot: CompositionSlot;
   initialBox: CompositionRect;
-  insertionBoundary: number | undefined;
   startLineOffset: number;
   pageGraphics: CompositionPlan['graphicPlacements'];
   flowBarrierBoxCandidates: ReturnType<typeof flowBarrierBoxCandidatesForSlot>;
@@ -1013,44 +755,6 @@ function textPlacementGrowthBottom(target: FlowTarget, initialBox: CompositionRe
 
 /**
  * @planner-target composition/flow-text-decision.ts
- * @planner-responsibility Resolve the next hard insertion boundary for a text block.
- */
-function textPlacementInsertionBoundary(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  target: FlowTarget,
-): number | undefined {
-  if (target.block.role === 'quote') return undefined;
-  return nextInsertionBoundary(
-    context.route,
-    context.authoredBlocks,
-    context.authoredIndexOf(target.block.id),
-    target.currentPage.page,
-    context.insertionProposals,
-    context.flowId,
-    runtime.cursor.resumeY,
-  );
-}
-
-/**
- * @planner-target composition/flow-text-decision.ts
- * @planner-responsibility Find the latest authored insertion that precedes the current block on this page.
- */
-function previousInsertionForTextPlacement(
-  context: FlowPlanningContext,
-  target: FlowTarget,
-): PlannedInsertion | undefined {
-  const authoredIndex = context.authoredIndexOf(target.block.id);
-  return context.authoredBlocks
-    .slice(0, authoredIndex)
-    .filter((candidate) => candidate.role === 'quote')
-    .map((candidate) => context.insertionProposals.get(insertionKey(context.flowId, candidate.id)))
-    .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === target.currentPage.page)
-    .sort((left, right) => right.box.y - left.box.y)[0];
-}
-
-/**
- * @planner-target composition/flow-text-decision.ts
  * @planner-responsibility Calculate the first line offset after existing flow, insertion, and obstacle occupancy.
  */
 function textPlacementStartLineOffset(
@@ -1063,14 +767,9 @@ function textPlacementStartLineOffset(
 ): { startLineOffset: number; localBottom: number } {
   const localBottom = flowingTextBottom(context.plan, slot.id, initialBox.y, context.document);
   const crossSlotBottom = occupiedBottomInOverlappingSlots(target.currentPage, context.plan, slot, localBottom);
-  const previousInsertion = previousInsertionForTextPlacement(context, target);
-  const previousInsertionBottom = previousInsertion ? previousInsertion.box.y + previousInsertion.box.height : undefined;
-  const insertionIsBeforeCurrentColumn = previousInsertion !== undefined
-    && initialBox.x + initialBox.width / 2 <= previousInsertion.box.x + previousInsertion.box.width / 2;
   const usedBottom = Math.max(
     localBottom,
     crossSlotBottom,
-    ...(insertionIsBeforeCurrentColumn && previousInsertionBottom !== undefined ? [previousInsertionBottom] : []),
     runtime.cursor.resumeSlotId === slot.id ? runtime.cursor.resumeY ?? Number.NEGATIVE_INFINITY : Number.NEGATIVE_INFINITY,
   );
   return { startLineOffset: Math.max(0, (usedBottom - initialBox.y) / leading), localBottom };
@@ -1090,9 +789,7 @@ function textPlacementObstacles(
   flowBarrierBoxCandidates: ReturnType<typeof flowBarrierBoxCandidatesForSlot>;
 } {
   const pageGraphics = context.plan.graphicPlacements.filter((graphic) => graphic.page === target.currentPage.page && graphic.graphicId !== `insertion:${target.block.id}`);
-  const flowBarrierBoxCandidates = target.block.role === 'quote'
-    ? []
-    : flowBarrierBoxCandidatesForSlot(target.currentPage.page, slot, context.flowId, context.plan.graphicPlacements);
+  const flowBarrierBoxCandidates = flowBarrierBoxCandidatesForSlot(target.currentPage.page, slot, context.flowId, context.plan.graphicPlacements);
   if (flowBarrierBoxCandidates.length > 0) {
     recordFlowDecision(context, 'FLOW_BARRIER_BOXES_CONSUMED', runtime, target);
   }
@@ -1192,17 +889,14 @@ function prepareTextPlacement(
   const slot = currentPage.slots.get(definition.id)!;
   const initialBox = slotBox(currentPage, definition);
   const growthBottom = textPlacementGrowthBottom(target, initialBox);
-  const insertionBoundary = textPlacementInsertionBoundary(context, runtime, target);
-  const textBottom = insertionBoundary === undefined
-    ? growthBottom
-    : Math.min(growthBottom, insertionBoundary);
+  const textBottom = growthBottom;
   const start = textPlacementStartLineOffset(context, runtime, target, slot, initialBox, leading);
   const blockGap = textPlacementBlockGap(context, runtime, target, slot, start.localBottom);
   const isHeadingBlock = block.kind === 'heading' || block.role === 'heading' || block.role === 'title';
   const { pageGraphics, flowBarrierBoxCandidates } = textPlacementObstacles(context, runtime, target, slot);
   const wraps = wrapTextPlacement(context, runtime, target, initialBox, start.startLineOffset, textBottom, pageGraphics, flowBarrierBoxCandidates, leading, blockGap);
   const compressed = compressHeadingGapIfNeeded(context, runtime, target, initialBox, start.startLineOffset, textBottom, pageGraphics, flowBarrierBoxCandidates, leading, blockGap, wraps.wrapped, wraps.completeWrapped);
-  return { leading, slot, initialBox, insertionBoundary, startLineOffset: start.startLineOffset, pageGraphics, flowBarrierBoxCandidates, blockGap: compressed.blockGap, isHeadingBlock, wrapped: compressed.wrapped, completeWrapped: compressed.completeWrapped };
+  return { leading, slot, initialBox, startLineOffset: start.startLineOffset, pageGraphics, flowBarrierBoxCandidates, blockGap: compressed.blockGap, isHeadingBlock, wrapped: compressed.wrapped, completeWrapped: compressed.completeWrapped };
 }
 
 type ListItemKeepDecision =
@@ -1276,7 +970,7 @@ function headingClusterProbes(
   const headingStartOffset = prepared.startLineOffset + prepared.blockGap / prepared.leading;
   // Probe the cluster without obstacles first. Using the wrapped result
   // from the real page here is insufficient: wrapBlock can skip lines
-  // under an obstacle, making a quote that cuts through the lead look
+  // under an insertion obstacle that cuts through the lead and make it look
   // like a normal gap instead of a violation of the keep rule.
   const headingProbe = wrapBlock(context.metrics, target.block, runtime.cursor.startWord, prepared.initialBox, headingStartOffset, Number.POSITIVE_INFINITY, [], prepared.leading, context.policy.minimumWrapWidth);
   const headingBottom = headingProbe.length > 0
@@ -1371,58 +1065,6 @@ function selectTextLinesForPlacement(
 
 /**
  * @planner-target composition/flow-planner.ts
- * @planner-responsibility Keep the current placeInsertionObstacleAfterQuote implementation intact until its target seam is extracted.
- */
-function placeInsertionObstacleAfterQuote(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  target: FlowTarget,
-  prepared: PreparedTextPlacement,
-): void {
-  if (!target.continuousInsertion) return;
-  const { currentPage, block } = target;
-  const { cursor } = runtime;
-  const { plan } = context;
-  const { slot } = prepared;
-  if (plan.graphicPlacements.some((graphic) => graphic.graphicId === `insertion:${block.id}` && graphic.page === currentPage.page)) return;
-  plan.graphicPlacements.push({
-    id: `graphic:insertion:${block.id}`,
-    graphicId: `insertion:${block.id}`,
-    slotId: slot.id,
-    page: currentPage.page,
-    shape: 'rectangle',
-    wrap: 'around',
-    paint: false,
-    box: { ...slot.box },
-  });
-  recordFlowDecision(context, 'FLOW_INSERTION_OBSTACLE_PLACED', runtime, target);
-  cursor.resumeY = Math.max(cursor.resumeY ?? Number.NEGATIVE_INFINITY, rectBottom(slot.box));
-  cursor.resumeSlotId = slot.id;
-}
-
-/**
- * @planner-target composition/flow-planner.ts
- * @planner-responsibility Keep the current resumeDeferredQuoteAfterPlacement implementation intact until its target seam is extracted.
- */
-function resumeDeferredQuoteAfterPlacement(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  target: FlowTarget,
-): void {
-  const { block } = target;
-  const deferred = runtime.activeDeferredQuote;
-  if (deferred?.blockId !== block.id) return;
-  const { cursor } = runtime;
-  runtime.activeDeferredQuote = undefined;
-  runtime.deferredQuote = undefined;
-  cursor.blockIndex = deferred.resume.blockIndex;
-  cursor.startWord = deferred.resume.startWord;
-  cursor.startRow = deferred.resume.startRow;
-  cursor.routeIndex = target.selectedSlot.routeIndex + 1;
-}
-
-/**
- * @planner-target composition/flow-planner.ts
  * @planner-responsibility Materialize selected lines and update the flow cursor.
  */
 function commitSelectedTextLines(
@@ -1436,57 +1078,19 @@ function commitSelectedTextLines(
   const { cursor } = runtime;
   const { flowId, metrics, plan } = context;
   const { leading, slot } = prepared;
-  placeLines(currentPage, definition, block, metrics, flowId, target.continuousInsertion ? undefined : selectedSlot.routeIndex, selected, leading, plan.placements, plan.lines);
+  placeLines(currentPage, definition, block, metrics, flowId, selectedSlot.routeIndex, selected, leading, plan.placements, plan.lines);
   runtime.lastLegalSlotId = slot.id;
   const consumedEnd = selected.at(-1)!.endWord;
   const completed = consumedEnd >= wordsForBlock(block).length;
   if (completed) {
     cursor.blockIndex += 1;
     cursor.startWord = 0;
-    if (block.role === 'quote') {
-      slot.state = 'exhausted';
-      placeInsertionObstacleAfterQuote(context, runtime, target, prepared);
-      resumeDeferredQuoteAfterPlacement(context, runtime, target);
-    }
     recordFlowDecision(context, 'BLOCK_PLACED', runtime, target);
   } else {
     cursor.startWord = consumedEnd;
     recordFlowDecision(context, 'BLOCK_CONTINUED', runtime, target);
   }
   return { consumedEnd, completed };
-}
-
-type InsertionBoundaryResolution =
-  | { kind: 'continue' }
-  | { kind: 'stop' }
-  | { kind: 'ready' };
-
-/**
- * @planner-target composition/flow-planner.ts
- * @planner-responsibility Keep the current resolveInsertionBoundaryAfterText implementation intact until its target seam is extracted.
- */
-function resolveInsertionBoundaryAfterText(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  target: FlowTarget,
-  prepared: PreparedTextPlacement,
-  consumedEnd: number,
-): InsertionBoundaryResolution {
-  if (prepared.insertionBoundary === undefined || consumedEnd >= wordsForBlock(target.block).length) return { kind: 'ready' };
-  const { currentPage, block } = target;
-  const { cursor } = runtime;
-  const { authoredBlocks, authoredIndexOf, flowId, insertionProposals, plan, route } = context;
-  const boundary = nextInsertionProposal(route, authoredBlocks, authoredIndexOf(block.id), currentPage.page, insertionProposals, flowId, cursor.resumeY);
-  if (!boundary) {
-    plan.diagnostics.push(diagnostic('error', 'INSERTION_PRECEDENCE_CONFLICT', `Insertion boundary for the next quote leaves authored block '${block.id}' unfinished above it.`, { flowId, blockId: block.id, page: currentPage.page, slotId: target.definition.id, details: { insertionBoundary: prepared.insertionBoundary, consumedEnd, totalWords: wordsForBlock(block).length } }));
-    addResidual(plan.residualContent, flowId, block, consumedEnd, target.definition.id, 'insertion-precedence-conflict');
-    return { kind: 'stop' };
-  }
-  cursor.startWord = consumedEnd;
-  cursor.resumeY = boundary.box.y + boundary.box.height;
-  cursor.resumeSlotId = target.definition.id;
-  recordFlowDecision(context, 'FLOW_RESUMED_BELOW_INSERTION', runtime, target);
-  return { kind: 'continue' };
 }
 
 /**
@@ -1500,10 +1104,10 @@ function advanceFlowAfterTextPlacement(
   consumedEnd: number,
 ): void {
   const { cursor } = runtime;
-  const { availableRouteSlots, block, continuousInsertion } = target;
+  const { availableRouteSlots, block } = target;
   const { blocks } = context;
   if (consumedEnd >= wordsForBlock(block).length && cursor.blockIndex >= blocks.length) return;
-  if (!continuousInsertion && consumedEnd < wordsForBlock(block).length) {
+  if (consumedEnd < wordsForBlock(block).length) {
     recordFlowDecision(context, 'FLOW_SEGMENT_ADVANCED', runtime, target);
     const pageBeforeAdvance = cursor.page;
     advanceCursor(cursor, availableRouteSlots);
@@ -1740,7 +1344,7 @@ function nextBlockKeepProbe(
     prepared.pageGraphics,
     nextLeading,
     context.policy.minimumWrapWidth,
-    next.role === 'quote' ? [] : prepared.flowBarrierBoxCandidates,
+    prepared.flowBarrierBoxCandidates,
     context.geometryTolerance,
   );
   return { keepLines, nextWrapped };
@@ -1799,9 +1403,6 @@ function planTextBlockAttempt(
   if (decision) return decision;
   const selected = selectTextLinesForPlacement(context, prepared, capacity.currentAvailableLines);
   const { consumedEnd } = commitSelectedTextLines(context, runtime, target, prepared, selected);
-  const insertionBoundaryResolution = resolveInsertionBoundaryAfterText(context, runtime, target, prepared, consumedEnd);
-  if (insertionBoundaryResolution.kind === 'stop') return { kind: 'stop' };
-  if (insertionBoundaryResolution.kind === 'continue') return { kind: 'continue' };
   advanceFlowAfterTextPlacement(context, runtime, target, consumedEnd);
   return { kind: 'done' };
 }
@@ -1820,10 +1421,9 @@ export function planFlow(
   pages: PageState[],
   plan: CompositionPlan,
   startPage = 1,
-  insertionProposals: Map<string, PlannedInsertion> = new Map(),
-  skipPreplannedInsertions = false,
+  skipPreplannedInsertionBlocks = false,
 ): void {
-  const context = createFlowPlanningContext(document, metrics, template, policy, flowId, route, pages, plan, startPage, insertionProposals, skipPreplannedInsertions);
+  const context = createFlowPlanningContext(document, metrics, template, policy, flowId, route, pages, plan, startPage, skipPreplannedInsertionBlocks);
   if (!context) return;
   const runtime = createFlowRuntime(context);
   const { cursor } = runtime;
@@ -1832,9 +1432,6 @@ export function planFlow(
     if (flowReachedTerminalPage(context, runtime)) return;
     const currentPage = ensureCurrentFlowPage(context, runtime);
     if (!currentPage) return;
-    if (holdFlowForPreplannedInsertion(context, runtime)) continue;
-    restoreDeferredQuoteOnCurrentPage(context, runtime);
-    restoreDeferredQuoteOnNextPage(context, runtime);
     const resolution = resolveFlowTarget(context, runtime, currentPage);
     if (resolution.kind === 'stop') return;
     if (resolution.kind === 'continue') continue;

@@ -77,6 +77,11 @@ try {
   const insertionCompiled = compileTemplateSource(insertionSource);
   assert.deepEqual(insertionCompiled.flows.quotes, { id: 'quotes', slots: ['quote'], insertionSlots: ['quote'], continuation: 'allowed' });
   assert.throws(
+    () => compileTemplateSource({ ...insertionSource, flows: { ...insertionSource.flows, main: { slots: ['content', 'quote'], insertion_slots: ['quote'], continuation: 'allowed' } } }),
+    /main.*insertion_slots.*separate insertion flow/u,
+    'the main flow must not own insertion slots',
+  );
+  assert.throws(
     () => compileTemplateSource({ ...insertionSource, flows: { ...insertionSource.flows, quotes: { slots: ['quote'], insertion_slots: ['missing'], continuation: 'allowed' } } }),
     /insertion_slots.*references unknown slot 'missing'/u,
   );

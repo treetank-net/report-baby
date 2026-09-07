@@ -341,9 +341,11 @@ Poniższe kwestie nie mogą zostać ukryte w nowej nazwie modułu:
    flow, który wywoła `ensurePage`; powinien wynikać z odgórnego planu stron.
    Szczegóły żądania następnej strony i zachowanie przy stronie z rezerwacją
    wymagają kontraktu opisanego w sekcji 13.
-2. Dwie ścieżki cytatów: preplanowana warstwa wstawek oraz cytat w flow.
-   Potrzebny jest jawny tryb wybrany z route. Nie usuwamy jednej ścieżki
-   bez udowodnienia, że druga obsługuje jej przypadki.
+2. Ścieżka cytatów. Obowiązuje preplanowana warstwa wstawek z osobnego,
+   nazwanego flow (np. `quotes`) deklarującego `insertionSlots`. `main` jest
+   zarezerwowany dla głównego tekstu: nie może zawierać `role: quote` ani
+   `insertionSlots`. Historyczna ścieżka cytatu inline została usunięta wraz
+   z obsługą defer/continuous.
 3. Zakres oczekiwanych powtórzeń header/footer. Oczekiwania evaluatora
    muszą dać się wyprowadzić niezależnie od tego, gdzie planner umieścił tekst.
 4. Stabilizacja, pojedynczy kandydat i zachowanie nieaktywnych elementów
@@ -495,8 +497,8 @@ przypisać każdy istniejący event do jednej operacji, aby nie zapisywać go dw
 | Funkcja | Moment | Wywołania / efekt |
 |---|---|---|
 | `planFlow` | Raz na zwykły flow lub jedno jego powtórzenie | Tworzy cursor i prowadzi pętlę prób |
-| `selectFlowTarget` — prywatna | Początek próby | Sprawdza limity, route, kolejność wstawek i zgodność slotu; używa `ensurePage`, `routeSlots`, `slotFor` |
-| `prepareTextAttempt` — prywatna | Po wyborze legalnego celu tekstu | Pobiera snapshot; ustala poprzedni/następny blok i ograniczenia insertion-order |
+| `selectFlowTarget` — prywatna | Początek próby | Sprawdza limity, route i zgodność slotu; używa `ensurePage`, `routeSlots`, `slotFor` |
+| `prepareTextAttempt` — prywatna | Po wyborze legalnego celu tekstu | Pobiera snapshot; ustala poprzedni/następny blok i ograniczenia przepływu |
 | `planTextFragment` — importowana | Gdy bieżący blok jest tekstowy | Zwraca lokalne rozstrzygnięcie bez zmiany cursora |
 | `planStructuredBlock` — projektowany interfejs istniejącego modułu | Gdy blok jest tabelą lub atomowy | Zwraca wynik pomiaru i placementu, postęp wierszy lub zakończenie bloku |
 | `applyOutcome` — prywatna | Po rozstrzygnięciu próby | Zleca materializację/zapis, zapisuje events i zmienia cursor |
@@ -505,9 +507,10 @@ przypisać każdy istniejący event do jednej operacji, aby nie zapisywać go dw
 | `completeBlock` — prywatna | Cała treść bloku została zapisana lub blok pusty | Zwiększa blockIndex, zeruje offsety treści |
 | `continueBlock` — prywatna | Zapisano tylko część | Zachowuje blockIndex i ustawia startWord albo startRow |
 
-Wstawki obsługiwane w authored flow nadal wymagają lokalnego stanu odroczenia
-i wznowienia. Pozostaje on własnością `planFlow`, obok cursora. Tryb osobnej
-warstwy wstawek pomija ich ponowny placement w zwykłym flow.
+Wstawki nie są już obsługiwane jako authored blocks w `main`. Warstwa wstawek
+otrzymuje bloki z nazwanego, nie-`main` flow, rezerwuje ich geometrie i
+materializuje je przed zwykłym przepływem. `planFlow` nie utrzymuje stanu
+odroczenia ani wznowienia cytatu.
 
 ### 11.7. `text-fragment-planning.ts` i `text-measurement.ts`
 

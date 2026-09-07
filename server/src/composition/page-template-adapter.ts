@@ -252,92 +252,10 @@ function orderedMainSlotIds(
   segments: CompositionSlotTemplate[],
 ): string[] {
   const byId = new Map([...textSlots, ...blockSlots].map((slot) => [slot.id, slot]));
-  const firstContentIndex = sourceSlotIds.indexOf('content');
-  const hasPostContentInsertion = firstContentIndex >= 0 && sourceSlotIds.slice(firstContentIndex + 1).some((sourceId) => sourceId !== 'content');
-  const contentOccurrences = sourceSlotIds.filter((sourceId) => sourceId === 'content').length;
   const expandSimple = (sourceId: string): CompositionSlotTemplate[] => sourceId === 'content'
     ? segments
     : byId.has(sourceId) ? [byId.get(sourceId)!] : [];
-  // A single content band followed by an atomic block is the legacy route
-  // shape: the text band remains one continuous route and the block is tried
-  // afterwards. Requiring repeated content entries is what opts a template
-  // into spatially interleaved insertion routing.
-  if (!hasPostContentInsertion || contentOccurrences < 2) return sourceSlotIds.flatMap(expandSimple).map((slot) => slot.id);
-  const insertions = sourceSlotIds
-    .filter((sourceId) => sourceId !== 'content')
-    .map((sourceId) => byId.get(sourceId))
-    .filter((slot): slot is CompositionSlotTemplate => slot !== undefined);
-  const quoteInsertions = insertions.filter((slot) => slot.allowedRoles?.includes('quote'));
-  const hasOtherInterleavedSlots = insertions.some((slot) => !slot.allowedRoles?.includes('quote'));
-  if (hasOtherInterleavedSlots || quoteInsertions.length === 0) {
-    let contentIndex = 0;
-    const expand = (sourceId: string): CompositionSlotTemplate[] => {
-      if (sourceId !== 'content') return byId.has(sourceId) ? [byId.get(sourceId)!] : [];
-      const previous = insertions[contentIndex - 1];
-      const next = insertions[contentIndex];
-      const lower = previous ? previous.box.y + previous.box.height : Number.NEGATIVE_INFINITY;
-      const upper = next ? next.box.y : Number.POSITIVE_INFINITY;
-      contentIndex += 1;
-      return segments.filter((segment) => segment.box.y >= lower && segment.box.y + segment.box.height <= upper).map((slot) => slot);
-    };
-    return sourceSlotIds.flatMap(expand).map((slot) => slot.id);
-  }
-
-  // A repeated `content` slot with full-width quote slots is one continuous
-  // columnar stream. Traverse the first column from top to bottom, placing
-  // quote bands at their vertical positions, and only then enter the next
-  // column. Row-major expansion made the right column look like an
-  // independent block before the quote.
-  const orderedQuotes = [...quoteInsertions].sort((left, right) => left.box.y - right.box.y);
-  const orderedSegments = [...segments].sort((left, right) => left.box.x - right.box.x || left.box.y - right.box.y);
-  const columnOrigins = [...new Set(orderedSegments.map((segment) => segment.box.x))];
-  const stream: CompositionSlotTemplate[] = [];
-  const firstColumn = columnOrigins[0];
-  let quoteIndex = 0;
-  const addQuotesBefore = (top: number): void => {
-    while (quoteIndex < orderedQuotes.length && orderedQuotes[quoteIndex].box.y <= top) {
-      stream.push(orderedQuotes[quoteIndex]);
-      quoteIndex += 1;
-    }
-  };
-  for (const columnOrigin of columnOrigins) {
-    const columnSegments = orderedSegments.filter((segment) => segment.box.x === columnOrigin);
-    for (const segment of columnSegments) {
-      if (columnOrigin === firstColumn) addQuotesBefore(segment.box.y);
-      stream.push(segment);
-    }
-    if (columnOrigin === firstColumn) addQuotesBefore(Number.POSITIVE_INFINITY);
-  }
-  return stream.map((slot) => slot.id);
-}
-
-function splitSegmentsAroundInsertions(
-  segments: CompositionSlotTemplate[],
-  insertions: CompositionSlotTemplate[],
-): CompositionSlotTemplate[] {
-  if (insertions.length === 0) return segments;
-  const orderedInsertions = [...insertions].sort((left, right) => left.box.y - right.box.y);
-  return segments.flatMap((segment) => {
-    const segmentBottom = segment.box.y + segment.box.height;
-    let cursor = segment.box.y;
-    let part = 0;
-    const pieces: CompositionSlotTemplate[] = [];
-    for (const insertion of orderedInsertions) {
-      const top = Math.max(segment.box.y, insertion.box.y);
-      const bottom = Math.min(segmentBottom, insertion.box.y + insertion.box.height);
-      if (bottom <= cursor || top >= segmentBottom) continue;
-      if (top > cursor) {
-        part += 1;
-        pieces.push({ ...segment, id: `${segment.id}:part-${part}`, box: { ...segment.box, y: cursor, height: top - cursor } });
-      }
-      cursor = Math.max(cursor, bottom);
-    }
-    if (cursor < segmentBottom) {
-      part += 1;
-      pieces.push({ ...segment, id: `${segment.id}:part-${part}`, box: { ...segment.box, y: cursor, height: segmentBottom - cursor } });
-    }
-    return pieces;
-  });
+  return sourceSlotIds.flatMap(expandSimple).map((slot) => slot.id);
 }
 
 function routeForMain(
@@ -353,16 +271,12 @@ function routeForMain(
   firstLayoutId: string,
   continuationLayoutId: string,
   continuation: 'allowed' | 'forbidden',
-  continuousInsertionIds: string[] = [],
 ): CompositionFlowRoute {
   const firstSlotIds = orderedMainSlotIds(mainSlotIds, firstTextSlots, firstBlockSlots, firstSlots);
-  const continuationSlotIds = continuousInsertionIds.length > 0
-    ? continuationSlots.filter((slot) => !continuousInsertionIds.includes(slot.id)).map((slot) => slot.id)
-    : orderedMainSlotIds(continuationSourceIds, continuationTextSlots, continuationBlockSlots, continuationSlots);
+  const continuationSlotIds = orderedMainSlotIds(continuationSourceIds, continuationTextSlots, continuationBlockSlots, continuationSlots);
   if (leadSlot) firstSlotIds.unshift(leadSlot.id);
   return {
     slots: firstSlotIds,
-    ...(continuousInsertionIds.length > 0 ? { insertionSlots: continuousInsertionIds } : {}),
     layouts: [firstLayoutId, continuationLayoutId],
     slotsByLayout: { [continuationLayoutId]: continuationSlotIds },
     continuation,
@@ -375,8 +289,9 @@ function routeForMain(
  * adapter only gives it named slots and a first-page/continuation-page route.
  *
  * A leading page block is deliberately an ordinary text slot. Its role
- * restriction prevents the next block from consuming leftover leading space;
- * the same mechanism can be used for a quote, sidebar, or other box.
+ * restriction prevents the next block from consuming leftover leading space.
+ * Quote insertions are represented by their own named flow instead of this
+ * main-flow lead mechanism.
  */
 export function compositionTemplateFromPageGeometry(
   compiled: CompiledTemplate,
@@ -450,16 +365,7 @@ export function compositionTemplateFromPageGeometry(
   const continuationTextSlots = declaredTextSlotsFor(continuationGeometry, continuationSourceIds, continuationSegments, true);
   const firstGraphicSlots = declaredGraphicSlots(compiled, geometry);
   const continuationGraphicSlots = declaredGraphicSlots(compiled, continuationGeometry, true);
-  const continuationInsertionSlots = continuationSourceIds
-    .filter((sourceId) => sourceId !== 'content')
-    .map((sourceId) => continuationTextSlots.find((slot) => slot.id === sourceId))
-    .filter((slot): slot is CompositionSlotTemplate => slot !== undefined);
-  const continuousQuoteFlow = continuationInsertionSlots.length > 0
-    && continuationSourceIds.filter((sourceId) => sourceId !== 'content').length === continuationInsertionSlots.length
-    && continuationSourceIds.filter((sourceId) => sourceId !== 'content').every((sourceId) => continuationInsertionSlots.some((slot) => slot.id === sourceId));
-  const continuationFlowSegments = continuousQuoteFlow
-    ? continuationSegments
-    : splitSegmentsAroundInsertions(continuationSegments, continuationInsertionSlots);
+  const continuationFlowSegments = continuationSegments;
   const leadGrowth = leadBlockId ? geometry.blockGrowth?.[leadBlockId] : undefined;
   const leadSlot: CompositionSlotTemplate | undefined = lead && leadBlockId
     ? {
@@ -569,7 +475,6 @@ export function compositionTemplateFromPageGeometry(
       firstLayoutId,
       continuationLayoutId,
       mainFlow.continuation,
-      continuousQuoteFlow ? continuationInsertionSlots.map((slot) => slot.id) : [],
     ),
   };
   if (!titleLayout && firstTitleSlots.length > 0) {

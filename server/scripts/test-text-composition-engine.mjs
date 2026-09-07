@@ -602,40 +602,6 @@ try {
   assert.equal(spacingReflowPhases.length, 1, 'a plan without insertions needs one stability check, not a second full reflow');
   assert.equal(spacingEvaluationPhase?.details?.candidates?.length, 1, 'a stable plan without insertions must produce one candidate');
 
-  const boundaryReflowTemplate = {
-    maxPages: 1,
-    layouts: [{ id: 'boundary-reflow', width: 100, height: 100, slots: [
-      { id: 'body-before', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 40 }, allowedRoles: ['body'] },
-      { id: 'quote-a', regionId: 'main', kind: 'text', box: { x: 5, y: 20, width: 90, height: 10 }, allowedRoles: ['quote'] },
-      { id: 'quote-b', regionId: 'main', kind: 'text', box: { x: 5, y: 60, width: 90, height: 10 }, allowedRoles: ['quote'] },
-      { id: 'body-after', regionId: 'main', kind: 'text', box: { x: 5, y: 75, width: 90, height: 20 }, allowedRoles: ['body'] },
-    ] }],
-    routes: {
-      main: {
-        slots: ['body-before', 'quote-a', 'body-after', 'quote-b'],
-        insertionSlots: ['quote-a', 'quote-b'],
-        layouts: ['boundary-reflow'],
-        continuation: 'forbidden',
-      },
-    },
-  };
-  const boundaryReflow = createTextCompositionEngine(boundaryReflowTemplate, { maxPlanningIterations: 2 }).plan({
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
-      { id: 'boundary-before', kind: 'paragraph', role: 'body', text: Array.from({ length: 20 }, (_, index) => `before${index}`).join(' ') },
-      { id: 'boundary-quote', kind: 'paragraph', role: 'quote', text: 'The quote must move below the preceding content.' },
-      { id: 'boundary-after', kind: 'paragraph', role: 'body', text: 'Content after the moved quote.' },
-    ] } },
-  }, metrics);
-  assert.equal(boundaryReflow.evaluation.status, 'accepted', JSON.stringify(boundaryReflow.evaluation));
-  const boundaryQuotePlacement = boundaryReflow.plan.insertionLines?.find((line) => line.blockId === 'boundary-quote');
-  assert.ok(boundaryQuotePlacement?.slotId.endsWith(':quote-b'), `boundary quote must move to the later insertion slot: ${JSON.stringify(boundaryQuotePlacement)}`);
-  const boundaryReflowPhases = boundaryReflow.plan.trace?.phases.filter((phase) => phase.name === 'reflow') ?? [];
-  const boundaryEvaluationPhase = boundaryReflow.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
-  assert.equal(boundaryReflowPhases.length, 1, 'the selected stabilized candidate must expose its own reflow pass');
-  assert.equal(boundaryEvaluationPhase?.details?.candidates?.length, 2, 'a proposal change must expose both full plans to the evaluator');
-  assert.deepEqual(boundaryEvaluationPhase.details.candidates.map((candidate) => candidate.status), ['rejected', 'accepted'], 'the first boundary plan must fail source-order evaluation before the moved quote is accepted');
-  assert.deepEqual(boundaryEvaluationPhase.details.candidates.map((candidate) => candidate.reflowPasses), [1, 1], 'each full candidate must expose its reflow cost');
-
   const movableQuoteTemplate = {
     maxPages: 1,
     layouts: [{ id: 'movable-quote', width: 100, height: 120, slots: [
@@ -923,61 +889,35 @@ try {
   assert.ok(clusterFixtureLines.every((line) => line.box.y >= clusterFixtureObstacle.box.y + clusterFixtureObstacle.box.height), `a heading and its first three lead lines must move below an obstacle that intersects the cluster: ${JSON.stringify({ obstacle: clusterFixtureObstacle.box, lines: clusterFixtureLines.map((line) => ({ blockId: line.blockId, y: line.box.y, text: line.text })), decisions: obstacleInsideHeadingCluster.plan.decisions.filter((decision) => decision.blockId?.startsWith('cluster-')) })}`);
   assert.ok(obstacleInsideHeadingCluster.plan.decisions.some((decision) => ['HEADING_CLUSTER_PUSHED_BELOW_OBSTACLE', 'HEADING_CLUSTER_PUSHED_TO_NEXT_SLOT'].includes(decision.code)), 'planner must record the hard heading-cluster decision when an obstacle intersects the lead probe');
 
-  const deferredQuoteTemplate = {
-    maxPages: 2,
-    layouts: [
-      { id: 'opening', width: 100, height: 100, slots: [
-        { id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 40 }, allowedRoles: ['body', 'heading'] },
-      ] },
-      { id: 'continuation', width: 100, height: 100, slots: [
-        { id: 'quote', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 20 }, allowedRoles: ['quote'] },
-        { id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 30, width: 90, height: 60 }, allowedRoles: ['body', 'heading'] },
-      ] },
-    ],
-    routes: {
-      main: {
-        slots: ['body'],
-        slotsByLayout: { continuation: ['quote', 'body'] },
-        layouts: ['opening', 'continuation'],
-        continuation: 'allowed',
-      },
-    },
-  };
-  const deferredQuote = createTextCompositionEngine(deferredQuoteTemplate).plan({
-    flows: { main: { id: 'main', continuation: 'allowed', blocks: [
-      { id: 'deferred-intro', kind: 'paragraph', role: 'body', text: 'Intro text.' },
-      { id: 'deferred-quote', kind: 'paragraph', role: 'quote', text: 'A quote becomes a useful insertion.' },
-      { id: 'deferred-body', kind: 'paragraph', role: 'body', text: Array.from({ length: 100 }, (_, index) => `body${index}`).join(' ') },
-    ] } },
-  }, metrics);
-  assert.equal(deferredQuote.evaluation.status, 'accepted', JSON.stringify(deferredQuote.evaluation));
-  assert.ok(deferredQuote.plan.decisions.some((decision) => decision.code === 'INSERTION_DEFERRED' && decision.blockId === 'deferred-quote'), 'a quote without an opening insertion slot must be explicitly deferred');
-  assert.ok(deferredQuote.plan.decisions.some((decision) => decision.code === 'DEFERRED_INSERTION_PLACED' && decision.blockId === 'deferred-quote'), 'a deferred quote must be placed on the next legal page');
-  assert.ok(deferredQuote.plan.lines.some((line) => line.blockId === 'deferred-body' && line.page === 1), 'ordinary article flow should use the opening page after deferring the quote');
-  assert.ok(plannedLines(deferredQuote.plan).some((line) => line.blockId === 'deferred-quote' && line.page === 2 && line.slotId === '2:quote'), 'the quote should occupy the continuation insertion slot');
-  assert.ok(deferredQuote.plan.lines.some((line) => line.blockId === 'deferred-body' && line.page === 2 && line.slotId === '2:body'), 'article flow should resume after the continuation quote');
-  assert.equal(deferredQuote.plan.residualContent.length, 0);
-
-  const optionalInsertionTemplate = {
+  const legacyInlineQuoteTemplate = {
     maxPages: 1,
-    layouts: [{ id: 'optional-insertion', width: 100, height: 100, slots: [
-      { id: 'body-before', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 40 }, allowedRoles: ['body'] },
+    layouts: [{ id: 'legacy-inline-quote', width: 100, height: 100, slots: [
+      { id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 80 }, allowedRoles: ['body', 'quote'] },
       { id: 'quote', regionId: 'main', kind: 'text', box: { x: 5, y: 45, width: 90, height: 20 }, allowedRoles: ['quote'] },
-      { id: 'body-after', regionId: 'main', kind: 'text', box: { x: 5, y: 65, width: 90, height: 30 }, allowedRoles: ['body'] },
     ] }],
-    routes: { main: { slots: ['body-before', 'quote', 'body-after'], layouts: ['optional-insertion'], continuation: 'forbidden' } },
+    routes: { main: { slots: ['body', 'quote'], insertionSlots: ['quote'], layouts: ['legacy-inline-quote'], continuation: 'forbidden' } },
   };
-  const optionalInsertion = createTextCompositionEngine(optionalInsertionTemplate).plan({
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
-      { id: 'optional-before', kind: 'paragraph', role: 'body', text: Array.from({ length: 40 }, (_, index) => `before${index}`).join(' ') },
-      { id: 'optional-after', kind: 'paragraph', role: 'body', text: 'After the unused insertion.' },
-    ] } },
+  const legacyInlineQuote = createTextCompositionEngine(legacyInlineQuoteTemplate).plan({
+    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [{ id: 'inline-quote', kind: 'paragraph', role: 'quote', text: 'Inline quote content is no longer legal.' }] } },
   }, metrics);
-  assert.equal(optionalInsertion.evaluation.status, 'accepted', JSON.stringify(optionalInsertion.evaluation));
-  assert.ok(optionalInsertion.plan.decisions.some((decision) => decision.code === 'OPTIONAL_INSERTION_COLLAPSED'), 'unused insertion slots should collapse instead of reserving an empty band');
-  const optionalAfter = optionalInsertion.plan.lines.find((line) => line.blockId === 'optional-after');
-  assert.ok(optionalAfter && Math.abs(optionalAfter.box.y - 65) < 0.001, 'content after an unused insertion must keep its fixed route geometry');
-  assert.equal(optionalInsertion.plan.slots.find((slot) => slot.id === '1:quote')?.state, 'exhausted', 'a collapsed insertion must not remain an open visual box');
+  assert.equal(legacyInlineQuote.evaluation.status, 'rejected', JSON.stringify(legacyInlineQuote.evaluation));
+  assert.ok(legacyInlineQuote.evaluation.diagnostics.some((item) => item.code === 'MAIN_FLOW_INSERTIONS_FORBIDDEN'));
+  assert.ok(legacyInlineQuote.evaluation.diagnostics.some((item) => item.code === 'MAIN_FLOW_QUOTE_FORBIDDEN'));
+
+  const quoteWithoutInsertionRoute = createTextCompositionEngine({
+    ...legacyInlineQuoteTemplate,
+    routes: {
+      main: { slots: ['body'], layouts: ['legacy-inline-quote'], continuation: 'forbidden' },
+      quotes: { slots: ['quote'], layouts: ['legacy-inline-quote'], continuation: 'forbidden' },
+    },
+  }).plan({
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'ordinary-quote', kind: 'paragraph', role: 'quote', text: 'A quote flow must declare insertion slots.' }] },
+    },
+  }, metrics);
+  assert.equal(quoteWithoutInsertionRoute.evaluation.status, 'rejected', JSON.stringify(quoteWithoutInsertionRoute.evaluation));
+  assert.ok(quoteWithoutInsertionRoute.evaluation.diagnostics.some((item) => item.code === 'QUOTE_INSERTION_FLOW_REQUIRED'));
 
   const loremEditorialFixture = {
     flows: {
@@ -986,10 +926,16 @@ try {
         continuation: 'forbidden',
         blocks: [
           { id: 'lorem-intro', kind: 'paragraph', role: 'intro', text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer vel justo sed erat posuere luctus.' },
-          { id: 'lorem-quote-1', kind: 'paragraph', role: 'quote', text: 'Praesent commodo cursus magna, vel scelerisque nisl consectetur et.' },
           { id: 'lorem-body-1', kind: 'paragraph', role: 'body', text: 'Vestibulum id ligula porta felis euismod semper. Donec ullamcorper nulla non metus auctor fringilla.' },
-          { id: 'lorem-quote-2', kind: 'paragraph', role: 'quote', text: 'Curabitur blandit tempus porttitor. Maecenas faucibus mollis interdum.' },
           { id: 'lorem-body-2', kind: 'paragraph', role: 'body', text: 'Aenean lacinia bibendum nulla sed consectetur. Cras mattis consectetur purus sit amet fermentum.' },
+        ],
+      },
+      quotes: {
+        id: 'quotes',
+        continuation: 'forbidden',
+        blocks: [
+          { id: 'lorem-quote-1', kind: 'paragraph', role: 'quote', text: 'Praesent commodo cursus magna, vel scelerisque nisl consectetur et.' },
+          { id: 'lorem-quote-2', kind: 'paragraph', role: 'quote', text: 'Curabitur blandit tempus porttitor. Maecenas faucibus mollis interdum.' },
         ],
       },
     },
@@ -998,12 +944,15 @@ try {
     maxPages: 1,
     layouts: [{ id: 'lorem-editorial', width: 100, height: 100, slots: [
       { id: 'intro', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 10 }, allowedRoles: ['intro'] },
-      { id: 'quote-1', regionId: 'main', kind: 'text', box: { x: 5, y: 20, width: 90, height: 10 }, allowedRoles: ['quote'] },
       { id: 'body-1', regionId: 'main', kind: 'text', box: { x: 5, y: 35, width: 40, height: 25 }, allowedRoles: ['body'] },
-      { id: 'quote-2', regionId: 'main', kind: 'text', box: { x: 5, y: 65, width: 90, height: 10 }, allowedRoles: ['quote'] },
       { id: 'body-2', regionId: 'main', kind: 'text', box: { x: 5, y: 80, width: 90, height: 15 }, allowedRoles: ['body'] },
+      { id: 'quote-1', regionId: 'quotes', kind: 'text', box: { x: 5, y: 20, width: 90, height: 10 }, allowedRoles: ['quote'] },
+      { id: 'quote-2', regionId: 'quotes', kind: 'text', box: { x: 5, y: 65, width: 90, height: 10 }, allowedRoles: ['quote'] },
     ] }],
-    routes: { main: { slots: ['intro', 'quote-1', 'body-1', 'quote-2', 'body-2'], layouts: ['lorem-editorial'], continuation: 'forbidden' } },
+    routes: {
+      main: { slots: ['intro', 'body-1', 'body-2'], layouts: ['lorem-editorial'], continuation: 'forbidden' },
+      quotes: { slots: ['quote-1', 'quote-2'], insertionSlots: ['quote-1', 'quote-2'], layouts: ['lorem-editorial'], continuation: 'forbidden' },
+    },
   };
   const loremEditorial = createTextCompositionEngine(loremEditorialTemplate).plan(loremEditorialFixture, { ...metrics, lineHeight() { return 5; } });
   assert.equal(loremEditorial.evaluation.status, 'accepted', JSON.stringify(loremEditorial.evaluation));
@@ -1019,26 +968,13 @@ try {
   assert.equal(malformedEvaluation.status, 'rejected');
   assert.ok(malformedEvaluation.diagnostics.some((item) => item.code === 'CONTENT_ORDER_VIOLATION'), 'evaluator must reject a later block moved before its preceding content');
   const malformedQuotes = structuredClone(loremEditorial.plan);
-  for (const line of malformedQuotes.lines) {
+  for (const line of malformedQuotes.insertionLines ?? []) {
     if (line.blockId === 'lorem-quote-1') line.routeIndex = 4;
     if (line.blockId === 'lorem-quote-2') line.routeIndex = 1;
   }
   const malformedQuoteEvaluation = evaluateCompositionPlan(loremEditorialFixture, malformedQuotes);
   assert.equal(malformedQuoteEvaluation.status, 'rejected');
   assert.ok(malformedQuoteEvaluation.diagnostics.some((item) => item.code === 'QUOTE_ORDER_VIOLATION'), 'evaluator must reject quotes that appear in reverse order');
-  const malformedGap = structuredClone(loremEditorial.plan);
-  const remapToSecondPage = (item) => ({ ...item, page: 2, slotId: item.slotId.replace(/^1:/u, '2:') });
-  malformedGap.slots = malformedGap.slots.map((slot) => ({ ...slot, page: 2, id: slot.id.replace(/^1:/u, '2:') }));
-  malformedGap.lines = malformedGap.lines.map(remapToSecondPage);
-  malformedGap.placements = malformedGap.placements.map(remapToSecondPage);
-  malformedGap.blockPlacements = malformedGap.blockPlacements.map(remapToSecondPage);
-  malformedGap.tablePlacements = malformedGap.tablePlacements.map(remapToSecondPage);
-  for (const line of malformedGap.lines) {
-    if (line.blockId === 'lorem-body-2') line.routeIndex = 6;
-  }
-  const malformedGapEvaluation = evaluateCompositionPlan(loremEditorialFixture, malformedGap);
-  assert.equal(malformedGapEvaluation.status, 'rejected');
-  assert.ok(malformedGapEvaluation.diagnostics.some((item) => item.code === 'ROUTE_SEGMENT_GAP'), 'evaluator must report an empty route segment before later content');
   const emptyFlowSlot = structuredClone(loremEditorial.plan);
   emptyFlowSlot.lines = emptyFlowSlot.lines.filter((line) => line.slotId !== '1:body-1');
   emptyFlowSlot.placements = emptyFlowSlot.placements.filter((placement) => placement.slotId !== '1:body-1');
@@ -1057,19 +993,26 @@ try {
     routes: {
       main: {
         slots: ['left', 'right'],
-        insertionSlots: ['quote'],
         layouts: ['preplanned-insertion-1', 'preplanned-insertion-2'],
         slotsByLayout: { 'preplanned-insertion-2': ['left', 'right'] },
         continuation: 'allowed',
       },
+      quotes: {
+        slots: ['quote'],
+        insertionSlots: ['quote'],
+        layouts: ['preplanned-insertion-1', 'preplanned-insertion-2'],
+        continuation: 'forbidden',
+      },
     },
   };
   const preplannedInsertion = createTextCompositionEngine(preplannedInsertionTemplate, { maxPlanningIterations: 2 }).plan({
-    flows: { main: { id: 'main', continuation: 'allowed', blocks: [
+    flows: {
+      main: { id: 'main', continuation: 'allowed', blocks: [
       { id: 'preplanned-before', kind: 'paragraph', role: 'body', text: Array.from({ length: 12 }, (_, index) => `before${index}`).join(' ') },
-      { id: 'preplanned-quote', kind: 'paragraph', role: 'quote', text: 'quote insertion is measured before the main flow resumes' },
       { id: 'preplanned-after', kind: 'paragraph', role: 'body', text: Array.from({ length: 60 }, (_, index) => `after${index}`).join(' ') },
-    ] } },
+      ] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'preplanned-quote', kind: 'paragraph', role: 'quote', text: 'quote insertion is measured before the main flow resumes' }] },
+    },
   }, metrics);
   assert.equal(preplannedInsertion.evaluation.status, 'accepted', JSON.stringify(preplannedInsertion.evaluation));
   assert.ok(preplannedInsertion.plan.insertionLines?.some((line) => line.blockId === 'preplanned-quote' && line.layer === 'insertion'), 'quote must be planned in the insertion layer');
@@ -1100,46 +1043,30 @@ try {
   assert.ok(fitQuoteSlot && fitQuoteSlot.box.height < 30, 'fit-content insertion must shrink below its initial frame when the quote is short');
   assert.ok(fitQuoteObstacle && fitQuoteSlot && fitQuoteObstacle.box.height === fitQuoteSlot.box.height, 'the exclusion obstacle must use the measured quote height');
 
-  const repositionedInsertionTemplate = {
-    maxPages: 1,
-    layouts: [{ id: 'repositioned-insertion', width: 100, height: 100, slots: [
-      { id: 'body-before', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 15 }, allowedRoles: ['body'] },
-      { id: 'body-gap', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 15 }, allowedRoles: ['body'] },
-      { id: 'quote', regionId: 'main', kind: 'text', box: { x: 5, y: 25, width: 90, height: 10 }, allowedRoles: ['quote'] },
-      { id: 'body-after', regionId: 'main', kind: 'text', box: { x: 5, y: 40, width: 90, height: 20 }, allowedRoles: ['body'] },
-    ] }],
-    routes: { main: { slots: ['body-before', 'body-gap', 'quote', 'body-after'], layouts: ['repositioned-insertion'], continuation: 'forbidden' } },
-  };
-  const orderedInsertion = createTextCompositionEngine(repositionedInsertionTemplate).plan({
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
-      { id: 'repositioned-before', kind: 'paragraph', role: 'body', text: 'First material.' },
-      { id: 'repositioned-quote', kind: 'paragraph', role: 'quote', text: 'An editorial insertion can move below a balanced column break.' },
-      { id: 'repositioned-after', kind: 'paragraph', role: 'body', text: 'Second material fills the otherwise empty earlier segment.' },
-    ] } },
-  }, metrics);
-  assert.equal(orderedInsertion.evaluation.status, 'rejected', JSON.stringify(orderedInsertion.evaluation));
-  assert.ok(orderedInsertion.evaluation.diagnostics.some((item) => item.code === 'EMPTY_FLOW_PLACEMENT'), 'an empty placement between earlier and later content must reject the route');
-
   const numberedInsetTemplate = {
     maxPages: 1,
     layouts: [{ id: 'numbered-inset', width: 100, height: 100, slots: [
       { id: 'left-before', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 20 }, allowedRoles: ['body'] },
       { id: 'right-before', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 20 }, allowedRoles: ['body'] },
-      { id: 'quote-a', regionId: 'main', kind: 'text', box: { x: 5, y: 20, width: 90, height: 10 }, allowedRoles: ['quote'] },
       { id: 'left-after', regionId: 'main', kind: 'text', box: { x: 5, y: 35, width: 40, height: 20 }, allowedRoles: ['body'] },
       { id: 'right-after', regionId: 'main', kind: 'text', box: { x: 55, y: 35, width: 40, height: 20 }, allowedRoles: ['body'] },
       { id: 'quote-b', regionId: 'main', kind: 'text', box: { x: 5, y: 70, width: 90, height: 10 }, allowedRoles: ['quote'] },
     ] }],
-    routes: { main: { slots: ['left-before', 'quote-a', 'left-after', 'quote-b', 'right-before', 'right-after'], layouts: ['numbered-inset'], continuation: 'forbidden' } },
+    routes: {
+      main: { slots: ['left-before', 'left-after', 'right-before', 'right-after'], layouts: ['numbered-inset'], continuation: 'forbidden' },
+      quotes: { slots: ['quote-b'], insertionSlots: ['quote-b'], layouts: ['numbered-inset'], continuation: 'forbidden' },
+    },
   };
   const numberedWords = Array.from({ length: 16 }, (_, index) => `word-${String(index + 1).padStart(4, '0')}`);
   const numberedTailWords = Array.from({ length: 8 }, (_, index) => `word-${String(index + numberedWords.length + 1).padStart(4, '0')}`);
   const numberedInset = createTextCompositionEngine(numberedInsetTemplate).plan({
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [
       { id: 'numbered-body', kind: 'paragraph', role: 'body', text: numberedWords.join(' ') },
-      { id: 'numbered-quote', kind: 'paragraph', role: 'quote', text: 'quote-0001 quote-0002' },
       { id: 'numbered-tail', kind: 'paragraph', role: 'body', text: numberedTailWords.join(' ') },
-    ] } },
+      ] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'numbered-quote', kind: 'paragraph', role: 'quote', text: 'quote-0001 quote-0002' }] },
+    },
   }, metrics);
   assert.equal(numberedInset.evaluation.status, 'accepted', JSON.stringify(numberedInset.evaluation));
   const numberedBodyLines = numberedInset.plan.lines.filter((line) => line.blockId === 'numbered-body');
@@ -1150,8 +1077,7 @@ try {
   assert.equal(numberedTailLines.length > 0, true, 'numbered inset fixture must place the tail');
   assert.ok(numberedBodyLines.every((line) => line.box.x < 50), 'a body before an insertion must finish in the left column before using the right column');
   assert.ok(Math.max(...numberedBodyLines.map((line) => line.box.y + line.box.height)) <= Math.min(...numberedQuoteLines.map((line) => line.box.y)), 'the body must finish before its following quote is painted');
-  assert.ok(numberedQuoteLines.every((line) => line.slotId === '1:quote-b'), 'the quote must move to the later insertion slot when quote-a would cause an early column jump');
-  assert.equal(numberedInset.plan.slots.find((slot) => slot.id === '1:quote-a')?.state, 'exhausted', 'an unused early insertion slot must collapse instead of reserving a blank band');
+  assert.ok(numberedQuoteLines.every((line) => line.slotId === '1:quote-b'), 'the quote must occupy the configured insertion slot');
   assert.ok(numberedTailLines.every((line) => line.box.x >= 50), 'content after the quote may enter the right column only after the left column is exhausted');
   const numberedEntries = [...numberedBodyLines, ...numberedTailLines].flatMap((line) => (line.text.match(/word-\d{4}/gu) ?? []).map((text) => ({ number: Number(text.slice(-4)), x: line.box.x, y: line.box.y })));
   for (const right of numberedEntries.filter((entry) => entry.x >= 50)) {
@@ -1168,22 +1094,6 @@ try {
     const lastBottom = Math.max(...slotLines.map((line) => line.box.y + line.box.height));
     assert.ok(slot && slot.box.y + slot.box.height - lastBottom < 5, `${slotId} must not leave a free line before the right column starts`);
   }
-  const malformedInset = structuredClone(numberedInset.plan);
-  const splitBodyLine = malformedInset.lines.findLast((line) => line.blockId === 'numbered-body');
-  assert.ok(splitBodyLine, 'numbered fixture must have a final body line to mutate');
-  splitBodyLine.slotId = '1:right-before';
-  splitBodyLine.routeIndex = 4;
-  splitBodyLine.box = { x: 55, y: 5, width: 40, height: 10 };
-  const malformedInsetEvaluation = evaluateCompositionPlan({
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
-      { id: 'numbered-body', kind: 'paragraph', role: 'body', text: numberedWords.join(' ') },
-      { id: 'numbered-quote', kind: 'paragraph', role: 'quote', text: 'quote-0001 quote-0002' },
-      { id: 'numbered-tail', kind: 'paragraph', role: 'body', text: numberedTailWords.join(' ') },
-    ] } },
-  }, malformedInset);
-  assert.equal(malformedInsetEvaluation.status, 'rejected');
-  assert.ok(malformedInsetEvaluation.diagnostics.some((item) => item.code === 'BLOCK_SPLITS_ACROSS_INSERTION'), 'evaluator must reject a block split by a quote insertion');
-
   const continuousObstacleTemplate = {
     maxPages: 3,
     layouts: [{ id: 'continuous-obstacle', width: 100, height: 100, slots: [
@@ -1418,14 +1328,19 @@ try {
       { id: 'right', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 90 } },
       { id: 'quote-a', regionId: 'main', kind: 'text', box: { x: 5, y: 35, width: 90, height: 10 }, allowedRoles: ['quote'] },
     ] }],
-    routes: { main: { slots: ['left', 'right'], insertionSlots: ['quote-a'], layouts: ['continuous-quote'], continuation: 'forbidden' } },
+    routes: {
+      main: { slots: ['left', 'right'], layouts: ['continuous-quote'], continuation: 'forbidden' },
+      quotes: { slots: ['quote-a'], insertionSlots: ['quote-a'], layouts: ['continuous-quote'], continuation: 'forbidden' },
+    },
   };
   const continuousQuoteDocument = {
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [
       { id: 'quote-before', kind: 'paragraph', role: 'body', text: 'word-0001 word-0002 word-0003 word-0004 word-0005 word-0006 word-0007 word-0008' },
-      { id: 'quote-insertion', kind: 'paragraph', role: 'quote', text: 'A quote sits inside the continuous route.' },
       { id: 'quote-after', kind: 'paragraph', role: 'body', text: Array.from({ length: 40 }, (_, index) => `word-${String(index + 9).padStart(4, '0')}`).join(' ') },
-    ] } },
+      ] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'quote-insertion', kind: 'paragraph', role: 'quote', text: 'A quote sits inside the continuous route.' }] },
+    },
   };
   const continuousQuote = createTextCompositionEngine(continuousQuoteTemplate).plan(continuousQuoteDocument, metrics);
   assert.equal(continuousQuote.evaluation.status, 'accepted', JSON.stringify(continuousQuote.evaluation));
@@ -1437,20 +1352,6 @@ try {
   assert.ok(quoteObstacle && beforeQuoteLine && beforeQuoteLine.box.y + beforeQuoteLine.box.height <= quoteObstacle.box.y, 'content before an insertion must remain above its obstacle');
   assert.ok(continuousQuote.plan.lines.some((line) => line.blockId === 'quote-after' && line.slotId === '1:left' && line.box.y >= 45), 'following text must continue below the quote in the same column');
   assert.ok(continuousQuote.plan.lines.some((line) => line.blockId === 'quote-after' && line.slotId === '1:right'), 'following text must enter the right column only after the left column is consumed');
-
-  const wrongInsertionOrder = structuredClone(continuousQuote.plan);
-  const movedPredecessor = wrongInsertionOrder.lines.find((line) => line.blockId === 'quote-before');
-  assert.ok(movedPredecessor, 'source-order fixture must expose the predecessor line');
-  movedPredecessor.box.y = 50;
-  const wrongInsertionEvaluation = evaluateCompositionPlan(continuousQuoteDocument, wrongInsertionOrder);
-  assert.equal(wrongInsertionEvaluation.status, 'rejected');
-  assert.ok(wrongInsertionEvaluation.diagnostics.some((item) => item.code === 'INSERTION_SOURCE_ORDER_VIOLATION'), 'evaluator must reject content moved below its insertion');
-
-  const impossibleInsertionDocument = structuredClone(continuousQuoteDocument);
-  impossibleInsertionDocument.flows.main.blocks[0].text = Array.from({ length: 20 }, (_, index) => `before-${String(index + 1).padStart(4, '0')}`).join(' ');
-  const impossibleInsertion = createTextCompositionEngine(continuousQuoteTemplate).plan(impossibleInsertionDocument, metrics);
-  assert.equal(impossibleInsertion.evaluation.status, 'rejected');
-  assert.ok(impossibleInsertion.evaluation.diagnostics.some((item) => ['INSERTION_PRECEDENCE_CONFLICT', 'INSERTION_SOURCE_ORDER_VIOLATION', 'MAX_PAGES_EXCEEDED'].includes(item.code)), `planner must reject an insertion that cannot preserve source order above its obstacle: ${JSON.stringify(impossibleInsertion.evaluation)}`);
 
   const defaultHeadingKeepTemplate = {
     maxPages: 2,
@@ -1524,12 +1425,21 @@ try {
   };
   const quoteWrapTemplate = {
     maxPages: 1,
-    layouts: [{ id: 'quote-wrap', width: 100, height: 100, slots: [{ id: 'quote', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 20 }, allowedRoles: ['quote'] }] }],
-    routes: { main: { slots: ['quote'], layouts: ['quote-wrap'], continuation: 'forbidden' } },
+    layouts: [{ id: 'quote-wrap', width: 100, height: 100, slots: [
+      { id: 'body', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 80 }, allowedRoles: ['body'] },
+      { id: 'quote', regionId: 'quotes', kind: 'text', box: { x: 5, y: 5, width: 90, height: 20 }, allowedRoles: ['quote'] },
+    ] }],
+    routes: {
+      main: { slots: ['body'], layouts: ['quote-wrap'], continuation: 'forbidden' },
+      quotes: { slots: ['quote'], insertionSlots: ['quote'], layouts: ['quote-wrap'], continuation: 'forbidden' },
+    },
   };
-  const quoteWrap = createTextCompositionEngine(quoteWrapTemplate).plan({ flows: { main: { id: 'main', continuation: 'forbidden', blocks: [{ id: 'quote-wrap-block', kind: 'paragraph', role: 'quote', text: 'The closing mark must have room inside the quote line.' }] } } }, quoteMetrics);
+  const quoteWrap = createTextCompositionEngine(quoteWrapTemplate).plan({ flows: {
+    main: { id: 'main', continuation: 'forbidden', blocks: [] },
+    quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'quote-wrap-block', kind: 'paragraph', role: 'quote', text: 'The closing mark must have room inside the quote line.' }] },
+  } }, quoteMetrics);
   assert.equal(quoteWrap.evaluation.status, 'accepted', JSON.stringify(quoteWrap.evaluation));
-  const quoteWrapLine = quoteWrap.plan.lines.at(-1);
+  const quoteWrapLine = plannedLines(quoteWrap.plan).find((line) => line.blockId === 'quote-wrap-block');
   assert.ok(quoteWrapLine && quoteWrapLine.naturalWidth + 5 <= quoteWrapLine.box.width, 'quote wrapping must reserve room for the closing glyph');
 
   const incompletePlan = structuredClone(result.plan);
@@ -1932,11 +1842,9 @@ try {
   const stableCandidate = spacingEvaluationPhase?.details?.candidates?.[0];
   assert.equal(stableCandidate?.reflowPasses, 1, 'a stable text plan must expose one stability check and no additional planning pass');
   assert.equal(spacingReflowPhases.length, 1, 'a stable text plan must not trigger a second full reflow');
-  assert.equal(boundaryEvaluationPhase?.details?.candidates?.length, 2, 'a moved insertion must expose both pre-reflow and post-reflow candidates');
-  assert.deepEqual(boundaryEvaluationPhase?.details?.candidates?.map((candidate) => candidate.reflowPasses), [1, 1], 'each moved-insertion candidate must expose its stability-check count');
   assert.equal(graphicResult.evaluation.diagnostics.some((item) => item.code === 'LINE_GRAPHIC_OVERLAP'), false, 'the planner loop must preserve graphic exclusion geometry');
   assert.ok(tableResult.plan.tablePlacements.length > 1 && fourMetrics.plan.blockPlacements.length === 4, 'the planner loop must preserve structured block placement and table continuation');
-  for (const plan of [result.plan, boundaryReflow.plan, graphicResult.plan, tableResult.plan, fourMetrics.plan]) {
+  for (const plan of [result.plan, graphicResult.plan, tableResult.plan, fourMetrics.plan]) {
     assert.ok([...plan.slots, ...plan.placements, ...plan.blockPlacements, ...plan.tablePlacements, ...plan.graphicPlacements]
       .every((placement) => Object.values(placement.box).every((value) => Number.isFinite(value))), 'the planner loop must expose finite geometry for every final placement');
   }

@@ -248,6 +248,9 @@ function templateFlowsAt(value: unknown, path: string, slots: Record<string, Com
     if (rawInsertionSlots !== undefined && (!Array.isArray(rawInsertionSlots) || rawInsertionSlots.length === 0 || rawInsertionSlots.some((slot) => typeof slot !== 'string' || slot.length === 0))) {
       fail(`${path}.${id}.insertion_slots`, 'must contain one or more named slots when provided.');
     }
+    if (id === 'main' && rawInsertionSlots !== undefined) {
+      fail(`${path}.${id}.insertion_slots`, "the main flow cannot declare insertion slots; use a separate insertion flow.");
+    }
     for (const slot of rawInsertionSlots ?? []) {
       if (!slots[slot]) fail(`${path}.${id}.insertion_slots`, `references unknown slot '${slot}'.`);
       if (!rawSlots.includes(slot)) fail(`${path}.${id}.insertion_slots`, `slot '${slot}' must also be listed in slots.`);

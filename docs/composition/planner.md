@@ -14,6 +14,9 @@ planner is in [`composition/text-planner.ts`](../../server/src/composition/text-
 ## Planning order
 
 1. Preflight validates the input, template, flow roles, and available metrics.
+   The `main` flow cannot declare `insertionSlots` or contain `role: quote`
+   blocks; quote blocks in any other flow require that flow to declare
+   `insertionSlots`.
 2. The planner measures and reserves insertions and graphics that affect the
    available text area. Content dimensions must be known before collisions are
    computed.
@@ -84,8 +87,8 @@ reflow passes.
 
 - text does not enter an obstacle;
 - blocks remain in source order;
-- insertions remain outside the ordinary route flow when the template declares
-  them as a separate flow;
+- insertions are always supplied by a non-`main` flow and remain outside the
+  ordinary `main` route flow;
 - every line uses geometry based on the same font metrics used by the renderer;
 - the planner does not use score to force through an illegal plan;
 - the trace describes stages, decisions, placements, barriers, and candidate

@@ -317,6 +317,7 @@ function insertionSlotCandidates(
 function insertionProposalsFromPlan(document: CompositionDocument, template: CompositionTemplate, plan: CompositionPlan, metrics: CompositionTextMetrics): Map<string, PlannedInsertion> {
   const proposals = new Map<string, PlannedInsertion>();
   for (const [flowId, flow] of Object.entries(document.flows)) {
+    if (flowId === 'main') continue;
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
     const candidates = insertionSlotCandidates(template, route);
@@ -572,6 +573,7 @@ function seedGraphicProposals(document: CompositionDocument, template: Compositi
 function seedInsertionProposals(document: CompositionDocument, template: CompositionTemplate, metrics: CompositionTextMetrics): Map<string, PlannedInsertion> {
   const proposals = new Map<string, PlannedInsertion>();
   for (const [flowId, flow] of Object.entries(document.flows)) {
+    if (flowId === 'main') continue;
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
     const candidates = insertionSlotCandidates(template, route);
@@ -832,6 +834,7 @@ function placeInsertionLayer(
 ): Set<string> {
   const placed = new Set<string>();
   for (const [flowId, flow] of Object.entries(document.flows)) {
+    if (flowId === 'main') continue;
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
     for (const block of flow.blocks.filter((candidate) => candidate.role === 'quote')) {
@@ -1260,6 +1263,46 @@ function movableGraphicFramesForPlan(
 
 /**
  * @planner-target composition/document-layout.ts
+ * @planner-responsibility Reject quote blocks that are not owned by a non-main insertion flow.
+ */
+function validateQuoteFlowContracts(
+  document: CompositionDocument,
+  template: CompositionTemplate,
+  plan: CompositionPlan,
+): void {
+  if (template.routes.main?.insertionSlots?.length) {
+    plan.diagnostics.push(diagnostic(
+      'error',
+      'MAIN_FLOW_INSERTIONS_FORBIDDEN',
+      "The main flow cannot declare insertion slots; use a separate insertion flow.",
+      { flowId: 'main' },
+    ));
+  }
+  for (const [flowId, flow] of Object.entries(document.flows)) {
+    for (const block of flow.blocks) {
+      if (block.role !== 'quote') continue;
+      if (flowId === 'main') {
+        plan.diagnostics.push(diagnostic(
+          'error',
+          'MAIN_FLOW_QUOTE_FORBIDDEN',
+          `Quote block '${block.id}' must be supplied by a flow other than 'main'.`,
+          { flowId, blockId: block.id },
+        ));
+        continue;
+      }
+      if (template.routes[flowId]?.insertionSlots?.length) continue;
+      plan.diagnostics.push(diagnostic(
+        'error',
+        'QUOTE_INSERTION_FLOW_REQUIRED',
+        `Quote block '${block.id}' must belong to a flow with insertion slots.`,
+        { flowId, blockId: block.id },
+      ));
+    }
+  }
+}
+
+/**
+ * @planner-target composition/document-layout.ts
  * @planner-responsibility Attach candidate frames and run all preflight validations for one layout pass.
  */
 function preparePlanForLayout(
@@ -1272,6 +1315,7 @@ function preparePlanForLayout(
 ): void {
   plan.movableInsertionFrames = movableInsertionFramesForPlan(policy, insertionProposals);
   plan.movableGraphicFrames = movableGraphicFramesForPlan(policy, graphicProposals);
+  validateQuoteFlowContracts(document, template, plan);
   validateMovableInsertionBounds(insertionProposals, policy, plan);
   validateMovableGraphicBounds(graphicProposals, policy, plan);
   validateGrowthPolicies(template, plan);
@@ -1324,7 +1368,6 @@ type DocumentFlowPlanningContext = {
   policy: TextCompositionPlannerPolicy;
   pages: PageState[];
   plan: CompositionPlan;
-  insertionProposals: Map<string, PlannedInsertion>;
 };
 
 /**
@@ -1340,7 +1383,7 @@ function planRepeatedFlow(
   const pageCount = Math.max(1, context.pages.length);
   const firstPage = route.startPage ?? 1;
   for (let page = firstPage; page <= pageCount; page += 1) {
-    planFlow(context.document, context.metrics, context.template, context.policy, flowId, { ...route, continuation: 'forbidden' }, context.pages, context.plan, page, context.insertionProposals);
+    planFlow(context.document, context.metrics, context.template, context.policy, flowId, { ...route, continuation: 'forbidden' }, context.pages, context.plan, page);
   }
 }
 
@@ -1357,7 +1400,7 @@ function planOrdinaryFlow(
     context.plan.diagnostics.push(diagnostic('error', 'FLOW_START_PAGE_INVALID', `Flow '${flowId}' has an invalid start page ${route.startPage}.`, { flowId }));
     return;
   }
-  planFlow(context.document, context.metrics, context.template, context.policy, flowId, route, context.pages, context.plan, route.startPage ?? 1, context.insertionProposals, Boolean(route.insertionSlots?.length));
+  planFlow(context.document, context.metrics, context.template, context.policy, flowId, route, context.pages, context.plan, route.startPage ?? 1, Boolean(route.insertionSlots?.length));
 }
 
 /**
@@ -1392,9 +1435,8 @@ function planDocumentFlows(
   policy: TextCompositionPlannerPolicy,
   pages: PageState[],
   plan: CompositionPlan,
-  insertionProposals: Map<string, PlannedInsertion>,
 ): void {
-  const context: DocumentFlowPlanningContext = { document, metrics, template, policy, pages, plan, insertionProposals };
+  const context: DocumentFlowPlanningContext = { document, metrics, template, policy, pages, plan };
   const flowEntries = Object.entries(document.flows);
   const orderedFlowEntries = [
     ...flowEntries.filter(([flowId]) => template.routes[flowId]?.repeat !== 'each-page'),
@@ -1442,7 +1484,7 @@ function planDocumentOnce(
   // Repeated chrome depends on the final number of pages. Plan all ordinary
   // flows first so a header/footer that starts on page 2 cannot observe the
   // provisional one-page document and silently disappear.
-  planDocumentFlows(document, metrics, template, policy, pages, plan, insertionProposals);
+  planDocumentFlows(document, metrics, template, policy, pages, plan);
   finalizeDocumentPlan(document, metrics, template, pages, plan);
   return plan;
 }

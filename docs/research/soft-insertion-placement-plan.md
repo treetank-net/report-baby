@@ -1,6 +1,12 @@
 # Plan: miękkie insertions dla cytatów, grafik i nazwanych flow
 
-Status: plan po commicie `4bc5de4` (`feat: add configurable quote glyph rendering`)
+Status: plan po commicie `4bc5de4` (`feat: add configurable quote glyph rendering`).
+Historyczna notatka: przykłady, w których insertion wskazuje
+`source: { flow: main, ... }`, są superseded. Obowiązujący kontrakt wymaga,
+aby quote należał do osobnego, nazwanego flow (np. `quotes`) deklarującego
+`insertionSlots`; `main` nie może mieć `insertionSlots` ani inline quote.
+Aktualny kontrakt opisują dokumenty w
+`docs/composition/`.
 
 Data: 2026-09-01
 

@@ -325,12 +325,6 @@ function routeForPage(template, page) {
 }
 
 function assertNoInternalRouteGaps(result) {
-  const collapsed = new Set(result.plan.decisions
-    .filter((decision) => decision.code === 'OPTIONAL_INSERTION_COLLAPSED' && typeof decision.page === 'number' && typeof decision.routeIndex === 'number')
-    .map((decision) => `${decision.page}:${decision.routeIndex}`));
-  const blocked = new Set(result.plan.decisions
-    .filter((decision) => decision.code === 'FLOW_SEGMENT_BLOCKED_BY_INSERTION' && typeof decision.page === 'number' && typeof decision.routeIndex === 'number')
-    .map((decision) => `${decision.page}:${decision.routeIndex}`));
   for (const page of result.plan.pages) {
     const { layout, slots } = routeForPage(result.template, page);
     const occupied = new Set(result.plan.lines
@@ -339,11 +333,11 @@ function assertNoInternalRouteGaps(result) {
     const ordered = [...occupied].sort((a, b) => a - b);
     if (ordered.length < 2) continue;
     for (let index = ordered[0]; index <= ordered.at(-1); index += 1) {
-      if (occupied.has(index) || collapsed.has(`${page.page}:${index}`) || blocked.has(`${page.page}:${index}`)) continue;
+      if (occupied.has(index)) continue;
       const slotId = slots[index];
       const definition = layout?.slots.find((slot) => slot.id === slotId);
       if (definition?.kind === 'block') continue;
-      assert.equal(definition?.allowedRoles?.includes('quote'), true, `page ${page.page} has an unfilled non-quote route segment ${index} before later content`);
+      assert.fail(`page ${page.page} has an unfilled main-flow route segment ${index} before later content`);
     }
   }
 }

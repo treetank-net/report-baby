@@ -1,5 +1,11 @@
 # CompositionInput migration boundary
 
+Status note (2026-09-07): this historical migration note described quotes as
+ordinary semantic blocks in any flow. The current contract narrows that rule:
+quotes must belong to a named non-`main` flow declaring insertion slots, while `main` remains
+the primary text flow. Paragraphs below that discuss quote ownership describe
+the migration-era model and are not a supported input contract.
+
 Date: 2026-08-28
 
 ## Current contract
