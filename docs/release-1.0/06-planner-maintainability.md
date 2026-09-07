@@ -1,7 +1,8 @@
 # Plan 06 — utrzymywalność planera
 
-Status: mapa modułów, integracja runtime oraz dwanaście bezpiecznych seamów
-wydzielonych; dalsze wydzielanie wymaga testów zachowania po każdym kroku
+Status: mapa modułów, integracja runtime oraz wydzielone odpowiedzialności;
+`planFlow` ma własny moduł, a dalsze wydzielanie wymaga testów zachowania po
+każdym kroku
 
 ## Wykonane w pierwszym kroku
 
@@ -47,6 +48,10 @@ wydzielonych; dalsze wydzielanie wymaga testów zachowania po każdym kroku
   `composition/structured-block-placement.ts`; moduł zachowuje istniejący
   cursor i zapisuje te same placementy, decyzje oraz diagnostykę. Grafika
   opływana nadal tworzy w tym samym miejscu flow barrier.
+- `planFlow` oraz jego flow-specific state i operacje zostały wydzielone do
+  `composition/flow-planner.ts`; `planDocumentOnce` importuje `planFlow` z tego
+  modułu. Wydzielenie zachowuje istniejący kontrakt, kolejność bloków, decyzje,
+  diagnostykę i zachowanie stron.
 - odczyt selectable text i word bounds został wydzielony z oracle do
   `scripts/lib/pdf-text.mjs`; pusty tekst poprawnego PDF-a jest wynikiem
   pomiaru, a niedostępny lub uszkodzony dekoder ma osobny kod błędu. Oracle
@@ -54,10 +59,11 @@ wydzielonych; dalsze wydzielanie wymaga testów zachowania po każdym kroku
 
 W tym punkcie planu zakończono także opisane wcześniej seam-y integracji,
 candidate generation, wrappingu, flow barriers, glyphów, próbkowania,
-slotów, insertion order, trace, bloków strukturalnych oraz PDF extraction.
-Pozostały fragment `planFlow` nie ma jeszcze wydzielonej granicy, która byłaby
-bezpieczniejsza niż istniejący publiczny test engine’a; nie wydzielamy go tylko
-na podstawie długości funkcji.
+slotów, insertion order, trace, bloków strukturalnych, PDF extraction oraz
+pierwszą granicę `flow-planner.ts`. Nie rozbijamy teraz `planFlow` mechanicznie
+na kolejne pliki: najpierw obserwujemy tę granicę w testach, a dopiero potem
+decydujemy, czy kolejny seam powinien dotyczyć dokumentu, stron, czy konkretnej
+reguły flow.
 
 To wydzielenie jest techniczne, nie domenowe: nie powstał nowy rodzaj contentu
 ani nowa encja. Moduł kandydatów przyjmuje istniejące propozycje i politykę
@@ -127,11 +133,9 @@ w `report-renderer.ts`.
     osobne źródła ustawień oraz test przeciwko przypadkowemu odczytowi z
     niewłaściwej grupy.
 11. Kontynuować wydzielanie z `planFlow` tylko przez istniejące, testowalne
-    odpowiedzialności. Trace jest już poza plannerem; następnym kandydatem jest
-    obsługa bloków strukturalnych (tabele i bloki atomowe), pod warunkiem że
-    zachowa ten sam cursor, decyzje i diagnostykę. Ten seam jest już wykonany;
-    pozostałe fragmenty `planFlow` wymagają osobnego testu zachowania przed
-    wydzieleniem.
+    odpowiedzialności. Pierwsza granica `flow-planner.ts` jest już wykonana;
+    kolejne rozbicie wymaga osobnego testu zachowania i nie może wprowadzać
+    wrappera na wrapperze ani przenosić operacji dokumentowych do kursora.
 
 ## Kryteria ukończenia
 
@@ -151,11 +155,12 @@ w `report-renderer.ts`.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 
-- Docelowy podział plików wymaga uzupełnienia po kolejnych testach stanu
-  `planFlow`; obecna mapa opisuje już wydzielone granice, ale nie zakłada, że
-  cały planner trzeba rozbić na mniejsze funkcje.
-- Zakres refaktoryzacji `planFlow` wymaga uzupełnienia po planie 04. Pętla może
-  ujawnić, że pierwszym seamem powinno być generowanie wariantów, a nie routing.
+- Docelowy podział plików po pierwszym `flow-planner.ts` wymaga uzupełnienia po
+  kolejnych testach stanu `planFlow`; obecna mapa nie zakłada, że cały planner
+  trzeba rozbić na mniejsze funkcje.
+- Zakres dalszej refaktoryzacji `planFlow` wymaga uzupełnienia po obserwacji
+  nowej granicy i testach odpowiedzialności dokumentu oraz stron. Nie wolno
+  wyprowadzać tej decyzji z samej długości funkcji.
 - Kryteria wydajności wymagają uzupełnienia po benchmarku z planu 04.
 - Docelowy podział konfiguracji stylów wymaga uzupełnienia po kolejnych
   testach capability adapterów; obecnie `render-config-styles.ts` jest osobnym

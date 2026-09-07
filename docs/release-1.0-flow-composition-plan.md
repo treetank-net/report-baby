@@ -54,6 +54,7 @@ Szczegóły, zależności, testy i miejsca wymagające doprecyzowania są w:
 6. [Utrzymywalność planera](release-1.0/06-planner-maintainability.md)
 7. [Block kinds i miękkie insertiony](release-1.0/07-block-kinds-and-soft-insertions.md)
 8. [Głębokość wyszukiwania kandydatów](release-1.0/08-candidate-search-depth.md)
+9. [Kary za dzielenie struktur i obsługa formatów obrazów](release-1.0/09-structure-penalties-and-image-formats.md)
 
 Dokumentacja aktualnego systemu znajduje się osobno w katalogu
 [Composition](composition/README.md). Plany wykonawcze opisują kolejność prac,
@@ -95,6 +96,8 @@ obniżenie oczekiwań bez zmiany kontraktu renderer’a.
 07 kolejne block kinds i miękkie insertiony
         ↓
 08 głębokość wyszukiwania kandydatów
+        ↓
+09 kary za dzielenie struktur i formaty obrazów
 ```
 
 Plan 05 może być częściowo wykonywany wcześniej jako obserwacja obecnego
@@ -132,3 +135,11 @@ Kiedy dokument wykonawczy mówi „wymaga uzupełnienia po X”, oznacza to, że
 obecny kod nie daje jeszcze wystarczającej wiedzy do bezpiecznej specyfikacji.
 Po wykonaniu X należy zaktualizować ten dokument, zanim zaczniemy kolejny
 zależny etap.
+
+## Zadania końcowe po planie 08
+
+Szczegółowy zakres zadań końcowych znajduje się w [Planie 09](release-1.0/09-structure-penalties-and-image-formats.md):
+
+- kara punktowa za nieestetyczne dzielenie list i tabel;
+- obsługa WebP i AVIF w resolverze, rendererze i screeningu kontrastu;
+- skrócenie czasu feedbacku testów bez usuwania pełnego gate’u release’owego.

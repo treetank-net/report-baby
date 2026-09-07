@@ -43,6 +43,10 @@ Chcemy mieć jeden deterministyczny przebieg, w którym:
 06 utrzymywalność planera
         ↓
 07 kolejne block kinds i miękkie insertiony
+        ↓
+08 głębokość wyszukiwania kandydatów
+        ↓
+09 ciągłość struktur, formaty obrazów i czas feedbacku testów
 ```
 
 Kroki 01–03 są fundamentem. Krok 04 daje pierwszą faktyczną optymalizację.
@@ -68,6 +72,9 @@ najpierw muszą istnieć testy i działający seam dla pętli.
 8. [Głębokość wyszukiwania kandydatów](08-candidate-search-depth.md) —
    sprawdzenie, czy zgrubne pozycje i lokalne doprecyzowanie szukają dostatecznie
    dokładnie bez niekontrolowanego wzrostu kosztu.
+9. [Ciągłość struktur i formaty obrazów](09-structure-penalties-and-image-formats.md) —
+   kary za dzielenie list i tabel, WebP/AVIF oraz końcowa optymalizacja czasu
+   feedbacku testów.
 
 ## Granica wykonalności
 

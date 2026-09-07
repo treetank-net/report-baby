@@ -47,6 +47,7 @@ import {
   type PlannedGraphic,
   type PlannedInsertion,
 } from './text-planner-candidates.js';
+import { planFlow } from './flow-planner.js';
 
 export type { MovableGraphicPolicy, MovableInsertionBounds } from './text-planner-candidates.js';
 
@@ -74,19 +75,7 @@ export interface TextCompositionPlannerPolicy {
   movableGraphicBounds?: MovableGraphicPolicy;
 }
 
-interface FlowCursor {
-  blockIndex: number;
-  startWord: number;
-  startRow: number;
-  page: number;
-  routeIndex: number;
-  /** The earliest y-coordinate available after an authored obstacle on this page. */
-  resumeY?: number;
-  /** The route slot whose local obstacle boundary produced resumeY. */
-  resumeSlotId?: string;
-}
-
-interface PageState {
+export interface PageState {
   page: number;
   layout: CompositionLayoutTemplate;
   slots: Map<string, CompositionSlot>;
@@ -100,11 +89,11 @@ function textOf(block: CompositionBlock): string {
   return block.text?.trim() ?? '';
 }
 
-function styleFor(block: CompositionBlock): string {
+export function styleFor(block: CompositionBlock): string {
   return compositionStyleName(block);
 }
 
-function diagnostic(
+export function diagnostic(
   severity: CompositionDiagnostic['severity'],
   code: string,
   message: string,
@@ -117,59 +106,26 @@ function layoutById(template: CompositionTemplate, id: string): CompositionLayou
   return template.layouts.find((layout) => layout.id === id);
 }
 
-function routeLayout(route: CompositionFlowRoute, template: CompositionTemplate, page: number): CompositionLayoutTemplate | undefined {
+export function routeLayout(route: CompositionFlowRoute, template: CompositionTemplate, page: number): CompositionLayoutTemplate | undefined {
   const layoutId = route.layouts?.[Math.min(page - 1, route.layouts.length - 1)] ?? template.layouts[0]?.id;
   return layoutId ? layoutById(template, layoutId) : undefined;
 }
 
-function routeSlots(route: CompositionFlowRoute, layout: CompositionLayoutTemplate): string[] {
+export function routeSlots(route: CompositionFlowRoute, layout: CompositionLayoutTemplate): string[] {
   return route.slotsByLayout?.[layout.id] ?? route.slots;
-}
-
-function insertionSlotFor(
-  route: CompositionFlowRoute,
-  layout: CompositionLayoutTemplate,
-  pageState: PageState,
-  plan: CompositionPlan,
-  routeSlotIds: string[],
-  routeIndex: number,
-  document: CompositionDocument,
-): CompositionSlotTemplate | undefined {
-  const insertionIds = route.insertionSlots ?? [];
-  if (insertionIds.length === 0) return undefined;
-  const currentDefinition = layout.slots.find((slot) => slot.id === routeSlotIds[routeIndex]);
-  const currentSlot = currentDefinition ? pageState.slots.get(currentDefinition.id) : undefined;
-  const currentBottom = currentSlot
-    ? contentStartBottom(pageState, plan, currentSlot, document)
-    : Number.NEGATIVE_INFINITY;
-  const candidates = insertionIds
-    .map((id) => layout.slots.find((slot) => slot.id === id))
-    .filter((slot): slot is CompositionSlotTemplate => slot !== undefined)
-    .filter((slot) => slot.allowedRoles?.includes('quote') && pageState.slots.get(slot.id)?.state === 'open')
-    .filter((slot) => {
-      const occupied = [
-        ...plan.lines,
-        ...plan.blockPlacements,
-        ...plan.tablePlacements,
-      ].filter((item) => item.page === pageState.page);
-      return !occupied.some((item) => rectsOverlap(item.box, slot.box));
-    })
-    .sort((left, right) => left.box.y - right.box.y)
-    ;
-  return candidates.find((slot) => slot.box.y + 0.001 >= currentBottom);
 }
 
 function slotId(page: number, id: string): string {
   return `${page}:${id}`;
 }
 
-function lineHeight(metrics: CompositionTextMetrics, block: CompositionBlock): number {
+export function lineHeight(metrics: CompositionTextMetrics, block: CompositionBlock): number {
   const height = metrics.lineHeight(styleFor(block));
   if (!Number.isFinite(height) || height <= 0) throw new Error(`Text metrics returned an invalid line-height for '${styleFor(block)}': ${height}.`);
   return height;
 }
 
-function textPadding(metrics: CompositionTextMetrics, block: CompositionBlock): { top: number; bottom: number } {
+export function textPadding(metrics: CompositionTextMetrics, block: CompositionBlock): { top: number; bottom: number } {
   const padding = metrics.textPadding?.(styleFor(block)) ?? { top: 0, bottom: 0 };
   if (!Number.isFinite(padding.top) || !Number.isFinite(padding.bottom) || padding.top < 0 || padding.bottom < 0) {
     throw new Error(`Text metrics returned invalid padding for '${styleFor(block)}': ${JSON.stringify(padding)}.`);
@@ -177,7 +133,7 @@ function textPadding(metrics: CompositionTextMetrics, block: CompositionBlock): 
   return padding;
 }
 
-function wrapBlock(
+export function wrapBlock(
   metrics: CompositionTextMetrics,
   block: CompositionBlock,
   startWord: number,
@@ -206,7 +162,7 @@ function wrapBlock(
   );
 }
 
-function wordsForBlock(block: CompositionBlock): string[] {
+export function wordsForBlock(block: CompositionBlock): string[] {
   return wordsOf(textOf(block));
 }
 
@@ -559,7 +515,7 @@ function absoluteGraphicPoints(graphic: { points?: Array<{ x: number; y: number 
   return graphic.points.map((point) => ({ x: box.x + point.x * box.width, y: box.y + point.y * box.height }));
 }
 
-function placeGraphicsForPage(
+export function placeGraphicsForPage(
   document: CompositionDocument,
   pageState: PageState,
   plan: CompositionPlan,
@@ -637,7 +593,7 @@ function materializeGraphicPages(
   for (const page of pages) placeGraphicsForPage(document, page, plan, graphicProposals);
 }
 
-function ensurePage(
+export function ensurePage(
   pages: PageState[],
   template: CompositionTemplate,
   route: CompositionFlowRoute,
@@ -657,243 +613,24 @@ function ensurePage(
   return pages[page - 1];
 }
 
-function rectBottom(rect: CompositionRect): number {
+export function rectBottom(rect: CompositionRect): number {
   return rect.y + rect.height;
 }
 
-function rectsOverlap(first: CompositionRect, second: CompositionRect): boolean {
+export function rectsOverlap(first: CompositionRect, second: CompositionRect): boolean {
   const horizontal = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
   const vertical = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
   const scale = Math.max(1, Math.abs(first.x), Math.abs(first.y), Math.abs(first.width), Math.abs(first.height), Math.abs(second.x), Math.abs(second.y), Math.abs(second.width), Math.abs(second.height));
   return horizontal > Number.EPSILON * scale * 32 && vertical > Number.EPSILON * scale * 32;
 }
 
-function slotCollidesWithPlacedBlock(pageState: PageState, slotId: string, plan: CompositionPlan, flowId?: string): boolean {
-  const slot = pageState.slots.get(slotId);
-  const box = slot?.box;
-  if (!box) return false;
-  return plan.lines.some((line) => line.layer !== 'insertion' && line.page === pageState.page && line.slotId !== slot.id && line.flowId !== flowId && rectsOverlap(box, line.box))
-    || plan.blockPlacements.some((placement) => placement.page === pageState.page && placement.slotId !== slot.id && rectsOverlap(box, placement.box))
-    || plan.tablePlacements.some((placement) => placement.page === pageState.page && placement.slotId !== slot.id && rectsOverlap(box, placement.box))
-    || pageState.layout.slots.some((candidate) => candidate.reserved === true && candidate.id !== slot.id && rectsOverlap(box, candidate.box));
-}
 
-function slotBox(pageState: PageState, definition: CompositionSlotTemplate): CompositionRect {
-  return pageState.slots.get(definition.id)?.box ?? definition.box;
-}
 
-function growSlot(
-  pageState: PageState,
-  definition: CompositionSlotTemplate,
-  requiredBottom: number,
-  plan: CompositionPlan,
-  flowId: string,
-  blockId: string,
-): void {
-  const growth = definition.grow;
-  if (!growth || growth.axis !== 'y') return;
-  const slot = pageState.slots.get(definition.id);
-  if (!slot) return;
-  const maxBottom = definition.box.y + growth.maxHeight;
-  const nextBottom = Math.min(maxBottom, Math.max(rectBottom(slot.box), requiredBottom));
-  const delta = nextBottom - rectBottom(slot.box);
-  if (delta <= 0) return;
-  slot.box.height = nextBottom - slot.box.y;
-  for (const pushedId of growth.pushes ?? []) {
-    const pushed = pageState.slots.get(pushedId);
-    if (!pushed) continue;
-    pushed.box.y += delta;
-    // Atomic/block slots have an intrinsic measured size.  Moving one must
-    // not silently make it shorter than the backend can render; only text
-    // slots are elastic after a preceding box grows.
-    const pushedDefinition = pageState.layout.slots.find((candidate) => candidate.id === pushedId);
-    if (pushedDefinition?.kind === 'text') {
-      pushed.box.height = Math.max(0, pushed.box.height - delta);
-      if (pushed.box.height === 0) pushed.state = 'exhausted';
-    }
-  }
-  plan.decisions.push({
-    code: 'SLOT_GROWN',
-    flowId,
-    blockId,
-    slotId: slot.id,
-    delta,
-    pushedSlots: growth.pushes ?? [],
-  });
-}
 
-function occupiedBottom(plan: CompositionPlan, slotId: string, fallback: number): number {
-  const lineBottom = plan.lines
-    .filter((line) => line.slotId === slotId)
-    .reduce((bottom, line) => Math.max(bottom, line.box.y + line.box.height), fallback);
-  const blockBottom = plan.blockPlacements
-    .filter((placement) => placement.slotId === slotId)
-    .reduce((bottom, placement) => Math.max(bottom, placement.box.y + placement.box.height), lineBottom);
-  return plan.tablePlacements
-    .filter((placement) => placement.slotId === slotId)
-    .reduce((bottom, placement) => Math.max(bottom, placement.box.y + placement.box.height), blockBottom);
-}
 
-function flowingTextBottom(plan: CompositionPlan, slotId: string, fallback: number, document: CompositionDocument): number {
-  const wrappedImages = new Set(Object.values(document.flows).flatMap((flow) => flow.blocks)
-    .filter((block) => block.kind === 'image' && (block.image?.wrap === 'left' || block.image?.wrap === 'right'))
-    .map((block) => block.id));
-  const lineBottom = plan.lines
-    .filter((line) => line.slotId === slotId && line.layer !== 'insertion')
-    .reduce((bottom, line) => Math.max(bottom, line.box.y + line.box.height), fallback);
-  const blockBottom = plan.blockPlacements
-    .filter((placement) => placement.slotId === slotId && !wrappedImages.has(placement.blockId))
-    .reduce((bottom, placement) => Math.max(bottom, placement.box.y + placement.box.height), lineBottom);
-  return plan.tablePlacements
-    .filter((placement) => placement.slotId === slotId)
-    .reduce((bottom, placement) => Math.max(bottom, placement.box.y + placement.box.height), blockBottom);
-}
 
-function horizontalOverlap(first: CompositionRect, second: CompositionRect): boolean {
-  const overlap = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
-  return overlap > Number.EPSILON * Math.max(1, Math.abs(first.x), Math.abs(first.width), Math.abs(second.x), Math.abs(second.width)) * 32;
-}
 
-/**
- * Full-width insertion slots are intentionally not static flow obstacles:
- * reserving them on every continuation page creates an empty band on pages
- * before the insertion. Once an insertion has actually been placed, however,
- * subsequent content must start below its real painted bottom. This helper
- * derives that occupied boundary from the page's placed lines/blocks and
- * keeps the rule independent of a particular quote or template name.
- */
-function occupiedBottomInOverlappingSlots(
-  pageState: PageState,
-  plan: CompositionPlan,
-  targetSlot: CompositionSlot,
-  fallback: number,
-): number {
-  const occupiedSlots = new Map<string, CompositionSlot>(
-    [...pageState.slots.values()].map((slot) => [slot.id, slot]),
-  );
-  const bottomOf = (item: { page: number; slotId: string; box: CompositionRect }): number => {
-    if (item.page !== pageState.page || item.slotId === targetSlot.id) return fallback;
-    if ('layer' in item && item.layer === 'insertion') return fallback;
-    const source = occupiedSlots.get(item.slotId);
-    if (!source || source.flowId !== targetSlot.flowId || source.box.y >= rectBottom(targetSlot.box) || !horizontalOverlap(source.box, targetSlot.box)) return fallback;
-    return item.box.y + item.box.height;
-  };
-  return Math.max(
-    fallback,
-    ...plan.lines.map(bottomOf),
-    ...plan.blockPlacements.map(bottomOf),
-    ...plan.tablePlacements.map(bottomOf),
-  );
-}
-
-function previousBlockInOverlappingSlots(
-  pageState: PageState,
-  plan: CompositionPlan,
-  targetSlot: CompositionSlot,
-  document: CompositionDocument,
-): CompositionBlock | undefined {
-  const blocks = new Map(Object.values(document.flows).flatMap((flow) => flow.blocks).map((block) => [block.id, block]));
-  const candidates = [
-    ...plan.lines,
-    ...plan.blockPlacements,
-    ...plan.tablePlacements,
-  ].filter((item) => {
-    if (item.page !== pageState.page || item.slotId === targetSlot.id) return false;
-    if ('layer' in item && item.layer === 'insertion') return false;
-    const source = pageState.slots.get(item.slotId);
-    return source?.flowId === targetSlot.flowId && source !== undefined && source.box.y < rectBottom(targetSlot.box) && horizontalOverlap(source.box, targetSlot.box);
-  }).sort((left, right) => (left.box.y + left.box.height) - (right.box.y + right.box.height));
-  return candidates.at(-1) ? blocks.get(candidates.at(-1)!.blockId) : undefined;
-}
-
-function contentStartBottom(
-  pageState: PageState,
-  plan: CompositionPlan,
-  slot: CompositionSlot,
-  document: CompositionDocument,
-): number {
-  const local = flowingTextBottom(plan, slot.id, slot.box.y, document);
-  return occupiedBottomInOverlappingSlots(pageState, plan, slot, local);
-}
-
-function previousBlockInSlot(plan: CompositionPlan, slotId: string, currentBlockId: string, document: CompositionDocument): CompositionBlock | undefined {
-  const blocks = new Map(Object.values(document.flows).flatMap((flow) => flow.blocks).map((block) => [block.id, block]));
-  const candidates = [
-    ...plan.placements.filter((placement) => placement.slotId === slotId && placement.blockId !== currentBlockId),
-    ...plan.blockPlacements.filter((placement) => placement.slotId === slotId && placement.blockId !== currentBlockId),
-    ...plan.tablePlacements.filter((placement) => placement.slotId === slotId && placement.blockId !== currentBlockId),
-  ].sort((left, right) => (left.box.y + left.box.height) - (right.box.y + right.box.height));
-  return candidates.at(-1) ? blocks.get(candidates.at(-1)!.blockId) : undefined;
-}
-
-function collapseUnusedInsertions(
-  pageState: PageState,
-  routeSlotIds: string[],
-  fromRouteIndex: number,
-  toRouteIndex: number,
-  plan: CompositionPlan,
-  flowId: string,
-  blockId: string,
-): void {
-  for (let index = fromRouteIndex; index < toRouteIndex; index += 1) {
-    const definition = pageState.layout.slots.find((slot) => slot.id === routeSlotIds[index]);
-    const insertion = definition ? pageState.slots.get(definition.id) : undefined;
-    if (!definition?.allowedRoles?.includes('quote') || !insertion || insertion.state !== 'open') continue;
-    const delta = insertion.box.height;
-    if (delta <= 0) {
-      insertion.state = 'exhausted';
-      continue;
-    }
-    // The route already contains fixed text segments on both sides of this
-    // insertion.  Collapsing an unused quote only changes route occupancy;
-    // it must never move a later segment (especially the next column).
-    insertion.state = 'exhausted';
-    plan.decisions.push({
-      code: 'OPTIONAL_INSERTION_COLLAPSED',
-      flowId,
-      blockId,
-      page: pageState.page,
-      slotId: insertion.id,
-      routeIndex: index,
-      delta,
-      reason: 'no-insertion-content-on-page',
-    });
-  }
-}
-
-function collapseInsertionBeforeContinuation(
-  pageState: PageState,
-  routeSlotIds: string[],
-  routeIndex: number,
-  plan: CompositionPlan,
-  flowId: string,
-  blockId: string,
-): void {
-  const definition = pageState.layout.slots.find((slot) => slot.id === routeSlotIds[routeIndex]);
-  const insertion = definition ? pageState.slots.get(definition.id) : undefined;
-  if (!definition?.allowedRoles?.includes('quote') || !insertion || insertion.state !== 'open') return;
-  const delta = insertion.box.height;
-  if (delta <= 0) {
-    insertion.state = 'exhausted';
-    return;
-  }
-  // An insertion is an obstacle in the existing column geometry.  The text
-  // stream is split around that obstacle; moving later boxes would turn the
-  // two columns into independently positioned blocks and can pull a right
-  // column above the left-column content.
-  insertion.state = 'exhausted';
-  plan.decisions.push({
-    code: 'OPTIONAL_INSERTION_COLLAPSED',
-    flowId,
-    blockId,
-    page: pageState.page,
-    routeIndex,
-    delta,
-    reason: 'continuation-needs-uninterrupted-column',
-  });
-}
-
-function placeLines(
+export function placeLines(
   pageState: PageState,
   definition: CompositionSlotTemplate,
   block: CompositionBlock,
@@ -967,7 +704,7 @@ function placeLines(
   slot.state = occupiedBottom >= rectBottom(box) ? 'exhausted' : 'partial';
 }
 
-function addResidual(
+export function addResidual(
   residualContent: CompositionPlan['residualContent'],
   flowId: string,
   block: CompositionBlock,
@@ -982,7 +719,7 @@ function addResidual(
   residualContent.push({ flowId, blockId: block.id, reason, consumed, remaining, ...(lastLegalSlotId ? { lastLegalSlotId } : {}) });
 }
 
-function addTableResidual(
+export function addTableResidual(
   residualContent: CompositionPlan['residualContent'],
   flowId: string,
   block: CompositionBlock,
@@ -995,19 +732,6 @@ function addTableResidual(
   residualContent.push({ flowId, blockId: block.id, reason, remainingRows: { start: startRow, end }, ...(lastLegalSlotId ? { lastLegalSlotId } : {}) });
 }
 
-function advanceCursor(
-  cursor: FlowCursor,
-  routeSlotsForPage: string[],
-): void {
-  cursor.routeIndex += 1;
-  cursor.resumeY = undefined;
-  cursor.resumeSlotId = undefined;
-  if (cursor.routeIndex >= routeSlotsForPage.length) {
-    cursor.routeIndex = 0;
-    cursor.page += 1;
-    cursor.resumeY = undefined;
-  }
-}
 
 function createPlan(minimumFragmentLines?: number): CompositionPlan {
   return {
@@ -1054,566 +778,6 @@ function validateGrowthPolicies(template: CompositionTemplate, plan: Composition
       for (const pushedId of growth.pushes ?? []) {
         if (!slotIds.has(pushedId) || pushedId === slot.id) {
           plan.diagnostics.push(diagnostic('error', 'GROW_TARGET_NOT_FOUND', `Slot '${slot.id}' cannot push '${pushedId}' in layout '${layout.id}'.`, { slotId: slot.id, details: { pushedId, layoutId: layout.id } }));
-        }
-      }
-    }
-  }
-}
-
-function planFlow(
-  document: CompositionDocument,
-  metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
-  policy: TextCompositionPlannerPolicy,
-  flowId: string,
-  route: CompositionFlowRoute,
-  pages: PageState[],
-  plan: CompositionPlan,
-  startPage = 1,
-  insertionProposals: Map<string, PlannedInsertion> = new Map(),
-  skipPreplannedInsertions = false,
-): void {
-  const flow = document.flows[flowId];
-  if (!flow) return;
-  const authoredBlocks = flow.blocks;
-  const geometryTolerance = policy.geometryTolerance ?? 0;
-  const blocks = skipPreplannedInsertions
-    ? authoredBlocks.filter((block) => block.role !== 'quote')
-    : authoredBlocks;
-  const authoredIndexOf = (blockId: string): number => authoredBlocks.findIndex((candidate) => candidate.id === blockId);
-  const cursor: FlowCursor = { blockIndex: 0, startWord: 0, startRow: 0, page: startPage, routeIndex: 0 };
-  let deferredQuote: { blockIndex: number; deferredPage: number; routeIndex?: number } | undefined;
-  let activeDeferredQuote: { blockIndex: number; blockId: string; resume: { blockIndex: number; startWord: number; startRow: number } } | undefined;
-  let lastLegalSlotId: string | undefined;
-  while (cursor.blockIndex < blocks.length) {
-    if (cursor.page > template.maxPages) {
-      const block = blocks[cursor.blockIndex];
-      plan.diagnostics.push(diagnostic('error', 'MAX_PAGES_EXCEEDED', `Flow '${flowId}' exceeded the template page limit.`, { flowId, blockId: block.id, page: cursor.page }));
-      if (block.kind === 'table') addTableResidual(plan.residualContent, flowId, block, cursor.startRow, lastLegalSlotId, 'max-pages');
-      else addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'max-pages');
-      return;
-    }
-    if (cursor.page > startPage && route.continuation === 'forbidden') {
-      const block = blocks[cursor.blockIndex];
-      plan.diagnostics.push(diagnostic('error', 'FLOW_CONTINUATION_FORBIDDEN', `Flow '${flowId}' cannot continue beyond its first page.`, { flowId, blockId: block.id, page: cursor.page }));
-      if (block.kind === 'table') addTableResidual(plan.residualContent, flowId, block, cursor.startRow, lastLegalSlotId, 'flow-continuation-forbidden');
-      else addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'flow-continuation-forbidden');
-      return;
-    }
-    const currentPage = ensurePage(pages, template, route, cursor.page, plan.diagnostics, flowId);
-    if (!currentPage) return;
-    const currentBlockAuthoredIndex = authoredIndexOf(blocks[cursor.blockIndex]?.id ?? '');
-    const precedingInsertionPage = authoredBlocks
-      .slice(0, currentBlockAuthoredIndex)
-      .filter((candidate) => candidate.role === 'quote')
-      .map((candidate) => insertionProposals.get(insertionKey(flowId, candidate.id))?.page)
-      .filter((page): page is number => page !== undefined)
-      .sort((left, right) => right - left)[0];
-    if (precedingInsertionPage !== undefined && cursor.page < precedingInsertionPage) {
-      cursor.page = precedingInsertionPage;
-      cursor.routeIndex = 0;
-      cursor.resumeY = undefined;
-      plan.decisions.push({ code: 'FLOW_HELD_FOR_PREPLANNED_INSERTION', flowId, blockId: blocks[cursor.blockIndex].id, page: currentPage.page, reason: 'successor-must-not-pass-earlier-insertion', details: { insertionPage: precedingInsertionPage } });
-      continue;
-    }
-    if (deferredQuote && !activeDeferredQuote && cursor.page === deferredQuote.deferredPage && deferredQuote.routeIndex !== undefined && cursor.routeIndex >= deferredQuote.routeIndex) {
-      activeDeferredQuote = {
-        blockIndex: deferredQuote.blockIndex,
-        blockId: blocks[deferredQuote.blockIndex].id,
-        resume: { blockIndex: cursor.blockIndex, startWord: cursor.startWord, startRow: cursor.startRow },
-      };
-      cursor.blockIndex = deferredQuote.blockIndex;
-      cursor.startWord = 0;
-      cursor.startRow = 0;
-      cursor.routeIndex = deferredQuote.routeIndex;
-      plan.decisions.push({ code: 'INSERTION_REPOSITIONED_PLACED', flowId, blockId: blocks[cursor.blockIndex].id, page: cursor.page, routeIndex: cursor.routeIndex, reason: 'earlier-route-segment-was-empty' });
-    }
-    if (deferredQuote && !activeDeferredQuote && cursor.page > deferredQuote.deferredPage) {
-      activeDeferredQuote = {
-        blockIndex: deferredQuote.blockIndex,
-        blockId: blocks[deferredQuote.blockIndex].id,
-        resume: { blockIndex: cursor.blockIndex, startWord: cursor.startWord, startRow: cursor.startRow },
-      };
-      cursor.blockIndex = deferredQuote.blockIndex;
-      cursor.startWord = 0;
-      cursor.startRow = 0;
-      cursor.routeIndex = 0;
-      plan.decisions.push({ code: 'DEFERRED_INSERTION_PLACED', flowId, blockId: blocks[cursor.blockIndex].id, page: cursor.page, reason: 'next-page-insertion-slot' });
-    }
-    placeGraphicsForPage(document, currentPage, plan);
-    const availableRouteSlots = routeSlots(route, currentPage.layout);
-    const block = blocks[cursor.blockIndex];
-    const plannedInsertion = block.role === 'quote' ? insertionProposals.get(insertionKey(flowId, block.id)) : undefined;
-    if (plannedInsertion && currentPage.page > plannedInsertion.page) {
-      plan.diagnostics.push(diagnostic('error', 'INSERTION_PLAN_PASSED', `Insertion '${block.id}' passed its stabilized page ${plannedInsertion.page}.`, { flowId, blockId: block.id, page: currentPage.page, details: { plannedPage: plannedInsertion.page, plannedSlotId: plannedInsertion.slotId } }));
-      addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'insertion-plan-passed');
-      return;
-    }
-    const insertionDefinition = block.role === 'quote'
-      ? plannedInsertion && currentPage.page === plannedInsertion.page
-        ? currentPage.layout.slots.find((slot) => slot.id === plannedInsertion.slotId && slot.allowedRoles?.includes('quote'))
-        : insertionSlotFor(route, currentPage.layout, currentPage, plan, availableRouteSlots, cursor.routeIndex, document)
-      : undefined;
-    if (block.role === 'quote' && (route.insertionSlots?.length ?? 0) > 0 && !insertionDefinition) {
-      if (route.continuation === 'allowed' && cursor.page < template.maxPages) {
-        cursor.page += 1;
-        cursor.routeIndex = 0;
-        plan.decisions.push({ code: 'INSERTION_PUSHED_TO_NEXT_PAGE', flowId, blockId: block.id, page: currentPage.page, reason: 'no-insertion-slot-after-current-flow-position' });
-        continue;
-      }
-      plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Flow '${flowId}' cannot place insertion '${block.id}' after the current flow position.`, { flowId, blockId: block.id, page: currentPage.page }));
-      addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'insertion-slot-not-found');
-      return;
-    }
-    // A quote is an insertion, but it remains in authored flow order. It may
-    // be deferred to another legal insertion slot; it must never be moved
-    // behind the next ordinary block merely to fill an earlier segment.
-    let selectedSlot = insertionDefinition
-      ? { definition: insertionDefinition, routeIndex: cursor.routeIndex }
-      : slotFor(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots);
-    if (block.role !== 'quote' && cursor.startWord > 0 && selectedSlot) {
-      const insertionIndex = availableRouteSlots.findIndex((slotId, index) => index >= cursor.routeIndex
-        && index < selectedSlot!.routeIndex
-        && currentPage.layout.slots.some((slot) => slot.id === slotId && slot.allowedRoles?.includes('quote'))
-        && currentPage.slots.get(slotId)?.state === 'open');
-      if (insertionIndex >= 0) {
-        collapseInsertionBeforeContinuation(currentPage, availableRouteSlots, insertionIndex, plan, flowId, block.id);
-        selectedSlot = slotFor(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots);
-      }
-    }
-    if (!selectedSlot || (selectedSlot.definition.kind !== 'text' && selectedSlot.definition.kind !== 'block')) {
-      if (selectedSlot === undefined && !hasRoleEligibleSlot(currentPage.layout, availableRouteSlots, cursor.routeIndex, flowId, block, currentPage.slots)) {
-        if (block.role === 'quote' && route.continuation === 'allowed' && cursor.page === startPage && !deferredQuote) {
-          const nextLayout = routeLayout(route, template, cursor.page + 1);
-          const nextSlotIds = nextLayout ? routeSlots(route, nextLayout) : [];
-          const nextPageHasInsertionSlot = nextLayout !== undefined && hasRoleEligibleSlot(nextLayout, nextSlotIds, 0, flowId, block);
-          if (nextPageHasInsertionSlot) {
-            deferredQuote = { blockIndex: cursor.blockIndex, deferredPage: cursor.page };
-            cursor.blockIndex += 1;
-            cursor.startWord = 0;
-            cursor.startRow = 0;
-            cursor.routeIndex = 0;
-            plan.decisions.push({ code: 'INSERTION_DEFERRED', flowId, blockId: block.id, page: currentPage.page, reason: 'insertion-slot-only-on-continuation' });
-            continue;
-          }
-        }
-        if (route.continuation === 'allowed') {
-          plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_PAGE', flowId, blockId: block.id, page: currentPage.page, reason: 'no-eligible-slot-on-page' });
-          advanceCursor(cursor, availableRouteSlots);
-          continue;
-        }
-      }
-      plan.diagnostics.push(diagnostic('error', 'FLOW_SLOT_NOT_FOUND', `Flow '${flowId}' cannot use route slot '${availableRouteSlots[cursor.routeIndex] ?? ''}'.`, { flowId, page: currentPage.page }));
-      addResidual(plan.residualContent, flowId, blocks[cursor.blockIndex], cursor.startWord, lastLegalSlotId, 'no-legal-slot');
-      return;
-    }
-    const routeStartIndex = cursor.routeIndex;
-    cursor.routeIndex = selectedSlot.routeIndex;
-    const definition = selectedSlot.definition;
-    const continuousInsertion = block.role === 'quote' && (route.insertionSlots?.includes(definition.id) ?? false);
-    if (block.role !== 'quote') {
-      collapseUnusedInsertions(currentPage, availableRouteSlots, routeStartIndex, selectedSlot.routeIndex, plan, flowId, block.id);
-    }
-    // Header/footer text deliberately shares its chrome band with the
-    // reserved lockup. The lockup is a paint reservation, not a competing
-    // content block, so it must not push the auxiliary flow to another page.
-    if (flowId !== 'title' && flowId !== 'header' && flowId !== 'footer' && slotCollidesWithPlacedBlock(currentPage, definition.id, plan, flowId)) {
-      plan.decisions.push({ code: 'TEXT_SLOT_COLLISION_PUSHED', flowId, blockId: block.id, slotId: definition.id, page: currentPage.page, reason: 'slot-overlaps-placed-block' });
-      advanceCursor(cursor, availableRouteSlots);
-      continue;
-    }
-    if (block.assetIds && block.assetIds.length > 0) {
-      plan.diagnostics.push(diagnostic('error', 'UNSUPPORTED_INLINE_ASSET', `Text planner cannot place inline asset(s) from '${block.id}' without an asset-to-slot mapping.`, { flowId, blockId: block.id, page: currentPage.page, slotId: definition.id, details: { assetIds: block.assetIds } }));
-      cursor.blockIndex += 1;
-      cursor.startWord = 0;
-      continue;
-    }
-    if (placeStructuredBlock({
-      pageState: currentPage,
-      definition,
-      block,
-      flowId,
-      routeIndex: selectedSlot.routeIndex,
-      plan,
-      cursor,
-      blocksLength: blocks.length,
-      availableRouteSlots,
-      metrics,
-      geometryTolerance,
-      previousBlockInSlot: (slotId, blockId) => previousBlockInSlot(plan, slotId, blockId, document),
-      contentStartBottom: (slot) => contentStartBottom(currentPage, plan, slot, document),
-      advanceCursor,
-      growSlot: (requiredBottom) => growSlot(currentPage, definition, requiredBottom, plan, flowId, block.id),
-    })) continue;
-    const leading = lineHeight(metrics, block);
-    const slot = currentPage.slots.get(definition.id)!;
-    const initialBox = slotBox(currentPage, definition);
-    const growthBottom = definition.grow?.axis === 'y'
-      ? definition.box.y + definition.grow.maxHeight
-      : rectBottom(initialBox);
-    const insertionBoundary = block.role === 'quote'
-      ? undefined
-      : nextInsertionBoundary(route, authoredBlocks, authoredIndexOf(block.id), currentPage.page, insertionProposals, flowId, cursor.resumeY);
-    const textBottom = insertionBoundary === undefined
-      ? growthBottom
-      : Math.min(growthBottom, insertionBoundary);
-    const localBottom = flowingTextBottom(plan, slot.id, initialBox.y, document);
-    const crossSlotBottom = occupiedBottomInOverlappingSlots(currentPage, plan, slot, localBottom);
-    const crossSlotPrevious = crossSlotBottom > localBottom
-      ? previousBlockInOverlappingSlots(currentPage, plan, slot, document)
-      : undefined;
-    const crossSlotGap = crossSlotPrevious ? metrics.blockGap?.(styleFor(crossSlotPrevious), styleFor(block)) ?? 0 : 0;
-    const previousInsertion = authoredBlocks
-      .slice(0, authoredIndexOf(block.id))
-      .filter((candidate) => candidate.role === 'quote')
-      .map((candidate) => insertionProposals.get(insertionKey(flowId, candidate.id)))
-      .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === currentPage.page)
-      .sort((left, right) => right.box.y - left.box.y)[0];
-    const previousInsertionBottom = previousInsertion ? previousInsertion.box.y + previousInsertion.box.height : undefined;
-    const insertionIsBeforeCurrentColumn = previousInsertion !== undefined
-      && initialBox.x + initialBox.width / 2 <= previousInsertion.box.x + previousInsertion.box.width / 2;
-    const usedBottom = Math.max(
-      localBottom,
-      crossSlotBottom,
-      ...(insertionIsBeforeCurrentColumn && previousInsertionBottom !== undefined ? [previousInsertionBottom] : []),
-      cursor.resumeSlotId === slot.id ? cursor.resumeY ?? Number.NEGATIVE_INFINITY : Number.NEGATIVE_INFINITY,
-    ) + crossSlotGap;
-    const startLineOffset = Math.max(0, (usedBottom - initialBox.y) / leading);
-    const pageGraphics = plan.graphicPlacements.filter((graphic) => graphic.page === currentPage.page && graphic.graphicId !== `insertion:${block.id}`);
-    const flowBarrierBoxCandidates = block.role === 'quote'
-      ? []
-      : flowBarrierBoxCandidatesForSlot(currentPage.page, slot, flowId, plan.graphicPlacements);
-    if (flowBarrierBoxCandidates.length > 0) {
-      plan.decisions.push({
-        code: 'FLOW_BARRIER_BOXES_CONSUMED',
-        flowId,
-        blockId: block.id,
-        slotId: slot.id,
-        page: currentPage.page,
-        details: { candidateIds: flowBarrierBoxCandidates.map((candidate) => candidate.id) },
-      });
-    }
-    const previous = cursor.startWord === 0 ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
-    // A resume boundary created by an obstacle is already the start of a new
-    // legal content segment. The previous authored block is separated from
-    // this heading by that barrier, so its margin-before must not be added a
-    // second time after resumeY.
-    const resumedAfterFlowBarrier = cursor.resumeSlotId === slot.id
-      && cursor.resumeY !== undefined
-      && cursor.resumeY > localBottom + geometryTolerance;
-    let blockGap = resumedAfterFlowBarrier
-      ? 0
-      : previous ? metrics.blockGap?.(styleFor(previous), styleFor(block)) ?? 0 : 0;
-    const isHeadingBlock = block.kind === 'heading' || block.role === 'heading' || block.role === 'title';
-    let wrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-    let completeWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset + blockGap / leading, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-    // If only the inter-block gap prevents a whole heading from fitting in
-    // the remaining physical lines, use the configured gap as a soft value
-    // and compress it to zero for this boundary. Keeping a heading whole is
-    // more important than creating a four-line hole at the end of a column;
-    // ordinary body-to-body spacing remains unchanged.
-    const availableWithoutGap = availableLineCount(rectBottom(initialBox) - (initialBox.y + startLineOffset * leading), leading);
-    if (isHeadingBlock && blockGap > 0 && wrapped.length < completeWrapped.length) {
-      const noGapWrapped = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-      const noGapComplete = wrapBlock(metrics, block, cursor.startWord, initialBox, startLineOffset, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-      if (noGapComplete.length <= availableWithoutGap && noGapWrapped.length === noGapComplete.length) {
-        plan.decisions.push({ code: 'BLOCK_GAP_COMPRESSED', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, from: blockGap, to: 0, reason: 'keep-heading-whole-without-empty-column' });
-        blockGap = 0;
-        wrapped = noGapWrapped;
-        completeWrapped = noGapComplete;
-      }
-    }
-    if (wrapped.length === 0) {
-      if (wordsForBlock(block).length === 0) {
-        cursor.blockIndex += 1;
-        cursor.startWord = 0;
-        continue;
-      }
-      plan.decisions.push({
-        code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
-        flowId,
-        blockId: block.id,
-        slotId: slot.id,
-        page: currentPage.page,
-        reason: 'no-available-text-band',
-        details: {
-          availableLines: availableLineCount(rectBottom(initialBox) - (initialBox.y + startLineOffset * leading), leading),
-          lineHeight: leading,
-          blockGap,
-          startLineOffset,
-        },
-      });
-      advanceCursor(cursor, availableRouteSlots);
-      continue;
-    }
-    if (definition.grow?.axis === 'y' && cursor.startWord === 0) {
-      const requiredBottom = initialBox.y + (wrapped.at(-1)!.lineOffset + 1) * leading;
-      growSlot(currentPage, definition, requiredBottom, plan, flowId, block.id);
-    }
-    const currentBox = slotBox(currentPage, definition);
-    // The inter-block gap is part of the next block's occupied band.  Omitting
-    // it here made the planner claim that a third line was available while the
-    // wrapped block (which starts after that gap) could only place two.
-    const blockStartOffset = startLineOffset + blockGap / leading;
-    const currentAvailableLines = availableLineCount(rectBottom(currentBox) - (currentBox.y + blockStartOffset * leading), leading);
-    const usedLines = startLineOffset;
-    if ((block.kind === 'heading' || block.role === 'heading' || block.role === 'title') && completeWrapped.length > currentAvailableLines) {
-      plan.decisions.push({ code: 'HEADING_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'keep-heading-together', details: { requiredLines: completeWrapped.length, availableLines: currentAvailableLines, startLineOffset, blockGap } });
-      advanceCursor(cursor, availableRouteSlots);
-      continue;
-    }
-    if (block.kind === 'list-item' && policy.keepListItemsTogether && cursor.startWord === 0) {
-      const complete = wrapBlock(metrics, block, 0, initialBox, 0, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-      const slotCapacity = availableLineCount(rectBottom(initialBox) - initialBox.y, leading);
-      if (complete.length > currentAvailableLines && complete.length <= slotCapacity && usedLines > 0) {
-        const minimumFragmentLines = policy.minimumFragmentLines ?? 1;
-        if (currentAvailableLines < minimumFragmentLines) {
-          plan.decisions.push({ code: 'LIST_ITEM_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'keep-list-item-together-below-minimum-fragment' });
-          advanceCursor(cursor, availableRouteSlots);
-          continue;
-        }
-        plan.decisions.push({ code: 'LIST_ITEM_SPLIT_TO_AVOID_HOLE', flowId, blockId: block.id, slotId: slot.id, reason: 'available-fragment-meets-minimum-and-whole-item-would-leave-hole', details: { availableLines: currentAvailableLines, minimumFragmentLines, completeLines: complete.length } });
-      }
-    }
-    const next = blocks[cursor.blockIndex + 1];
-    const keepLines = block.keepWithNextLines
-      ?? (block.kind === 'heading' ? policy.headingKeepWithNextLines ?? 0 : 0);
-    const nextLeading = next ? lineHeight(metrics, next) : leading;
-    const nextWrapped = next ? wrapBlock(metrics, next, 0, currentBox, 0, rectBottom(currentBox), pageGraphics, nextLeading, policy.minimumWrapWidth, next.role === 'quote' ? [] : flowBarrierBoxCandidates, geometryTolerance) : [];
-    if (isHeadingBlock && keepLines > 0 && next) {
-      const headingStartOffset = startLineOffset + blockGap / leading;
-      // Probe the cluster without obstacles first.  Using the wrapped result
-      // from the real page here is insufficient: wrapBlock can skip lines
-      // under an obstacle, making a quote that cuts through the lead look
-      // like a normal gap instead of a violation of the keep rule.
-      const headingProbe = wrapBlock(metrics, block, cursor.startWord, initialBox, headingStartOffset, Number.POSITIVE_INFINITY, [], leading, policy.minimumWrapWidth);
-      const headingBottom = headingProbe.length > 0
-        ? initialBox.y + (headingProbe.at(-1)!.lineOffset + 1) * leading
-        : initialBox.y + headingStartOffset * leading;
-      const nextProbeStart = (headingBottom + blockGap - currentBox.y) / nextLeading;
-      const leadProbe = wrapBlock(metrics, next, 0, currentBox, nextProbeStart, Number.POSITIVE_INFINITY, [], nextLeading, policy.minimumWrapWidth);
-      if (leadProbe.length >= keepLines) {
-        const clusterObstacle = obstructionAcrossLineBands(
-          [{ lines: headingProbe, lineHeight: leading }, { lines: leadProbe.slice(0, keepLines), lineHeight: nextLeading }],
-          initialBox,
-          initialBox.y,
-          pageGraphics,
-          geometryTolerance,
-        );
-        if (clusterObstacle) {
-        const requiredClusterLines = headingProbe.length + keepLines;
-        const resumeY = Math.max(cursor.resumeY ?? initialBox.y, rectBottom(clusterObstacle.box));
-        const availableAfterObstacle = availableLineCount(rectBottom(currentBox) - resumeY, leading);
-        if (availableAfterObstacle >= requiredClusterLines) {
-          cursor.resumeY = resumeY;
-          cursor.resumeSlotId = slot.id;
-          plan.decisions.push({ code: 'HEADING_CLUSTER_PUSHED_BELOW_OBSTACLE', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, reason: 'keep-heading-and-lead-together', details: { obstacleId: clusterObstacle.graphicId, resumeY, requiredClusterLines, availableAfterObstacle } });
-          continue;
-        }
-        plan.decisions.push({ code: 'HEADING_CLUSTER_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, page: currentPage.page, reason: 'keep-heading-and-lead-together', details: { obstacleId: clusterObstacle.graphicId, requiredClusterLines, availableAfterObstacle } });
-        advanceCursor(cursor, availableRouteSlots);
-        continue;
-        }
-      }
-    }
-    const keepRequired = keepLines > 0 && cursor.startWord === 0
-      ? completeWrapped.length + Math.min(keepLines, nextWrapped.length)
-      : 0;
-    // A heading's configured keep-with-next rule is hard: placing the heading
-    // alone at the bottom of a slot would create the exact orphan visible in
-    // the editorial PDF. The complete heading measurement is used here so a
-    // heading that fits by itself is still pushed when its lead does not.
-    if (isHeadingBlock && keepRequired > currentAvailableLines && usedLines > 0) {
-      plan.decisions.push({
-        code: 'KEEP_CLUSTER_PUSHED',
-        flowId,
-        blockId: block.id,
-        from: slot.id,
-        slotId: slot.id,
-        reason: 'insufficient-local-capacity',
-        details: { requiredLines: keepRequired, availableLines: currentAvailableLines },
-      });
-      advanceCursor(cursor, availableRouteSlots);
-      continue;
-    }
-    if (!isHeadingBlock && keepRequired > currentAvailableLines && block.keepWithNextLines !== undefined && wrapped.length <= currentAvailableLines) {
-      plan.decisions.push({ code: 'KEEP_CLUSTER_RELAXED', flowId, blockId: block.id, from: slot.id, reason: 'whole-block-fits-but-following-block-does-not' });
-    }
-    if (currentAvailableLines <= 0) {
-      lastLegalSlotId = slot.id;
-      plan.decisions.push({
-        code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
-        flowId,
-        blockId: block.id,
-        slotId: slot.id,
-        page: currentPage.page,
-        reason: 'next-block-spacing-or-line-height-does-not-fit',
-        details: { availableLines: currentAvailableLines, lineHeight: leading, blockGap, startLineOffset },
-      });
-      if (route.continuation === 'forbidden' && cursor.routeIndex >= availableRouteSlots.length - 1) {
-        plan.diagnostics.push(diagnostic('error', 'FLOW_CONTINUATION_FORBIDDEN', `Flow '${flowId}' cannot continue beyond its available slots on page ${currentPage.page}.`, { flowId, blockId: block.id, page: currentPage.page, slotId: slot.id }));
-        addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'flow-continuation-forbidden');
-        return;
-      }
-      advanceCursor(cursor, availableRouteSlots);
-      continue;
-    }
-    let take = Math.min(currentAvailableLines, wrapped.length);
-    let remainder = completeWrapped.length - take;
-    if (remainder > 0 && policy.minimumLinesAtEnd !== undefined && remainder < policy.minimumLinesAtEnd) {
-      take -= policy.minimumLinesAtEnd - remainder;
-      remainder = completeWrapped.length - take;
-    }
-    if (remainder > 0 && !isHeadingBlock && policy.minimumLinesAtStart !== undefined && take < policy.minimumLinesAtStart) {
-      if (usedLines > 0) {
-        plan.decisions.push({
-          code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
-          flowId,
-          blockId: block.id,
-          slotId: slot.id,
-          page: currentPage.page,
-          reason: 'minimum-fragment-start-would-be-violated',
-          details: { availableLines: currentAvailableLines, attemptedLines: take, minimumFragmentLines: policy.minimumLinesAtStart, lineHeight: leading, blockGap, startLineOffset: blockStartOffset },
-        });
-        advanceCursor(cursor, availableRouteSlots);
-        continue;
-      }
-      plan.diagnostics.push(diagnostic('error', 'MINIMUM_FRAGMENT_UNSATISFIED', `Flow '${flowId}' cannot satisfy the minimum fragment size for '${block.id}'.`, { flowId, blockId: block.id, page: currentPage.page, slotId: slot.id }));
-      addResidual(plan.residualContent, flowId, block, cursor.startWord, lastLegalSlotId, 'minimum-fragment');
-      return;
-    }
-    if (take <= 0) {
-      plan.decisions.push({
-        code: 'BLOCK_PUSHED_TO_NEXT_SLOT',
-        flowId,
-        blockId: block.id,
-        slotId: slot.id,
-        page: currentPage.page,
-        reason: 'minimum-fragment-orphan-adjustment-left-no-lines',
-        details: { availableLines: currentAvailableLines, attemptedLines: take, lineHeight: leading, blockGap, startLineOffset: blockStartOffset },
-      });
-      advanceCursor(cursor, availableRouteSlots);
-      continue;
-    }
-    if (isHeadingBlock && remainder > 0) {
-      plan.decisions.push({ code: 'HEADING_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'keep-heading-together', details: { requiredLines: completeWrapped.length, availableLines: currentAvailableLines, startLineOffset, blockGap } });
-      advanceCursor(cursor, availableRouteSlots);
-      continue;
-    }
-    const selected = wrapped.slice(0, take);
-    if (selected.some((line) => line.naturalWidth > line.width)) {
-      plan.diagnostics.push(diagnostic('error', 'OVERFULL_LINE', `Flow '${flowId}' contains a token wider than slot '${definition.id}'.`, { flowId, blockId: block.id, page: currentPage.page, slotId: slot.id }));
-    }
-    placeLines(currentPage, definition, block, metrics, flowId, continuousInsertion ? undefined : selectedSlot.routeIndex, selected, leading, plan.placements, plan.lines);
-    lastLegalSlotId = slot.id;
-    const consumedEnd = selected.at(-1)!.endWord;
-    if (consumedEnd >= wordsForBlock(block).length) {
-      cursor.blockIndex += 1;
-      cursor.startWord = 0;
-      if (block.role === 'quote') {
-        slot.state = 'exhausted';
-        if (continuousInsertion && !plan.graphicPlacements.some((graphic) => graphic.graphicId === `insertion:${block.id}` && graphic.page === currentPage.page)) {
-          plan.graphicPlacements.push({
-            id: `graphic:insertion:${block.id}`,
-            graphicId: `insertion:${block.id}`,
-            slotId: slot.id,
-            page: currentPage.page,
-            shape: 'rectangle',
-            wrap: 'around',
-            paint: false,
-            box: { ...slot.box },
-          });
-          plan.decisions.push({ code: 'FLOW_INSERTION_OBSTACLE_PLACED', flowId, blockId: block.id, page: currentPage.page, slotId: slot.id, box: { ...slot.box } });
-          cursor.resumeY = Math.max(cursor.resumeY ?? Number.NEGATIVE_INFINITY, rectBottom(slot.box));
-          cursor.resumeSlotId = slot.id;
-        }
-        if (activeDeferredQuote?.blockId === block.id) {
-          const resume = activeDeferredQuote.resume;
-          activeDeferredQuote = undefined;
-          deferredQuote = undefined;
-          cursor.blockIndex = resume.blockIndex;
-          cursor.startWord = resume.startWord;
-          cursor.startRow = resume.startRow;
-          cursor.routeIndex = selectedSlot.routeIndex + 1;
-        }
-      }
-      plan.decisions.push({ code: 'BLOCK_PLACED', flowId, blockId: block.id, slotId: slot.id });
-    } else {
-      cursor.startWord = consumedEnd;
-      plan.decisions.push({ code: 'BLOCK_CONTINUED', flowId, blockId: block.id, slotId: slot.id });
-    }
-    if (insertionBoundary !== undefined && consumedEnd < wordsForBlock(block).length) {
-      const boundary = nextInsertionProposal(
-        route,
-        authoredBlocks,
-        authoredIndexOf(block.id),
-        currentPage.page,
-        insertionProposals,
-        flowId,
-        cursor.resumeY,
-      );
-      if (!boundary) {
-        plan.diagnostics.push(diagnostic('error', 'INSERTION_PRECEDENCE_CONFLICT', `Insertion boundary for the next quote leaves authored block '${block.id}' unfinished above it.`, { flowId, blockId: block.id, page: currentPage.page, slotId: slot.id, details: { insertionBoundary, consumedEnd, totalWords: wordsForBlock(block).length } }));
-        addResidual(plan.residualContent, flowId, block, consumedEnd, slot.id, 'insertion-precedence-conflict');
-        return;
-      }
-      cursor.startWord = consumedEnd;
-      cursor.resumeY = boundary.box.y + boundary.box.height;
-      cursor.resumeSlotId = slot.id;
-      plan.decisions.push({ code: 'FLOW_RESUMED_BELOW_INSERTION', flowId, blockId: block.id, page: currentPage.page, slotId: slot.id, consumedEnd, obstacleY: boundary.box.y, obstacleBottom: cursor.resumeY });
-      continue;
-    }
-    if (consumedEnd < wordsForBlock(block).length || cursor.blockIndex < blocks.length) {
-      const nextBlock = blocks[cursor.blockIndex];
-      // Keep the current column alive for an authored insertion that follows
-      // this block.  An insertion is an obstacle in the same continuous
-      // route, not a reason to finish the page before we have tried its next
-      // legal band.  Advancing here used to leave the rest of the current
-      // column empty and moved the quote (and all following text) to the next
-      // page even when quote-b still fit below the preceding text.
-      const nextInsertionFitsCurrentPage = nextBlock?.role === 'quote'
-        && insertionSlotFor(route, currentPage.layout, currentPage, plan, availableRouteSlots, cursor.routeIndex, document) !== undefined;
-      // A completed block does not end the continuous flow.  Re-enter the
-      // placement loop so the next authored block gets the remaining vertical
-      // band in this same slot; only an unfinished block must advance now.
-      // Treating `selected.length === currentAvailableLines` as a reason to
-      // advance was the source of false holes: that count describes the
-      // current block's starting capacity, not the remaining capacity after
-      // its last line (and it ignores the next block's actual line-height and
-      // gap).
-      if (!continuousInsertion && !nextInsertionFitsCurrentPage && consumedEnd < wordsForBlock(block).length) {
-        const nextBlock = blocks[cursor.blockIndex];
-        const nextLeading = nextBlock ? lineHeight(metrics, nextBlock) : undefined;
-        const nextBlockGap = nextBlock ? metrics.blockGap?.(styleFor(block), styleFor(nextBlock)) ?? 0 : 0;
-        const lastLineBottom = selected.at(-1)
-          ? initialBox.y + (selected.at(-1)!.lineOffset + 1) * leading
-          : initialBox.y;
-        const nextBlockAvailableLines = nextLeading === undefined
-          ? undefined
-          : availableLineCount(rectBottom(currentBox) - lastLineBottom - nextBlockGap, nextLeading);
-        plan.decisions.push({
-          code: 'FLOW_SEGMENT_ADVANCED',
-          flowId,
-          blockId: block.id,
-          page: currentPage.page,
-          slotId: slot.id,
-          routeIndex: selectedSlot.routeIndex,
-          details: { selectedLines: selected.length, currentAvailableLines, consumedEnd, totalWords: wordsForBlock(block).length },
-        });
-        const transition = plan.decisions.at(-1)!;
-        if (nextBlock && nextLeading !== undefined) {
-          transition.details = {
-            ...(transition.details as Record<string, unknown>),
-            nextBlockId: nextBlock.id,
-            nextBlockAvailableLines,
-            nextBlockLineHeight: nextLeading,
-            nextBlockGap,
-          };
-        }
-        const pageBeforeAdvance = cursor.page;
-        advanceCursor(cursor, availableRouteSlots);
-        if (cursor.page > pageBeforeAdvance && cursor.blockIndex < blocks.length) {
-          plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_PAGE', flowId, blockId: blocks[cursor.blockIndex].id, page: cursor.page, reason: 'previous-slot-exhausted' });
         }
       }
     }
