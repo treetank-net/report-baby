@@ -143,79 +143,6 @@ function slotBox(pageState: PageState, definition: CompositionSlotTemplate): Com
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current insertionCurrentBottom implementation intact until its target seam is extracted.
- */
-function insertionCurrentBottom(
-  layout: CompositionLayoutTemplate,
-  pageState: PageState,
-  plan: CompositionPlan,
-  routeSlotIds: string[],
-  routeIndex: number,
-  document: CompositionDocument,
-): number {
-  const currentDefinition = layout.slots.find((slot) => slot.id === routeSlotIds[routeIndex]);
-  const currentSlot = currentDefinition ? pageState.slots.get(currentDefinition.id) : undefined;
-  return currentSlot
-    ? contentStartBottom(pageState, plan, currentSlot, document)
-    : Number.NEGATIVE_INFINITY;
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current insertionCandidates implementation intact until its target seam is extracted.
- */
-function insertionCandidates(
-  layout: CompositionLayoutTemplate,
-  pageState: PageState,
-  plan: CompositionPlan,
-  insertionIds: string[],
-): CompositionSlotTemplate[] {
-  const occupied = [
-    ...plan.lines,
-    ...plan.blockPlacements,
-    ...plan.tablePlacements,
-  ].filter((item) => item.page === pageState.page);
-  return insertionIds
-    .map((id) => layout.slots.find((slot) => slot.id === id))
-    .filter((slot): slot is CompositionSlotTemplate => slot !== undefined)
-    .filter((slot) => slot.allowedRoles?.includes('quote') && pageState.slots.get(slot.id)?.state === 'open')
-    .filter((slot) => !insertionOverlapsOccupiedSlot(slot, occupied))
-    .sort((left, right) => left.box.y - right.box.y);
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current insertionOverlapsOccupiedSlot implementation intact until its target seam is extracted.
- */
-function insertionOverlapsOccupiedSlot(
-  slot: CompositionSlotTemplate,
-  occupied: Array<{ box: CompositionRect }>,
-): boolean {
-  return occupied.some((item) => rectsOverlap(item.box, slot.box));
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current insertionSlotFor implementation intact until its target seam is extracted.
- */
-function insertionSlotFor(
-  route: CompositionFlowRoute,
-  layout: CompositionLayoutTemplate,
-  pageState: PageState,
-  plan: CompositionPlan,
-  routeSlotIds: string[],
-  routeIndex: number,
-  document: CompositionDocument,
-): CompositionSlotTemplate | undefined {
-  const insertionIds = route.insertionSlots ?? [];
-  if (insertionIds.length === 0) return undefined;
-  const currentBottom = insertionCurrentBottom(layout, pageState, plan, routeSlotIds, routeIndex, document);
-  const candidates = insertionCandidates(layout, pageState, plan, insertionIds);
-  return candidates.find((slot) => slot.box.y + 0.001 >= currentBottom);
-}
-
-/**
  * @planner-target composition/page-management.ts
  * @planner-responsibility Keep the current growthDelta implementation intact until its target seam is extracted.
  */
@@ -423,21 +350,6 @@ function overlappingItemBottom(
 
 /**
  * @planner-target composition/flow-occupancy.ts
- * @planner-responsibility Keep the current previousBlockInOverlappingSlots implementation intact until its target seam is extracted.
- */
-function previousBlockInOverlappingSlots(
-  pageState: PageState,
-  plan: CompositionPlan,
-  targetSlot: CompositionSlot,
-  document: CompositionDocument,
-): CompositionBlock | undefined {
-  const blocks = new Map(Object.values(document.flows).flatMap((flow) => flow.blocks).map((block) => [block.id, block]));
-  const candidates = overlappingPlacementCandidates(pageState, plan, targetSlot);
-  return blockFromLastPlacement(candidates, blocks);
-}
-
-/**
- * @planner-target composition/flow-occupancy.ts
  * @planner-responsibility Keep the current previousBlockInSlot implementation intact until its target seam is extracted.
  */
 function previousBlockInSlot(plan: CompositionPlan, slotId: string, currentBlockId: string, document: CompositionDocument): CompositionBlock | undefined {
@@ -448,42 +360,6 @@ function previousBlockInSlot(plan: CompositionPlan, slotId: string, currentBlock
     ...plan.tablePlacements.filter((placement) => placement.slotId === slotId && placement.blockId !== currentBlockId),
   ].sort((left, right) => (left.box.y + left.box.height) - (right.box.y + right.box.height));
   return candidates.at(-1) ? blocks.get(candidates.at(-1)!.blockId) : undefined;
-}
-
-/**
- * @planner-target composition/flow-occupancy.ts
- * @planner-responsibility Keep the current overlappingPlacementCandidates implementation intact until its target seam is extracted.
- */
-function overlappingPlacementCandidates(
-  pageState: PageState,
-  plan: CompositionPlan,
-  targetSlot: CompositionSlot,
-): Array<{ blockId: string; box: CompositionRect }> {
-  return [
-    ...plan.lines,
-    ...plan.blockPlacements,
-    ...plan.tablePlacements,
-  ].filter((item) => {
-    if (item.page !== pageState.page || item.slotId === targetSlot.id) return false;
-    if ('layer' in item && item.layer === 'insertion') return false;
-    const source = pageState.slots.get(item.slotId);
-    return source?.flowId === targetSlot.flowId
-      && source !== undefined
-      && source.box.y < rectBottom(targetSlot.box)
-      && horizontalOverlap(source.box, targetSlot.box);
-  }).sort((left, right) => (left.box.y + left.box.height) - (right.box.y + right.box.height));
-}
-
-/**
- * @planner-target composition/flow-occupancy.ts
- * @planner-responsibility Keep the current blockFromLastPlacement implementation intact until its target seam is extracted.
- */
-function blockFromLastPlacement(
-  placements: Array<{ blockId: string }>,
-  blocks: Map<string, CompositionBlock>,
-): CompositionBlock | undefined {
-  const last = placements.at(-1);
-  return last ? blocks.get(last.blockId) : undefined;
 }
 
 /**
@@ -871,7 +747,6 @@ function insertionDefinitionForBlock(
   context: FlowPlanningContext,
   runtime: FlowRuntime,
   currentPage: PageState,
-  availableRouteSlots: string[],
   plannedInsertion: PlannedInsertion | undefined,
 ): CompositionSlotTemplate | undefined {
   const block = currentFlowBlock(context, runtime);
@@ -879,23 +754,7 @@ function insertionDefinitionForBlock(
   if (plannedInsertion && currentPage.page === plannedInsertion.page) {
     return currentPage.layout.slots.find((slot) => slot.id === plannedInsertion.slotId && slot.allowedRoles?.includes('quote'));
   }
-  return insertionSlotFor(context.route, currentPage.layout, currentPage, context.plan, availableRouteSlots, runtime.cursor.routeIndex, context.document);
-}
-
-/**
- * @planner-target composition/insertion-planning.ts
- * @planner-responsibility Keep the current advanceForMissingInsertion implementation intact until its target seam is extracted.
- */
-function advanceForMissingInsertion(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-): boolean {
-  const block = currentFlowBlock(context, runtime);
-  if (context.route.continuation !== 'allowed' || runtime.cursor.page >= context.template.maxPages) return false;
-  recordFlowDecision(context, 'INSERTION_PUSHED_TO_NEXT_PAGE', runtime, undefined, 'no-insertion-slot-after-current-flow-position');
-  runtime.cursor.page += 1;
-  runtime.cursor.routeIndex = 0;
-  return true;
+  return undefined;
 }
 
 /**
@@ -996,13 +855,7 @@ function resolveFlowTarget(
   const block = currentFlowBlock(context, runtime);
   const plannedInsertion = plannedInsertionForBlock(context, block);
   if (insertionPassedItsPlannedPage(context, runtime, currentPage, plannedInsertion)) return { kind: 'stop' };
-  const insertionDefinition = insertionDefinitionForBlock(context, runtime, currentPage, availableRouteSlots, plannedInsertion);
-  if (block.role === 'quote' && (context.route.insertionSlots?.length ?? 0) > 0 && !insertionDefinition) {
-    if (advanceForMissingInsertion(context, runtime)) return { kind: 'continue' };
-    context.plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Flow '${context.flowId}' cannot place insertion '${block.id}' after the current flow position.`, { flowId: context.flowId, blockId: block.id, page: currentPage.page }));
-    recordFlowResidual(context, runtime, 'insertion-slot-not-found');
-    return { kind: 'stop' };
-  }
+  const insertionDefinition = insertionDefinitionForBlock(context, runtime, currentPage, plannedInsertion);
   const selectedSlot = selectFlowSlot(context, runtime, currentPage, availableRouteSlots, block, insertionDefinition);
   if (!selectedSlot || (selectedSlot.definition.kind !== 'text' && selectedSlot.definition.kind !== 'block')) {
     return resolveUnavailableFlowSlot(context, runtime, currentPage, availableRouteSlots, selectedSlot);
@@ -1111,10 +964,7 @@ function prepareTextPlacement(
     : Math.min(growthBottom, insertionBoundary);
   const localBottom = flowingTextBottom(plan, slot.id, initialBox.y, document);
   const crossSlotBottom = occupiedBottomInOverlappingSlots(currentPage, plan, slot, localBottom);
-  const crossSlotPrevious = crossSlotBottom > localBottom
-    ? previousBlockInOverlappingSlots(currentPage, plan, slot, document)
-    : undefined;
-  const crossSlotGap = crossSlotPrevious ? metrics.blockGap?.(styleFor(crossSlotPrevious), styleFor(block)) ?? 0 : 0;
+  const crossSlotGap = 0;
   const previousInsertion = authoredBlocks
     .slice(0, authoredIndexOf(block.id))
     .filter((candidate) => candidate.role === 'quote')
@@ -1294,13 +1144,6 @@ function keepClusterCanBeRelaxed(
     && prepared.wrapped.length <= currentAvailableLines;
 }
 
-type TextLineSelection =
-  | { kind: 'advance-for-minimum-start'; attemptedLines: number }
-  | { kind: 'reject-minimum-fragment' }
-  | { kind: 'advance-for-orphan-adjustment'; attemptedLines: number }
-  | { kind: 'advance-for-heading-remainder' }
-  | { kind: 'ready'; lines: ReturnType<typeof wrapBlock> };
-
 /**
  * @planner-target composition/flow-text-decision.ts
  * @planner-responsibility Choose the lines that fit the current slot and keep rules.
@@ -1309,23 +1152,16 @@ function selectTextLinesForPlacement(
   context: FlowPlanningContext,
   prepared: PreparedTextPlacement,
   currentAvailableLines: number,
-  usedLines: number,
-): TextLineSelection {
+): ReturnType<typeof wrapBlock> {
   const { policy } = context;
-  const { isHeadingBlock, wrapped, completeWrapped } = prepared;
+  const { wrapped, completeWrapped } = prepared;
   let take = Math.min(currentAvailableLines, wrapped.length);
   let remainder = completeWrapped.length - take;
   if (remainder > 0 && policy.minimumLinesAtEnd !== undefined && remainder < policy.minimumLinesAtEnd) {
     take -= policy.minimumLinesAtEnd - remainder;
     remainder = completeWrapped.length - take;
   }
-  if (remainder > 0 && !isHeadingBlock && policy.minimumLinesAtStart !== undefined && take < policy.minimumLinesAtStart) {
-    if (usedLines > 0) return { kind: 'advance-for-minimum-start', attemptedLines: take };
-    return { kind: 'reject-minimum-fragment' };
-  }
-  if (take <= 0) return { kind: 'advance-for-orphan-adjustment', attemptedLines: take };
-  if (isHeadingBlock && remainder > 0) return { kind: 'advance-for-heading-remainder' };
-  return { kind: 'ready', lines: wrapped.slice(0, take) };
+  return wrapped.slice(0, take);
 }
 
 /**
@@ -1459,16 +1295,10 @@ function advanceFlowAfterTextPlacement(
   consumedEnd: number,
 ): void {
   const { cursor } = runtime;
-  const { currentPage, availableRouteSlots, block, continuousInsertion } = target;
-  const { blocks, document, plan, route } = context;
+  const { availableRouteSlots, block, continuousInsertion } = target;
+  const { blocks } = context;
   if (consumedEnd >= wordsForBlock(block).length && cursor.blockIndex >= blocks.length) return;
-  const nextBlock = blocks[cursor.blockIndex];
-  // Keep the current column alive for an authored insertion that follows
-  // this block. An insertion is an obstacle in the same continuous route,
-  // not a reason to finish the page before we have tried its next legal band.
-  const nextInsertionFitsCurrentPage = nextBlock?.role === 'quote'
-    && insertionSlotFor(route, currentPage.layout, currentPage, plan, availableRouteSlots, cursor.routeIndex, document) !== undefined;
-  if (!continuousInsertion && !nextInsertionFitsCurrentPage && consumedEnd < wordsForBlock(block).length) {
+  if (!continuousInsertion && consumedEnd < wordsForBlock(block).length) {
     recordFlowDecision(context, 'FLOW_SEGMENT_ADVANCED', runtime, target);
     const pageBeforeAdvance = cursor.page;
     advanceCursor(cursor, availableRouteSlots);
@@ -1482,15 +1312,6 @@ type TextBlockAttemptResult =
   | { kind: 'continue' }
   | { kind: 'stop' }
   | { kind: 'done' };
-
-/**
- * @planner-target composition/flow-text-decision.ts
- * @planner-responsibility Keep the current completeEmptyTextBlock implementation intact until its target seam is extracted.
- */
-function completeEmptyTextBlock(runtime: FlowRuntime): void {
-  runtime.cursor.blockIndex += 1;
-  runtime.cursor.startWord = 0;
-}
 
 /**
  * @planner-target composition/flow-text-decision.ts
@@ -1663,42 +1484,6 @@ function advanceTextBlockWhenNoCapacity(
 }
 
 /**
- * @planner-target composition/flow-text-decision.ts
- * @planner-responsibility Keep the current resolveTextLineSelectionFailure implementation intact until its target seam is extracted.
- */
-function resolveTextLineSelectionFailure(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  target: FlowTarget,
-  prepared: PreparedTextPlacement,
-  currentAvailableLines: number,
-  lineSelection: TextLineSelection,
-): TextBlockAttemptResult | undefined {
-  if (lineSelection.kind === 'ready') return undefined;
-  const { cursor } = runtime;
-  const { currentPage, availableRouteSlots, block } = target;
-  const { flowId, plan } = context;
-  if (lineSelection.kind === 'advance-for-minimum-start') {
-    recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'minimum-fragment-start-would-be-violated');
-    advanceCursor(cursor, availableRouteSlots);
-    return { kind: 'continue' };
-  }
-  if (lineSelection.kind === 'reject-minimum-fragment') {
-    plan.diagnostics.push(diagnostic('error', 'MINIMUM_FRAGMENT_UNSATISFIED', `Flow '${flowId}' cannot satisfy the minimum fragment size for '${block.id}'.`, { flowId, blockId: block.id, page: currentPage.page, slotId: prepared.slot.id }));
-    addResidual(plan.residualContent, flowId, block, cursor.startWord, runtime.lastLegalSlotId, 'minimum-fragment');
-    return { kind: 'stop' };
-  }
-  if (lineSelection.kind === 'advance-for-orphan-adjustment') {
-    recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'minimum-fragment-orphan-adjustment-left-no-lines');
-    advanceCursor(cursor, availableRouteSlots);
-    return { kind: 'continue' };
-  }
-  recordFlowDecision(context, 'HEADING_PUSHED_TO_NEXT_SLOT', runtime, target, 'keep-heading-together');
-  advanceCursor(cursor, availableRouteSlots);
-  return { kind: 'continue' };
-}
-
-/**
  * @planner-target composition/flow-planner.ts
  * @planner-responsibility Keep the current planTextBlockAttempt implementation intact until its target seam is extracted.
  */
@@ -1712,10 +1497,6 @@ function planTextBlockAttempt(
   const { blocks, geometryTolerance, metrics, policy } = context;
   const prepared = prepareTextPlacement(context, runtime, target);
   if (prepared.wrapped.length === 0) {
-    if (wordsForBlock(block).length === 0) {
-      completeEmptyTextBlock(runtime);
-      return { kind: 'continue' };
-    }
     advanceTextBlockWhenNoLinesFit(context, runtime, target);
     return { kind: 'continue' };
   }
@@ -1763,12 +1544,7 @@ function planTextBlockAttempt(
   recordRelaxedKeepCluster(context, target, prepared, keepRequired, currentAvailableLines);
   const noCapacityResult = advanceTextBlockWhenNoCapacity(context, runtime, target, prepared, currentAvailableLines);
   if (noCapacityResult) return noCapacityResult;
-  const lineSelection = selectTextLinesForPlacement(context, prepared, currentAvailableLines, usedLines);
-  if (lineSelection.kind !== 'ready') {
-    return resolveTextLineSelectionFailure(context, runtime, target, prepared, currentAvailableLines, lineSelection)
-      ?? { kind: 'stop' };
-  }
-  const selected = lineSelection.lines;
+  const selected = selectTextLinesForPlacement(context, prepared, currentAvailableLines);
   const { consumedEnd } = commitSelectedTextLines(context, runtime, target, prepared, selected);
   const insertionBoundaryResolution = resolveInsertionBoundaryAfterText(context, runtime, target, prepared, consumedEnd);
   if (insertionBoundaryResolution.kind === 'stop') return { kind: 'stop' };
