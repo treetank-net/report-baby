@@ -407,3 +407,28 @@ The inventory after this pass reports no target-different function above 80
 lines. The two remaining functions above that threshold are
 `placeStructuredBlock` and `createTextCompositionPlanner`; both remain in
 their current target file and were therefore not split under the agreed rule.
+
+### Flow-planner decomposition correction — 2026-09-07
+
+The follow-up pass is focused on the large functions that still lived in
+`flow-planner.ts`, rather than expanding more of `text-planner.ts`:
+
+- `planTextBlockAttempt` now only coordinates one text-placement attempt. It
+  delegates capacity calculation, the keep/list/heading decision sequence,
+  line selection, placement, insertion-boundary handling, and cursor advance
+  to named functions. The decision sequence is annotated for the future
+  `flow-text-decision.ts` seam; the orchestration remains in `flow-planner.ts`.
+- `resolveFlowTarget` now delegates slot selection and target construction to
+  named helpers, then performs only page preparation and route-range cleanup.
+  An unavailable slot has an explicit `continue`/`stop` result type instead
+  of pretending that it can produce a ready target.
+- `handleNonTextFlowPlacement` now delegates collision pushing and unsupported
+  inline-asset rejection before invoking structured placement. The structured
+  placement call remains the flow planner's orchestration boundary.
+
+The remaining `planFlow` and `createFlowPlanningContext` functions are
+orchestration/context-construction functions of roughly 30–40 lines. Their
+parts do not currently belong to different target modules, so splitting them
+further would only add same-file indirection and would not advance the agreed
+mechanical relocation. The refreshed inventory records each extracted
+function's inputs, output, direct calls, and intended target module.

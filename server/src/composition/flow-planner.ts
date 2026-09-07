@@ -505,6 +505,8 @@ type FlowTargetResolution =
   | { kind: 'continue' }
   | { kind: 'stop' };
 
+type FlowTargetUnavailableResolution = Exclude<FlowTargetResolution, { kind: 'ready' }>;
+
 /**
  * @planner-target composition/flow-planner.ts
  * @planner-responsibility Keep the current createFlowPlanningContext implementation intact until its target seam is extracted.
@@ -786,7 +788,7 @@ function resolveUnavailableFlowSlot(
   currentPage: PageState,
   availableRouteSlots: string[],
   selectedSlot: SelectedFlowSlot | undefined,
-): FlowTargetResolution {
+): FlowTargetUnavailableResolution {
   const block = currentFlowBlock(context, runtime);
   if (selectedSlot === undefined && !hasRoleEligibleSlot(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots)) {
     if (deferInsertionToNextPage(context, runtime)) return { kind: 'continue' };
@@ -834,6 +836,57 @@ function selectFlowSlot(
   return slotFor(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots);
 }
 
+type FlowTargetSelectionResolution =
+  | { kind: 'ready'; target: FlowTarget; routeStartIndex: number }
+  | { kind: 'continue' }
+  | { kind: 'stop' };
+
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Build the immutable target record after a legal slot has been selected.
+ */
+function createFlowTarget(
+  context: FlowPlanningContext,
+  currentPage: PageState,
+  availableRouteSlots: string[],
+  block: CompositionBlock,
+  selectedSlot: SelectedFlowSlot,
+): FlowTarget {
+  return {
+    currentPage,
+    availableRouteSlots,
+    block,
+    selectedSlot,
+    definition: selectedSlot.definition,
+    continuousInsertion: block.role === 'quote' && (context.route.insertionSlots?.includes(selectedSlot.definition.id) ?? false),
+  };
+}
+
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Select and validate the legal target slot for the current flow block.
+ */
+function selectFlowTarget(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  currentPage: PageState,
+  availableRouteSlots: string[],
+): FlowTargetSelectionResolution {
+  const block = currentFlowBlock(context, runtime);
+  const plannedInsertion = plannedInsertionForBlock(context, block);
+  if (insertionPassedItsPlannedPage(context, runtime, currentPage, plannedInsertion)) return { kind: 'stop' };
+  const insertionDefinition = insertionDefinitionForBlock(context, runtime, currentPage, plannedInsertion);
+  const selectedSlot = selectFlowSlot(context, runtime, currentPage, availableRouteSlots, block, insertionDefinition);
+  if (!selectedSlot || (selectedSlot.definition.kind !== 'text' && selectedSlot.definition.kind !== 'block')) {
+    return resolveUnavailableFlowSlot(context, runtime, currentPage, availableRouteSlots, selectedSlot);
+  }
+  return {
+    kind: 'ready',
+    routeStartIndex: runtime.cursor.routeIndex,
+    target: createFlowTarget(context, currentPage, availableRouteSlots, block, selectedSlot),
+  };
+}
+
 /**
  * @planner-target composition/flow-planner.ts
  * @planner-responsibility Resolve the legal slot and page target for the next flow block.
@@ -845,39 +898,60 @@ function resolveFlowTarget(
 ): FlowTargetResolution {
   placeGraphicsForPage(context.document, currentPage, context.plan);
   const availableRouteSlots = routeSlots(context.route, currentPage.layout);
-  const block = currentFlowBlock(context, runtime);
-  const plannedInsertion = plannedInsertionForBlock(context, block);
-  if (insertionPassedItsPlannedPage(context, runtime, currentPage, plannedInsertion)) return { kind: 'stop' };
-  const insertionDefinition = insertionDefinitionForBlock(context, runtime, currentPage, plannedInsertion);
-  const selectedSlot = selectFlowSlot(context, runtime, currentPage, availableRouteSlots, block, insertionDefinition);
-  if (!selectedSlot || (selectedSlot.definition.kind !== 'text' && selectedSlot.definition.kind !== 'block')) {
-    return resolveUnavailableFlowSlot(context, runtime, currentPage, availableRouteSlots, selectedSlot);
-  }
-  const routeStartIndex = runtime.cursor.routeIndex;
-  runtime.cursor.routeIndex = selectedSlot.routeIndex;
-  const continuousInsertion = block.role === 'quote' && (context.route.insertionSlots?.includes(selectedSlot.definition.id) ?? false);
-  if (block.role !== 'quote') {
+  const selection = selectFlowTarget(context, runtime, currentPage, availableRouteSlots);
+  if (selection.kind !== 'ready') return selection;
+  runtime.cursor.routeIndex = selection.target.selectedSlot.routeIndex;
+  if (selection.target.block.role !== 'quote') {
     collapseInsertionsInRouteRange(
       currentPage,
       availableRouteSlots,
-      routeStartIndex,
-      selectedSlot.routeIndex,
+      selection.routeStartIndex,
+      selection.target.selectedSlot.routeIndex,
       context,
       runtime,
       'no-insertion-content-on-page',
     );
   }
-  return {
-    kind: 'ready',
-    target: {
-      currentPage,
-      availableRouteSlots,
-      block,
-      selectedSlot,
-      definition: selectedSlot.definition,
-      continuousInsertion,
-    },
-  };
+  return { kind: 'ready', target: selection.target };
+}
+
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Push a non-text block when its target slot is already occupied.
+ */
+function pushNonTextBlockForCollision(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+): boolean {
+  const { currentPage, availableRouteSlots, definition } = target;
+  const { cursor } = runtime;
+  // Header/footer text deliberately shares its chrome band with the
+  // reserved lockup. The lockup is a paint reservation, not a competing
+  // content block, so it must not push the auxiliary flow to another page.
+  if (context.flowId !== 'title' && context.flowId !== 'header' && context.flowId !== 'footer' && slotCollidesWithPlacedBlock(currentPage, definition.id, context.plan, context.flowId)) {
+    recordFlowDecision(context, 'TEXT_SLOT_COLLISION_PUSHED', runtime, target, 'slot-overlaps-placed-block');
+    advanceCursor(cursor, availableRouteSlots);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Reject an inline asset that has no asset-to-slot mapping.
+ */
+function skipUnsupportedInlineAsset(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+): boolean {
+  const { currentPage, block, definition } = target;
+  if (!block.assetIds || block.assetIds.length === 0) return false;
+  context.plan.diagnostics.push(diagnostic('error', 'UNSUPPORTED_INLINE_ASSET', `Text planner cannot place inline asset(s) from '${block.id}' without an asset-to-slot mapping.`, { flowId: context.flowId, blockId: block.id, page: currentPage.page, slotId: definition.id, details: { assetIds: block.assetIds } }));
+  runtime.cursor.blockIndex += 1;
+  runtime.cursor.startWord = 0;
+  return true;
 }
 
 /**
@@ -889,28 +963,16 @@ function handleNonTextFlowPlacement(
   runtime: FlowRuntime,
   target: FlowTarget,
 ): boolean {
+  if (pushNonTextBlockForCollision(context, runtime, target)) return true;
+  if (skipUnsupportedInlineAsset(context, runtime, target)) return true;
   const { currentPage, availableRouteSlots, block, selectedSlot, definition } = target;
   const { cursor } = runtime;
-  const { document, metrics, geometryTolerance, plan, flowId } = context;
-  // Header/footer text deliberately shares its chrome band with the
-  // reserved lockup. The lockup is a paint reservation, not a competing
-  // content block, so it must not push the auxiliary flow to another page.
-  if (flowId !== 'title' && flowId !== 'header' && flowId !== 'footer' && slotCollidesWithPlacedBlock(currentPage, definition.id, plan, flowId)) {
-    recordFlowDecision(context, 'TEXT_SLOT_COLLISION_PUSHED', runtime, target, 'slot-overlaps-placed-block');
-    advanceCursor(cursor, availableRouteSlots);
-    return true;
-  }
-  if (block.assetIds && block.assetIds.length > 0) {
-    plan.diagnostics.push(diagnostic('error', 'UNSUPPORTED_INLINE_ASSET', `Text planner cannot place inline asset(s) from '${block.id}' without an asset-to-slot mapping.`, { flowId, blockId: block.id, page: currentPage.page, slotId: definition.id, details: { assetIds: block.assetIds } }));
-    cursor.blockIndex += 1;
-    cursor.startWord = 0;
-    return true;
-  }
+  const { document, metrics, geometryTolerance, plan } = context;
   return placeStructuredBlock({
     pageState: currentPage,
     definition,
     block,
-    flowId,
+    flowId: context.flowId,
     routeIndex: selectedSlot.routeIndex,
     plan,
     cursor,
@@ -1626,31 +1688,76 @@ function advanceTextBlockWhenNoCapacity(
   return { kind: 'continue' };
 }
 
+type TextPlacementCapacity = {
+  currentBox: CompositionRect;
+  currentAvailableLines: number;
+  usedLines: number;
+};
+
 /**
- * @planner-target composition/flow-planner.ts
- * @planner-responsibility Keep the current planTextBlockAttempt implementation intact until its target seam is extracted.
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Calculate the available and already-used lines for the current text segment.
  */
-function planTextBlockAttempt(
-  context: FlowPlanningContext,
-  runtime: FlowRuntime,
-  target: FlowTarget,
-): TextBlockAttemptResult {
-  const { cursor } = runtime;
-  const { currentPage, block, definition } = target;
-  const { blocks, geometryTolerance, metrics, policy } = context;
-  const prepared = prepareTextPlacement(context, runtime, target);
-  if (prepared.wrapped.length === 0) {
-    advanceTextBlockWhenNoLinesFit(context, runtime, target);
-    return { kind: 'continue' };
-  }
-  growTextSlotForInitialPlacement(context, runtime, target, prepared);
-  const currentBox = slotBox(currentPage, definition);
+function textPlacementCapacity(target: FlowTarget, prepared: PreparedTextPlacement): TextPlacementCapacity {
+  const currentBox = slotBox(target.currentPage, target.definition);
   // The inter-block gap is part of the next block's occupied band. Omitting
   // it here made the planner claim that a third line was available while the
   // wrapped block (which starts after that gap) could only place two.
   const blockStartOffset = prepared.startLineOffset + prepared.blockGap / prepared.leading;
   const currentAvailableLines = availableLineCount(rectBottom(currentBox) - (currentBox.y + blockStartOffset * prepared.leading), prepared.leading);
-  const usedLines = prepared.startLineOffset;
+  return { currentBox, currentAvailableLines, usedLines: prepared.startLineOffset };
+}
+
+type NextBlockKeepProbe = {
+  keepLines: number;
+  nextWrapped: ReturnType<typeof wrapBlock>;
+};
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Measure the next authored block needed by keep-with-next rules.
+ */
+function nextBlockKeepProbe(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+  prepared: PreparedTextPlacement,
+  currentBox: CompositionRect,
+): NextBlockKeepProbe {
+  const { block } = target;
+  const next = context.blocks[runtime.cursor.blockIndex + 1];
+  const keepLines = block.keepWithNextLines
+    ?? (block.kind === 'heading' ? context.policy.headingKeepWithNextLines ?? 0 : 0);
+  if (!next) return { keepLines, nextWrapped: [] };
+  const nextLeading = lineHeight(context.metrics, next);
+  const nextWrapped = wrapBlock(
+    context.metrics,
+    next,
+    0,
+    currentBox,
+    0,
+    rectBottom(currentBox),
+    prepared.pageGraphics,
+    nextLeading,
+    context.policy.minimumWrapWidth,
+    next.role === 'quote' ? [] : prepared.flowBarrierBoxCandidates,
+    context.geometryTolerance,
+  );
+  return { keepLines, nextWrapped };
+}
+
+/**
+ * @planner-target composition/flow-text-decision.ts
+ * @planner-responsibility Apply heading, list-item, keep-cluster, and capacity decisions before committing text lines.
+ */
+function applyTextPlacementDecisionRules(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+  prepared: PreparedTextPlacement,
+  capacity: TextPlacementCapacity,
+): TextBlockAttemptResult | undefined {
+  const { currentAvailableLines, usedLines, currentBox } = capacity;
   if (pushHeadingWhenWholeHeadingDoesNotFit(context, runtime, target, prepared, currentAvailableLines)) {
     return { kind: 'continue' };
   }
@@ -1659,35 +1766,38 @@ function planTextBlockAttempt(
     return { kind: 'continue' };
   }
   recordListItemSplitDecision(context, target, listKeepDecision);
-  const next = blocks[cursor.blockIndex + 1];
-  const keepLines = block.keepWithNextLines
-    ?? (block.kind === 'heading' ? policy.headingKeepWithNextLines ?? 0 : 0);
-  const nextLeading = next ? lineHeight(metrics, next) : prepared.leading;
-  const nextWrapped = next ? wrapBlock(
-    metrics,
-    next,
-    0,
-    currentBox,
-    0,
-    rectBottom(currentBox),
-    prepared.pageGraphics,
-    nextLeading,
-    policy.minimumWrapWidth,
-    next.role === 'quote' ? [] : prepared.flowBarrierBoxCandidates,
-    geometryTolerance,
-  ) : [];
+  const keepProbe = nextBlockKeepProbe(context, runtime, target, prepared, currentBox);
   const headingClusterResult = handleHeadingClusterObstacleBeforeTextPlacement(context, runtime, target, prepared, currentBox);
   if (headingClusterResult) return headingClusterResult;
-  const keepRequired = keepLines > 0 && cursor.startWord === 0
-    ? prepared.completeWrapped.length + Math.min(keepLines, nextWrapped.length)
+  const keepRequired = keepProbe.keepLines > 0 && runtime.cursor.startWord === 0
+    ? prepared.completeWrapped.length + Math.min(keepProbe.keepLines, keepProbe.nextWrapped.length)
     : 0;
   if (pushKeepClusterWhenItCannotFit(context, runtime, target, prepared, keepRequired, currentAvailableLines, usedLines)) {
     return { kind: 'continue' };
   }
   recordRelaxedKeepCluster(context, target, prepared, keepRequired, currentAvailableLines);
-  const noCapacityResult = advanceTextBlockWhenNoCapacity(context, runtime, target, prepared, currentAvailableLines);
-  if (noCapacityResult) return noCapacityResult;
-  const selected = selectTextLinesForPlacement(context, prepared, currentAvailableLines);
+  return advanceTextBlockWhenNoCapacity(context, runtime, target, prepared, currentAvailableLines);
+}
+
+/**
+ * @planner-target composition/flow-planner.ts
+ * @planner-responsibility Coordinate one text-placement attempt through prepared inputs, decisions, placement, and cursor advancement.
+ */
+function planTextBlockAttempt(
+  context: FlowPlanningContext,
+  runtime: FlowRuntime,
+  target: FlowTarget,
+): TextBlockAttemptResult {
+  const prepared = prepareTextPlacement(context, runtime, target);
+  if (prepared.wrapped.length === 0) {
+    advanceTextBlockWhenNoLinesFit(context, runtime, target);
+    return { kind: 'continue' };
+  }
+  growTextSlotForInitialPlacement(context, runtime, target, prepared);
+  const capacity = textPlacementCapacity(target, prepared);
+  const decision = applyTextPlacementDecisionRules(context, runtime, target, prepared, capacity);
+  if (decision) return decision;
+  const selected = selectTextLinesForPlacement(context, prepared, capacity.currentAvailableLines);
   const { consumedEnd } = commitSelectedTextLines(context, runtime, target, prepared, selected);
   const insertionBoundaryResolution = resolveInsertionBoundaryAfterText(context, runtime, target, prepared, consumedEnd);
   if (insertionBoundaryResolution.kind === 'stop') return { kind: 'stop' };
