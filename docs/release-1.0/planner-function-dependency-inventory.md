@@ -176,9 +176,9 @@ The signatures come from the TypeScript checker. Direct dependencies include cal
 | `plan`<br>composition/text-planner.ts | 1092–1094 | 3 | `composition/text-planner.ts`<br>Keep the current plan implementation intact until its target seam is extracted. | `document: CompositionDocument`, `metrics: CompositionTextMetrics` | `CompositionPlan` | `planCandidates` (local → composition/text-planner.ts) |
 | `planRefinedCandidates`<br>composition/text-planner.ts | 1105–1120 | 16 | `composition/text-planner.ts`<br>Keep the current planRefinedCandidates implementation intact until its target seam is extracted. | `document: CompositionDocument`, `metrics: CompositionTextMetrics`, `selected: CompositionPlan`, `round: number` | `CompositionPlan[]` | `movableGraphicProposalRefinements` (./text-planner-candidates.js)<br>`movableInsertionProposalRefinements` (./text-planner-candidates.js)<br>`planDocumentOnce` (local → composition/document-layout.ts)<br>`seedGraphicProposals` (local → composition/graphic-planning.ts)<br>`seedInsertionProposals` (local → composition/insertion-planning.ts) |
 
-## Extraction hotspots
+## Relocation review queue
 
-Functions above 80 source lines are the first candidates for another named seam. The report does not claim that line count alone proves multiple responsibilities; it provides a reproducible review queue.
+Functions above 80 source lines are reviewed first when assigning ownership. They may move to their target module intact; size is only a navigation signal, not a reason to split a function.
 
 | Function | Size | Intended target | Direct dependency count |
 | --- | ---: | --- | ---: |
@@ -187,14 +187,25 @@ Functions above 80 source lines are the first candidates for another named seam.
 | `planDocumentOnce`<br>composition/text-planner.ts | 87 | `composition/document-layout.ts` | 20 |
 | `createTextCompositionPlanner`<br>composition/text-planner.ts | 84 | `composition/text-planner.ts` | 16 |
 
+## Possible duplicate implementations
+
+These groups have exactly the same normalized function body. They are candidates for consolidation after ownership is established; matching text alone is not proof that the contexts are interchangeable.
+
+| Group | Functions and intended targets |
+| --- | --- |
+| 1 (62 normalized body characters) | `movableInsertionProposalCandidates` (composition/text-planner-candidates.ts → composition/text-planner-candidates.ts)<br>`movableGraphicProposalCandidates` (composition/text-planner-candidates.ts → composition/text-planner-candidates.ts) |
+| 2 (49 normalized body characters) | `diagnostic` (composition/structured-block-placement.ts → composition/planning-records.ts)<br>`diagnostic` (composition/text-planner.ts → composition/planning-records.ts) |
+| 3 (32 normalized body characters) | `rectBottom` (composition/structured-block-placement.ts → composition/page-management.ts)<br>`rectBottom` (composition/text-planner.ts → composition/page-management.ts) |
+
 ## Dependency notes
 
-The target table is the intended import shape after extraction. A target with many unrelated dependencies is a signal to split the seam further or keep a lower-level helper below it. Dependencies shown as `external/state` are calls or member expressions that the inventory cannot assign to another scanned function; they need a deliberate ownership decision during the move.
+The target table is the intended import shape after relocation. A target with many unrelated dependencies is a signal to review ownership and possible shared helpers; it is not an instruction to split functions automatically. Dependencies shown as `external/state` are calls or member expressions that the inventory cannot assign to another scanned function; they need a deliberate ownership decision during the move.
 
 - Functions still defaulted to their current file: 43. These are intentionally left in place until a target seam is agreed.
 - Functions without an @planner-target comment: 0. Run the inventory with --annotate to add missing comments.
 - External/state dependency expressions: 37.
-- Functions above 80 lines: 4.
+- Functions above 80 lines in the relocation review queue: 4.
+- Possible exact normalized-body duplicate groups: 3.
 
 Examples:
 

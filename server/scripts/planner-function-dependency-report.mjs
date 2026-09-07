@@ -397,6 +397,15 @@ function signatureFor(checker, node) {
   return { parameters, returnType: checker.typeToString(signature.getReturnType()) };
 }
 
+function normalizedBody(node) {
+  if (!node.body) return '';
+  return node.body.getText()
+    .replace(/\/\*[\s\S]*?\*\//gu, '')
+    .replace(/\/\/[^\n]*/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
 function buildInventory() {
   const options = {
     target: ts.ScriptTarget.ES2022,
@@ -430,6 +439,7 @@ function buildInventory() {
         responsibility: metadata.responsibility,
         hasPlannerComment: Boolean(plannerComment),
         signature: signatureFor(checker, node),
+        bodyFingerprint: normalizedBody(node),
         node,
         sourceFile,
         imports: importBindings(sourceFile),
@@ -489,6 +499,18 @@ function aggregateTargets(records) {
   return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
 }
 
+function duplicateGroups(records) {
+  const groups = new Map();
+  for (const record of records) {
+    if (record.bodyFingerprint.length < 20) continue;
+    if (!groups.has(record.bodyFingerprint)) groups.set(record.bodyFingerprint, []);
+    groups.get(record.bodyFingerprint).push(record);
+  }
+  return [...groups.values()]
+    .filter((group) => group.length > 1)
+    .sort((left, right) => right[0].bodyFingerprint.length - left[0].bodyFingerprint.length);
+}
+
 function renderReport(records) {
   const targets = aggregateTargets(records);
   const sourceFiles = [...new Set(records.map((record) => record.file))].sort();
@@ -526,9 +548,9 @@ function renderReport(records) {
       return `| \`${record.name}\`<br>${record.file} | ${linesValue} | ${size} | \`${record.target}\`<br>${inline(record.responsibility)} | ${parameterSummary(record.signature.parameters)} | \`${inline(record.signature.returnType)}\` | ${dependencySummary(record)} |`;
     }),
     '',
-    '## Extraction hotspots',
+    '## Relocation review queue',
     '',
-    'Functions above 80 source lines are the first candidates for another named seam. The report does not claim that line count alone proves multiple responsibilities; it provides a reproducible review queue.',
+    'Functions above 80 source lines are reviewed first when assigning ownership. They may move to their target module intact; size is only a navigation signal, not a reason to split a function.',
     '',
     '| Function | Size | Intended target | Direct dependency count |',
     '| --- | ---: | --- | ---: |',
@@ -536,14 +558,25 @@ function renderReport(records) {
       .sort((left, right) => (right.lineEnd - right.lineStart) - (left.lineEnd - left.lineStart))
       .map((record) => `| \`${record.name}\`<br>${record.file} | ${record.lineEnd - record.lineStart + 1} | \`${record.target}\` | ${record.dependencies.length} |`),
     '',
+    '## Possible duplicate implementations',
+    '',
+    'These groups have exactly the same normalized function body. They are candidates for consolidation after ownership is established; matching text alone is not proof that the contexts are interchangeable.',
+    '',
+    '| Group | Functions and intended targets |',
+    '| --- | --- |',
+    ...(duplicateGroups(records).length
+      ? duplicateGroups(records).map((group, index) => `| ${index + 1} (${group[0].bodyFingerprint.length} normalized body characters) | ${group.map((record) => `\`${record.name}\` (${record.file} → ${record.target})`).join('<br>')} |`)
+      : ['| — | No exact normalized-body duplicates found. |']),
+    '',
     '## Dependency notes',
     '',
-    'The target table is the intended import shape after extraction. A target with many unrelated dependencies is a signal to split the seam further or keep a lower-level helper below it. Dependencies shown as `external/state` are calls or member expressions that the inventory cannot assign to another scanned function; they need a deliberate ownership decision during the move.',
+    'The target table is the intended import shape after relocation. A target with many unrelated dependencies is a signal to review ownership and possible shared helpers; it is not an instruction to split functions automatically. Dependencies shown as `external/state` are calls or member expressions that the inventory cannot assign to another scanned function; they need a deliberate ownership decision during the move.',
     '',
     `- Functions still defaulted to their current file: ${defaults.length}. These are intentionally left in place until a target seam is agreed.`,
     `- Functions without an @planner-target comment: ${missingComments.length}. Run the inventory with --annotate to add missing comments.`,
     `- External/state dependency expressions: ${unresolved.length}.`,
-    `- Functions above 80 lines: ${records.filter((record) => record.lineEnd - record.lineStart + 1 > 80).length}.`,
+    `- Functions above 80 lines in the relocation review queue: ${records.filter((record) => record.lineEnd - record.lineStart + 1 > 80).length}.`,
+    `- Possible exact normalized-body duplicate groups: ${duplicateGroups(records).length}.`,
   ];
   if (unresolved.length) {
     lines.push('', 'Examples:', '', ...unresolved.slice(0, 30).map((item) => `- \`${item}\``));
