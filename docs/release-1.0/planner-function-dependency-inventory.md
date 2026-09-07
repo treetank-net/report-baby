@@ -31,6 +31,31 @@ The signatures come from the TypeScript checker. Direct dependencies include cal
 | `composition/text-planner-candidates.ts` | 10 | `composition/insertion-order.ts` |
 | `composition/text-planner.ts` | 4 | `composition/document-layout.ts`<br>`composition/engine.ts`<br>`composition/graphic-planning.ts`<br>`composition/insertion-planning.ts`<br>`composition/model.ts`<br>`composition/planning-records.ts`<br>`composition/planning-trace.ts`<br>`composition/text-planner-candidates.ts` |
 
+## Projected target-file size
+
+This is a function-only lower-bound projection. “Assigned LOC” sums each function range; “non-overlapping LOC” unions ranges within a target and therefore avoids counting nested functions twice. Imports, interfaces, shared types, module comments, and blank lines are not projected.
+
+| Intended target file | Functions | Assigned LOC | Non-overlapping LOC | Existing file LOC |
+| --- | ---: | ---: | ---: | ---: |
+| `composition/document-layout.ts` | 6 | 173 | 173 | new |
+| `composition/engine.ts` | 4 | 129 | 77 | 527 |
+| `composition/flow-occupancy.ts` | 19 | 174 | 174 | new |
+| `composition/flow-planner.ts` | 22 | 530 | 530 | 2030 |
+| `composition/flow-text-decision.ts` | 18 | 505 | 505 | new |
+| `composition/graphic-planning.ts` | 5 | 103 | 103 | new |
+| `composition/insertion-order.ts` | 1 | 3 | 3 | 37 |
+| `composition/insertion-planning.ts` | 18 | 411 | 411 | new |
+| `composition/page-management.ts` | 18 | 157 | 157 | new |
+| `composition/planning-records.ts` | 4 | 42 | 42 | new |
+| `composition/structured-block-placement.ts` | 3 | 228 | 228 | 318 |
+| `composition/style-name.ts` | 1 | 3 | 3 | 20 |
+| `composition/text-measurement.ts` | 6 | 49 | 49 | new |
+| `composition/text-placement.ts` | 1 | 73 | 73 | new |
+| `composition/text-planner-candidates.ts` | 10 | 152 | 152 | 273 |
+| `composition/text-planner.ts` | 4 | 142 | 84 | 1122 |
+
+A non-zero overlap is expected when a function contains nested named functions. It is a measurement warning, not extra code that must be copied twice.
+
 ## Function inventory
 
 | Current function | Current lines | Size | Intended target | Inputs | Output | Direct dependencies |

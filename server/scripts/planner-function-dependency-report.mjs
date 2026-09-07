@@ -499,6 +499,51 @@ function aggregateTargets(records) {
   return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
 }
 
+function unionLineCount(records) {
+  const intervalsByFile = new Map();
+  for (const record of records) {
+    if (!intervalsByFile.has(record.sourceFile.fileName)) intervalsByFile.set(record.sourceFile.fileName, []);
+    intervalsByFile.get(record.sourceFile.fileName).push([record.lineStart, record.lineEnd]);
+  }
+  let total = 0;
+  for (const intervals of intervalsByFile.values()) {
+    intervals.sort(([left], [right]) => left - right);
+    let currentStart;
+    let currentEnd;
+    for (const [start, end] of intervals) {
+      if (currentStart === undefined) {
+        currentStart = start;
+        currentEnd = end;
+      } else if (start <= currentEnd + 1) {
+        currentEnd = Math.max(currentEnd, end);
+      } else {
+        total += currentEnd - currentStart + 1;
+        currentStart = start;
+        currentEnd = end;
+      }
+    }
+    if (currentStart !== undefined) total += currentEnd - currentStart + 1;
+  }
+  return total;
+}
+
+function targetProjections(records) {
+  const groups = new Map();
+  for (const record of records) {
+    if (!groups.has(record.target)) groups.set(record.target, []);
+    groups.get(record.target).push(record);
+  }
+  return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([target, group]) => {
+    const assignedLines = group.reduce((total, record) => total + record.lineEnd - record.lineStart + 1, 0);
+    const nonOverlappingLines = unionLineCount(group);
+    const existingPath = path.join(sourceRoot, target);
+    const existingFileLines = fs.existsSync(existingPath)
+      ? fs.readFileSync(existingPath, 'utf8').split('\n').length - 1
+      : undefined;
+    return { target, functionCount: group.length, assignedLines, nonOverlappingLines, existingFileLines, overlapLines: assignedLines - nonOverlappingLines };
+  });
+}
+
 function duplicateGroups(records) {
   const groups = new Map();
   for (const record of records) {
@@ -513,6 +558,7 @@ function duplicateGroups(records) {
 
 function renderReport(records) {
   const targets = aggregateTargets(records);
+  const projections = targetProjections(records);
   const sourceFiles = [...new Set(records.map((record) => record.file))].sort();
   const unresolved = records.flatMap((record) => record.dependencies
     .filter((dependency) => dependency.kind === 'external')
@@ -537,6 +583,16 @@ function renderReport(records) {
     '| Intended target file | Functions | Final dependencies |',
     '| --- | --- | --- |',
     ...targets.map(([target, group]) => `| \`${target}\` | ${group.functions.length} | ${group.dependencies.size ? [...group.dependencies].sort().map((dependency) => `\`${dependency}\``).join('<br>') : '—'} |`),
+    '',
+    '## Projected target-file size',
+    '',
+    'This is a function-only lower-bound projection. “Assigned LOC” sums each function range; “non-overlapping LOC” unions ranges within a target and therefore avoids counting nested functions twice. Imports, interfaces, shared types, module comments, and blank lines are not projected.',
+    '',
+    '| Intended target file | Functions | Assigned LOC | Non-overlapping LOC | Existing file LOC |',
+    '| --- | ---: | ---: | ---: | ---: |',
+    ...projections.map((projection) => `| \`${projection.target}\` | ${projection.functionCount} | ${projection.assignedLines} | ${projection.nonOverlappingLines} | ${projection.existingFileLines ?? 'new'} |`),
+    '',
+    'A non-zero overlap is expected when a function contains nested named functions. It is a measurement warning, not extra code that must be copied twice.',
     '',
     '## Function inventory',
     '',
