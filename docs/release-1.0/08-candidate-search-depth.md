@@ -1,9 +1,12 @@
 # Plan 08 — głębokość wyszukiwania kandydatów
 
 Status: częściowo wykonany; renderer-neutralny sampler, próbkowanie komórek
-glifów dla całego korpusu oraz integracja PNG z asset adapterem i evaluatorem
-działają. Pełny eksperyment głębokości wyszukiwania, kalibracja wag, pozostałe
-formaty i dokładna weryfikacja finalnego PDF-a pozostają otwarte.
+glifów dla całego korpusu, integracja PNG z asset adapterem i evaluatorem oraz
+deterministyczna kolejność kandydatów i trace liczników kosztu wyszukiwania
+działają. Trace zawiera również obserwowany czas planowania, który nie jest
+metryką deterministyczną. Nadal trzeba wykonać
+kalibrację na realnych editorialach, porównać screening z finalnym PDF-em i
+objąć pozostałe formaty.
 
 ## Cel
 
@@ -147,6 +150,22 @@ testem kontraktu, aby evaluator, visual QA i screening nie wydawały różnych
 werdyktów dla tego samego koloru.
 
 ## Stan implementacji po eksperymencie
+
+Silnik composition zapisuje teraz `trace.candidateSearch`. Dla rundy zgrubnej
+i każdej rundy doprecyzowania trace pokazuje liczbę wygenerowanych,
+unikalnych i ewaluowanych planów, liczbę legalnych kandydatów, wynik najlepszego
+wariantu, liczbę reflowów i informację, czy runda poprawiła zwycięzcę. Trace
+agreguje także czas planowania oraz liczbę pełnych przeliczeń planu. Kandydaci
+nie są usuwani przed ewaluacją, więc istniejąca kolejność i tie-break pozostają
+kompatybilne; unikalność jest raportowana osobno. Runda kończy się wcześniej,
+gdy nie poprawia zwycięzcy, a limit pozostaje kontrolowany przez konfigurację
+`candidateCount`, `refinementRounds` i `refinementCandidateCount`.
+
+Kontrakt silnika ma test, w którym doprecyzowanie znajduje lepszy wariant niż
+wyszukiwanie zgrubne, a następna runda kończy się z jawnym powodem
+`no-improvement`. Fixture ruchomego cytatu nadal sprawdza rzeczywiste pozycje,
+score i reflowy, ale jego najlepsza lokalna pozycja jest obecnie remisem z
+wariantem zgrubnym; nie traktujemy tego jako dowodu kalibracji wizualnej.
 
 Renderer-neutralny sampler został dodany w
 [`server/src/composition/contrast.ts`](../../server/src/composition/contrast.ts)

@@ -1,7 +1,8 @@
 import { normalizeMarkdown, normalizeStructuredContent, normalizedText } from '../../content/markdown-normalizer.js';
 import type { NormalizedContentNode, NormalizedImageNode } from '../../content/contracts/normalized-content.js';
 import type { CompositionInput } from '../../contracts/input/schema.js';
-import type { CompositionAsset, CompositionBlock, CompositionDocument, CompositionFlow, CompositionGraphic } from '../contracts/model.js';
+import type { CompositionAsset, CompositionBlock, CompositionDocument, CompositionFlow, CompositionGraphic, CompositionInlineRun } from '../contracts/model.js';
+import { inlineRunsFromNodes, inlineRunsFromText } from '../text/inline-runs.js';
 
 /**
  * @planner-target composition/adapters/input.ts
@@ -59,6 +60,7 @@ function textBlock(id: string, role: CompositionBlock['role'], text: string, con
     kind: 'paragraph',
     role,
     text,
+    inlineRuns: content ? inlineRunsFromNodes(content) : inlineRunsFromText(text),
     ...(content === undefined ? {} : { content }),
     ...(diagnostics && diagnostics.length > 0 ? { diagnostics } : {}),
   };
@@ -84,6 +86,23 @@ function imageBlock(id: string, role: CompositionBlock['role'], image: Normalize
     },
     atomic: true,
   };
+}
+
+function normalizedTableText(value: string): string {
+  const normalized = normalizeMarkdown(value);
+  return normalizedText(normalized);
+}
+
+function tableHeadText(value: string | number): string {
+  return normalizedTableText(String(value));
+}
+
+function tableBodyText(value: string | number): string | number {
+  return typeof value === 'string' ? normalizedTableText(value) : value;
+}
+
+function tableInlineRuns(values: Array<Array<string | number>>): CompositionInlineRun[][][] {
+  return values.map((row) => row.map((value) => typeof value === 'string' ? inlineRunsFromNodes(normalizeMarkdown(value).nodes) : inlineRunsFromText(String(value))));
 }
 
 /**
@@ -184,15 +203,30 @@ function convertBlock(flowId: string, input: CompositionInput['flows'][string]['
     const normalized = contentNodes({ text: input.text, content: input.content });
     return imageNodes(normalized.nodes).length > 0
       ? contentBlocks(id, role, normalized)
-      : [{ ...common, kind: 'paragraph', text: normalized.text, content: normalized.nodes, ...(normalized.diagnostics.length ? { diagnostics: normalized.diagnostics } : {}) }];
+      : [{ ...common, kind: 'paragraph', text: normalized.text, inlineRuns: inlineRunsFromNodes(normalized.nodes), content: normalized.nodes, ...(normalized.diagnostics.length ? { diagnostics: normalized.diagnostics } : {}) }];
   }
-  if (input.type === 'heading') return [{ ...common, kind: 'heading', text: input.text, ...(input.level === undefined ? {} : { level: input.level }) }];
-  if (input.type === 'list-item') return [{ ...common, kind: 'list-item', text: input.text }];
+  if (input.type === 'heading' || input.type === 'list-item') {
+    const normalized = contentNodes({ text: input.text });
+    return [{
+      ...common,
+      kind: input.type,
+      text: normalized.text,
+      inlineRuns: inlineRunsFromNodes(normalized.nodes),
+      content: normalized.nodes,
+      ...(normalized.diagnostics.length ? { diagnostics: normalized.diagnostics } : {}),
+      ...(input.type === 'heading' && input.level !== undefined ? { level: input.level } : {}),
+    }];
+  }
   if (input.type === 'image') {
     const assetId = input.asset_id ?? imageAssetId(id);
     return [{ ...common, kind: 'image', image: { assetId, width: input.width as CompositionAsset['width'], fit: input.fit, wrap: input.wrap, ...(input.caption === undefined ? {} : { caption: input.caption }), keepWithCaption: input.keep_with_caption }, atomic: input.atomic ?? true }];
   }
-  if (input.type === 'table') return [{ ...common, kind: 'table', table: { head: input.head, body: input.body, ...(input.caption === undefined ? {} : { caption: input.caption }) } }];
+  if (input.type === 'table') return [{ ...common, kind: 'table', table: {
+    head: input.head.map(tableHeadText),
+    body: input.body.map((row) => row.map(tableBodyText)),
+    inlineRuns: { head: tableInlineRuns([input.head])[0] ?? [], body: tableInlineRuns(input.body) },
+    ...(input.caption === undefined ? {} : { caption: input.caption }),
+  } }];
   if (input.type === 'metric') return [{ ...common, kind: 'metric', metric: { label: input.label, value: input.value, ...(input.delta === undefined ? {} : { delta: input.delta }), ...(input.trend === undefined ? {} : { trend: input.trend }), ...(input.note === undefined ? {} : { note: input.note }) }, atomic: input.atomic ?? true }];
   const chart = { type: input.chart_type, title: input.title, subtitle: input.subtitle, prefix: input.prefix, suffix: input.suffix, data: input.data };
   return [{ ...common, kind: 'chart', chart, atomic: input.atomic ?? true }];

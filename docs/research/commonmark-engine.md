@@ -13,7 +13,13 @@ Nie używać `cmark` jako domyślnej ścieżki serwera Node: świetnie nadaje si
 
 ## Kontekst repo
 
-`server/src/text-runs.ts` używa jednego wyrażenia regularnego do trzech ograniczonych form inline: `**bold**`, `*italic*` i `__bold__`. Nie rozpoznaje bloków, list, linków, obrazów, referencji linków, code spans, escapingu ani zagnieżdżeń. To nie jest parser CommonMark: specyfikacja definiuje dokument jako sekwencję bloków i inline’ów oraz wymaga najpierw rozpoznać strukturę blokową, a dopiero potem inline’y. [CommonMark Spec 0.31.2](https://spec.commonmark.org/0.31.2/)
+Historycznie `server/src/text-runs.ts` używał jednego wyrażenia regularnego do
+trzech ograniczonych form inline. Ta ścieżka została usunięta; obecny parser
+znajduje się w `server/src/content/markdown-normalizer.ts`, a mapowanie
+semantycznych runów w `server/src/composition/text/inline-runs.ts`. To nadal
+nie jest obietnica pełnego CommonMark: specyfikacja definiuje dokument jako
+sekwencję bloków i inline’ów oraz wymaga najpierw rozpoznać strukturę blokową,
+a dopiero potem inline’y. [CommonMark Spec 0.31.2](https://spec.commonmark.org/0.31.2/)
 
 `server/package.json` wymaga Node `>=18`, używa TypeScript i buduje minifikowane bundlery CJS przez `npx esbuild --bundle --platform=node --target=node18 --format=cjs`. Ocena poniżej zakłada pozostawienie tej ścieżki. Nie wykonano pomiaru końcowego rozmiaru bundla, bo nie dodawano pakietów ani nie modyfikowano lockfile'a; liczba zależności i deklarowany rozmiar są wskaźnikami, nie zastępują lokalnego pomiaru po prototypie.
 
@@ -57,7 +63,7 @@ Poniższe reguły są decyzjami produktu, a nie obietnicą specyfikacji:
 
 ## Rekomendowany projekt integracji
 
-1. Dodać osobny moduł wejściowy, np. `server/src/markdown.ts`, który wywołuje `fromMarkdown` albo `unified().use(remarkParse).parse(value)`. Nie rozszerzać `text-runs.ts` o kolejne regexy.
+1. Utrzymywać osobny moduł wejściowy (`server/src/content/markdown-normalizer.ts`), który wywołuje parser i mapuje wynik do własnego modelu. Nie wracać do rozszerzania usuniętego `text-runs.ts` o kolejne regexy.
 2. Zdefiniować mały `NormalizedContent` niezależny od mdast, np. `Document`, `Paragraph`, `Heading`, `Text`, `Emphasis`, `Strong`, `Link`, `Image`, `List`, `Code`, `Quote` i kontrolowany `Unsupported`. Zod waliduje wynik adaptera przed renderowaniem.
 3. W adapterze zachować `position` dla komunikatów; w VFile dopisywać warnings dla elementów, których renderer nie obsługuje. To zastępuje ciche degradacje.
 4. Przed ustaleniem polityki rozszerzeń dopuścić tylko CommonMark core. GFM, frontmatter, math i directives aktywować pojedynczo wraz z mapowaniem do modelu i testami. `html` mapować na warning/`Unsupported` albo bezpieczny tekst — nie przepuszczać go do SVG/PDF.

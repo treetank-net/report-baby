@@ -2,6 +2,8 @@ import type {
   CompositionEngine,
   CompositionBackend,
   CompositionEvaluation,
+  CompositionCandidateSearchRound,
+  CompositionCandidateSearchTrace,
   CompositionEvaluator,
   CompositionPlan,
   CompositionPlanResult,
@@ -20,11 +22,85 @@ import type { CompositionDocument } from './contracts/model.js';
  * @planner-responsibility Keep the current compareCompositionEvaluations implementation intact until its target seam is extracted.
  */
 export function compareCompositionEvaluations(left: CompositionEvaluation, right: CompositionEvaluation): number {
-  const leftLegal = left.status !== 'rejected' && left.hardViolations.length === 0 && left.residualContent.length === 0;
-  const rightLegal = right.status !== 'rejected' && right.hardViolations.length === 0 && right.residualContent.length === 0;
+  const leftLegal = evaluationIsLegal(left);
+  const rightLegal = evaluationIsLegal(right);
   if (leftLegal !== rightLegal) return leftLegal ? -1 : 1;
   if (left.score !== right.score) return left.score > right.score ? -1 : 1;
   return 0;
+}
+
+function evaluationIsLegal(evaluation: CompositionEvaluation): boolean {
+  return evaluation.status !== 'rejected'
+    && (evaluation.hardViolations?.length ?? 0) === 0
+    && (evaluation.residualContent?.length ?? 0) === 0;
+}
+
+function candidateSignature(plan: CompositionPlan): string {
+  return JSON.stringify({
+    pages: plan.pages,
+    lines: plan.lines,
+    insertionLines: plan.insertionLines,
+    placements: plan.placements,
+    blockPlacements: plan.blockPlacements,
+    tablePlacements: plan.tablePlacements,
+    graphicPlacements: plan.graphicPlacements,
+  });
+}
+
+function uniquePlanCount(plans: CompositionPlan[]): number {
+  return new Set(plans.map(candidateSignature)).size;
+}
+
+function reflowPassCount(plan: CompositionPlan): number {
+  return plan.trace?.phases.filter((phase) => phase.name === 'reflow').length ?? 0;
+}
+
+function candidateRound(
+  round: number,
+  generatedCandidates: number,
+  candidates: CompositionPlan[],
+  evaluations: CompositionEvaluation[],
+  improved: boolean,
+  stopReason?: CompositionCandidateSearchRound['stopReason'],
+): CompositionCandidateSearchRound {
+  const legalCandidates = evaluations.filter(evaluationIsLegal).length;
+  const legalScores = evaluations.filter(evaluationIsLegal).map((evaluation) => evaluation.score);
+  return {
+    round,
+    generatedCandidates,
+    uniqueCandidates: uniquePlanCount(candidates),
+    evaluatedCandidates: evaluations.length,
+    legalCandidates,
+    ...(legalScores.length > 0 ? { bestScore: Math.max(...legalScores) } : {}),
+    improved,
+    reflowPasses: candidates.reduce((total, plan) => total + reflowPassCount(plan), 0),
+    ...(stopReason === undefined ? {} : { stopReason }),
+  };
+}
+
+function candidateDetails(
+  candidate: CompositionPlan,
+  evaluation: CompositionEvaluation,
+  index: number,
+  refinementRound: number,
+): Record<string, unknown> {
+  return {
+    index,
+    status: evaluation.status,
+    score: evaluation.score,
+    scoreBreakdown: evaluation.scoreBreakdown,
+    hardViolationCount: evaluation.hardViolations?.length ?? 0,
+    reflowPasses: reflowPassCount(candidate),
+    refinementRound,
+    insertionPlacements: candidate.graphicPlacements
+      .filter((graphic) => graphic.graphicId.startsWith('insertion:'))
+      .map((graphic) => ({
+        graphicId: graphic.graphicId,
+        page: graphic.page,
+        slotId: graphic.slotId,
+        box: { ...graphic.box },
+      })),
+  };
 }
 
 /**
@@ -58,8 +134,10 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
      * @planner-responsibility Keep the current plan implementation intact until its target seam is extracted.
      */
     plan(document, metrics) {
-      const candidates = planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)];
-      if (candidates.length === 0) throw new Error('Composition planner returned no candidates.');
+      const startedAt = Date.now();
+      const generatedCandidates = planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)];
+      if (generatedCandidates.length === 0) throw new Error('Composition planner returned no candidates.');
+      const candidates = [...generatedCandidates];
       const candidateRounds = candidates.map(() => 0);
       const evaluations = candidates.map((candidate) => evaluator.evaluate(document, candidate));
       let selectedCandidate = 0;
@@ -67,10 +145,16 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         if (compareCompositionEvaluations(evaluations[index], evaluations[selectedCandidate]) < 0) selectedCandidate = index;
       }
       const refinementRounds = planner.candidateRefinementRounds ?? 0;
+      const searchRounds: CompositionCandidateSearchRound[] = [candidateRound(0, generatedCandidates.length, candidates, evaluations, true)];
       for (let round = 1; round <= refinementRounds; round += 1) {
-        const refined = planner.planRefinedCandidates?.(document, metrics, candidates[selectedCandidate], round) ?? [];
-        if (refined.length === 0) break;
+        const refinedGenerated = planner.planRefinedCandidates?.(document, metrics, candidates[selectedCandidate], round) ?? [];
+        if (refinedGenerated.length === 0) {
+          searchRounds.push(candidateRound(round, 0, [], [], false, 'no-candidates'));
+          break;
+        }
+        const refined = [...refinedGenerated];
         const refinedEvaluations = refined.map((candidate) => evaluator.evaluate(document, candidate));
+        const previousSelected = selectedCandidate;
         for (let index = 0; index < refined.length; index += 1) {
           candidates.push(refined[index]);
           evaluations.push(refinedEvaluations[index]);
@@ -78,35 +162,35 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
           const candidateIndex = evaluations.length - 1;
           if (compareCompositionEvaluations(evaluations[candidateIndex], evaluations[selectedCandidate]) < 0) selectedCandidate = candidateIndex;
         }
+        const improved = selectedCandidate !== previousSelected
+          && compareCompositionEvaluations(evaluations[selectedCandidate], evaluations[previousSelected]) < 0;
+        const stopReason = improved
+          ? round === refinementRounds ? 'limit' : undefined
+          : 'no-improvement';
+        searchRounds.push(candidateRound(round, refinedGenerated.length, refined, refinedEvaluations, improved, stopReason));
+        if (!improved) break;
       }
       const plan = candidates[selectedCandidate];
       const evaluation = evaluations[selectedCandidate];
+      const candidateSearch: CompositionCandidateSearchTrace = {
+        rounds: searchRounds,
+        generatedCandidates: searchRounds.reduce((total, round) => total + round.generatedCandidates, 0),
+        evaluatedCandidates: searchRounds.reduce((total, round) => total + round.evaluatedCandidates, 0),
+        fullPlanRecalculations: searchRounds.reduce((total, round) => total + round.generatedCandidates, 0),
+        planningTimeMs: Math.max(0, Date.now() - startedAt),
+        selectedCandidate,
+      };
       plan.trace?.phases.push({
         name: 'evaluation',
         status: evaluation.status === 'rejected' ? 'failed' : 'completed',
         details: {
           diagnosticCount: evaluation.diagnostics.length,
           errorCount: evaluation.diagnostics.filter((item) => item.severity === 'error').length,
-          candidates: evaluations.map((candidateEvaluation, index) => ({
-            index,
-            status: candidateEvaluation.status,
-            score: candidateEvaluation.score,
-            scoreBreakdown: candidateEvaluation.scoreBreakdown,
-            hardViolationCount: candidateEvaluation.hardViolations.length,
-            reflowPasses: candidates[index].trace?.phases.filter((phase) => phase.name === 'reflow').length ?? 0,
-            refinementRound: candidateRounds[index],
-            insertionPlacements: candidates[index].graphicPlacements
-              .filter((graphic) => graphic.graphicId.startsWith('insertion:'))
-              .map((graphic) => ({
-                graphicId: graphic.graphicId,
-                page: graphic.page,
-                slotId: graphic.slotId,
-                box: { ...graphic.box },
-              })),
-          })),
+          candidates: evaluations.map((candidateEvaluation, index) => candidateDetails(candidates[index]!, candidateEvaluation, index, candidateRounds[index]!)),
           selectedCandidate,
         },
       });
+      if (plan.trace) plan.trace.candidateSearch = candidateSearch;
       return { plan, evaluation };
     },
   };

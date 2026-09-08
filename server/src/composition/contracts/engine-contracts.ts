@@ -3,6 +3,7 @@ import type {
   CompositionBlockKind,
   CompositionBlockRole,
   CompositionDocument,
+  CompositionInlineRun,
   CompositionGlyphAnchor,
   CompositionGlyphAnchorAlignment,
   CompositionGlyphTargetMode,
@@ -13,7 +14,7 @@ import type {
 export interface CompositionTextMetrics {
   units: string;
   family?: string;
-  measureText(text: string, styleName: string): number;
+  measureText(text: string, styleName: string, run?: CompositionInlineRun): number;
   lineHeight(styleName: string): number;
   lineInkBounds?(styleName: string): { top: number; bottom: number };
   glyphInkBounds?(text: string, styleName: string): { top: number; bottom: number };
@@ -205,6 +206,7 @@ export interface CompositionLine {
   slotId: string;
   page: number;
   text: string;
+  inlineRuns?: CompositionInlineRun[];
   box: CompositionBox;
   routeIndex?: number;
   textAlign?: 'left' | 'center' | 'right';
@@ -330,6 +332,28 @@ export interface CompositionPlanTrace {
   slots: CompositionSlotTrace[];
   flowPlacements?: CompositionFlowPlacement[];
   flowBarrierBoxCandidates?: CompositionFlowBarrierBoxCandidate[];
+  candidateSearch?: CompositionCandidateSearchTrace;
+}
+
+export interface CompositionCandidateSearchRound {
+  round: number;
+  generatedCandidates: number;
+  uniqueCandidates: number;
+  evaluatedCandidates: number;
+  legalCandidates: number;
+  bestScore?: number;
+  improved: boolean;
+  reflowPasses: number;
+  stopReason?: 'no-improvement' | 'limit' | 'no-candidates';
+}
+
+export interface CompositionCandidateSearchTrace {
+  rounds: CompositionCandidateSearchRound[];
+  generatedCandidates: number;
+  evaluatedCandidates: number;
+  fullPlanRecalculations: number;
+  planningTimeMs: number;
+  selectedCandidate: number;
 }
 
 export interface CompositionPlan {

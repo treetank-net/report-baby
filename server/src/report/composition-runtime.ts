@@ -27,6 +27,7 @@ import { createJsPdfChartBlockCapabilities } from '../composition/adapters/pdf/c
 import { createJsPdfImageBlockCapabilities } from '../composition/adapters/pdf/image.js';
 import { createJsPdfMetricBlockCapabilities } from '../composition/adapters/pdf/metric.js';
 import { createJsPdfTableBlockCapabilities } from '../composition/adapters/pdf/table.js';
+import { fontCoverage } from '../composition/adapters/pdf/font-coverage.js';
 import type { CompositionBlockKind } from '../composition/contracts/model.js';
 import type { JsPdfCompositionBlockCapability } from '../composition/contracts/pdf.js';
 import { renderComposition } from '../composition/composition-engine.js';
@@ -99,6 +100,11 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
   const fontSet = await loadRenderFontSet(theme);
   const doc = newPdf('portrait', [geometry.width, geometry.height], fontSet);
   const family = pdfFont(theme);
+  const inlineFontCoverage = {
+    family: fontSet.glyphFamily ?? 'DejaVu',
+    regular: fontCoverage(fontSet.regular),
+    bold: fontCoverage(fontSet.bold),
+  };
   const drawings: ReportDrawing[] = [];
   installReportDrawingRecorder(doc, drawings);
   const maxPages = configNumber(PDF_CONFIG.compositionMaxPages, 'pdf.composition_max_pages');
@@ -143,9 +149,9 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
     : undefined;
   const blocks = Object.values(compositionDocument.flows).flatMap((flow) => flow.blocks);
   const capabilities: Partial<Record<CompositionBlockKind, JsPdfCompositionBlockCapability>> = {};
-  if (blocks.some((block) => block.kind === 'metric')) capabilities.metric = createJsPdfMetricBlockCapabilities(doc, family, compositionMetricStyleFromRenderConfig({ fillColor: rgb(theme.soft), drawColor: rgb(theme.line), labelColor: rgb(theme.muted), valueColor: rgb(theme.foreground), deltaColor: rgb(theme.primary), noteColor: rgb(theme.muted), trendUpColor: rgb(theme.success), trendDownColor: rgb(theme.danger), trendFlatColor: rgb(theme.muted) }));
+  if (blocks.some((block) => block.kind === 'metric')) capabilities.metric = createJsPdfMetricBlockCapabilities(doc, family, compositionMetricStyleFromRenderConfig({ fillColor: rgb(theme.soft), drawColor: rgb(theme.line), labelColor: rgb(theme.muted), valueColor: rgb(theme.foreground), deltaColor: rgb(theme.primary), noteColor: rgb(theme.muted), trendUpColor: rgb(theme.success), trendDownColor: rgb(theme.danger), trendFlatColor: rgb(theme.muted) }), inlineFontCoverage);
   if (blocks.some((block) => block.kind === 'chart')) capabilities.chart = createJsPdfChartBlockCapabilities(doc, family, compositionChartStyle);
-  const tableCapabilities = blocks.some((block) => block.kind === 'table') ? createJsPdfTableBlockCapabilities(doc, family, compositionTableStyleFromRenderConfig({ headerFillColor: rgb(theme.primary), headerTextColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)), rowFillColor: rgb(theme.background), alternateRowFillColor: rgb(theme.soft), textColor: rgb(theme.foreground), lineColor: rgb(theme.line) })) : undefined;
+  const tableCapabilities = blocks.some((block) => block.kind === 'table') ? createJsPdfTableBlockCapabilities(doc, family, compositionTableStyleFromRenderConfig({ headerFillColor: rgb(theme.primary), headerTextColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)), rowFillColor: rgb(theme.background), alternateRowFillColor: rgb(theme.soft), textColor: rgb(theme.foreground), lineColor: rgb(theme.line) }), inlineFontCoverage) : undefined;
   if (imageCapabilities) capabilities.image = imageCapabilities;
   const combined = Object.keys(capabilities).length > 0 ? combineJsPdfCompositionBlockCapabilities(capabilities) : undefined;
   const reportBand = theme.reportHeaderStyle === 'accent-band'
@@ -177,6 +183,7 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
     ...(combined ? { measureBlock: combined.measureBlock } : {}),
     ...(tableCapabilities ? { measureTable: tableCapabilities.measureTable } : {}),
     ...(contrastProvider ? { contrastProvider } : {}),
+    inlineFontCoverage,
   });
   if (options.rejectOnEvaluation !== false && composition.evaluation.status === 'rejected') {
     const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');
@@ -189,6 +196,7 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
       ...(composition.plan.graphicPlacements.some((graphic) => graphic.paint !== false) ? { graphicStyle: compositionGraphicStyleFromRenderConfig({ fillColor: rgb(theme.soft), drawColor: rgb(theme.line) }) } : {}),
       ...(combined ? { blockRenderers: combined.blockRenderers } : {}),
       ...(tableCapabilities ? { tableRenderer: tableCapabilities.renderer } : {}),
+      inlineFontCoverage,
     }));
   };
   return { doc, geometry, template, composition, drawings, render };

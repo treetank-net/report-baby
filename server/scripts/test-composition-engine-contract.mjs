@@ -107,6 +107,31 @@ try {
       selectedCandidate: 2,
     },
   });
+  const coarsePlan = { ...plan, graphicPlacements: [{ id: 'coarse', graphicId: 'search', slotId: 'slot', page: 1, shape: 'rectangle', wrap: 'none', box: { x: 0, y: 0, width: 1, height: 1 } }], trace: { phases: [] } };
+  const improvedPlan = { ...coarsePlan, graphicPlacements: [{ ...coarsePlan.graphicPlacements[0], id: 'refined', box: { x: 1, y: 0, width: 1, height: 1 } }], trace: { phases: [] } };
+  const unchangedPlan = { ...improvedPlan, trace: { phases: [] } };
+  const refinementEngine = createCompositionEngine(
+    {
+      plan() { throw new Error('refinement planner must use candidate seams'); },
+      planCandidates() { return [coarsePlan]; },
+      candidateRefinementRounds: 3,
+      planRefinedCandidates(_input, _metrics, selected, round) {
+        assert.equal(selected, round === 1 ? coarsePlan : improvedPlan);
+        return round === 1 ? [improvedPlan] : [unchangedPlan];
+      },
+    },
+    {
+      evaluate(_input, planned) {
+        const score = planned.graphicPlacements[0].box.x;
+        return { status: 'accepted', diagnostics: [], hardViolations: [], score, scoreBreakdown: [], residualContent: [] };
+      },
+    },
+  );
+  const refinementResult = refinementEngine.plan(document, metrics);
+  assert.equal(refinementResult.plan, improvedPlan, 'a better local candidate must replace the coarse winner');
+  assert.equal(refinementResult.plan.trace.candidateSearch.rounds[1].improved, true, 'trace must mark the improving refinement round');
+  assert.equal(refinementResult.plan.trace.candidateSearch.rounds[2].stopReason, 'no-improvement', 'trace must stop when a refinement no longer improves the winner');
+  assert.equal(refinementResult.plan.trace.candidateSearch.selectedCandidate, 1, 'trace must expose the refined winner index');
   const capabilityCalls = [];
   const capabilities = combineJsPdfCompositionBlockCapabilities({
     image: {

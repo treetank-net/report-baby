@@ -36,7 +36,7 @@ try {
     title: 'A semantic report',
     subtitle: 'The public input remains compact.',
     period: 'Q3',
-    intro: 'Lead **text** with an inline image.\n\nSecond paragraph.',
+    intro: 'Lead **text** and *emphasis* with an inline image.\n\nSecond paragraph.',
     kpis: [{ label: 'Reach', value: 1200, delta: '+12%', trend: 'up', note: 'Compared with Q2' }],
     charts: [{ type: 'bar', title: 'Reach by channel', data: [{ label: 'Web', value: 700 }] }],
     sections: [{ heading: 'A section', body: 'Section body.\n\n![A map](assets/map.png "Map")\n\n<div>Unsupported authored markup</div>', level: 1 }],
@@ -76,7 +76,14 @@ try {
     'list-item',
   ]);
   assert.equal(document.flows.main.blocks[0].kind, 'paragraph');
-  assert.match(document.flows.main.blocks[0].text, /Lead text with an inline image/);
+  assert.match(document.flows.main.blocks[0].text, /Lead text and emphasis with an inline image/);
+  assert.deepEqual(document.flows.main.blocks[0].inlineRuns?.map(({ text, marks }) => ({ text, marks })), [
+    { text: 'Lead ', marks: [] },
+    { text: 'text', marks: ['strong'] },
+    { text: ' and ', marks: [] },
+    { text: 'emphasis', marks: ['emphasis'] },
+    { text: ' with an inline image.\nSecond paragraph.', marks: [] },
+  ], 'normalized inline AST must survive the composition adapter as renderer-neutral runs');
   assert.equal(document.flows.main.blocks[1].metric.value, 1200);
   assert.equal(document.flows.main.blocks[2].chart.data[0].label, 'Web');
   assert.equal(document.flows.main.blocks[3].level, 1);

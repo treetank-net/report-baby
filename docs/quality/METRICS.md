@@ -53,7 +53,7 @@ code; and no metric is evaluated by a model. Same tree in, same bytes out.
 
 | Asset | State |
 | --- | --- |
-| `wrapStyledRuns(doc, runs, width, ctx)` | `content/text-runs.ts:229` — width is already a parameter. **No change needed** |
+| `wrapText(text, width, metrics, ...)` | `composition/text/text-layout.ts` — width remains an explicit input; inline styling is carried by `CompositionInlineRun`. **No change needed** |
 | `kind: 'page'` | `template-source.ts:114` — accepted by the compiler. **Nothing renders it** |
 | `archetype: 'columns'` | `template-source.ts:147` — accepted |
 | Column algorithm | `server/scripts/prototype-multicolumn.mjs`, 783 lines: `breakParagraph(tokens, start, measure)`, `columnBoxes(spec)` with gutter, "page grid minus reserved bands → ordered segments" |

@@ -1,10 +1,13 @@
 import type { jsPDF } from 'jspdf';
-import type { CompositionBlock } from '../../contracts/model.js';
+import type { CompositionBlock, CompositionInlineRun } from '../../contracts/model.js';
 import type { CompositionTextMetrics } from '../../contracts/engine-contracts.js';
 import type {
+  JsPdfInlineFontCoverage,
   JsPdfCompositionStyle,
   JsPdfCompositionStyles,
 } from '../../contracts/pdf.js';
+import { styleForInlineRun } from '../../contracts/pdf.js';
+import { missingInlineCodePoints, splitInlineRunByCoverage } from '../../text/inline-runs.js';
 import { compositionStyleName } from '../../text/style-name.js';
 
 /**
@@ -109,6 +112,93 @@ export function oneLine(doc: jsPDF, value: string, width: number): string {
   return `${prefix.replace(/[\s,;:.\u2013\u2014-]+$/u, '')}…`;
 }
 
+function availableFontStyles(doc: jsPDF, family: string): Set<string> {
+  const fonts = doc.getFontList() as Record<string, string[] | undefined>;
+  return new Set(fonts[family] ?? []);
+}
+
+/** Resolve semantic inline marks to an actually registered jsPDF face. */
+export function resolveInlineRunStyle(doc: jsPDF, family: string, style: JsPdfCompositionStyle, run?: CompositionInlineRun): JsPdfCompositionStyle {
+  const desired = styleForInlineRun(style, run);
+  const available = availableFontStyles(doc, desired.fontFamily ?? family);
+  if (available.has(desired.fontStyle)) return desired;
+  const fallback = desired.fontStyle === 'bolditalic'
+    ? available.has('bold') ? 'bold' : available.has('italic') ? 'italic' : 'normal'
+    : desired.fontStyle === 'italic' && !available.has('italic')
+      ? 'normal'
+      : desired.fontStyle === 'bold' && !available.has('bold')
+        ? 'normal'
+        : desired.fontStyle;
+  return fallback === desired.fontStyle ? desired : { ...desired, fontStyle: fallback };
+}
+
+export function coverageForRun(run: CompositionInlineRun, coverage: JsPdfInlineFontCoverage | undefined): Set<number> | undefined {
+  if (!coverage) return undefined;
+  return run.marks.includes('strong') ? coverage.bold ?? coverage.regular : coverage.regular;
+}
+
+/** Apply one semantic run and switch the whole run to the fallback font when needed. */
+export function applyInlineTextStyle(
+  doc: jsPDF,
+  family: string,
+  style: JsPdfCompositionStyle,
+  text: string,
+  run: CompositionInlineRun | undefined,
+  coverage: JsPdfInlineFontCoverage | undefined,
+): JsPdfCompositionStyle {
+  const resolved = resolveInlineRunStyle(doc, family, style, run);
+  const effectiveRun = run ?? { text, marks: [] };
+  const missing = missingInlineCodePoints([effectiveRun], coverageForRun(effectiveRun, coverage));
+  const selected = missing.length > 0 && coverage ? { ...resolved, fontFamily: coverage.family } : resolved;
+  applyStyle(doc, family, selected);
+  return selected;
+}
+
+/** Draw one line while keeping uncovered characters selectable in the fallback face. */
+export function drawInlineText(
+  doc: jsPDF,
+  family: string,
+  style: JsPdfCompositionStyle,
+  text: string,
+  x: number,
+  y: number,
+  run: CompositionInlineRun | undefined,
+  coverage: JsPdfInlineFontCoverage | undefined,
+): void {
+  let cursor = x;
+  const effectiveRun = run ?? { text, marks: [] };
+  for (const segment of splitInlineRunByCoverage(effectiveRun, coverageForRun(effectiveRun, coverage))) {
+    const runStyle = resolveInlineRunStyle(doc, family, style, segment.run);
+    const resolvedStyle = segment.fallback && coverage ? { ...runStyle, fontFamily: coverage.family } : runStyle;
+    const segmentText = textForStyle(segment.run.text, resolvedStyle);
+    if (!segmentText) continue;
+    applyStyle(doc, family, resolvedStyle);
+    doc.text(segmentText, cursor, y + resolvedStyle.baselineOffset);
+    cursor += doc.getTextWidth(segmentText);
+  }
+}
+
+function measureInlineText(
+  doc: jsPDF,
+  family: string,
+  style: JsPdfCompositionStyle,
+  text: string,
+  run: CompositionInlineRun | undefined,
+  coverage: JsPdfInlineFontCoverage | undefined,
+): number {
+  if (!run || !coverage) {
+    const resolved = resolveInlineRunStyle(doc, family, style, run);
+    applyStyle(doc, family, resolved);
+    return doc.getTextWidth(textForStyle(text, resolved));
+  }
+  return splitInlineRunByCoverage(run, coverageForRun(run, coverage)).reduce((total, segment) => {
+    const segmentStyle = resolveInlineRunStyle(doc, family, style, segment.run);
+    const resolvedStyle = segment.fallback ? { ...segmentStyle, fontFamily: coverage.family } : segmentStyle;
+    applyStyle(doc, family, resolvedStyle);
+    return total + doc.getTextWidth(textForStyle(segment.run.text, resolvedStyle));
+  }, 0);
+}
+
 /**
  * Adapt the real PDF font metrics to the renderer-neutral planner contract.
  * The planner only sees this interface; it never imports or calls jsPDF.
@@ -121,6 +211,7 @@ export function createJsPdfTextMetrics(
   doc: jsPDF,
   family: string,
   styles: JsPdfCompositionStyles,
+  options: { inlineFontCoverage?: JsPdfInlineFontCoverage } = {},
 ): CompositionTextMetrics {
   // Capture the font geometry once. Planning may ask for the same style many
   // times; this also makes the adapter an explicit measurement overlay rather
@@ -134,11 +225,10 @@ export function createJsPdfTextMetrics(
      * @planner-target composition/adapters/pdf/text.ts
      * @planner-responsibility Keep the current measureText implementation intact until its target seam is extracted.
      */
-    measureText(text, style) {
+    measureText(text, style, run?: CompositionInlineRun) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
-      applyStyle(doc, family, selected);
-      return doc.getTextWidth(textForStyle(text, selected));
+      return measureInlineText(doc, family, selected, text, run, options.inlineFontCoverage);
     },
     /**
      * @planner-target composition/adapters/pdf/text.ts

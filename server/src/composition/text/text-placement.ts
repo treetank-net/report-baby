@@ -84,6 +84,7 @@ function appendPlacedLines(
       page: pageState.page,
       ...(routeIndex === undefined ? {} : { routeIndex }),
       text: line.text,
+      ...(line.inlineRuns && line.inlineRuns.length > 0 ? { inlineRuns: line.inlineRuns.map((run) => ({ ...run, marks: [...run.marks] })) } : {}),
       box: {
         x: line.x,
         y: lineY,

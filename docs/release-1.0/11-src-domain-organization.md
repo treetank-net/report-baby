@@ -385,7 +385,8 @@ już jawne granice. Dalsza praca nie powinna być mechanicznym dzieleniem plikó
    wspólnych kalkulatorów, bez zmiany kolejności decyzji planera;
 3. audytować `legality.ts` i `scoring.ts` jako dwa różne konteksty evaluatora,
    wydzielając tylko seam'y, które mają własny kontrakt wejścia/wyjścia;
-4. usunąć wyłącznie potwierdzone martwe ścieżki (`text-runs.ts`, stare modele
-   slajdów, legacy plan) po pomiarze pokrycia i aktualizacji testów;
+4. usuwać wyłącznie potwierdzone martwe ścieżki (parser `text-runs.ts` został
+   już usunięty; pozostałe stare modele i legacy plan wymagają osobnego audytu)
+   po pomiarze pokrycia i aktualizacji testów;
 5. przy każdym seamie uruchamiać `tsc --noEmit`, architecture check, build,
    `npm run test:composition` oraz właściwe testy MCP/CLI/brand i artefaktów.

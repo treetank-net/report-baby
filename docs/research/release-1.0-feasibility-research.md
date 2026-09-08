@@ -202,9 +202,9 @@ samego starego planu.
 Obecny flow breaker ma własny dynamic-programming-like wybór między
 `FlowNode` breakpoints: generuje słowa i polskie breakpoints, liczy szerokości,
 uwzględnia hyphenation, stretch/shrink, raggedness i karę za hyphenation.
-[`text-runs.ts:367-373`](../../server/src/text-runs.ts#L367-L373)
-[`text-runs.ts:392-420`](../../server/src/text-runs.ts#L392-L420)
-[`text-runs.ts:483-565`](../../server/src/text-runs.ts#L483-L565)
+[`composition/text/text-layout.ts`](../../server/src/composition/text/text-layout.ts)
+[`composition/text/tokenization.ts`](../../server/src/composition/text/tokenization.ts)
+[`composition/text/inline-runs.ts`](../../server/src/composition/text/inline-runs.ts)
 Jednocześnie nie jest to ogólny Unicode line-breaking engine: wejście jest
 dzielone głównie po whitespace i lokalnych `polishBreakPoints`; zakres dla
 RTL/CJK/vertical writing pozostaje niepotwierdzony produkcyjnie.
@@ -367,7 +367,7 @@ ink bounds i style, a backend używa `doc.text`, `doc.rect`, `doc.addPage`,
 - **Hardcoded thresholds:** flow breaker ma stałe `FLOW_*` dla kar,
   stretch/shrink i fill, a assertion ma domyślne tolerance. To jest ryzyko
   powstania dwóch źródeł prawdy względem wymaganej konfiguracji YAML.
-  [`text-runs.ts:367-373`](../../server/src/text-runs.ts#L367-L373)
+  [`composition/text/text-layout.ts`](../../server/src/composition/text/text-layout.ts)
   [`report-plan-assertions.ts:112-120`](../../server/src/report-plan-assertions.ts#L112-L120)
 
 - **Pomiar kontra raster:** legalność geometryczna nie gwarantuje wizualnego

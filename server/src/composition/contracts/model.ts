@@ -120,10 +120,26 @@ export interface CompositionTemplate {
 export type CompositionBlockKind = 'heading' | 'paragraph' | 'list-item' | 'image' | 'table' | 'chart' | 'metric';
 export type CompositionBlockRole = 'intro' | 'heading' | 'body' | 'table' | 'chart' | 'metric' | 'header' | 'sidebar' | 'quote' | 'footer' | 'title' | 'subtitle' | 'eyebrow';
 
+export type CompositionInlineMark = 'strong' | 'emphasis' | 'link';
+
+/**
+ * Renderer-neutral inline content. Marks preserve authored semantics while
+ * font selection remains an adapter concern.
+ */
+export interface CompositionInlineRun {
+  text: string;
+  marks: CompositionInlineMark[];
+  href?: string;
+}
+
 export interface CompositionTable {
   head: string[];
   body: Array<Array<string | number>>;
   caption?: string;
+  inlineRuns?: {
+    head: CompositionInlineRun[][];
+    body: CompositionInlineRun[][][];
+  };
 }
 
 export interface CompositionChart {
@@ -161,6 +177,7 @@ export interface CompositionBlock {
   role: CompositionBlockRole;
   text?: string;
   content?: NormalizedContentNode[];
+  inlineRuns?: CompositionInlineRun[];
   diagnostics?: string[];
   assetIds?: string[];
   level?: 1 | 2;

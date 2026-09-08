@@ -8,10 +8,11 @@ import type { CompositionContrastProvider } from './evaluation/contrast.js';
 import { compositionDocumentFromInput } from './adapters/input.js';
 import { compositionTemplateFromPageGeometry } from './adapters/page-template.js';
 import { createJsPdfTextMetrics } from './adapters/pdf/text.js';
-import type { JsPdfCompositionStyles } from './contracts/pdf.js';
+import type { JsPdfCompositionStyles, JsPdfInlineFontCoverage } from './contracts/pdf.js';
 import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './adapters/text-engine.js';
 import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 import { compositionStylesFromRenderConfig } from './adapters/render-config.js';
+import { hasInlineMark, missingInlineCodePointsByStyle, missingInlineGlyphWarning, missingTableGlyphWarning } from './text/inline-runs.js';
 
 export {
   compositionChartStyleFromRenderConfig,
@@ -42,6 +43,7 @@ export interface ReportCompositionOptions {
   measureBlock?: CompositionTextMetrics['measureBlock'];
   measureTable?: CompositionTextMetrics['measureTable'];
   contrastProvider?: CompositionContrastProvider;
+  inlineFontCoverage?: JsPdfInlineFontCoverage;
 }
 
 export interface ReportCompositionResult {
@@ -80,7 +82,7 @@ export function planReportComposition(
     ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
   });
   const styles = options.styles ?? compositionStylesFromRenderConfig();
-  const metrics = createJsPdfTextMetrics(doc, options.family, styles);
+  const metrics = createJsPdfTextMetrics(doc, options.family, styles, { inlineFontCoverage: options.inlineFontCoverage });
   if (options.measureBlock) metrics.measureBlock = options.measureBlock;
   if (options.measureTable) metrics.measureTable = options.measureTable;
   const policy: TextCompositionPlannerPolicy = {
@@ -88,5 +90,66 @@ export function planReportComposition(
     ...options.policy,
   };
   const result = createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics);
+  appendInlineDiagnostics(doc, options.family, document, result, options.inlineFontCoverage);
   return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };
+}
+
+type InlineDiagnosticResult = { evaluation: CompositionEvaluation };
+
+function documentInlineRuns(document: ReturnType<typeof compositionDocumentFromInput>) {
+  return Object.values(document.flows).flatMap((flow) => flow.blocks.flatMap((block) => block.inlineRuns ?? []));
+}
+
+function documentTableRuns(document: ReturnType<typeof compositionDocumentFromInput>) {
+  return Object.values(document.flows)
+    .flatMap((flow) => flow.blocks.flatMap((block) => block.table?.inlineRuns ? [block.table.inlineRuns] : []))
+    .flatMap((table) => [...table.head, ...table.body.flat()]);
+}
+
+function appendMissingGlyphDiagnostic(
+  family: string,
+  runs: ReturnType<typeof documentInlineRuns>,
+  result: InlineDiagnosticResult,
+  coverage: JsPdfInlineFontCoverage | undefined,
+): void {
+  const missing = missingInlineCodePointsByStyle(runs, coverage?.regular, coverage?.bold);
+  if (missing.length > 0) result.evaluation.diagnostics.push({ severity: 'warning', code: 'INLINE_GLYPH_FALLBACK', message: missingInlineGlyphWarning(family, missing) });
+}
+
+function appendTableGlyphDiagnostic(
+  family: string,
+  tableRuns: ReturnType<typeof documentTableRuns>,
+  result: InlineDiagnosticResult,
+  coverage: JsPdfInlineFontCoverage | undefined,
+): void {
+  const missing = missingInlineCodePointsByStyle(tableRuns.flat(), coverage?.regular, coverage?.bold);
+  if (missing.length > 0) result.evaluation.diagnostics.push({ severity: 'warning', code: 'TABLE_GLYPH_FALLBACK', message: missingTableGlyphWarning(family, missing) });
+}
+
+function appendTableMarkupDiagnostic(tableRuns: ReturnType<typeof documentTableRuns>, result: InlineDiagnosticResult): void {
+  if (tableRuns.some((cell) => hasInlineMark(cell, 'strong') || hasInlineMark(cell, 'emphasis') || hasInlineMark(cell, 'link'))) {
+    result.evaluation.diagnostics.push({ severity: 'warning', code: 'TABLE_INLINE_MARKUP_FLATTENED', message: 'Inline markup inside table cells was stripped to plain text: the table renderer draws one weight per cell and cannot switch weight mid-string.' });
+  }
+}
+
+function appendItalicFallbackDiagnostic(doc: jsPDF, family: string, runs: ReturnType<typeof documentInlineRuns>, result: InlineDiagnosticResult): void {
+  const fontStyles = doc.getFontList() as Record<string, string[] | undefined>;
+  if (runs.some((run) => run.marks.includes('emphasis')) && !(fontStyles[family] ?? []).includes('italic')) {
+    result.evaluation.diagnostics.push({ severity: 'warning', code: 'INLINE_ITALIC_FALLBACK', message: 'Italic markup was rendered upright: neither the brand nor the bundled font ships an italic face.' });
+  }
+}
+
+function appendInlineDiagnostics(
+  doc: jsPDF,
+  family: string,
+  document: ReturnType<typeof compositionDocumentFromInput>,
+  result: InlineDiagnosticResult,
+  coverage: JsPdfInlineFontCoverage | undefined,
+): void {
+  const runs = documentInlineRuns(document);
+  const tableRuns = documentTableRuns(document);
+  appendMissingGlyphDiagnostic(family, runs, result, coverage);
+  appendTableGlyphDiagnostic(family, tableRuns, result, coverage);
+  appendTableMarkupDiagnostic(tableRuns, result);
+  appendItalicFallbackDiagnostic(doc, family, runs, result);
 }

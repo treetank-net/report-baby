@@ -66,8 +66,8 @@ najpierw muszą istnieć testy i działający seam dla pętli.
 | 04 | wykonany w ograniczonym zakresie | tylko jawne, deterministyczne ruchy; bez globalnego solvera |
 | 05 | w większości wykonany | inline runs, gap-tightening i pełna własność chrome w planie |
 | 06 | w większości wykonany | utrzymanie publicznego gate’u; znany, wcześniejszy `EMPTY_FLOW_SLOT`; dalsze seam’y tylko z konkretnym kontraktem |
-| 07 | częściowo wykonany | wspólna polityka soft insertionów oraz pełny inline AST/runs |
-| 08 | częściowo wykonany | właściwy benchmark głębokości wyszukiwania, kalibracja i formaty JPEG/SVG/WebP/AVIF w realnym pipeline |
+| 07 | w większości wykonany | fallback glyphów oraz pełna polityka soft insertionów dla wszystkich atomic kinds |
+| 08 | częściowo wykonany | kalibracja na realnych PDF-ach, porównanie screeningu z finalnym rasterem i formaty JPEG/SVG/WebP/AVIF |
 | 09 | nierozpoczęty | ciągłość list/tabel, WebP/AVIF i budżet czasu feedbacku |
 
 Ta tabela jest nadrzędnym skrótem statusu. Szczegółowe dokumenty zachowują

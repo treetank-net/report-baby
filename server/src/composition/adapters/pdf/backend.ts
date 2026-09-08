@@ -10,7 +10,8 @@ import type {
   JsPdfCompositionStyles,
 } from '../../contracts/pdf.js';
 import { fitContainBox } from '../../geometry/visual-geometry.js';
-import { applyStyle, styleFor, textForStyle } from './text.js';
+import { applyStyle, resolveInlineRunStyle, styleFor, textForStyle } from './text.js';
+import { splitInlineRunByCoverage } from '../../text/inline-runs.js';
 
 /**
  * Combine independently owned atomic-block capabilities without allowing the
@@ -170,8 +171,26 @@ export function createJsPdfTextBackend(
           doc.setFillColor(...style.marker.color);
           doc.circle(line.box.x - (style.textIndent ?? 0) + style.marker.x, line.box.y + style.baselineOffset - style.marker.y, style.marker.radius, 'F');
         }
-        applyStyle(doc, family, style);
-        doc.text(renderedText, textX, line.box.y + style.baselineOffset, line.textAlign ? { align: line.textAlign } : undefined);
+        const runs = line.inlineRuns?.length ? line.inlineRuns : [{ text: renderedText, marks: [] }];
+        let cursor = textX;
+        for (const run of runs) {
+          const coverage = options.inlineFontCoverage
+            ? run.marks.includes('strong') ? options.inlineFontCoverage.bold ?? options.inlineFontCoverage.regular : options.inlineFontCoverage.regular
+            : undefined;
+          for (const segment of splitInlineRunByCoverage(run, coverage)) {
+            const runStyle = resolveInlineRunStyle(doc, family, style, segment.run);
+            const resolvedStyle = segment.fallback && options.inlineFontCoverage
+              ? { ...runStyle, fontFamily: options.inlineFontCoverage.family }
+              : runStyle;
+            const runText = textForStyle(segment.run.text, resolvedStyle)
+              .replaceAll('{{page.number}}', String(line.page))
+              .replaceAll('{{page.count}}', String(plan.pages.length));
+            if (!runText) continue;
+            applyStyle(doc, family, resolvedStyle);
+            doc.text(runText, cursor, line.box.y + resolvedStyle.baselineOffset);
+            cursor += doc.getTextWidth(runText);
+          }
+        }
       };
       for (const line of plan.lines.filter((candidate) => candidate.layer !== 'insertion')) renderLine(line);
       // Insertions are painted after the ordinary flow. Their geometry was

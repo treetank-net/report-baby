@@ -1,8 +1,10 @@
 # Plan 07 — block kinds i miękkie insertiony
 
-Status: częściowo wykonany; mapa block kinds, ścieżka authored graphics oraz
-ograniczone ruchome insertiony działają. Wspólna polityka soft insertionów i
-pełne zachowanie inline AST/runs pozostają otwarte.
+Status: w większości wykonany dla obecnego zakresu; mapa block kinds, ścieżka
+authored graphics, ograniczone ruchome insertiony oraz renderer-neutralne
+inline runs działają. Fallback glyphów jest podłączony do PDF dla tekstu,
+metryk i tabel. Uogólnienie soft insertionów na wszystkie atomic block kinds
+pozostaje otwarte.
 
 Aktualny zakres nie traktuje `quote` jako ścieżki legacy w `main`: quote jest
 tekstem dostarczanym przez nazwany, nie-main flow z zadeklarowanymi
@@ -54,25 +56,39 @@ nie jako drugie źródło prawdy.
 
 ## Audyt inline AST/runs — 2026-09-08
 
-Obecny przepływ zachowuje AST, ale jeszcze go nie renderuje jako styled runs:
+Obecny przepływ zachowuje AST i przenosi go do renderer-neutralnych styled runs:
 
 ```text
 markdown-normalizer
   → NormalizedContentNode[]
   → composition/adapters/input.ts
-  → CompositionBlock.content + plain block.text
-  → text-layout i adapter PDF używają block.text
+  → CompositionBlock.content + inlineRuns + plain block.text
+  → text-layout przenosi zakres runów do CompositionLine
+  → adapter PDF mierzy i renderuje runy osobnymi stylami
 ```
 
-`server/src/content/text-runs.ts` zawiera starszy parser regexowy, pomiar,
-fallback fontów i łamanie styled runs, ale nie ma importów z produkcyjnego
-`server/src` ani z testowych entrypointów i nie trafia do bundla przez bieżącą
-ścieżkę composition. Jest więc kandydatem do usunięcia, nie dowodem działającej
-obsługi inline. Nie usuwamy go jeszcze: najpierw trzeba wybrać kontrakt punktu
-7 — albo przenieść `NormalizedContentNode[]` do renderer-neutralnego modelu
-linii i zachować style, albo formalnie zakończyć starszą ścieżkę runs wraz z jej
-testami. Mieszanie obu parserów utrwalałoby dwie różne interpretacje tego samego
+Starszy parser regexowy `server/src/content/text-runs.ts` został usunięty po
+potwierdzeniu, że nie ma importów produkcyjnych ani testowych. Jego zakres jest
+teraz rozdzielony: AST → `CompositionInlineRun` należy do adaptera inputu,
+łamanie zakresów do `composition/text`, a odczyt cmap i wybór fallbacku do
+adaptera PDF. Dzięki temu nie utrzymujemy dwóch interpretacji tego samego
 tekstu.
+
+Kontrakt composition używa `CompositionInlineRun`: run zawiera tekst oraz
+semantyczne markery `strong`, `emphasis` i `link`. Adapter inputu buduje je
+bezpośrednio z `NormalizedContentNode[]`; `wrapBlock` przenosi odpowiedni
+zakres runów do `CompositionLine`, a adapter PDF wybiera wagę/krój dla każdego
+runu. Tekst pozostaje dzięki temu w selekcjonowalnej warstwie PDF. Brak osobnego
+kroju italic jest rozwiązywany przez jawny fallback do dostępnego stylu upright
+i ostrzeżenie. Brak glyphu w foncie marki jest rozwiązywany per run (a w tabeli
+per komórka) przez zarejestrowany fallback font oraz ostrzeżenie z kodem
+diagnostycznym. Samo zachowanie AST nie jest już jedyną obsługą tego przypadku.
+
+Regresja `inline-markup-report` przechodzi: PDF używa osobnych zasobów fontu
+dla marki, fallbacku i bolda, a analiza strumieni potwierdza siedem linii z
+przełączeniem fontu. `pdftotext` zwraca znaki `✓` oraz tekst tabel bez literalnych
+delimiterów markdown. Brak kroju italic nie kończy planowania — jest raportowany
+jako ostrzeżenie i rysowany upright.
 
 ## Kroki
 

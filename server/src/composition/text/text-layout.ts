@@ -11,6 +11,8 @@ import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import { compositionStyleName } from './style-name.js';
 import { wordsOf } from './tokenization.js';
+import { inlineRunsForWordRange } from './inline-runs.js';
+import type { CompositionInlineRun } from '../contracts/model.js';
 import type { WrappedLine } from './text-layout-contracts.js';
 export { placeLines } from './text-placement.js';
 export type { TextPlacementPage } from './text-placement.js';
@@ -25,10 +27,24 @@ interface Interval {
  * @planner-target composition/text/text-layout.ts
  * @planner-responsibility Keep the current measure implementation intact until its target seam is extracted.
  */
-function measure(metrics: CompositionTextMetrics, text: string, styleName: string): number {
-  const width = metrics.measureText(text, styleName);
+function measure(metrics: CompositionTextMetrics, text: string, styleName: string, run?: CompositionInlineRun): number {
+  const width = metrics.measureText(text, styleName, run);
   if (!Number.isFinite(width) || width < 0) throw new Error(`Text metrics returned an invalid width for '${styleName}': ${width}.`);
   return width;
+}
+
+function measureWordRange(
+  metrics: CompositionTextMetrics,
+  text: string,
+  styleName: string,
+  runs: CompositionInlineRun[] | undefined,
+  startWord: number,
+  endWord: number,
+): number {
+  if (!runs || runs.length === 0) return measure(metrics, text, styleName);
+  const selected = inlineRunsForWordRange(runs, startWord, endWord);
+  if (selected.length === 0) return measure(metrics, text, styleName);
+  return selected.reduce((total, run) => total + measure(metrics, run.text, styleName, run), 0);
 }
 
 /**
@@ -146,6 +162,7 @@ export function wrapText(
   minimumWrapWidth = 0,
   flowBarrierBoxCandidates: CompositionFlowBarrierBoxCandidate[] = [],
   geometryTolerance = 0,
+  inlineRuns?: CompositionInlineRun[],
 ): WrappedLine[] {
   if (!Number.isFinite(slot.width) || slot.width <= 0) return [];
   const words = wordsOf(text);
@@ -182,7 +199,7 @@ export function wrapText(
       continue;
     }
     const intervalWidth = interval.end - interval.start;
-    const firstWordWidth = measure(metrics, words[index], styleName);
+    const firstWordWidth = measureWordRange(metrics, words[index]!, styleName, inlineRuns, index, index + 1);
     if (firstWordWidth > intervalWidth && intervalWidth < textSlot.width) {
       lineOffset += 1;
       continue;
@@ -195,7 +212,8 @@ export function wrapText(
         ? Math.max(0, metrics.textTrailingReserve?.(styleName) ?? 0)
         : 0;
       const textWidth = Math.max(0, intervalWidth - trailingReserve);
-      if (measure(metrics, candidate, styleName) <= textWidth || (!lineText && measure(metrics, candidate, styleName) <= intervalWidth)) {
+      const candidateWidth = measureWordRange(metrics, candidate, styleName, inlineRuns, index, end + 1);
+      if (candidateWidth <= textWidth || (!lineText && candidateWidth <= intervalWidth)) {
         lineText = candidate;
         end += 1;
         continue;
@@ -204,7 +222,8 @@ export function wrapText(
     }
     lines.push({
       text: lineText,
-      naturalWidth: measure(metrics, lineText, styleName),
+      inlineRuns: inlineRuns ? inlineRunsForWordRange(inlineRuns, index, end) : undefined,
+      naturalWidth: measureWordRange(metrics, lineText, styleName, inlineRuns, index, end),
       startWord: index,
       endWord: end,
       x: interval.start,
@@ -356,6 +375,7 @@ export function wrapBlock(
     minimumWrapWidth,
     flowBarrierBoxCandidates,
     geometryTolerance,
+    block.inlineRuns,
   );
 }
 

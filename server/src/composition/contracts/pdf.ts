@@ -1,12 +1,12 @@
 import type { jsPDF } from 'jspdf';
-import type { CompositionBlock, CompositionBlockKind } from './model.js';
+import type { CompositionBlock, CompositionBlockKind, CompositionInlineRun } from './model.js';
 import type { CompositionPlan, CompositionTextMetrics } from './engine-contracts.js';
 
 export interface JsPdfCompositionStyle {
   fontSize: number;
   lineHeight: number;
   baselineOffset: number;
-  fontStyle: 'normal' | 'bold';
+  fontStyle: 'normal' | 'bold' | 'italic' | 'bolditalic';
   fontFamily?: string;
   textColor?: [number, number, number];
   textTransform?: 'uppercase';
@@ -32,6 +32,15 @@ export interface JsPdfCompositionStyle {
 }
 
 export type JsPdfCompositionStyles = Record<string, JsPdfCompositionStyle>;
+
+/** Apply inline semantic marks without making the planner depend on jsPDF. */
+export function styleForInlineRun(style: JsPdfCompositionStyle, run?: CompositionInlineRun): JsPdfCompositionStyle {
+  if (!run || run.marks.length === 0) return style;
+  const bold = style.fontStyle === 'bold' || style.fontStyle === 'bolditalic' || run.marks.includes('strong');
+  const italic = style.fontStyle === 'italic' || style.fontStyle === 'bolditalic' || run.marks.includes('emphasis');
+  const fontStyle = bold && italic ? 'bolditalic' : bold ? 'bold' : italic ? 'italic' : 'normal';
+  return fontStyle === style.fontStyle ? style : { ...style, fontStyle };
+}
 
 export interface JsPdfCompositionGraphicStyle {
   fillColor: [number, number, number];
@@ -166,6 +175,13 @@ export interface JsPdfCompositionBackendOptions {
   pageSizeTolerance: number;
   graphicStyle?: JsPdfCompositionGraphicStyle;
   imageAssets?: ReadonlyMap<string, JsPdfCompositionImageAsset>;
+  inlineFontCoverage?: JsPdfInlineFontCoverage;
   blockRenderers?: Partial<Record<CompositionBlockKind, JsPdfCompositionBlockRenderer>>;
   tableRenderer?: JsPdfCompositionTableRenderer;
+}
+
+export interface JsPdfInlineFontCoverage {
+  family: string;
+  regular?: Set<number>;
+  bold?: Set<number>;
 }

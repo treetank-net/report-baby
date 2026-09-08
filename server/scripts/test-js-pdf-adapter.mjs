@@ -68,6 +68,53 @@ try {
   assert.match(firstPageText.stdout, /Lorem/u);
   assert.match(secondPageText.stdout, /Lorem/u);
 
+  const inlineDocument = {
+    flows: {
+      main: {
+        id: 'main',
+        continuation: 'forbidden',
+        blocks: [{
+          id: 'inline-body',
+          kind: 'paragraph',
+          role: 'body',
+          text: 'Bold and italic text remains selectable.',
+          inlineRuns: [
+            { text: 'Bold', marks: ['strong'] },
+            { text: ' and ', marks: [] },
+            { text: 'italic', marks: ['emphasis'] },
+            { text: ' text remains selectable.', marks: [] },
+          ],
+        }],
+      },
+    },
+  };
+  const inlinePdf = new jsPDF({ unit: 'mm', format: [100, 100] });
+  const inlineStyles = { body: { fontSize: 9, lineHeight: 6, baselineOffset: 4.5, fontStyle: 'normal' } };
+  const inlineMetrics = createJsPdfTextMetrics(inlinePdf, 'helvetica', inlineStyles);
+  const inlineResult = createTextCompositionEngine({
+    maxPages: 1,
+    layouts: [{ id: 'inline', width: 100, height: 100, slots: [{ id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 8, width: 84, height: 80 } }] }],
+    routes: { main: { slots: ['body'], layouts: ['inline'], continuation: 'forbidden' } },
+  }).plan(inlineDocument, inlineMetrics);
+  assert.equal(inlineResult.evaluation.status, 'accepted', JSON.stringify(inlineResult.evaluation));
+  assert.ok(inlineResult.plan.lines.some((line) => line.inlineRuns?.some((run) => run.marks.includes('strong'))), 'planned lines must retain strong marks');
+  assert.ok(inlineResult.plan.lines.some((line) => line.inlineRuns?.some((run) => run.marks.includes('emphasis'))), 'planned lines must retain emphasis marks');
+  const seenInlineStyles = [];
+  const originalSetFont = inlinePdf.setFont.bind(inlinePdf);
+  inlinePdf.setFont = (family, fontStyle) => {
+    seenInlineStyles.push(fontStyle);
+    return originalSetFont(family, fontStyle);
+  };
+  const inlineArtifact = renderComposition(inlineDocument, inlineResult, createJsPdfTextBackend(inlinePdf, 'helvetica', inlineStyles, { pageSizeTolerance: renderConfig.pdf.page_size_tolerance }));
+  assert.ok(inlineArtifact.length > 0);
+  assert.ok(seenInlineStyles.includes('bold'), 'strong runs must select a bold PDF face');
+  assert.ok(seenInlineStyles.includes('italic'), 'emphasis runs must select an italic PDF face when the adapter supports it');
+  const inlineOutput = join(temporary, 'inline.pdf');
+  await writeFile(inlineOutput, inlineArtifact);
+  const inlineText = runProcess('pdftotext', [inlineOutput, '-']);
+  assert.equal(inlineText.status, 0, inlineText.stderr);
+  assert.match(inlineText.stdout, /Bold and italic text remains selectable/u, 'styled runs must not lose text-layer content');
+
   const graphicAssetDocument = structuredClone(document);
   graphicAssetDocument.assets = [{ id: 'photo-1', source: 'fixture.png', width: 'full', fit: 'contain', keepWithCaption: false }];
   graphicAssetDocument.graphics[0] = { ...graphicAssetDocument.graphics[0], assetId: 'photo-1', shape: 'rectangle' };

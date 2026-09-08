@@ -2,9 +2,11 @@ import type { jsPDF } from 'jspdf';
 import type { CompositionBlock, CompositionTable } from '../../contracts/model.js';
 import type { CompositionPlan, CompositionTextMetrics } from '../../contracts/engine-contracts.js';
 import type {
+  JsPdfInlineFontCoverage,
   JsPdfCompositionTableRenderer,
   JsPdfCompositionTableStyle,
 } from '../../contracts/pdf.js';
+import { missingInlineCodePoints } from '../../text/inline-runs.js';
 
 /**
  * @planner-target composition/adapters/pdf/table.ts
@@ -19,15 +21,21 @@ function tableFromBlock(block: CompositionBlock): CompositionTable {
  * @planner-target composition/adapters/pdf/table.ts
  * @planner-responsibility Keep the current tableColumnWidths implementation intact until its target seam is extracted.
  */
-function tableColumnWidths(pdf: jsPDF, family: string, table: CompositionTable, width: number, style: JsPdfCompositionTableStyle): number[] {
+function tableCellFamily(family: string, value: string | number, coverage: JsPdfInlineFontCoverage | undefined): string {
+  if (!coverage || missingInlineCodePoints([{ text: String(value), marks: [] }], coverage.regular).length === 0) return family;
+  return coverage.family;
+}
+
+function tableColumnWidths(pdf: jsPDF, family: string, table: CompositionTable, width: number, style: JsPdfCompositionTableStyle, coverage?: JsPdfInlineFontCoverage): number[] {
   const columnCount = Math.max(table.head.length, ...table.body.map((row) => row.length), 1);
-  pdf.setFont(family, 'normal');
   pdf.setFontSize(style.fontSize);
   const naturalWidths = Array.from({ length: columnCount }, (_, index) => {
-    const bodyWidth = Math.max(0, ...table.body.map((row) => pdf.getTextWidth(String(row[index] ?? ''))));
-    pdf.setFont(family, 'bold');
+    const bodyWidth = Math.max(0, ...table.body.map((row) => {
+      pdf.setFont(tableCellFamily(family, row[index] ?? '', coverage), 'normal');
+      return pdf.getTextWidth(String(row[index] ?? ''));
+    }));
+    pdf.setFont(tableCellFamily(family, table.head[index] ?? '', coverage), 'bold');
     const headWidth = pdf.getTextWidth(String(table.head[index] ?? ''));
-    pdf.setFont(family, 'normal');
     return Math.max(bodyWidth, headWidth) + style.cellPadding * 2;
   });
   const naturalTotal = naturalWidths.reduce((sum, item) => sum + item, 0);
@@ -47,11 +55,13 @@ function tableLineHeight(style: JsPdfCompositionTableStyle): number {
  * @planner-target composition/adapters/pdf/table.ts
  * @planner-responsibility Keep the current tableRowHeight implementation intact until its target seam is extracted.
  */
-function tableRowHeight(pdf: jsPDF, family: string, row: Array<string | number>, widths: number[], style: JsPdfCompositionTableStyle, bold: boolean): number {
-  pdf.setFont(family, bold ? 'bold' : 'normal');
+function tableRowHeight(pdf: jsPDF, family: string, row: Array<string | number>, widths: number[], style: JsPdfCompositionTableStyle, bold: boolean, coverage?: JsPdfInlineFontCoverage): number {
   pdf.setFontSize(style.fontSize);
   const lineHeight = tableLineHeight(style);
-  const lines = row.map((cell, index) => pdf.splitTextToSize(String(cell), Math.max(1, widths[index] - style.cellPadding * 2)) as string[]);
+  const lines = row.map((cell, index) => {
+    pdf.setFont(tableCellFamily(family, cell, coverage), bold ? 'bold' : 'normal');
+    return pdf.splitTextToSize(String(cell), Math.max(1, widths[index] - style.cellPadding * 2)) as string[];
+  });
   return Math.max(1, ...lines.map((items) => items.length)) * lineHeight + style.cellPadding * 2;
 }
 
@@ -68,9 +78,9 @@ function tableRowsFromBlock(block: CompositionBlock): { table: CompositionTable;
  * @planner-target composition/adapters/pdf/table.ts
  * @planner-responsibility Keep the current drawCompositionTable implementation intact until its target seam is extracted.
  */
-function drawCompositionTable(pdf: jsPDF, family: string, block: CompositionBlock, placement: CompositionPlan['tablePlacements'][number], style: JsPdfCompositionTableStyle): void {
+function drawCompositionTable(pdf: jsPDF, family: string, block: CompositionBlock, placement: CompositionPlan['tablePlacements'][number], style: JsPdfCompositionTableStyle, coverage?: JsPdfInlineFontCoverage): void {
   const { table, head, body } = tableRowsFromBlock(block);
-  const widths = tableColumnWidths(pdf, family, table, placement.box.width, style);
+  const widths = tableColumnWidths(pdf, family, table, placement.box.width, style, coverage);
   const lineHeight = tableLineHeight(style);
   let y = placement.box.y;
   /**
@@ -78,9 +88,8 @@ function drawCompositionTable(pdf: jsPDF, family: string, block: CompositionBloc
    * @planner-responsibility Keep the current drawRow implementation intact until its target seam is extracted.
    */
   const drawRow = (row: Array<string | number>, bold: boolean, fill: [number, number, number], rowIndex: number) => {
-    const height = tableRowHeight(pdf, family, row, widths, style, bold);
+    const height = tableRowHeight(pdf, family, row, widths, style, bold, coverage);
     let x = placement.box.x;
-    pdf.setFont(family, bold ? 'bold' : 'normal');
     pdf.setFontSize(style.fontSize);
     pdf.setTextColor(...(bold ? style.headerTextColor : style.textColor));
     row.forEach((cell, index) => {
@@ -89,6 +98,7 @@ function drawCompositionTable(pdf: jsPDF, family: string, block: CompositionBloc
       pdf.setDrawColor(...style.lineColor);
       pdf.setLineWidth(style.lineWidth);
       pdf.rect(x, y, width, height, 'FD');
+      pdf.setFont(tableCellFamily(family, cell, coverage), bold ? 'bold' : 'normal');
       const lines = pdf.splitTextToSize(String(cell), Math.max(1, width - style.cellPadding * 2)) as string[];
       lines.forEach((line, lineIndex) => pdf.text(line, x + style.cellPadding, y + style.cellPadding + lineHeight * (lineIndex + 0.8)));
       x += width;
@@ -112,6 +122,7 @@ export function createJsPdfTableBlockCapabilities(
   doc: jsPDF,
   family: string,
   style: JsPdfCompositionTableStyle,
+  coverage?: JsPdfInlineFontCoverage,
 ): { measureTable: NonNullable<CompositionTextMetrics['measureTable']>; renderer: JsPdfCompositionTableRenderer } {
   if (!Number.isFinite(style.fontSize) || style.fontSize <= 0 || !Number.isFinite(style.lineHeightRatio) || style.lineHeightRatio <= 0 || !Number.isInteger(style.maxRowsPerFragment) || style.maxRowsPerFragment <= 0) {
     throw new Error('Table block style requires positive font, line-height and row-fragment limits.');
@@ -125,13 +136,13 @@ export function createJsPdfTableBlockCapabilities(
       const { table, head, body } = tableRowsFromBlock(block);
       if (!Number.isFinite(box.width) || box.width <= style.cellPadding * 2) throw new Error(`Table block '${block.id}' has no usable width.`);
       if (!Number.isInteger(startRow) || startRow < 0 || startRow >= body.length) throw new Error(`Table block '${block.id}' has invalid start row ${startRow}.`);
-      const widths = tableColumnWidths(doc, family, table, box.width, style);
+      const widths = tableColumnWidths(doc, family, table, box.width, style, coverage);
       let height = options.repeatHeader || startRow === 0
-        ? tableRowHeight(doc, family, head, widths, style, true)
+        ? tableRowHeight(doc, family, head, widths, style, true, coverage)
         : 0;
       let endRow = startRow;
       while (endRow < body.length && endRow - startRow < style.maxRowsPerFragment) {
-        const nextHeight = tableRowHeight(doc, family, body[endRow] ?? [], widths, style, false);
+        const nextHeight = tableRowHeight(doc, family, body[endRow] ?? [], widths, style, false, coverage);
         if (endRow > startRow && height + nextHeight > box.height) break;
         height += nextHeight;
         endRow += 1;
@@ -143,7 +154,7 @@ export function createJsPdfTableBlockCapabilities(
      * @planner-responsibility Keep the current renderer implementation intact until its target seam is extracted.
      */
     renderer(pdf, block, placement) {
-      drawCompositionTable(pdf, family, block, placement, style);
+      drawCompositionTable(pdf, family, block, placement, style, coverage);
     },
   };
 }
