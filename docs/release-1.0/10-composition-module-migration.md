@@ -311,7 +311,7 @@ adapters
 - `1ab6867` — odświeżenie skryptu inventory tak, aby rekurencyjnie skanował
   aktualne `composition/**/*.ts`, ignorował nieistniejące historyczne cele i
   poprawnie raportował aktualne ścieżki evaluatora.
-- bieżący seam — adaptery wejścia, geometrii szablonu, konfiguracji renderera
+- `bbcddf8` — adaptery wejścia, geometrii szablonu, konfiguracji renderera
   i składania text engine trafiły do `composition/adapters/`: odpowiednio
   `input.ts`, `page-template.ts`, `render-config.ts` i `text-engine.ts`.
 
