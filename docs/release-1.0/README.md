@@ -75,6 +75,9 @@ najpierw muszą istnieć testy i działający seam dla pętli.
 9. [Ciągłość struktur i formaty obrazów](09-structure-penalties-and-image-formats.md) —
    kary za dzielenie list i tabel, WebP/AVIF oraz końcowa optymalizacja czasu
    feedbacku testów.
+10. [Kategorie i migracja modułów composition](10-composition-module-migration.md) —
+    docelowa mapa katalogów, właściciele odpowiedzialności i kolejność
+    przenoszenia plików bez katalogu `runtime/`.
 
 ## Granica wykonalności
 
