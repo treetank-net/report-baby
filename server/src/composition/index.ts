@@ -104,4 +104,4 @@ export {
   type JsPdfCompositionImageRenderer,
   type JsPdfCompositionImageStyle,
   type JsPdfCompositionBlockCapability,
-} from './js-pdf-adapter.js';
+} from './adapters/pdf/js-pdf-adapter.js';

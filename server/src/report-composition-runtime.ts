@@ -26,9 +26,9 @@ import {
   createJsPdfMetricBlockCapabilities,
   createJsPdfTableBlockCapabilities,
   createJsPdfTextBackend,
-} from './composition/js-pdf-adapter.js';
+} from './composition/adapters/pdf/js-pdf-adapter.js';
 import type { CompositionBlockKind } from './composition/model.js';
-import type { JsPdfCompositionBlockCapability } from './composition/js-pdf-adapter.js';
+import type { JsPdfCompositionBlockCapability } from './composition/adapters/pdf/js-pdf-adapter.js';
 import { renderComposition } from './composition/engine.js';
 import { resolveImageAsset } from './image-resolver.js';
 import { decodePngDataUri } from './image-raster.js';

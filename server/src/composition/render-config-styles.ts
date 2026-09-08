@@ -7,7 +7,7 @@ import type {
   JsPdfCompositionStyle,
   JsPdfCompositionStyles,
   JsPdfCompositionTableStyle,
-} from './js-pdf-adapter.js';
+} from './adapters/pdf/js-pdf-adapter.js';
 
 function pdfNumber(pdf: Record<string, number>, key: string): number {
   const value = pdf[key];

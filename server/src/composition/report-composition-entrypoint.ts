@@ -7,7 +7,7 @@ import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } f
 import type { CompositionContrastProvider } from './evaluation/contrast.js';
 import { compositionDocumentFromInput } from './input.js';
 import { compositionTemplateFromPageGeometry } from './page-template-adapter.js';
-import { createJsPdfTextMetrics, type JsPdfCompositionStyles } from './js-pdf-adapter.js';
+import { createJsPdfTextMetrics, type JsPdfCompositionStyles } from './adapters/pdf/js-pdf-adapter.js';
 import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './text-engine.js';
 import type { TextCompositionPlannerPolicy } from './text-planner.js';
 import { compositionStylesFromRenderConfig } from './render-config-styles.js';
