@@ -167,14 +167,15 @@ kontekst, a nie syntetyczny obiekt decyzji.
 Adaptery tłumaczą zewnętrzne dane na kontrakty composition i nie zawierają reguł
 wyboru layoutu.
 
-`js-pdf-adapter.ts` jest obecnie największym workiem. Dzielimy go według
+Implementacja adaptera PDF była największym workiem. Dzielimy ją według
 capability backendu na `pdf/backend`, `pdf/text`, `pdf/image`, `pdf/metric`,
 `pdf/chart` i `pdf/table`. Każdy adapter implementuje istniejący kontrakt;
 planner nie importuje jsPDF.
 
-Kontrakt tych capability znajduje się już w `contracts/pdf.ts`. Do czasu
-rozcięcia implementacji adaptera funkcja składania capability pozostaje przy
-adapterze, ale nie definiuje już publicznych typów.
+Kontrakt tych capability znajduje się w `contracts/pdf.ts`. Implementacja jest
+rozdzielona na moduły capability; funkcja składania capability pozostaje w
+`adapters/pdf/backend.ts`, ponieważ jest częścią orkiestracji backendu, a nie
+kontraktem typu.
 
 ### Runtime w `composition/`
 
@@ -281,6 +282,10 @@ adapters
 - `e3cd97a` — przeniesienie implementacji jsPDF do `adapters/pdf/`.
 - `3f0ff4b` — wydzielenie kontraktów adaptera PDF do `contracts/pdf.ts` i
   odpięcie typów od implementacji jsPDF.
+- `7b0c43d` — rozcięcie implementacji PDF według capability na `backend.ts`,
+  `text.ts`, `image.ts`, `metric.ts`, `chart.ts` i `table.ts`; usunięcie
+  monolitycznego `js-pdf-adapter.ts` i aktualizacja importów do konkretnych
+  właścicieli.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
@@ -290,8 +295,8 @@ ponowienia na hoście/CI z możliwością uruchamiania procesów potomnych.
 
 ## Następny zakres implementacyjny
 
-Kolejny seam obejmuje rozcięcie implementacji `adapters/pdf/js-pdf-adapter.ts`
-według capability (`backend`, `text`, `image`, `metric`, `chart`, `table`).
-Kontrakty pozostają w `contracts/pdf.ts`, a publiczne eksporty nadal przechodzą
-przez jedyną fasadę `composition/index.ts`. Po każdym wydzieleniu sprawdzamy
-kompilację, architekturę i testy adaptera przed przejściem do kolejnego pliku.
+Kolejny seam obejmuje oddzielenie kontraktów i implementacji `engine.ts` do
+`contracts/engine-contracts.ts` oraz `composition-engine.ts`. Publiczne eksporty
+nadal przechodzą przez jedyną fasadę `composition/index.ts`. Po każdym
+wydzieleniu sprawdzamy kompilację, architekturę i testy adaptera przed
+przejściem do kolejnego pliku.
