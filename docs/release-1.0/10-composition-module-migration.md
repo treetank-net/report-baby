@@ -326,19 +326,29 @@ adapters
   wywołujące nie konstruują już dla nich obiektów decyzji.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
-przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
-input, template, planner, adaptery i composition adapter; zatrzymał się dopiero
-na oracle PDF przez sandboxowe `spawnSync pdftotext EPERM`. Ten przypadek wymaga
-ponowienia na hoście/CI z możliwością uruchamiania procesów potomnych.
+przechodziły pomyślnie. Pełny suite `npm run test:composition` przeszedł na
+hoście wszystkie 13 kontroli, włącznie z oracle PDF, obrazami, kontrastem,
+przepływem numerowanym i limitami stron. W sandboxie oracle nadal może kończyć
+się `spawnSync pdftotext EPERM`; nie jest to błąd migracji.
 
-## Następny zakres implementacyjny
+## Domknięcie migracji i świadomie pozostawione seamy
 
-Kolejny seam obejmuje analizę wspólnych obliczeń `flow-planner.ts` i
-`flow-text-decision.ts`: najpierw opisujemy funkcje, wejścia/wyjścia i artefakty,
-potem łączymy tylko operacje z tą samą wiedzą domenową, bez zmiany zachowania
-planera. Publiczne eksporty nadal przechodzą przez jedyną fasadę
-`composition/index.ts`. Po każdym wydzieleniu sprawdzamy kompilację,
-architekturę i testy adaptera przed przejściem do kolejnego pliku.
+Analiza wspólnych obliczeń `flow-planner.ts` i `flow-text-decision.ts` nie
+wykazała bezpiecznej funkcji, którą można połączyć bez mieszania stanu kursora,
+wyboru slotu i reguł tekstowych. Wspólne operacje są już za seamami
+`page-state.ts`, `flow-space.ts`, `text/text-layout.ts` i
+`observability/planning-observability.ts`; oba planery pozostają osobnymi
+modułami orkiestrującymi.
+
+Kolejka siedmiu funkcji powyżej 80 linii została przejrzana. Każda z nich ma
+jedną spójną odpowiedzialność za własnym interfejsem (adapter szablonu,
+placement structured block, adapter stylów/PDF albo algorytm wrappingu), więc
+nie jest dzielona mechanicznie. Pozostawienie ich jako głębokich modułów jest
+celowe; dalszy podział wymagałby nowego wariantu interfejsu lub drugiego
+adaptera, którego obecnie nie ma.
+
+Publiczne eksporty nadal przechodzą przez jedyną fasadę `composition/index.ts`.
+Po każdym seamie sprawdzamy kompilację, architekturę i suite composition.
 
 ### Aktualny inventory
 
