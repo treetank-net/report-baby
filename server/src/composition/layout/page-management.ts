@@ -4,19 +4,15 @@ import type {
   CompositionRect,
   CompositionSlotTemplate,
   CompositionTemplate,
-} from './model.js';
+} from '../model.js';
 import type {
   CompositionDiagnostic,
   CompositionPlan,
   CompositionSlot,
-} from './engine.js';
-import { diagnostic } from './planning-records.js';
-
-export interface PageState {
-  page: number;
-  layout: CompositionLayoutTemplate;
-  slots: Map<string, CompositionSlot>;
-}
+} from '../engine.js';
+import type { PageState } from '../contracts/layout-state.js';
+import { diagnostic } from '../planning-records.js';
+export type { PageState } from '../contracts/layout-state.js';
 
 /**
  * @planner-target composition/page-management.ts

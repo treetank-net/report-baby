@@ -1,4 +1,4 @@
-import type { CompositionBlock, CompositionDocument, CompositionRect } from './model.js';
+import type { CompositionBlock, CompositionDocument, CompositionRect } from '../model.js';
 import type {
   CompositionFlowBarrierBoxCandidate,
   CompositionFlowPlacement,
@@ -6,7 +6,7 @@ import type {
   CompositionLine,
   CompositionPlan,
   CompositionSlot,
-} from './engine.js';
+} from '../engine.js';
 
 function rectBottom(rect: CompositionRect): number {
   return rect.y + rect.height;

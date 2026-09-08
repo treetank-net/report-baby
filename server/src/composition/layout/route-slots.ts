@@ -1,5 +1,5 @@
-import type { CompositionBlock, CompositionLayoutTemplate, CompositionSlotTemplate } from './model.js';
-import type { CompositionSlot } from './engine.js';
+import type { CompositionBlock, CompositionLayoutTemplate, CompositionSlotTemplate } from '../model.js';
+import type { CompositionSlot } from '../engine.js';
 
 /**
  * @planner-target composition/route-slots.ts

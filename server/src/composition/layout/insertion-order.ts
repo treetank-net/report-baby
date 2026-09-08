@@ -1,5 +1,5 @@
-import type { CompositionBlock, CompositionFlowRoute } from './model.js';
-import type { PlannedInsertion } from './text-planner-candidates.js';
+import type { CompositionBlock, CompositionFlowRoute } from '../model.js';
+import type { PlannedInsertion } from '../text-planner-candidates.js';
 
 export function insertionKey(flowId: string, blockId: string): string {
   return `${flowId}:${blockId}`;

@@ -12,9 +12,8 @@ import type {
   CompositionTextMetrics,
 } from '../engine.js';
 import type { TextCompositionPlannerPolicy } from '../planner-policy.js';
-import type { PageState } from '../page-management.js';
-import type { FlowCursor } from '../flow-cursor.js';
-import type { flowBarrierBoxCandidatesForSlot } from '../flow-barriers.js';
+import type { PageState, FlowCursor } from './layout-state.js';
+import type { flowBarrierBoxCandidatesForSlot } from '../layout/flow-barriers.js';
 import type { wrapBlock } from '../text/text-measurement.js';
 
 /** Immutable inputs shared by every operation in one flow-planning run. */

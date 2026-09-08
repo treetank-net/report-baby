@@ -2,12 +2,12 @@ import type {
   CompositionBlock,
   CompositionDocument,
   CompositionRect,
-} from './model.js';
+} from '../model.js';
 import type {
   CompositionPlan,
   CompositionSlot,
-} from './engine.js';
-import type { PageState } from './page-management.js';
+} from '../engine.js';
+import type { PageState } from '../contracts/layout-state.js';
 import { rectBottom, rectsOverlap } from './page-management.js';
 
 /** Return whether a flowing text line occupies the candidate slot's box. */

@@ -5,7 +5,7 @@ import type {
 import type { CompositionPlan } from './engine.js';
 import {
   flowBarrierBoxCandidatesForSlot,
-} from './flow-barriers.js';
+} from './layout/flow-barriers.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,
@@ -16,13 +16,13 @@ import {
   flowingTextBottom,
   occupiedBottomInOverlappingSlots,
   previousBlockInSlot,
-} from './flow-occupancy.js';
-import { advanceCursor } from './flow-cursor.js';
-import { growSlot } from './slot-growth.js';
+} from './layout/flow-occupancy.js';
+import { advanceCursor } from './layout/flow-cursor.js';
+import { growSlot } from './layout/slot-growth.js';
 import { availableLineCount } from './text/line-capacity.js';
 import { obstructionAcrossLineBands } from './text/text-wrapping.js';
 import { lineHeight, styleFor, wrapBlock } from './text/text-measurement.js';
-import { rectBottom, slotBox } from './page-management.js';
+import { rectBottom, slotBox } from './layout/page-management.js';
 import { addResidual, diagnostic, recordFlowDecision } from './planning-records.js';
 
 /** Decide whether the current block is a heading that cannot fit whole. */

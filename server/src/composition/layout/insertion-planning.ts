@@ -5,18 +5,19 @@ import type {
   CompositionRect,
   CompositionSlotTemplate,
   CompositionTemplate,
-} from './model.js';
+} from '../model.js';
 import type {
   CompositionPlan,
   CompositionSlot,
   CompositionTextMetrics,
-} from './engine.js';
+} from '../engine.js';
 import { insertionKey } from './insertion-order.js';
-import { diagnostic, addResidual } from './planning-records.js';
-import { ensurePage, rectBottom, routeLayout, type PageState } from './page-management.js';
-import { lineHeight, textPadding, wrapBlock, wordsForBlock } from './text/text-measurement.js';
-import { placeLines } from './text/text-placement.js';
-import type { PlannedInsertion } from './text-planner-candidates.js';
+import { diagnostic, addResidual } from '../planning-records.js';
+import { ensurePage, rectBottom, routeLayout } from './page-management.js';
+import type { PageState } from '../contracts/layout-state.js';
+import { lineHeight, textPadding, wrapBlock, wordsForBlock } from '../text/text-measurement.js';
+import { placeLines } from '../text/text-placement.js';
+import type { PlannedInsertion } from '../text-planner-candidates.js';
 
 type InsertionTextMeasurement = {
   leading: number;

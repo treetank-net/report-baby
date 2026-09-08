@@ -8,19 +8,19 @@ import type {
   CompositionPlan,
   CompositionTableMeasurement,
 } from './engine.js';
-import type { PageState } from './page-management.js';
+import type { PageState } from './contracts/layout-state.js';
 import { compositionStyleName } from './text/style-name.js';
-import { isAtomicBlock } from './route-slots.js';
+import { isAtomicBlock } from './layout/route-slots.js';
 import { diagnostic } from './planning-records.js';
-import { rectBottom } from './page-management.js';
+import { rectBottom } from './layout/page-management.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,
   FlowTarget,
 } from './contracts/flow-planning.js';
-import { advanceCursor } from './flow-cursor.js';
-import { contentStartBottom, previousBlockInSlot } from './flow-occupancy.js';
-import { growSlot } from './slot-growth.js';
+import { advanceCursor } from './layout/flow-cursor.js';
+import { contentStartBottom, previousBlockInSlot } from './layout/flow-occupancy.js';
+import { growSlot } from './layout/slot-growth.js';
 
 /**
  * @planner-target composition/structured-block-placement.ts

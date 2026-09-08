@@ -10,21 +10,21 @@ import type {
   CompositionTextMetrics,
 } from './engine.js';
 import { placeGlyphObjects } from './glyph-objects.js';
-import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './flow-barriers.js';
+import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './layout/flow-barriers.js';
 import { recordPlanningPhase, tracePlan } from './planning-trace.js';
 import { diagnostic } from './planning-records.js';
 import {
   ensurePage,
   validateGrowthPolicies,
-  type PageState,
-} from './page-management.js';
+} from './layout/page-management.js';
+import type { PageState } from './contracts/layout-state.js';
 import {
   materializeGraphicPages,
 } from './graphic-planning.js';
 import {
   placeInsertionLayer,
   reserveInsertionObstacles,
-} from './insertion-planning.js';
+} from './layout/insertion-planning.js';
 import { planFlow } from './flow-planner.js';
 import type { TextCompositionPlannerPolicy } from './planner-policy.js';
 import type {

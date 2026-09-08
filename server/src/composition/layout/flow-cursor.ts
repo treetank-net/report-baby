@@ -1,13 +1,5 @@
-/** Mutable position of a flow while it traverses route slots and pages. */
-export interface FlowCursor {
-  blockIndex: number;
-  startWord: number;
-  startRow: number;
-  page: number;
-  routeIndex: number;
-  resumeY?: number;
-  resumeSlotId?: string;
-}
+import type { FlowCursor } from '../contracts/layout-state.js';
+export type { FlowCursor } from '../contracts/layout-state.js';
 
 /** Advance to the next route slot, wrapping to the next page when necessary. */
 /**
