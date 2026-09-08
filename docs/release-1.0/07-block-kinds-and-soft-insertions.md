@@ -1,18 +1,22 @@
 # Plan 07 — block kinds i miękkie insertiony
 
-Status: w większości wykonany dla obecnego zakresu; mapa block kinds, ścieżka
-authored graphics, ograniczone ruchome insertiony oraz renderer-neutralne
-inline runs działają. Fallback glyphów jest podłączony do PDF dla tekstu,
-metryk i tabel. Uogólnienie soft insertionów na wszystkie atomic block kinds
-pozostaje otwarte.
+Status: wykonany dla zakresu release 1.0. Mapa block kinds, ścieżka authored
+graphics, ruchome insertiony, renderer-neutralne inline runs oraz fallback
+glyphów działają. Każdy obsługiwany block kind może być przypisany do jawnego
+`insertionSlots` przez ograniczenia slotu; planner mierzy i materializuje tekst,
+tabele oraz atomic blocks (image, metric, chart) jako jedną warstwę obstacle.
+Pozostaje jedynie rozszerzanie tego kontraktu o nowe rodzaje bloków poza obecnym
+modelem.
 
 Aktualny zakres nie traktuje `quote` jako ścieżki legacy w `main`: quote jest
 tekstem dostarczanym przez nazwany, nie-main flow z zadeklarowanymi
 `insertionSlots`. `main` nie może ani zawierać quote, ani deklarować
 `insertionSlots`; te reguły są sprawdzane w preflight i przez evaluator.
-Wspólna walidacja ram insertionów i grafik znajduje się w
-`composition/layout/movable-placement-validation.ts`, ale nie oznacza jeszcze,
-że każdy block kind może być przemieszczany.
+Pozostałe block kinds mogą być insertionami, jeżeli slot jawnie dopuszcza ich
+rolę/rodzaj. Pozycje insertionów są ograniczane przez jawne ruchome bounds
+polityki (slot jest punktem wyjścia i właścicielem warstwy). Wspólna walidacja ram insertionów i grafik znajduje się w
+`composition/layout/movable-placement-validation.ts`, a ich pomiar i
+materializacja korzystają z tych samych capability seams co zwykły flow.
 
 ## Cel
 
@@ -31,16 +35,19 @@ wbudowany w szablon jako „zawsze trzecia pozycja na stronie”.
 
 ## Stan obecny
 
-Grafiki, cytaty, glyphy, tabele i atomic blocks mają już częściowe ścieżki w
-composition. Pierwszy slice soft placementu jest teraz wykonany dla
-autorskiej grafiki: `CompositionGraphic.size` wyznacza mierzony box, a
-`movableGraphicBounds` używa tego samego coarse/refinement search co quote.
-Nie jest to jeszcze jednolity mechanizm dla image-blocków, KPI i wykresów.
+Grafiki, cytaty, glyphy, tabele i atomic blocks mają jednolitą ścieżkę w
+composition. `CompositionGraphic.size` wyznacza mierzony box, a
+`movableGraphicBounds` używa tego samego coarse/refinement search co
+`movableInsertionBounds`. Insertion block jest mierzony przez capability
+`measureBlock` albo `measureTable`, dostaje placement właściwy dla rodzaju i
+zawsze rejestruje prostokątny obstacle dla głównego flow.
 
 Public input accepts authored graphics through `graphics`; the input adapter
 maps them into the same `CompositionGraphic` model used by internal callers.
-This completes declaration and normalization, but not yet the general policy
-that makes every image, KPI, or chart movable.
+The generic insertion path now applies the same policy to every currently
+supported content kind: the slot filters the block, the shared capability
+measures it, and the placement layer materializes the corresponding text,
+table, or atomic placement before ordinary flow text is laid out.
 
 Kanoniczna mapa obecnych rodzajów bloków znajduje się w
 [`docs/composition/block-kinds.md`](../composition/block-kinds.md). Opisuje
@@ -125,16 +132,17 @@ jako ostrzeżenie i rysowany upright.
 - legalność i score rozróżniają „nie można” od „można, ale gorzej wygląda”;
 - realny editorial z inną grafiką, cytatami i treścią przechodzi pełny gate.
 
-## Wymaga uzupełnienia po wykonaniu punktu X
+## Dalsze rozszerzenia po release 1.0
 
-- Wspólny kontrakt wymiarów wymaga uzupełnienia po punkcie 1, ponieważ obecne
-  block kinds mają różne capability seams.
-- Zasady „soft” wymagają uzupełnienia po planie 04: dopiero działająca pętla
-  pokaże, jakie alternatywy da się bezpiecznie przeszukiwać.
-- Wsparcie KPI/wykresów wymaga uzupełnienia po przejściu grafiki przez punkty
-  3–5; nie zakładamy, że ich pomiar i kolizje są identyczne.
+- Nowe block kinds wymagają osobnego capability seamu (pomiaru i placementu);
+  nie są automatycznie uznawane za insertiony.
+- Dalsza kalibracja zasad „soft” należy do punktu 08 i kolejnych benchmarków,
+  nie do deklaracji slotów.
+- Osobne testy rendererów mogą rozszerzyć obsługę formatów obrazów, ale nie
+  powinny przenosić dekodowania do planera.
 
 ## Poza zakresem release’u bazowego
 
-Pełna generalizacja wszystkich insertionów może pozostać kolejnym etapem, jeśli
-wyniki planu 04 pokażą zbyt duży koszt lub niejednoznaczność geometrii.
+Nowe block kinds spoza obecnego modelu wymagają osobnych capability seams i nie
+są automatycznie uznawane za insertiony. Nie dodajemy globalnego solvera ani
+nie pozwalamy na insertion sloty w `main`.

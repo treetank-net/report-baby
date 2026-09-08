@@ -26,12 +26,12 @@ import { growSlot } from './page-state.js';
  * @planner-target composition/layout/structured-block-placement.ts
  * @planner-responsibility Keep the current placeAtomicBlock implementation intact until its target seam is extracted.
  */
-function placeAtomicBlock(
+export function placeAtomicBlock(
   pageState: PageState,
   definition: CompositionSlotTemplate,
   block: CompositionBlock,
   measurement: CompositionBlockMeasurement,
-  routeIndex: number,
+  routeIndex: number | undefined,
   blockPlacements: CompositionBlockPlacement[],
   graphicPlacements: CompositionPlan['graphicPlacements'],
   top = pageState.slots.get(definition.id)?.box.y ?? definition.box.y,
@@ -92,14 +92,14 @@ function placeAtomicBlock(
  * @planner-target composition/layout/structured-block-placement.ts
  * @planner-responsibility Keep the current placeTableFragment implementation intact until its target seam is extracted.
  */
-function placeTableFragment(
+export function placeTableFragment(
   pageState: PageState,
   definition: CompositionSlotTemplate,
   block: CompositionBlock,
   measurement: CompositionTableMeasurement,
   startRow: number,
   repeatsHeader: boolean,
-  routeIndex: number,
+  routeIndex: number | undefined,
   tablePlacements: CompositionPlan['tablePlacements'],
   top = pageState.slots.get(definition.id)?.box.y ?? definition.box.y,
 ): void {

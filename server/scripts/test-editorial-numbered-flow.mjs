@@ -523,9 +523,14 @@ try {
   });
   const movableEvaluationPhase = movableResult.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
   const movableCandidates = movableEvaluationPhase?.details?.candidates ?? [];
+  const movableSearchTrace = movableResult.plan.trace?.candidateSearch;
   assert.equal(movableResult.evaluation.status, 'accepted', JSON.stringify(movableResult.evaluation));
   assert.ok(movableCandidates.length >= renderConfig.composition_search.movable_quote_candidate_count, 'movable quote search must evaluate its configured coarse candidates');
   assert.ok(movableCandidates.some((candidate) => candidate.refinementRound === 1), 'movable quote search must evaluate a local refinement round');
+  assert.ok((movableSearchTrace?.generatedCandidates ?? 0) >= movableCandidates.length, 'editorial candidate trace must account for every generated candidate');
+  assert.equal(movableSearchTrace?.evaluatedCandidates, movableCandidates.length, 'editorial candidate trace must account for every evaluated candidate');
+  assert.ok(Number.isFinite(movableSearchTrace?.planningTimeMs) && movableSearchTrace.planningTimeMs >= 0, 'editorial candidate trace must expose observed planning time');
+  assert.equal(movableSearchTrace?.selectedCandidate, movableEvaluationPhase?.details?.selectedCandidate, 'editorial trace and evaluation must identify the same winner');
   assert.ok(movableCandidates.every((candidate) => candidate.status === 'accepted'), 'movable quote candidates must remain legal');
   assert.ok(new Set(movableCandidates.map((candidate) => candidate.score)).size > 1, 'movable quote search must distinguish candidate quality');
   const orphanScore = (candidate) => candidate.scoreBreakdown?.find((component) => component.code === 'orphan-lines');
@@ -571,6 +576,7 @@ try {
         reflowPasses: candidate.reflowPasses,
         insertionPlacements: candidate.insertionPlacements,
       })),
+      searchTrace: movableSearchTrace,
     }, null, 2));
     const selectedCandidateIndex = movableEvaluationPhase.details.selectedCandidate;
     const debugPdf = movablePdf;

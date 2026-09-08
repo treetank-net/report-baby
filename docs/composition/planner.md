@@ -36,7 +36,9 @@ planner is in [`composition/layout/text-planner.ts`](../../server/src/compositio
 
 The default path produces one plan. Alternatives are generated only when the
 policy contains `movableInsertionBounds` for an existing insertion proposal or
-`movableGraphicBounds` for an authored graphic proposal. The frame describes
+`movableGraphicBounds` for an authored graphic proposal. An insertion proposal
+may refer to text, a table, an image, a metric, or a chart when its named slot
+allows that block kind. The frame describes
 the allowed area, not the element size. For graphics, the element size comes
 from `CompositionGraphic.size`; when it is omitted, the graphic remains
 slot-sized and has no useful room to move. The planner:
@@ -50,7 +52,7 @@ slot-sized and has no useful room to move. The planner:
   best variant.
 
 `movableGraphicBounds` uses the same candidate count, axis, preferred position,
-and refinement rules as quote insertions. A graphic proposal must remain inside
+and refinement rules as insertion proposals. A graphic proposal must remain inside
 its `kind: graphic` slot. A partial wrapping graphic changes the available
 horizontal intervals for only the lines it intersects; a full-width graphic
 also creates flow-barrier candidates so a continuation cannot cross its blocked

@@ -3,7 +3,7 @@ import type {
   CompositionRect,
   CompositionSlotTemplate,
 } from '../contracts/model.js';
-import type { CompositionTextMetrics } from '../contracts/engine-contracts.js';
+import type { CompositionBlockMeasurement, CompositionTableMeasurement, CompositionTextMetrics } from '../contracts/engine-contracts.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import { lineHeight, textPadding, wrapBlock, wordsForBlock } from '../text/text-layout.js';
 import type { WrappedLine } from '../text/text-layout.js';
@@ -15,6 +15,11 @@ export type InsertionTextMeasurement = {
   wordCount: number;
   consumed: number;
 };
+
+export type InsertionContentMeasurement =
+  | { kind: 'text'; text: InsertionTextMeasurement }
+  | { kind: 'table'; table: CompositionTableMeasurement }
+  | { kind: 'block'; block: CompositionBlockMeasurement };
 
 /** Measure insertion text once so proposal fitting and placement share one calculator. */
 export function measureInsertionText(
@@ -41,4 +46,37 @@ export function measureInsertionText(
     wordCount: wordsForBlock(block).length,
     consumed: lines.at(-1)?.endWord ?? 0,
   };
+}
+
+/** Measure any content block claimed by an insertion slot. */
+export function measureInsertionContent(
+  metrics: CompositionTextMetrics,
+  definition: CompositionSlotTemplate,
+  box: CompositionRect,
+  block: CompositionBlock,
+): InsertionContentMeasurement | undefined {
+  if (block.kind === 'table') {
+    if (!metrics.measureTable) return undefined;
+    return { kind: 'table', table: metrics.measureTable(block, box, 0, { repeatHeader: false }) };
+  }
+  if (block.atomic === true || block.kind === 'image' || block.kind === 'metric' || block.kind === 'chart') {
+    if (!metrics.measureBlock) return undefined;
+    return { kind: 'block', block: metrics.measureBlock(block, box) };
+  }
+  return { kind: 'text', text: measureInsertionText(metrics, definition, box, block) };
+}
+
+export function insertionContentHeight(measurement: InsertionContentMeasurement): number {
+  if (measurement.kind === 'text') {
+    const { lines, leading, padding } = measurement.text;
+    if (lines.length === 0) return 0;
+    return padding.top + (lines.at(-1)!.lineOffset + 1) * leading + padding.bottom;
+  }
+  return measurement.kind === 'table' ? measurement.table.height : measurement.block.height;
+}
+
+export function insertionContentIsComplete(measurement: InsertionContentMeasurement, block: CompositionBlock): boolean {
+  if (measurement.kind === 'text') return measurement.text.consumed >= measurement.text.wordCount;
+  if (measurement.kind === 'table') return measurement.table.endRow >= (block.table?.body.length ?? 0);
+  return true;
 }

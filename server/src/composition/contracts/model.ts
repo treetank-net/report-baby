@@ -95,10 +95,10 @@ export interface CompositionLayoutTemplate {
 export interface CompositionFlowRoute {
   slots: string[];
   /**
-   * Fixed-position insertions owned by a named non-main flow and painted as
-   * exclusion obstacles for the ordinary text flow. They are not route
-   * segments of `main`; the main stream continues around the resulting box,
-   * just like it does around an image.
+   * Content slots owned by a named non-main flow. Blocks matching these slots
+   * are measured and painted as an insertion layer, then exposed as exclusion
+   * obstacles for the ordinary text flow. They are not route segments of
+   * `main`; the main stream continues around the resulting box.
    */
   insertionSlots?: string[];
   continuation: 'allowed' | 'forbidden';

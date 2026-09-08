@@ -76,6 +76,11 @@ try {
   insertionSource.flows.quotes = { slots: ['quote'], insertion_slots: ['quote'], continuation: 'allowed' };
   const insertionCompiled = compileTemplateSource(insertionSource);
   assert.deepEqual(insertionCompiled.flows.quotes, { id: 'quotes', slots: ['quote'], insertionSlots: ['quote'], continuation: 'allowed' });
+  const atomicInsertionSource = structuredClone(source);
+  atomicInsertionSource.slots.metric = { type: 'metric-card', frame: { x: 0.1, y: 0.4, width: 0.3, height: 0.1 }, role: 'metric' };
+  atomicInsertionSource.flows.metrics = { slots: ['metric'], insertion_slots: ['metric'], continuation: 'forbidden' };
+  const atomicInsertionCompiled = compileTemplateSource(atomicInsertionSource);
+  assert.deepEqual(atomicInsertionCompiled.flows.metrics, { id: 'metrics', slots: ['metric'], insertionSlots: ['metric'], continuation: 'forbidden' }, 'non-quote content slots may be declared as insertion slots');
   assert.throws(
     () => compileTemplateSource({ ...insertionSource, flows: { ...insertionSource.flows, main: { slots: ['content', 'quote'], insertion_slots: ['quote'], continuation: 'allowed' } } }),
     /main.*insertion_slots.*separate insertion flow/u,

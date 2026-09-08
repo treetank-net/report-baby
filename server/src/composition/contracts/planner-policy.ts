@@ -9,7 +9,7 @@ export interface MovablePlacementBounds {
   refinementCandidateCount?: number;
 }
 
-/** @deprecated Use MovablePlacementBounds; retained for the quote API. */
+/** Compatibility alias: insertion movement uses the same bounds contract for every block kind. */
 export type MovableInsertionBounds = MovablePlacementBounds;
 
 export type MovableInsertionPolicy = Record<string, MovableInsertionBounds>;

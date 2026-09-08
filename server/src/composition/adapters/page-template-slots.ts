@@ -134,7 +134,7 @@ export function declaredBlockSlotsForFlow(
       kind: 'block' as const,
       box: normalizedBox(slotFrame(source, continuation), pageGeometry),
       ...(source.role ? { allowedRoles: [source.role as CompositionBlockRole] } : {}),
-      allowedBlockKinds: blockKindsForSource(source.kind),
+      allowedBlockKinds: (source.allowedBlockKinds as CompositionBlockKind[] | undefined) ?? blockKindsForSource(source.kind),
       ...(growth === undefined ? {} : { grow: growth }),
     }];
   });

@@ -1,7 +1,7 @@
 # Release 1.0 — plany wykonawcze
 
 Status: punkty 01–05 są w większości wykonane w ograniczonym zakresie, punkt 06
-jest w większości wykonany, punkty 07–08 pozostają częściowe, a punkt 09 nie
+jest w większości wykonany, punkty 07–08 są wykonane dla zakresu release’u, a punkt 09 nie
 został rozpoczęty. Organizacja modułów 10–11 została wykonana jako praca
 utrzymaniowa bez zmiany kontraktu MCP/CLI.
 
@@ -66,8 +66,8 @@ najpierw muszą istnieć testy i działający seam dla pętli.
 | 04 | wykonany w ograniczonym zakresie | tylko jawne, deterministyczne ruchy; bez globalnego solvera |
 | 05 | w większości wykonany | inline runs, gap-tightening i pełna własność chrome w planie |
 | 06 | w większości wykonany | utrzymanie publicznego gate’u; znany, wcześniejszy `EMPTY_FLOW_SLOT`; dalsze seam’y tylko z konkretnym kontraktem |
-| 07 | w większości wykonany | fallback glyphów oraz pełna polityka soft insertionów dla wszystkich atomic kinds |
-| 08 | częściowo wykonany | kalibracja na realnych PDF-ach, porównanie screeningu z finalnym rasterem i formaty JPEG/SVG/WebP/AVIF |
+| 07 | wykonany dla obecnych block kinds | nowe rodzaje bloków wymagają osobnego capability seam’u |
+| 08 | wykonany dla wyszukiwania composition | formaty JPEG/SVG/WebP/AVIF pozostają w zakresie punktu 09 |
 | 09 | nierozpoczęty | ciągłość list/tabel, WebP/AVIF i budżet czasu feedbacku |
 
 Ta tabela jest nadrzędnym skrótem statusu. Szczegółowe dokumenty zachowują

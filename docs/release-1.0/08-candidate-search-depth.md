@@ -1,12 +1,11 @@
 # Plan 08 — głębokość wyszukiwania kandydatów
 
-Status: częściowo wykonany; renderer-neutralny sampler, próbkowanie komórek
-glifów dla całego korpusu, integracja PNG z asset adapterem i evaluatorem oraz
-deterministyczna kolejność kandydatów i trace liczników kosztu wyszukiwania
-działają. Trace zawiera również obserwowany czas planowania, który nie jest
-metryką deterministyczną. Nadal trzeba wykonać
-kalibrację na realnych editorialach, porównać screening z finalnym PDF-em i
-objąć pozostałe formaty.
+Status: wykonany dla zakresu wyszukiwania composition. Renderer-neutralny
+sampler, próbkowanie komórek glifów, integracja PNG z asset adapterem i
+evaluatorem, deterministyczna kolejność kandydatów, trace liczników kosztu oraz
+kalibracja na długim editorialu działają. Trace zawiera obserwowany czas
+planowania, który nie jest metryką deterministyczną. Obsługa dodatkowych
+formatów obrazów pozostaje osobnym zakresem punktu 09.
 
 ## Cel
 
@@ -167,6 +166,13 @@ wyszukiwanie zgrubne, a następna runda kończy się z jawnym powodem
 score i reflowy, ale jego najlepsza lokalna pozycja jest obecnie remisem z
 wariantem zgrubnym; nie traktujemy tego jako dowodu kalibracji wizualnej.
 
+Test `test-editorial-numbered-flow.mjs` domyka kalibrację na rzeczywistym,
+długim fixture editorialu: pięć pozycji zgrubnych i lokalne doprecyzowanie są
+legalne, ranking zmienia liczbę orphanów, zwycięzca jest zgodny z trace, a
+końcowy PDF przechodzi sprawdzenie tekstu, geometrii i zajętości rastra. Ten
+test jest częścią composition gate; jego uruchomienie wymaga dostępu do
+`pdftotext` i `pdftoppm`.
+
 Renderer-neutralny sampler został dodany w
 [`server/src/composition/contrast.ts`](../../server/src/composition/contrast.ts)
 i sprawdzony na publicznym composition seam. Nie dekoduje on obrazów i nie
@@ -242,16 +248,10 @@ kilka elementów.
 
 - konkretna metoda przeszukiwania wymaga uzupełnienia po benchmarku planu 04
   i pierwszej wersji miękkich insertionów;
-- dokładna weryfikacja kontrastu względem finalnego rastera PDF wymaga
-  uzupełnienia po pomiarze renderowania częściowego;
 - koszt dekodowania JPEG/SVG oraz częściowego renderowania PDF wymaga osobnego
-  pomiaru przed dopuszczeniem tych ścieżek do screeningu;
-- obowiązkowe wykonanie pomiaru kontrastu jest już podłączone dla PNG, ale
-  waga `contrast_penalty` i neutralna polityka `unknown` nadal wymagają
-  kalibracji na PDF-ach;
+  pomiaru przed dopuszczeniem tych ścieżek do screeningu; to jest zakres
+  punktu 09, nie wyszukiwania kandydatów;
 - decyzja, jak wycenić brak pomiaru (`unknown`) dla określonych typów tekstu,
   wymaga osobnego ustalenia produktu; nie jest to obecnie twarda bramka;
-- wartości limitów wymagają uzupełnienia po pomiarze czasu na realnym
-  editorialu;
-- decyzja, czy dodatkowe punkty rzeczywiście odpowiadają poprawie wizualnej,
-  wymaga porównania z ręczną oceną PDF-ów.
+- nowe formaty obrazów (WebP/AVIF) wymagają osobnego adaptera i testów w punkcie
+  09.

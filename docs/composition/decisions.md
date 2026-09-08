@@ -21,11 +21,12 @@ negative penalties.
 
 ## Obstacles outside ordinary flow
 
-A quote, graphic, or future KPI can be a separate insertion. Quote content is
-always owned by a named non-`main` flow; `main` is reserved for the primary
-text and cannot declare insertion slots. The insertion's measured box is an
-obstacle for text, but its text does not become ordinary-flow lines. This
-allows the element type to change without rewriting column-text mechanics.
+A quote, graphic, KPI, chart, table, or image block can be a separate
+insertion. Quote content is always owned by a named non-`main` flow; `main` is
+reserved for the primary text and cannot declare insertion slots. An insertion's
+measured box is an obstacle for text, while its content is materialized through
+the capability for its own block kind. This allows the element type to change
+without rewriting column-text mechanics.
 
 ## Flow barriers as shared continuation areas
 

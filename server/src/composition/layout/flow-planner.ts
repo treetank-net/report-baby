@@ -65,14 +65,12 @@ function createFlowPlanningContext(
   pages: PageState[],
   plan: CompositionPlan,
   startPage: number,
-  skipPreplannedInsertionBlocks: boolean,
+  preplannedInsertionBlockIds: ReadonlySet<string>,
 ): FlowPlanningContext | undefined {
   const flow = document.flows[flowId];
   if (!flow) return undefined;
   const authoredBlocks = flow.blocks;
-  const blocks = skipPreplannedInsertionBlocks
-    ? authoredBlocks.filter((block) => block.role !== 'quote')
-    : authoredBlocks;
+  const blocks = authoredBlocks.filter((block) => !preplannedInsertionBlockIds.has(block.id));
   return {
     document,
     metrics,
@@ -386,9 +384,9 @@ export function planFlow(
   pages: PageState[],
   plan: CompositionPlan,
   startPage = 1,
-  skipPreplannedInsertionBlocks = false,
+  preplannedInsertionBlockIds: ReadonlySet<string> = new Set(),
 ): void {
-  const context = createFlowPlanningContext(document, metrics, template, policy, flowId, route, pages, plan, startPage, skipPreplannedInsertionBlocks);
+  const context = createFlowPlanningContext(document, metrics, template, policy, flowId, route, pages, plan, startPage, preplannedInsertionBlockIds);
   if (!context) return;
   const runtime = createFlowRuntime(context);
   const { cursor } = runtime;

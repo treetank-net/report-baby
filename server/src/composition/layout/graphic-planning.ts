@@ -8,6 +8,7 @@ import type {
   CompositionGraphicPlacement,
   CompositionPlan,
 } from '../contracts/engine-contracts.js';
+import { rectFitsInside } from '../geometry/rectangles.js';
 import { polygonPoints } from '../geometry/visual-geometry.js';
 import { diagnostic } from '../observability/planning-observability.js';
 import { ensurePage, routeLayout, slotId } from './page-state.js';
@@ -65,18 +66,6 @@ function graphicShapeValidationError(graphic: DocumentGraphic): string | undefin
     return `Polygon '${graphic.id}' needs at least three normalized points inside its slot.`;
   }
   return undefined;
-}
-
-/** Check whether a proposed graphic box remains inside its slot. */
-/**
- * @planner-target composition/layout/graphic-planning.ts
- * @planner-responsibility Keep the current graphicBoxFitsSlot implementation intact until its target seam is extracted.
- */
-function graphicBoxFitsSlot(box: CompositionRect, definition: CompositionSlotTemplate): boolean {
-  return box.x >= definition.box.x
-    && box.y >= definition.box.y
-    && box.x + box.width <= definition.box.x + definition.box.width
-    && box.y + box.height <= definition.box.y + definition.box.height;
 }
 
 /** Build the renderer-neutral placement record for a graphic. */
@@ -137,7 +126,7 @@ function placeGraphicForPage(
   }
   const proposal = graphicProposals.get(graphic.id);
   const box = proposal?.box ?? graphicBox(graphic, definition);
-  if (!graphicBoxFitsSlot(box, definition)) {
+  if (!rectFitsInside(box, definition.box)) {
     plan.diagnostics.push(diagnostic('error', 'GRAPHIC_BOX_OUTSIDE_SLOT', `Graphic '${graphic.id}' leaves graphic slot '${graphic.slotId}'.`, { blockId: graphic.id, page: pageState.page, slotId: graphic.slotId, details: { box, slot: definition.box } }));
     return;
   }

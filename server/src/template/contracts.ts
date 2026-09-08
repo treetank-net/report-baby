@@ -254,7 +254,7 @@ function templateFlowsAt(value: unknown, path: string, slots: Record<string, Com
     for (const slot of rawInsertionSlots ?? []) {
       if (!slots[slot]) fail(`${path}.${id}.insertion_slots`, `references unknown slot '${slot}'.`);
       if (!rawSlots.includes(slot)) fail(`${path}.${id}.insertion_slots`, `slot '${slot}' must also be listed in slots.`);
-      if (slots[slot]?.role !== 'quote') fail(`${path}.${id}.insertion_slots`, `slot '${slot}' must declare role 'quote'.`);
+      if (slots[slot]?.kind === 'graphic' || slots[slot]?.kind === 'lockup') fail(`${path}.${id}.insertion_slots`, `slot '${slot}' must be a content slot, not '${slots[slot]?.kind}'.`);
     }
     const continuation = raw.continuation === undefined || raw.continuation === 'allowed' ? 'allowed' : raw.continuation === 'forbidden' ? 'forbidden' : fail(`${path}.${id}.continuation`, "must be 'allowed' or 'forbidden'.");
     const repeat = raw.repeat === undefined ? undefined : raw.repeat === 'each-page' ? raw.repeat : fail(`${path}.${id}.repeat`, "must be 'each-page'.");

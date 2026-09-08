@@ -23,6 +23,7 @@ import {
   placeInsertionLayer,
   reserveInsertionObstacles,
 } from './insertion-layout.js';
+import { insertionBlocksForFlow } from './insertion-planning.js';
 import { planFlow } from './flow-planner.js';
 import type { TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
 import type {
@@ -108,12 +109,12 @@ function planHasErrors(plan: CompositionPlan): boolean {
   return plan.diagnostics.some((item) => item.severity === 'error');
 }
 
-/** Reject quote blocks that are not owned by a non-main insertion flow. */
+/** Validate insertion-flow ownership; quote keeps its stricter legacy contract. */
 /**
  * @planner-target composition/layout/document-layout.ts
- * @planner-responsibility Keep the current validateQuoteFlowContracts implementation intact until its target seam is extracted.
+ * @planner-responsibility Keep the current validateInsertionFlowContracts implementation intact until its target seam is extracted.
  */
-function validateQuoteFlowContracts(document: CompositionDocument, template: CompositionTemplate, plan: CompositionPlan): void {
+function validateInsertionFlowContracts(document: CompositionDocument, template: CompositionTemplate, plan: CompositionPlan): void {
   if (template.routes.main?.insertionSlots?.length) {
     plan.diagnostics.push(diagnostic('error', 'MAIN_FLOW_INSERTIONS_FORBIDDEN', "The main flow cannot declare insertion slots; use a separate insertion flow.", { flowId: 'main' }));
   }
@@ -145,7 +146,7 @@ function preparePlanForLayout(
 ): void {
   plan.movableInsertionFrames = movableInsertionFramesForPlan(policy.movableInsertionBounds, insertionProposals);
   plan.movableGraphicFrames = movableGraphicFramesForPlan(policy.movableGraphicBounds, graphicProposals);
-  validateQuoteFlowContracts(document, template, plan);
+  validateInsertionFlowContracts(document, template, plan);
   validateMovablePlacementBounds(insertionProposals, policy.movableInsertionBounds ?? {}, plan, 'insertion');
   validateMovablePlacementBounds(graphicProposals, policy.movableGraphicBounds ?? {}, plan, 'graphic');
   validateGrowthPolicies(template, plan);
@@ -208,8 +209,9 @@ function planRepeatedFlow(context: DocumentFlowPlanningContext, flowId: string, 
   context.plan.repeatFlowIds?.push(flowId);
   const pageCount = Math.max(1, context.pages.length);
   const firstPage = route.startPage ?? 1;
+  const preplannedInsertionBlockIds = new Set(insertionBlocksForFlow(context.template, flowId, context.document.flows[flowId]?.blocks ?? []).map((block) => block.id));
   for (let page = firstPage; page <= pageCount; page += 1) {
-    planFlow(context.document, context.metrics, context.template, context.policy, flowId, { ...route, continuation: 'forbidden' }, context.pages, context.plan, page);
+    planFlow(context.document, context.metrics, context.template, context.policy, flowId, { ...route, continuation: 'forbidden' }, context.pages, context.plan, page, preplannedInsertionBlockIds);
   }
 }
 
@@ -223,7 +225,8 @@ function planOrdinaryFlow(context: DocumentFlowPlanningContext, flowId: string, 
     context.plan.diagnostics.push(diagnostic('error', 'FLOW_START_PAGE_INVALID', `Flow '${flowId}' has an invalid start page ${route.startPage}.`, { flowId }));
     return;
   }
-  planFlow(context.document, context.metrics, context.template, context.policy, flowId, route, context.pages, context.plan, route.startPage ?? 1, Boolean(route.insertionSlots?.length));
+  const preplannedInsertionBlockIds = new Set(insertionBlocksForFlow(context.template, flowId, context.document.flows[flowId]?.blocks ?? []).map((block) => block.id));
+  planFlow(context.document, context.metrics, context.template, context.policy, flowId, route, context.pages, context.plan, route.startPage ?? 1, preplannedInsertionBlockIds);
 }
 
 /** Dispatch one flow to its repeated or ordinary planning path. */

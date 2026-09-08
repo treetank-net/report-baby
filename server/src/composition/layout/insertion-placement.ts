@@ -9,12 +9,14 @@ import type {
   CompositionSlot,
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
-import { diagnostic, addResidual, recordPlanDecision } from '../observability/planning-observability.js';
+import { diagnostic, addResidual, addTableResidual, recordPlanDecision } from '../observability/planning-observability.js';
 import { ensurePage, routeLayout } from './page-state.js';
 import type { PageState } from '../contracts/layout-state.js';
 import { placeLines } from '../text/text-layout.js';
 import { insertionKey, type PlannedInsertion } from './planner-candidates.js';
-import { measureInsertionText, type InsertionTextMeasurement } from './insertion-measurement.js';
+import { insertionBlocksForFlow, insertionSlotAcceptsBlock } from './insertion-planning.js';
+import { insertionContentHeight, insertionContentIsComplete, measureInsertionContent, type InsertionContentMeasurement } from './insertion-measurement.js';
+import { placeAtomicBlock, placeTableFragment } from './structured-block-placement.js';
 import type { CompositionSlotTemplate } from '../contracts/model.js';
 
 function reserveInsertionObstacle(
@@ -30,7 +32,7 @@ function reserveInsertionObstacle(
   }
   const page = ensurePage(pages, template, route, proposal.page, plan.diagnostics, proposal.flowId);
   if (!page) return;
-  const definition = page.layout.slots.find((slot) => slot.id === proposal.slotId && slot.allowedRoles?.includes('quote'));
+  const definition = page.layout.slots.find((slot) => slot.id === proposal.slotId);
   const slot = definition ? page.slots.get(definition.id) : undefined;
   if (!definition || !slot) {
     plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Insertion '${proposal.blockId}' cannot reserve slot '${proposal.slotId}'.`, { flowId: proposal.flowId, blockId: proposal.blockId, page: proposal.page, slotId: proposal.slotId }));
@@ -118,7 +120,7 @@ function resolveInsertionBlockTarget(
     return undefined;
   }
   const page = ensurePage(pages, template, route, proposal.page, plan.diagnostics, flowId);
-  const definition = page?.layout.slots.find((slot) => slot.id === proposal.slotId && slot.allowedRoles?.includes('quote'));
+  const definition = page?.layout.slots.find((slot) => slot.id === proposal.slotId && insertionSlotAcceptsBlock(slot, flowId, block));
   const slot = definition && page ? page.slots.get(definition.id) : undefined;
   if (!page || !definition || !slot) {
     plan.diagnostics.push(diagnostic('error', 'INSERTION_SLOT_NOT_FOUND', `Insertion '${block.id}' cannot place its planned slot '${proposal.slotId}'.`, { flowId, blockId: block.id, page: proposal.page, slotId: proposal.slotId }));
@@ -132,13 +134,14 @@ function fitInsertionSlotContent(
   plan: CompositionPlan,
   target: InsertionBlockTarget,
   block: CompositionBlock,
-  measurement: InsertionTextMeasurement,
+  measurement: InsertionContentMeasurement,
+  contentHeight: number,
 ): void {
   const { definition, slot, page, proposal } = target;
-  if (!definition.fitContent || measurement.lines.length === 0) return;
-  const contentHeight = (measurement.lines.at(-1)!.lineOffset + 1) * measurement.leading;
+  if (!definition.fitContent) return;
+  if (contentHeight <= 0) return;
   const maxHeight = definition.grow?.axis === 'y' ? definition.grow.maxHeight : slot.box.height;
-  const fittedHeight = Math.min(maxHeight, measurement.padding.top + contentHeight + measurement.padding.bottom);
+  const fittedHeight = Math.min(maxHeight, contentHeight);
   slot.box.height = fittedHeight;
   const decision = recordPlanDecision(plan, 'INSERTION_SLOT_FIT_CONTENT');
   decision.flowId = proposal.flowId;
@@ -168,14 +171,34 @@ function placeInsertionBlock(
 ): string | undefined {
   const target = resolveInsertionBlockTarget(template, plan, pages, proposals, route, flowId, block);
   if (!target) return undefined;
-  const measurement = measureInsertionText(metrics, target.definition, target.slot.box, block);
-  if (measurement.consumed < measurement.wordCount) {
-    plan.diagnostics.push(diagnostic('error', 'INSERTION_OVERFLOW', `Insertion '${block.id}' does not fit in its measured obstacle box.`, { flowId, blockId: block.id, page: target.page.page, slotId: target.slot.id, details: { consumed: measurement.consumed, wordCount: measurement.wordCount, box: { ...target.slot.box } } }));
-    addResidual(plan.residualContent, flowId, block, measurement.consumed, target.slot.id, 'insertion-overflow');
+  let measurement: InsertionContentMeasurement | undefined;
+  try {
+    measurement = measureInsertionContent(metrics, target.definition, target.slot.box, block);
+  } catch (cause) {
+    plan.diagnostics.push(diagnostic('error', 'INSERTION_MEASUREMENT_FAILED', `Measurement failed for insertion '${block.id}': ${cause instanceof Error ? cause.message : String(cause)}`, { flowId, blockId: block.id, page: target.page.page, slotId: target.slot.id }));
     return undefined;
   }
-  fitInsertionSlotContent(plan, target, block, measurement);
-  placeLines(target.page, target.definition, block, metrics, flowId, undefined, measurement.lines, measurement.leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion', measurement.padding);
+  if (!measurement) {
+    plan.diagnostics.push(diagnostic('error', 'INSERTION_MEASUREMENT_UNAVAILABLE', `No renderer-neutral measurement is available for insertion '${block.id}'.`, { flowId, blockId: block.id, page: target.page.page, slotId: target.slot.id }));
+    addResidual(plan.residualContent, flowId, block, 0, target.slot.id, 'insertion-measurement-unavailable');
+    return undefined;
+  }
+  const contentHeight = insertionContentHeight(measurement);
+  if (!Number.isFinite(contentHeight) || contentHeight <= 0 || !insertionContentIsComplete(measurement, block)) {
+    const textMeasurement = measurement.kind === 'text' ? measurement.text : undefined;
+    plan.diagnostics.push(diagnostic('error', 'INSERTION_OVERFLOW', `Insertion '${block.id}' does not fit in its measured obstacle box.`, { flowId, blockId: block.id, page: target.page.page, slotId: target.slot.id, details: { consumed: textMeasurement?.consumed, wordCount: textMeasurement?.wordCount, endRow: measurement.kind === 'table' ? measurement.table.endRow : undefined, rowCount: block.table?.body.length, box: { ...target.slot.box } } }));
+    if (measurement.kind === 'table') addTableResidual(plan.residualContent, flowId, block, measurement.table.endRow, target.slot.id, 'insertion-overflow');
+    else addResidual(plan.residualContent, flowId, block, textMeasurement?.consumed ?? 0, target.slot.id, 'insertion-overflow');
+    return undefined;
+  }
+  fitInsertionSlotContent(plan, target, block, measurement, contentHeight);
+  if (measurement.kind === 'text') {
+    placeLines(target.page, target.definition, block, metrics, flowId, undefined, measurement.text.lines, measurement.text.leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion', measurement.text.padding);
+  } else if (measurement.kind === 'table') {
+    placeTableFragment(target.page, target.definition, block, measurement.table, 0, false, target.slot.routeIndex, plan.tablePlacements, target.slot.box.y);
+  } else {
+    placeAtomicBlock(target.page, target.definition, block, measurement.block, target.slot.routeIndex, plan.blockPlacements, plan.graphicPlacements, target.slot.box.y);
+  }
   target.slot.state = 'exhausted';
   synchronizeInsertionObstacle(plan, target, block);
   const decision = recordPlanDecision(plan, 'INSERTION_LAYER_PLACED');
@@ -183,12 +206,13 @@ function placeInsertionBlock(
   decision.blockId = block.id;
   decision.page = target.page.page;
   decision.slotId = target.slot.id;
-  decision.lineCount = measurement.lines.length;
+  decision.lineCount = measurement.kind === 'text' ? measurement.text.lines.length : undefined;
+  decision.kind = measurement.kind;
   decision.box = { ...target.slot.box };
   return target.key;
 }
 
-/** Materialize all planned insertion text before ordinary flow placement. */
+/** Materialize all planned insertion blocks before ordinary flow placement. */
 export function placeInsertionLayer(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
@@ -202,7 +226,7 @@ export function placeInsertionLayer(
     if (flowId === 'main') continue;
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
-    for (const block of flow.blocks.filter((candidate) => candidate.role === 'quote')) {
+    for (const block of insertionBlocksForFlow(template, flowId, flow.blocks)) {
       const key = placeInsertionBlock(metrics, template, plan, pages, proposals, route, flowId, block);
       if (key) placed.add(key);
     }

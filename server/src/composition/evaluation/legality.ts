@@ -326,8 +326,9 @@ export function validateFlowSlotContinuity(
   plan: CompositionPlan,
   minimum: number,
   diagnostics: CompositionDiagnostic[],
+  insertionSlotIds: ReadonlySet<string> = new Set(),
 ): void {
-  if (slot.allowedRoles?.includes('quote')) return;
+  if (slot.allowedRoles?.includes('quote') || insertionSlotIds.has(slot.id.replace(/^\d+:/u, ''))) return;
   const laterItems = flowItems.filter((item) => item.page > page.page || (item.page === page.page && (item.routeIndex ?? Number.NEGATIVE_INFINITY) > slot.routeIndex!));
   if (laterItems.length === 0) return;
   const hasEligibleLaterBlock = laterItems.some((item) => {
@@ -354,18 +355,21 @@ export function checkEmptyAndUnderfilledSlots(document: CompositionDocument, pla
   const minimum = plan.minimumFragmentLines ?? 1;
   if (!Number.isInteger(minimum) || minimum <= 0) return;
   const items = underfilledFlowItems(document, plan);
+  const insertionSlotIds = new Set(plan.graphicPlacements
+    .filter((graphic) => graphic.graphicId.startsWith('insertion:'))
+    .map((graphic) => graphic.slotId.replace(/^\d+:/u, '')));
   for (const [flowId, flow] of Object.entries(document.flows)) {
     if (plan.repeatFlowIds?.includes(flowId)) continue;
     const blockIndexes = new Map(flow.blocks.map((block, index) => [block.id, index]));
     const flowItems = items.filter((item) => item.flowId === flowId);
     for (const page of plan.pages) {
       const pageSlots = plan.slots.filter((slot) => slot.page === page.page && slot.flowId === flowId && slot.routeIndex !== undefined && slot.kind === 'text');
-      for (const slot of pageSlots) validateFlowSlotContinuity(flow, page, slot, flowItems, blockIndexes, plan, minimum, diagnostics);
+      for (const slot of pageSlots) validateFlowSlotContinuity(flow, page, slot, flowItems, blockIndexes, plan, minimum, diagnostics, insertionSlotIds);
     }
   }
 }
 
-type InsertionQuoteGeometry = {
+type InsertionObstacleGeometry = {
   page: number;
   box: { x: number; y: number; width: number; height: number };
 };
@@ -374,17 +378,12 @@ type InsertionQuoteGeometry = {
  * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Resolve the physical obstacle geometry for one insertion quote.
  */
-function insertionQuoteGeometry(
-  quoteLines: CompositionPlan['lines'],
-  quoteGraphic: CompositionPlan['graphicPlacements'][number],
-): InsertionQuoteGeometry {
-  const quoteBox = quoteGraphic.box ?? quoteLines.reduce((box, line) => ({
-    x: Math.min(box.x, line.box.x),
-    y: Math.min(box.y, line.box.y),
-    width: Math.max(box.x + box.width, line.box.x + line.box.width) - Math.min(box.x, line.box.x),
-    height: Math.max(box.y + box.height, line.box.y + line.box.height) - Math.min(box.y, line.box.y),
-  }), { ...quoteLines[0].box });
-  return { page: quoteGraphic.page ?? quoteLines[0].page, box: quoteBox };
+function insertionObstacleGeometry(
+  insertionLines: CompositionPlan['lines'],
+  insertionGraphic: CompositionPlan['graphicPlacements'][number],
+): InsertionObstacleGeometry {
+  const insertionBox = insertionGraphic.box;
+  return { page: insertionGraphic.page ?? insertionLines[0]?.page ?? 0, box: insertionBox };
 }
 
 /**
@@ -393,16 +392,16 @@ function insertionQuoteGeometry(
  */
 function validateInsertionPredecessorOrder(
   flowId: string,
-  quoteId: string,
-  geometry: InsertionQuoteGeometry,
+  insertionId: string,
+  geometry: InsertionObstacleGeometry,
   predecessors: Array<{ blockId: string; page: number; slotId: string; box: { x: number; y: number; width: number; height: number } }>,
   diagnostics: CompositionDiagnostic[],
 ): void {
   const predecessorAfterQuote = predecessors.find((item) => item.page > geometry.page || (item.page === geometry.page && item.box.y >= geometry.box.y + geometry.box.height));
   if (!predecessorAfterQuote) return;
-  pushEvaluationError(diagnostics, 'INSERTION_SOURCE_ORDER_VIOLATION', 'Content preceding insertion ' + quoteId + ' is placed after its obstacle.', {
+  pushEvaluationError(diagnostics, 'INSERTION_SOURCE_ORDER_VIOLATION', 'Content preceding insertion ' + insertionId + ' is placed after its obstacle.', {
     flowId,
-    blockId: quoteId,
+    blockId: insertionId,
     page: geometry.page,
     details: {
       predecessorBlockId: predecessorAfterQuote.blockId,
@@ -420,8 +419,8 @@ function validateInsertionPredecessorOrder(
  */
 function validateInsertionSuccessorOrder(
   flowId: string,
-  quoteId: string,
-  geometry: InsertionQuoteGeometry,
+  insertionId: string,
+  geometry: InsertionObstacleGeometry,
   successors: Array<{ blockId: string; page: number; slotId: string; box: { x: number; y: number; width: number; height: number } }>,
   plan: CompositionPlan,
   diagnostics: CompositionDiagnostic[],
@@ -435,9 +434,9 @@ function validateInsertionSuccessorOrder(
     return !laterColumn;
   });
   if (!successorBeforeQuote) return;
-  pushEvaluationError(diagnostics, 'INSERTION_SOURCE_ORDER_VIOLATION', 'Content following insertion ' + quoteId + ' is placed before its obstacle.', {
+  pushEvaluationError(diagnostics, 'INSERTION_SOURCE_ORDER_VIOLATION', 'Content following insertion ' + insertionId + ' is placed before its obstacle.', {
     flowId,
-    blockId: quoteId,
+    blockId: insertionId,
     page: geometry.page,
     details: {
       successorBlockId: successorBeforeQuote.blockId,
@@ -450,40 +449,41 @@ function validateInsertionSuccessorOrder(
 
 /**
  * @planner-target composition/evaluation/legality.ts
- * @planner-responsibility Validate predecessor and successor ordering for one insertion quote.
+ * @planner-responsibility Validate predecessor and successor ordering for one insertion block.
  */
-function validateQuoteInsertionOrder(
+function validateInsertionOrder(
   flowId: string,
-  quote: CompositionBlock,
-  quoteIndex: number,
+  insertion: CompositionBlock,
+  insertionIndex: number,
   plan: CompositionPlan,
   placedItems: Array<CompositionPlan['lines'][number] | CompositionPlan['blockPlacements'][number] | CompositionPlan['tablePlacements'][number]>,
   blockFlowIds: Map<string, string>,
   blockIndexes: Map<string, number>,
   diagnostics: CompositionDiagnostic[],
 ): void {
-  const quoteLines = allLines(plan).filter((line) => line.flowId === flowId && line.blockId === quote.id);
-  if (quoteLines.length === 0) return;
-  const quoteGraphic = plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:' + quote.id);
-  if (!quoteGraphic) return;
-  const geometry = insertionQuoteGeometry(quoteLines, quoteGraphic);
-  const predecessors = placedItems.filter((item) => itemFlowIdForPlacedItem(item, blockFlowIds) === flowId && (blockIndexes.get(item.blockId) ?? Number.POSITIVE_INFINITY) < quoteIndex);
-  const successors = placedItems.filter((item) => itemFlowIdForPlacedItem(item, blockFlowIds) === flowId && (blockIndexes.get(item.blockId) ?? Number.NEGATIVE_INFINITY) > quoteIndex);
-  validateInsertionPredecessorOrder(flowId, quote.id, geometry, predecessors, diagnostics);
-  validateInsertionSuccessorOrder(flowId, quote.id, geometry, successors, plan, diagnostics);
+  const insertionLines = allLines(plan).filter((line) => line.flowId === flowId && line.blockId === insertion.id);
+  const insertionGraphic = plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:' + insertion.id);
+  if (!insertionGraphic || (insertionLines.length === 0 && !plan.blockPlacements.some((placement) => placement.blockId === insertion.id) && !plan.tablePlacements.some((placement) => placement.blockId === insertion.id))) return;
+  const geometry = insertionObstacleGeometry(insertionLines, insertionGraphic);
+  const predecessors = placedItems.filter((item) => itemFlowIdForPlacedItem(item, blockFlowIds) === flowId && (blockIndexes.get(item.blockId) ?? Number.POSITIVE_INFINITY) < insertionIndex);
+  const successors = placedItems.filter((item) => itemFlowIdForPlacedItem(item, blockFlowIds) === flowId && (blockIndexes.get(item.blockId) ?? Number.NEGATIVE_INFINITY) > insertionIndex);
+  validateInsertionPredecessorOrder(flowId, insertion.id, geometry, predecessors, diagnostics);
+  validateInsertionSuccessorOrder(flowId, insertion.id, geometry, successors, plan, diagnostics);
 }
 
 /**
  * @planner-target composition/evaluation/legality.ts
- * @planner-responsibility Validate insertion source order for every quote in every flow.
+ * @planner-responsibility Validate insertion source order for every insertion block in every flow.
  */
 export function checkInsertionSourceOrder(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
   const placedItems = [...allLines(plan), ...plan.blockPlacements, ...plan.tablePlacements];
   const blockFlowIds = new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block) => [block.id, flowId] as const)));
   for (const [flowId, flow] of Object.entries(document.flows)) {
     const blockIndexes = new Map(flow.blocks.map((block, index) => [block.id, index]));
-    for (const [quoteIndex, quote] of flow.blocks.entries()) {
-      if (quote.role === 'quote') validateQuoteInsertionOrder(flowId, quote, quoteIndex, plan, placedItems, blockFlowIds, blockIndexes, diagnostics);
+    for (const [insertionIndex, insertion] of flow.blocks.entries()) {
+      if (plan.graphicPlacements.some((graphic) => graphic.graphicId === 'insertion:' + insertion.id)) {
+        validateInsertionOrder(flowId, insertion, insertionIndex, plan, placedItems, blockFlowIds, blockIndexes, diagnostics);
+      }
     }
   }
 }

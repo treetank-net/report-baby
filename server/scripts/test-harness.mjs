@@ -16,6 +16,7 @@ const suites = {
     ['template flow contract', 'scripts/test-template-flow-contract.mjs'],
     ['report plan contract', 'scripts/test-report-plan.mjs'],
     ['text composition engine', 'scripts/test-text-composition-engine.mjs'],
+    ['generic soft insertions', 'scripts/test-generic-soft-insertions.mjs'],
     ['page template adapter', 'scripts/test-page-template-adapter.mjs'],
     ['jsPDF adapter', 'scripts/test-js-pdf-adapter.mjs'],
     ['composition adapter', 'scripts/test-report-composition-adapter.mjs'],

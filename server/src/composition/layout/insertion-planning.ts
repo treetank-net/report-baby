@@ -11,7 +11,8 @@ import type {
 } from '../contracts/engine-contracts.js';
 import { routeLayout } from './page-state.js';
 import { insertionKey, type PlannedInsertion } from './planner-candidates.js';
-import { measureInsertionText } from './insertion-measurement.js';
+import { insertionContentHeight, insertionContentIsComplete, measureInsertionContent } from './insertion-measurement.js';
+import { isAtomicBlock } from './page-state.js';
 
 type InsertionSlotCandidate = {
   page: number;
@@ -19,9 +20,63 @@ type InsertionSlotCandidate = {
   box: CompositionRect;
 };
 
+function blockMatchesAllowedId(blockId: string, allowedIds: string[]): boolean {
+  return allowedIds.some((allowedId) => blockId === allowedId || blockId.startsWith(`${allowedId}:`));
+}
+
+/**
+ * An insertion slot is an explicit content seam.  Its role/kind/id filters
+ * decide which non-main blocks may enter it; the route itself decides that
+ * the block is painted as an obstacle rather than as an ordinary flow.
+ */
+export function insertionSlotAcceptsBlock(
+  definition: CompositionTemplate['layouts'][number]['slots'][number],
+  flowId: string,
+  block: CompositionBlock,
+): boolean {
+  if (definition.kind === 'graphic' || definition.reserved) return false;
+  if (definition.flowId !== undefined && definition.flowId !== flowId) return false;
+  if (definition.allowedRoles && !definition.allowedRoles.includes(block.role)) return false;
+  if (definition.allowedBlockIds && !blockMatchesAllowedId(block.id, definition.allowedBlockIds)) return false;
+  if (definition.allowedBlockKinds && !definition.allowedBlockKinds.includes(block.kind)) return false;
+  if (definition.kind === 'block') return isAtomicBlock(block) || block.kind === 'table';
+  return true;
+}
+
+function insertionSlotDefinitions(
+  template: CompositionTemplate,
+  route: CompositionFlowRoute,
+): CompositionTemplate['layouts'][number]['slots'] {
+  const definitions = new Map<string, CompositionTemplate['layouts'][number]['slots'][number]>();
+  const firstPage = route.startPage ?? 1;
+  for (let page = firstPage; page <= template.maxPages; page += 1) {
+    const layout = routeLayout(route, template, page);
+    for (const slotId of route.insertionSlots ?? []) {
+      const slot = layout?.slots.find((candidate) => candidate.id === slotId);
+      if (slot) definitions.set(slot.id, slot);
+    }
+  }
+  return [...definitions.values()];
+}
+
+/** Return blocks explicitly claimed by insertion slots in a named flow. */
+export function insertionBlocksForFlow(
+  template: CompositionTemplate,
+  flowId: string,
+  blocks: CompositionBlock[],
+): CompositionBlock[] {
+  if (flowId === 'main') return [];
+  const route = template.routes[flowId];
+  if (!route?.insertionSlots?.length) return [];
+  const definitions = insertionSlotDefinitions(template, route);
+  return blocks.filter((block) => definitions.some((definition) => insertionSlotAcceptsBlock(definition, flowId, block)));
+}
+
 function insertionSlotCandidates(
   template: CompositionTemplate,
   route: CompositionFlowRoute,
+  flowId: string,
+  block?: CompositionBlock,
 ): InsertionSlotCandidate[] {
   if (!route.insertionSlots?.length) return [];
   const candidates: InsertionSlotCandidate[] = [];
@@ -30,11 +85,23 @@ function insertionSlotCandidates(
     const layout = routeLayout(route, template, page);
     if (!layout) continue;
     for (const slotId of route.insertionSlots) {
-      const slot = layout.slots.find((candidate) => candidate.id === slotId && candidate.allowedRoles?.includes('quote'));
+      const slot = layout.slots.find((candidate) => candidate.id === slotId && (block === undefined || insertionSlotAcceptsBlock(candidate, flowId, block)));
       if (slot) candidates.push({ page, slotId, box: { ...slot.box } });
     }
   }
   return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
+}
+
+function candidateSupportsBlock(
+  template: CompositionTemplate,
+  route: CompositionFlowRoute,
+  flowId: string,
+  candidate: InsertionSlotCandidate,
+  block: CompositionBlock,
+): boolean {
+  const layout = routeLayout(route, template, candidate.page);
+  const definition = layout?.slots.find((slot) => slot.id === candidate.slotId);
+  return definition !== undefined && insertionSlotAcceptsBlock(definition, flowId, block);
 }
 
 function fitInsertionProposal(
@@ -47,17 +114,23 @@ function fitInsertionProposal(
   const block = flow?.blocks.find((candidate) => candidate.id === proposal.blockId);
   const route = template.routes[proposal.flowId];
   const layout = route ? routeLayout(route, template, proposal.page) : undefined;
-  const definition = layout?.slots.find((candidate) => candidate.id === proposal.slotId && candidate.allowedRoles?.includes('quote'));
-  if (!block || !definition?.fitContent) return proposal;
-  const measurement = measureInsertionText(metrics, definition, proposal.box, block);
-  if (measurement.lines.length === 0) return proposal;
-  const contentHeight = (measurement.lines.at(-1)!.lineOffset + 1) * measurement.leading;
+  if (!block) return proposal;
+  const definition = layout?.slots.find((candidate) => candidate.id === proposal.slotId && insertionSlotAcceptsBlock(candidate, proposal.flowId, block));
+  if (!definition?.fitContent) return proposal;
+  let measurement: ReturnType<typeof measureInsertionContent>;
+  try {
+    measurement = measureInsertionContent(metrics, definition, proposal.box, block);
+  } catch {
+    return proposal;
+  }
+  if (!measurement || insertionContentHeight(measurement) <= 0 || (measurement.kind === 'table' && !insertionContentIsComplete(measurement, block))) return proposal;
+  const contentHeight = insertionContentHeight(measurement);
   const maximumHeight = definition.grow?.axis === 'y' ? definition.grow.maxHeight : proposal.box.height;
   return {
     ...proposal,
     box: {
       ...proposal.box,
-      height: Math.min(maximumHeight, measurement.padding.top + contentHeight + measurement.padding.bottom),
+      height: Math.min(maximumHeight, contentHeight),
     },
   };
 }
@@ -74,7 +147,8 @@ export function insertionProposalsFromPlan(
     if (flowId === 'main') continue;
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
-    const candidates = insertionSlotCandidates(template, route);
+    const insertionBlocks = insertionBlocksForFlow(template, flowId, flow.blocks);
+    const candidates = insertionSlotCandidates(template, route, flowId);
     const blockIndexes = new Map(flow.blocks.map((block, index) => [block.id, index]));
     const placedItems = [
       ...plan.lines.filter((line) => line.flowId === flowId && line.layer !== 'insertion'),
@@ -82,7 +156,7 @@ export function insertionProposalsFromPlan(
       ...plan.tablePlacements.filter((placement) => blockIndexes.has(placement.blockId)),
     ];
     let previousCandidateIndex = -1;
-    for (const block of flow.blocks.filter((candidate) => candidate.role === 'quote')) {
+    for (const block of insertionBlocks) {
       const quoteIndex = blockIndexes.get(block.id) ?? Number.POSITIVE_INFINITY;
       const line = plan.lines
         .filter((candidate) => candidate.flowId === flowId && candidate.blockId === block.id)
@@ -94,11 +168,19 @@ export function insertionProposalsFromPlan(
           if (!latest || item.page > latest.page || (item.page === latest.page && bottom > latest.bottom)) return { page: item.page, bottom };
           return latest;
         }, undefined);
-      const currentIndex = line
-        ? candidates.findIndex((candidate) => candidate.page === line.page && candidate.slotId === line.slotId.replace(/^\d+:/u, ''))
+      const placed = line
+        ?? plan.blockPlacements
+          .filter((candidate) => candidate.blockId === block.id)
+          .sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x)[0]
+        ?? plan.tablePlacements
+          .filter((candidate) => candidate.blockId === block.id)
+          .sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x)[0];
+      const currentIndex = placed
+        ? candidates.findIndex((candidate) => candidate.page === placed.page && candidate.slotId === placed.slotId.replace(/^\d+:/u, '') && candidateSupportsBlock(template, route, flowId, candidate, block))
         : -1;
       const earliestIndex = Math.max(previousCandidateIndex + 1, currentIndex, 0);
       const selectedIndex = candidates.findIndex((candidate, index) => index >= earliestIndex
+        && candidateSupportsBlock(template, route, flowId, candidate, block)
         && (!predecessorBottom || candidate.page > predecessorBottom.page || (candidate.page === predecessorBottom.page && candidate.box.y >= predecessorBottom.bottom - Number.EPSILON)));
       const selected = selectedIndex >= 0 ? candidates[selectedIndex] : undefined;
       if (!selected) continue;
@@ -120,12 +202,15 @@ export function seedInsertionProposals(
     if (flowId === 'main') continue;
     const route = template.routes[flowId];
     if (!route?.insertionSlots?.length) continue;
-    const candidates = insertionSlotCandidates(template, route);
-    const quoteBlocks = flow.blocks.filter((block) => block.role === 'quote');
-    quoteBlocks.forEach((block, index) => {
-      const candidate = candidates[index];
+    const insertionBlocks = insertionBlocksForFlow(template, flowId, flow.blocks);
+    const candidates = insertionSlotCandidates(template, route, flowId);
+    let previousCandidateIndex = -1;
+    insertionBlocks.forEach((block) => {
+      const selectedIndex = candidates.findIndex((candidate, index) => index > previousCandidateIndex && candidateSupportsBlock(template, route, flowId, candidate, block));
+      const candidate = selectedIndex >= 0 ? candidates[selectedIndex] : undefined;
       if (!candidate) return;
       proposals.set(insertionKey(flowId, block.id), fitInsertionProposal(document, metrics, template, { flowId, blockId: block.id, ...candidate }));
+      previousCandidateIndex = selectedIndex;
     });
   }
   return proposals;
@@ -144,7 +229,6 @@ export function nextInsertionProposal(
   if ((flow.insertionSlots?.length ?? 0) === 0) return undefined;
   return blocks
     .slice(blockIndex + 1)
-    .filter((block) => block.role === 'quote')
     .map((block) => proposals.get(insertionKey(flowId, block.id)))
     .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === page && proposal.box.y > afterY + Number.EPSILON)
     .sort((left, right) => left.box.y - right.box.y)[0];

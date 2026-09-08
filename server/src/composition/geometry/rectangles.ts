@@ -9,6 +9,20 @@ export function rectBottom(rect: CompositionRect): number {
   return rect.y + rect.height;
 }
 
+/** Determine whether one rectangle remains inside another with planner tolerance. */
+/**
+ * @planner-target composition/geometry/rectangles.ts
+ * @planner-responsibility Keep the current rectFitsInside implementation intact until its target seam is extracted.
+ */
+export function rectFitsInside(inner: CompositionRect, outer: CompositionRect): boolean {
+  const scale = Math.max(1, Math.abs(inner.x), Math.abs(inner.y), Math.abs(inner.width), Math.abs(inner.height), Math.abs(outer.x), Math.abs(outer.y), Math.abs(outer.width), Math.abs(outer.height));
+  const tolerance = Number.EPSILON * scale * 64;
+  return inner.x >= outer.x - tolerance
+    && inner.y >= outer.y - tolerance
+    && inner.x + inner.width <= outer.x + outer.width + tolerance
+    && inner.y + inner.height <= outer.y + outer.height + tolerance;
+}
+
 /** Determine whether two rectangles overlap using the planner tolerance. */
 /**
  * @planner-target composition/geometry/rectangles.ts

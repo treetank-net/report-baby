@@ -4,6 +4,8 @@
  * continue to use this path.
  */
 export {
+  insertionBlocksForFlow,
+  insertionSlotAcceptsBlock,
   insertionProposalsFromPlan,
   nextInsertionBoundary,
   nextInsertionProposal,
@@ -13,5 +15,10 @@ export {
   placeInsertionLayer,
   reserveInsertionObstacles,
 } from './insertion-placement.js';
-export { measureInsertionText } from './insertion-measurement.js';
-export type { InsertionTextMeasurement } from './insertion-measurement.js';
+export {
+  measureInsertionText,
+  measureInsertionContent,
+  insertionContentHeight,
+  insertionContentIsComplete,
+} from './insertion-measurement.js';
+export type { InsertionTextMeasurement, InsertionContentMeasurement } from './insertion-measurement.js';

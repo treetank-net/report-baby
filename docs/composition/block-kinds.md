@@ -87,9 +87,10 @@ produced; the plan must also prove complete coverage and legal geometry.
 
 ## Current limits
 
-The current model supports the seven kinds listed above. It does not yet make
-every block kind a movable soft insertion. Images and quote-role text have
-the most complete obstacle path; metrics and charts are atomic blocks whose
-placement is currently selected by compatible template slots. Generalizing
-that movement policy is the separate soft-insertion work in
-`docs/release-1.0/07-block-kinds-and-soft-insertions.md`.
+The current model supports the seven kinds listed above. Every listed kind can
+now be selected by a named non-main `insertionSlots` route when its slot
+declares a compatible role or `allowedBlockKinds` value. Text, tables, images,
+metrics and charts retain their own measurement and renderer capabilities; the
+insertion layer only coordinates them and reserves one obstacle for `main`.
+New kinds still need an explicit capability and slot mapping before they can be
+used as insertions.
