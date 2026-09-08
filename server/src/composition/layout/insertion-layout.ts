@@ -11,7 +11,7 @@ import type {
   CompositionSlot,
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
-import { diagnostic, addResidual } from '../observability/planning-observability.js';
+import { diagnostic, addResidual, recordPlanDecision } from '../observability/planning-observability.js';
 import { ensurePage, routeLayout } from './page-state.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import type { PageState } from '../contracts/layout-state.js';
@@ -224,7 +224,12 @@ function reserveInsertionObstacle(
     paint: false,
     box: { ...slot.box },
   });
-  plan.decisions.push({ code: 'INSERTION_OBSTACLE_RESERVED', flowId: proposal.flowId, blockId: proposal.blockId, page: proposal.page, slotId: slot.id, box: { ...slot.box } });
+  const decision = recordPlanDecision(plan, 'INSERTION_OBSTACLE_RESERVED');
+  decision.flowId = proposal.flowId;
+  decision.blockId = proposal.blockId;
+  decision.page = proposal.page;
+  decision.slotId = slot.id;
+  decision.box = { ...slot.box };
 }
 
 /**
@@ -248,7 +253,11 @@ function collapseUnassignedInsertionSlots(
         const slot = page.slots.get(insertionId);
         if (!slot || slot.state !== 'open') continue;
         slot.state = 'exhausted';
-        plan.decisions.push({ code: 'INSERTION_SLOT_COLLAPSED', flowId, page: page.page, slotId: slot.id, reason: 'no-authored-insertion-assigned-to-page' });
+        const decision = recordPlanDecision(plan, 'INSERTION_SLOT_COLLAPSED');
+        decision.flowId = flowId;
+        decision.page = page.page;
+        decision.slotId = slot.id;
+        decision.reason = 'no-authored-insertion-assigned-to-page';
       }
     }
   }
@@ -337,7 +346,15 @@ function fitInsertionSlotContent(
   const maxHeight = definition.grow?.axis === 'y' ? definition.grow.maxHeight : slot.box.height;
   const fittedHeight = Math.min(maxHeight, measurement.padding.top + contentHeight + measurement.padding.bottom);
   slot.box.height = fittedHeight;
-  plan.decisions.push({ code: 'INSERTION_SLOT_FIT_CONTENT', flowId: proposal.flowId, blockId: block.id, page: page.page, slotId: slot.id, fromHeight: proposal.box.height, toHeight: fittedHeight, contentHeight, maxHeight });
+  const decision = recordPlanDecision(plan, 'INSERTION_SLOT_FIT_CONTENT');
+  decision.flowId = proposal.flowId;
+  decision.blockId = block.id;
+  decision.page = page.page;
+  decision.slotId = slot.id;
+  decision.fromHeight = proposal.box.height;
+  decision.toHeight = fittedHeight;
+  decision.contentHeight = contentHeight;
+  decision.maxHeight = maxHeight;
 }
 
 /** Synchronize an insertion obstacle after fit-content sizing. */
@@ -376,7 +393,13 @@ function placeInsertionBlock(
   placeLines(target.page, target.definition, block, metrics, flowId, undefined, measurement.lines, measurement.leading, plan.placements, plan.insertionLines ?? (plan.insertionLines = []), 'insertion', measurement.padding);
   target.slot.state = 'exhausted';
   synchronizeInsertionObstacle(plan, target, block);
-  plan.decisions.push({ code: 'INSERTION_LAYER_PLACED', flowId, blockId: block.id, page: target.page.page, slotId: target.slot.id, lineCount: measurement.lines.length, box: { ...target.slot.box } });
+  const decision = recordPlanDecision(plan, 'INSERTION_LAYER_PLACED');
+  decision.flowId = flowId;
+  decision.blockId = block.id;
+  decision.page = target.page.page;
+  decision.slotId = target.slot.id;
+  decision.lineCount = measurement.lines.length;
+  decision.box = { ...target.slot.box };
   return target.key;
 }
 

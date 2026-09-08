@@ -4,7 +4,7 @@ import type {
   CompositionPlanner,
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
-import { diagnostic } from '../observability/planning-observability.js';
+import { diagnostic, recordPlanDecision } from '../observability/planning-observability.js';
 import { recordPlanningPhase } from '../observability/planning-observability.js';
 import {
   movableGraphicProposalCandidates,
@@ -62,10 +62,15 @@ function planCandidates(
     candidates.push(latestPlan);
     const nextProposals = insertionProposalsFromPlan(document, template, latestPlan, metrics);
     const signature = movableInsertionProposalSignature(nextProposals);
-    latestPlan.decisions.push({ code: 'PLANNER_PASS_COMPLETED', iteration, insertionCount: nextProposals.size, signature });
+    const passDecision = recordPlanDecision(latestPlan, 'PLANNER_PASS_COMPLETED');
+    passDecision.iteration = iteration;
+    passDecision.insertionCount = nextProposals.size;
+    passDecision.signature = signature;
     recordPlanningPhase(latestPlan, 'reflow', 'completed', { insertionCount: nextProposals.size, signature }, iteration);
     if (signature === previousSignature || (iteration === 1 && nextProposals.size === 0)) {
-      latestPlan.decisions.push({ code: 'PLANNER_STABILIZED', iteration, insertionCount: nextProposals.size });
+      const stabilizedDecision = recordPlanDecision(latestPlan, 'PLANNER_STABILIZED');
+      stabilizedDecision.iteration = iteration;
+      stabilizedDecision.insertionCount = nextProposals.size;
       return candidates;
     }
     if (iteration === maxIterations) {

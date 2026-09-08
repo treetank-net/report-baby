@@ -7,6 +7,7 @@ import type {
 } from '../contracts/engine-contracts.js';
 import { compositionStyleName } from '../text/style-name.js';
 import { plannedLines } from './plan-lines.js';
+import { recordPlanDecision } from '../observability/planning-observability.js';
 
 /**
  * @planner-target composition/layout/glyph-objects.ts
@@ -120,7 +121,12 @@ export function placeGlyphObjects(document: CompositionDocument, metrics: Compos
         baselineY: y + baselineOffset,
         ...(definition.opacity === undefined ? {} : { opacity: definition.opacity }),
       });
-      plan.decisions.push({ code: 'GLYPH_OBJECT_PLACED', glyphId: definition.id, targetId: definition.target.id, page, targetType: definition.target.kind, box: { x, y: glyphBoxY, width: glyphWidth, height: glyphBoxHeight } });
+      const decision = recordPlanDecision(plan, 'GLYPH_OBJECT_PLACED');
+      decision.glyphId = definition.id;
+      decision.targetId = definition.target.id;
+      decision.page = page;
+      decision.targetType = definition.target.kind;
+      decision.box = { x, y: glyphBoxY, width: glyphWidth, height: glyphBoxHeight };
     }
   }
 }

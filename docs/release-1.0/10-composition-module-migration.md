@@ -322,8 +322,9 @@ adapters
   `layout/plan-lines.ts`, odczyt tekstu bloku jest współdzielony przez text i
   observability, `pdfNumber` ma jednego właściciela w adapterze konfiguracji,
   a `insertionKey` jest współdzielony przez planowanie insertionów i kandydatów.
-  Decyzje structured-block są zapisywane przez `recordFlowDecision`; funkcje
-  wywołujące nie konstruują już dla nich obiektów decyzji.
+  Decyzje przepływów i faz planera są zapisywane przez
+  `recordFlowDecision`/`recordPlanDecision`; funkcje wywołujące nie konstruują
+  już obiektów decyzji.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Pełny suite `npm run test:composition` przeszedł na
@@ -364,7 +365,7 @@ node server/scripts/planner-function-dependency-report.mjs \
   --write-report docs/release-1.0/planner-function-dependency-inventory.md
 ```
 
-Obecny snapshot obejmuje 405 nazwanych funkcji w 39 plikach. Tabela rozmiarów
+Obecny snapshot obejmuje 406 nazwanych funkcji w 39 plikach. Tabela rozmiarów
 jest dolną granicą kodu funkcji, a nie obietnicą redukcji LOC: o przeniesieniu
 decyduje wspólna wiedza domenowa i kształt zależności. Fizycznie, razem z
 adnotacjami katalogowymi, największe aktualne moduły to `flow-text-decision.ts`

@@ -84,6 +84,17 @@ export function recordFlowDecision(
   return decision;
 }
 
+/** Build and append a plan-level decision for phases without flow context. */
+/**
+ * @planner-target composition/observability/planning-observability.ts
+ * @planner-responsibility Append one decision and return it for explicit metadata assignment.
+ */
+export function recordPlanDecision(plan: CompositionPlan, eventName: string): CompositionDecision {
+  const decision: CompositionDecision = { code: eventName };
+  plan.decisions.push(decision);
+  return decision;
+}
+
 import type {
   CompositionBlockTrace,
   CompositionPlanTrace,
