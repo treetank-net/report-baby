@@ -1,6 +1,7 @@
 import type { CompositionBlock, CompositionRect } from '../model.js';
 import type { CompositionFlowBarrierBoxCandidate, CompositionGraphicPlacement, CompositionTextMetrics } from '../engine.js';
 import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
+import { rectBottom } from '../geometry/rectangles.js';
 import { wordsOf } from './tokenization.js';
 
 export interface WrappedLine {
@@ -62,10 +63,6 @@ function availableIntervals(
   }
   if (cursor < slot.x + slot.width) available.push({ start: cursor, end: slot.x + slot.width });
   return available;
-}
-
-function rectBottom(rect: CompositionRect): number {
-  return rect.y + rect.height;
 }
 
 function lineFitsFlowBarrierBox(

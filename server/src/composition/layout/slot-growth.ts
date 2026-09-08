@@ -1,4 +1,4 @@
-import { rectBottom } from './page-management.js';
+import { rectBottom } from '../geometry/rectangles.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,

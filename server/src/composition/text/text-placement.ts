@@ -9,7 +9,7 @@ import type {
   CompositionTextMetrics,
 } from '../engine.js';
 import { glyphSamplingBoxes } from '../glyph-sampling.js';
-import { rectBottom } from '../layout/page-management.js';
+import { rectBottom } from '../geometry/rectangles.js';
 import type { WrappedLine } from './text-wrapping.js';
 
 export interface TextPlacementPage {

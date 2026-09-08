@@ -8,7 +8,7 @@ import type {
   CompositionSlot,
 } from '../engine.js';
 import type { PageState } from '../contracts/layout-state.js';
-import { rectBottom, rectsOverlap } from './page-management.js';
+import { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
 
 /** Return whether a flowing text line occupies the candidate slot's box. */
 /**

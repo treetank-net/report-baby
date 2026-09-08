@@ -12,7 +12,7 @@ import type { PageState } from './contracts/layout-state.js';
 import { compositionStyleName } from './text/style-name.js';
 import { isAtomicBlock } from './layout/route-slots.js';
 import { diagnostic } from './planning-records.js';
-import { rectBottom } from './layout/page-management.js';
+import { rectBottom } from './geometry/rectangles.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,

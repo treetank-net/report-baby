@@ -7,22 +7,13 @@ import type {
   CompositionPlan,
   CompositionSlot,
 } from '../engine.js';
-
-function rectBottom(rect: CompositionRect): number {
-  return rect.y + rect.height;
-}
+import { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
 
 function horizontalOverlap(first: CompositionRect, second: CompositionRect): boolean {
   const overlap = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
   return overlap > Number.EPSILON * Math.max(1, Math.abs(first.x), Math.abs(first.width), Math.abs(second.x), Math.abs(second.width)) * 32;
 }
 
-function rectsOverlap(first: CompositionRect, second: CompositionRect): boolean {
-  const horizontal = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
-  const vertical = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
-  const scale = Math.max(1, Math.abs(first.x), Math.abs(first.y), Math.abs(first.width), Math.abs(first.height), Math.abs(second.x), Math.abs(second.y), Math.abs(second.width), Math.abs(second.height));
-  return horizontal > Number.EPSILON * scale * 32 && vertical > Number.EPSILON * scale * 32;
-}
 
 function coversFlowWidth(flow: CompositionRect, graphic: CompositionRect): boolean {
   return graphic.x <= flow.x && graphic.x + graphic.width >= flow.x + flow.width;

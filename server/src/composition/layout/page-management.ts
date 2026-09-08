@@ -103,24 +103,7 @@ export function ensurePage(
   return pages[page - 1];
 }
 
-/**
- * @planner-target composition/page-management.ts
- * @planner-responsibility Return the lower edge of a rectangle.
- */
-export function rectBottom(rect: CompositionRect): number {
-  return rect.y + rect.height;
-}
-
-/**
- * @planner-target composition/page-management.ts
- * @planner-responsibility Determine whether two rectangles overlap with tolerance.
- */
-export function rectsOverlap(first: CompositionRect, second: CompositionRect): boolean {
-  const horizontal = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
-  const vertical = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
-  const scale = Math.max(1, Math.abs(first.x), Math.abs(first.y), Math.abs(first.width), Math.abs(first.height), Math.abs(second.x), Math.abs(second.y), Math.abs(second.width), Math.abs(second.height));
-  return horizontal > Number.EPSILON * scale * 32 && vertical > Number.EPSILON * scale * 32;
-}
+export { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
 
 /**
  * @planner-target composition/page-management.ts

@@ -22,7 +22,8 @@ import { growSlot } from './layout/slot-growth.js';
 import { availableLineCount } from './text/line-capacity.js';
 import { obstructionAcrossLineBands } from './text/text-wrapping.js';
 import { lineHeight, styleFor, wrapBlock } from './text/text-measurement.js';
-import { rectBottom, slotBox } from './layout/page-management.js';
+import { slotBox } from './layout/page-management.js';
+import { rectBottom } from './geometry/rectangles.js';
 import { addResidual, diagnostic, recordFlowDecision } from './planning-records.js';
 
 /** Decide whether the current block is a heading that cannot fit whole. */
