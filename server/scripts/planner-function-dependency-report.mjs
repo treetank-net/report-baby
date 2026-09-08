@@ -17,34 +17,17 @@ const serverRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname),
 const repoRoot = path.resolve(serverRoot, '..');
 const sourceRoot = path.join(serverRoot, 'src');
 
-const scannedRelativeFiles = [
-  'composition/text-planner.ts',
-  'composition/flow-planner.ts',
-  'composition/flow-occupancy.ts',
-  'composition/flow-text-decision.ts',
-  'composition/flow-planning-types.ts',
-  'composition/flow-cursor.ts',
-  'composition/slot-growth.ts',
-  'composition/planner-policy.ts',
-  'composition/route-slots.ts',
-  'composition/text-measurement.ts',
-  'composition/page-management.ts',
-  'composition/text-placement.ts',
-  'composition/structured-block-placement.ts',
-  'composition/insertion-planning.ts',
-  'composition/graphic-planning.ts',
-  'composition/evaluator.ts',
-  'composition/evaluation-support.ts',
-  'composition/evaluation-scoring.ts',
-  'composition/evaluation-content.ts',
-  'composition/evaluation-legality.ts',
-  'composition/document-layout.ts',
-  'composition/text-planner-candidates.ts',
-  'composition/engine.ts',
-  'composition/planning-records.ts',
-];
+function sourceFilesUnder(directory) {
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...sourceFilesUnder(entryPath));
+    else if (entry.isFile() && entry.name.endsWith('.ts')) files.push(entryPath);
+  }
+  return files;
+}
 
-const scannedFiles = scannedRelativeFiles.map((relative) => path.join(sourceRoot, relative));
+const scannedFiles = sourceFilesUnder(path.join(sourceRoot, 'composition')).sort();
 
 const targetByFunction = new Map([
   // text-planner.ts: page and document ownership
@@ -303,7 +286,9 @@ function sourceBase(file) {
 }
 
 function targetFor(file, name) {
-  return targetByFunction.get(`${sourceBase(file)}::${name}`) ?? `composition/${sourceBase(file)}`;
+  const configured = targetByFunction.get(`${sourceBase(file)}::${name}`);
+  if (configured && fs.existsSync(path.join(sourceRoot, configured))) return configured;
+  return sourceRelative(file);
 }
 
 function responsibilityFor(name) {

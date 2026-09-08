@@ -25,7 +25,7 @@ import {
 } from './content.js';
 
 /**
- * @planner-target composition/evaluator.ts
+ * @planner-target composition/evaluation/evaluator.ts
  * @planner-responsibility Keep the current buildCompositionEvaluation implementation intact until its target seam is extracted.
  */
 function buildCompositionEvaluation(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[], contrastAssessments: CompositionContrastAssessment[]): CompositionEvaluation {
@@ -51,7 +51,7 @@ export interface CompositionEvaluationOptions {
 }
 
 /**
- * @planner-target composition/evaluator.ts
+ * @planner-target composition/evaluation/evaluator.ts
  * @planner-responsibility Keep the current evaluateCompositionPlan implementation intact until its target seam is extracted.
  */
 export function evaluateCompositionPlan(document: CompositionDocument, plan: CompositionPlan, options: CompositionEvaluationOptions = {}): CompositionEvaluation {
