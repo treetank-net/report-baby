@@ -314,6 +314,9 @@ adapters
 - `bbcddf8` — adaptery wejścia, geometrii szablonu, konfiguracji renderera
   i składania text engine trafiły do `composition/adapters/`: odpowiednio
   `input.ts`, `page-template.ts`, `render-config.ts` i `text-engine.ts`.
+- `adc11c8` — usunięcie starych ścieżek adapterów po przełączeniu wszystkich
+  importów; `6116673` — aktualizacja kanonicznej mapy modułów i dokumentacji
+  konfiguracji oraz block-kinds.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
