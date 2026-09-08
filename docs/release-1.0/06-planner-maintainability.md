@@ -816,3 +816,57 @@ uruchomiony na czystym `HEAD` (`13f5d28`, przed bieżącą ekstrakcją
 `text-planner`) kończy się identycznie, więc nie przypisuję tego wyniku tej
 zmianie. Jest to osobny problem zachowania editorial-flow do dalszej
 diagnozy.
+
+## Dekompozycja evaluatora — 2026-09-07
+
+Przed kolejnym przenoszeniem kodu rozbito duże funkcje ewaluatora na nazwane
+operacje o jednej odpowiedzialności. Nie zmieniono kolejności walidacji,
+kształtu diagnostyk ani zasad scoringu.
+
+### Nowy podział modułów
+
+| Moduł | Odpowiedzialność |
+|---|---|
+| \`evaluator.ts\` | Orkiestracja przebiegu ewaluacji, zebranie diagnostyk i wyliczenie statusu wyniku. |
+| \`evaluation-support.ts\` | Wspólne kalkulatory: \`wordsOf\`, \`wordCountOf\`, geometria, tolerancja, slot lookup, dostępna pojemność oraz konstrukcja diagnostyki przez \`pushEvaluationError\`. |
+| \`evaluation-content.ts\` | Rejestr flow placementów, kolejność wizualna bloków/quote, pokrycie słów, residuale i kompletność tabel/bloków atomowych. |
+| \`evaluation-legality.ts\` | Walidacja legalności targetów, ciągłości flow, przejść route, wstawek, tabel, bloków atomowych i grafik. |
+| \`evaluation-scoring.ts\` | Składniki oceny: balans kolumn, heading, fragmentacja, orphan lines, spacing wstawek, kontrast i złożenie wyniku. |
+
+\`evaluator.ts\` ma obecnie 79 LOC. Najdłuższa funkcja walidacyjna ma 46 LOC
+(\`checkEarlyRouteTransitions\`), a największa funkcja scoringowa 42 LOC
+(\`insertionSpacingDetail\`). Funkcje lokalne \`spread\`, normalizacja kontrastu,
+identyfikacja flow placementu oraz pierwsza pozycja wizualna zostały
+awansowane do nazwanych helperów. \`wordsOf\` nie jest już używane jako
+niejawny krok w dużej funkcji — \`wordCountOf\` stanowi jawny kalkulator
+pokrycia treści.
+
+Wcześniejsze \`diagnostics.push(error(...))\` w nowych seamach zostało
+zastąpione przez \`pushEvaluationError(diagnostics, code, message, details)\`.
+Jedyny wyjątek to diagnostyka luki route, która zachowuje dodatkowe pola
+\`flowId\` i \`page\` na poziomie obiektu. Builder zachowuje ten sam kształt
+\`CompositionDiagnostic\`; nie jest źródłem legalności planu, tylko zapisem
+wyniku walidacji.
+
+### Rozmiar plików po dekompozycji
+
+| Plik | LOC |
+|---|---:|
+| \`evaluator.ts\` | 79 |
+| \`evaluation-support.ts\` | 249 |
+| \`evaluation-content.ts\` | 307 |
+| \`evaluation-scoring.ts\` | 398 |
+| \`evaluation-legality.ts\` | 658 |
+
+To jest podział odpowiedzialności, nie dodanie encji domenowych. \`FlowPlacementSummary\`,
+\`UnderfilledFlowItem\` i \`ContentRange\` są technicznymi projekcjami
+walidatora; nie uczestniczą w planowaniu ani nie przechowują własnego cyklu
+życia.
+
+### Weryfikacja
+
+- \`npm run build\` — zaliczone;
+- \`node scripts/architecture-check.mjs\` — zaliczone, 86 modułów bez cykli;
+- \`node scripts/test-composition-documentation.mjs\` — zaliczone;
+- \`npm run planner:inventory\` — 240 funkcji, komentarze docelowych modułów;
+- \`npm run test:composition\` poza sandboxem — zaliczone, 13/13 kontroli.

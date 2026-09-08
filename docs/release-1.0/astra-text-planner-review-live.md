@@ -475,3 +475,22 @@ modules. Build, architecture, documentation, and the 13-check composition
 suite pass. The full editorial-flow suite still has the known
 `FLOW_SLOT_UNDERFILLED` reproducer; a clean `HEAD` run shows the same failure,
 so it is not attributed to this relocation.
+
+### Evaluator decomposition — 2026-09-08
+
+The evaluator follow-up that was previously listed as open was completed as a
+mechanical responsibility split. `evaluator.ts` now only orchestrates the
+evaluation pass and builds the final result. Named operations are grouped in
+`evaluation-support.ts` (text/geometry/contrast calculators and diagnostic
+builder), `evaluation-content.ts` (coverage and residual content),
+`evaluation-legality.ts` (hard-rule validation), and
+`evaluation-scoring.ts` (quality components). `wordsOf` is a tokenizer;
+`wordCountOf` is the explicit coverage calculator. Generic evaluator errors
+are appended through `pushEvaluationError`; the route-gap diagnostic remains a
+custom object because it carries flow and page fields at the top level.
+
+The split preserves validation order, diagnostic shape, and scoring behavior.
+The largest extracted validator is 46 LOC and the largest scoring helper is
+42 LOC. The full composition suite passes 13/13 checks outside the restricted
+sandbox; build, architecture, documentation, and dependency inventory checks
+also pass.
