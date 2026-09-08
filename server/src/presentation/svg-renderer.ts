@@ -1,7 +1,7 @@
 import { assetDataUri, defaultRenderTheme } from '../brand/context.js';
 import type { Slide, SlideDeck } from './contracts.js';
-import type { RenderTheme } from '../core/model/render-theme.js';
-import type { ResolvedSlidePlan } from '../core/model/resolved-slide-plan.js';
+import type { RenderTheme } from '../contracts/render-theme.js';
+import type { ResolvedSlidePlan } from '../contracts/resolved-slide-plan.js';
 import { loadRenderFontSet, readableTextColor, renderSvgToPng } from '../rendering/primitives.js';
 import { renderChart } from '../rendering/svg.js';
 import { validateSlideContent } from './slide-validation.js';

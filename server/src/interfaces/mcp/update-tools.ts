@@ -55,25 +55,32 @@ function semverGt(a: string, b: string): boolean {
   return false;
 }
 
+type ChangelogSection = { version: string; body: string[] };
+
+function appendChangelogSection(
+  sections: string[],
+  current: ChangelogSection | null,
+  fromVer: string,
+  toVer: string,
+): void {
+  if (!current || !semverGt(current.version, fromVer) || semverGt(current.version, toVer)) return;
+  sections.push([`## ${current.version}`, ...current.body].join('\n').trimEnd());
+}
+
 function extractChangelog(text: string, fromVer: string, toVer: string): string {
   const lines = text.split('\n');
   const sections: string[] = [];
-  let current: { version: string; body: string[] } | null = null;
-  const flush = () => {
-    if (current && semverGt(current.version, fromVer) && !semverGt(current.version, toVer)) {
-      sections.push([`## ${current.version}`, ...current.body].join('\n').trimEnd());
-    }
-  };
+  let current: ChangelogSection | null = null;
   for (const line of lines) {
     const m = line.match(/^##\s+v?(\d+\.\d+\.\d+)/);
     if (m) {
-      flush();
+      appendChangelogSection(sections, current, fromVer, toVer);
       current = { version: m[1], body: [] };
     } else if (current) {
       current.body.push(line);
     }
   }
-  flush();
+  appendChangelogSection(sections, current, fromVer, toVer);
   return sections.join('\n\n').trim();
 }
 

@@ -1,11 +1,11 @@
-import type { RenderTheme } from '../../core/model/render-theme.js';
-import type { ResolvedBox, ResolvedLockupPlan, ResolvedSlidePlan } from '../../core/model/resolved-slide-plan.js';
+import type { RenderTheme } from '../../contracts/render-theme.js';
+import type { ResolvedBox, ResolvedLockupPlan, ResolvedSlidePlan } from '../../contracts/resolved-slide-plan.js';
 import type { Slide } from '../../contracts/input/schema.js';
 import { readRenderConfig, type RenderConfig } from '../../template/builtins.js';
 import { logicalDirection, logicalPlacement, logicalSpacing, physicalAlign, physicalSide, resolveSlideTemplate, templateTitleAlign, type LockupPlacement, type LockupSpacing, type SlideTemplateRef, type TextDirection } from '../../template/direction.js';
 import { resolvePlan, type CompiledTemplate, type NormalizedFrame, type TemplateLength } from '../../template/contracts.js';
 
-export type { ResolvedBox, ResolvedLockupPlan, ResolvedSlidePlan } from '../../core/model/resolved-slide-plan.js';
+export type { ResolvedBox, ResolvedLockupPlan, ResolvedSlidePlan } from '../../contracts/resolved-slide-plan.js';
 
 export interface ResolveSlidePlanInput {
   slide: Slide;

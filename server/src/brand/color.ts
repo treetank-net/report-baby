@@ -1,4 +1,4 @@
-import type { RenderTheme } from '../core/model/render-theme.js';
+import type { RenderTheme } from '../contracts/render-theme.js';
 
 export const DEFAULT_THEME: RenderTheme = {
   background: '#ffffff',

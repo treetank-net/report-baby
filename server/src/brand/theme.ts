@@ -1,4 +1,4 @@
-import type { RenderTheme } from '../core/model/render-theme.js';
+import type { RenderTheme } from '../contracts/render-theme.js';
 import { logicalDirection, logicalPlacement, logicalSpacing } from '../template/direction.js';
 import type { PreparedAssetsManifest } from './asset-preparation.js';
 import { assetPath, assetWarnings, oversizedRasterWarnings, preparedImagePath } from './assets.js';

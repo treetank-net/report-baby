@@ -1,7 +1,7 @@
 import type { jsPDF } from 'jspdf';
 import { createHash } from 'node:crypto';
 import { relative } from 'node:path';
-import type { RenderTheme } from '../core/model/render-theme.js';
+import type { RenderTheme } from '../contracts/render-theme.js';
 import type { CompositionInput } from '../contracts/input/schema.js';
 import { readRenderConfig } from '../template/builtins.js';
 import type { PageGeometry } from '../template/geometry.js';

@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { listBrandTemplates, resolveBrandContext, type BrandOverrides } from '../../brand/context.js';
 import type { ReportConfig } from '../../infrastructure/config.js';
-import type { RenderTheme } from '../../core/model/render-theme.js';
+import type { RenderTheme } from '../../contracts/render-theme.js';
 import { listTemplates, renderReportPdfDetailed, resolveReportCompositionOnly, resolveReportPlanOnly } from '../../report/renderer.js';
 import { renderChart, metricCards, type ChartType } from '../../rendering/svg.js';
 import { loadRenderFontSet, renderSvgToPng } from '../../rendering/primitives.js';

@@ -1,5 +1,5 @@
-import type { ResolvedBox } from '../core/model/resolved-slide-plan.js';
-import type { ResolvedReportBlock, ResolvedReportPagePlan, ResolvedReportPlan } from '../core/model/resolved-report-plan.js';
+import type { ResolvedBox } from '../contracts/resolved-slide-plan.js';
+import type { ResolvedReportBlock, ResolvedReportPagePlan, ResolvedReportPlan } from '../contracts/resolved-report-plan.js';
 
 export interface ReportPlanAssertionOptions {
   tolerance?: number;

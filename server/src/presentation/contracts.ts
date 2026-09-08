@@ -1,5 +1,5 @@
-import type { RenderTheme } from '../core/model/render-theme.js';
-import type { ResolvedSlidePlan } from '../core/model/resolved-slide-plan.js';
+import type { RenderTheme } from '../contracts/render-theme.js';
+import type { ResolvedSlidePlan } from '../contracts/resolved-slide-plan.js';
 import type { Slide } from '../contracts/input/schema.js';
 import type { TextDirection } from '../template/direction.js';
 import type { BrandOverrides } from '../brand/contracts.js';

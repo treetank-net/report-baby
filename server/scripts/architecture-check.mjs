@@ -86,7 +86,6 @@ const typeGraph = new Map([...files].map((file) => [file, new Set()]));
 const runtimeGraph = new Map([...files].map((file) => [file, new Set()]));
 const violations = [];
 for (const [from, source] of sources) {
-  if (display(from).startsWith('core/') && /\bprocess\.env\b/.test(source.getFullText())) violations.push(`${display(from)} reads process.env inside core/`);
   for (const item of importsFor(source, true)) {
     const target = resolveLocal(from, item.specifier);
     if (!target) continue;
@@ -98,7 +97,6 @@ for (const [from, source] of sources) {
     // source descriptor used by the Zod input schema), but they must not load
     // implementations at runtime.
     if (fromName.startsWith('contracts/') && !item.typeOnly) violations.push(`${fromName} imports local module ${targetName}`);
-    if (fromName.startsWith('core/model/') && (targetName.startsWith('tools/') || ['example.ts', 'brand-tool.ts'].includes(targetName))) violations.push(`${fromName} imports adapter ${targetName}`);
   }
 }
 

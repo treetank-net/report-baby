@@ -1,5 +1,5 @@
-import type { RenderTheme } from '../core/model/render-theme.js';
-import type { ResolvedReportBlock, ResolvedReportPagePlan, ResolvedReportPlan, ReportPlanRole } from '../core/model/resolved-report-plan.js';
+import type { RenderTheme } from '../contracts/render-theme.js';
+import type { ResolvedReportBlock, ResolvedReportPagePlan, ResolvedReportPlan, ReportPlanRole } from '../contracts/resolved-report-plan.js';
 import type { PageGeometry, PageSegment } from '../template/geometry.js';
 import type { CompositionDocument } from '../composition/contracts/model.js';
 

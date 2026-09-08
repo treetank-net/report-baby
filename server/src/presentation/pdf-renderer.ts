@@ -1,6 +1,6 @@
 import { DOMParser, parseHTML } from 'linkedom';
 import { svg2pdf } from 'svg2pdf.js';
-import type { RenderTheme } from '../core/model/render-theme.js';
+import type { RenderTheme } from '../contracts/render-theme.js';
 import { assetDataUri, defaultRenderTheme } from '../brand/context.js';
 import { loadRenderFontSet, newPdf, registerPdfFontSet } from '../rendering/primitives.js';
 import { rasterizePdf } from '../rendering/pdf-rasterizer.js';

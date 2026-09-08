@@ -37,29 +37,34 @@ eksportów. Usunięto dwa worki odpowiedzialności:
 | `presentation/slide-validation.ts` | walidacja zawartości slajdu | 18 |
 | `presentation/contracts.ts` | kontrakty decku | 25 |
 | `presentation/slides.ts` | stabilna fasada eksportów | 11 |
-| `brand/context.ts` | odczyt źródeł, profili i orkiestracja | 478 |
+| `brand/context.ts` | odczyt źródeł i orkiestracja brandu | 456 |
+| `brand/discovery.ts` | rekurencyjne odkrywanie template’ów i profili | 34 |
 | `brand/theme.ts` | rozwiązywanie theme/composition | 174 |
 | `brand/assets.ts` | ścieżki, cache i ostrzeżenia assetów | 124 |
 | `brand/color.ts` | palette i kontrast | 80 |
 | `brand/value.ts` | bezpieczne wartości dokumentu | 38 |
 | `brand/paths.ts` | bezpieczne ścieżki względne | 12 |
 | `brand/contracts.ts` | `BrandOverrides`, `RenderComposition` | 28 |
+| `contracts/render-theme.ts` | wspólny kontrakt motywu renderowania | 65 |
+| `contracts/resolved-slide-plan.ts` | wynikowy plan slajdu | 33 |
+| `contracts/resolved-report-plan.ts` | wynikowy plan raportu | 27 |
 
 Wcześniejsze `slides.ts` (ponad 1000 LOC) i `brand-context.ts` (ponad 900 LOC)
 nie są już miejscami, w których miesza się renderer, layout, assety i
 orkiestracja. `slides.ts` pozostał kompatybilną fasadą, więc MCP i CLI nie
 muszą znać nowego podziału. `brand/context.ts` zachowuje istniejące operacje
-publiczne (`resolveBrandContext`, `inspectBrand`, `listBrandbooks`), a nowe
-moduły są ich wewnętrznymi seamami.
+publiczne (`resolveBrandContext`, `inspectBrand`, `listBrandbooks`), a
+`brand/discovery.ts` przejmuje rekurencyjne przechodzenie katalogów. Oba moduły
+mają jawne, wewnętrzne seam’y.
 
-Po tym przebiegu `server/src` ma 18 711 linii TypeScript. Jest to metryka
+Po tym przebiegu `server/src` ma 18 670 linii TypeScript. Jest to metryka
 orientacyjna: kolejnym krokiem będzie usuwanie powtórzeń i ręcznych obliczeń w
 modułach composition, a nie mechaniczne dalsze rozcinanie każdego pliku.
 
 Weryfikacja tego przebiegu:
 
 - `npx tsc --noEmit` — przechodzi;
-- `node scripts/architecture-check.mjs` — 101 modułów, brak zakazanych cykli;
+- `node scripts/architecture-check.mjs` — 107 modułów, brak zakazanych cykli;
 - `npm run build` — cztery bundle oraz 19 wbudowanych szablonów;
 - `npm run test:composition` na hoście — 13/13 testów przechodzi, w tym oracle,
   obrazy, kontrast, flow redakcyjny i limity stron.
@@ -93,6 +98,23 @@ wstawki) oraz `insertion-placement.ts` (rezerwacja przeszkód, fit-content i
 materializacja). To usuwa powtórzenie pomiaru między planowaniem a placementem,
 bez zmiany kontraktu `insertion-layout.ts` dla `text-planner` i
 `flow-text-decision`.
+
+Kontrakty `RenderTheme`, `ResolvedSlidePlan` i `ResolvedReportPlan` zostały
+przeniesione z technicznego `core/model/` do `contracts/`. Są to struktury
+przenoszone pomiędzy domenami (brand, presentation, report i rendering), a nie
+moduły wykonawcze. Dzięki temu żaden z tych obszarów nie musi importować
+nieistniejącej warstwy `core`, a kontrola architektury nie zawiera już reguł
+odnoszących się do usuniętego katalogu.
+
+W `composition/layout/flow-space.ts` usunięto ostatnią lokalną funkcję
+`addContent`; rejestracja zawartości slotu korzysta z nazwanej funkcji
+`addFlowContent`. Moduł nadal pozostaje właścicielem zajętości, kolizji i barier
+przepływu, ale nie tworzy funkcji pomocniczych wewnątrz funkcji orkiestrującej.
+
+W adapterze `interfaces/mcp/update-tools.ts` konstrukcja sekcji changeloga jest
+również nazwaną funkcją `appendChangelogSection`, a nie lokalnym `flush`. Dzięki
+temu updater ma rozdzielone: semver, wybór sekcji i pobieranie plików, przy
+zachowaniu tej samej odpowiedzi narzędzia `update_plugin`.
 
 ## Kontekst produktu
 
@@ -151,9 +173,15 @@ Niezmienny kontrakt release:
 | Rendering | `rendering/**` | prymitywy i rozwiązywanie obrazów nie należą do planerów |
 | Interfaces | `interfaces/mcp/**`, `interfaces/cli/**` | rejestracja MCP i CLI są osobnymi adapterami |
 
-`server/src` ma obecnie 18 711 linii TypeScript. Największe pozostałe moduły to
-`composition/evaluation/legality.ts`, `composition/layout/text-planner.ts`,
-`composition/layout/flow-planner.ts` oraz `composition/layout/insertion-layout.ts`.
+`server/src` ma obecnie 18 670 linii TypeScript. Największe pozostałe moduły to
+`composition/evaluation/legality.ts` (659 LOC),
+`composition/layout/flow-text-decision.ts` (588 LOC),
+`brand/context.ts` (456 LOC), `composition/evaluation/scoring.ts` (441 LOC),
+`composition/adapters/page-template.ts` (422 LOC),
+`composition/layout/document-layout.ts` (418 LOC),
+`composition/layout/flow-space.ts` (417 LOC) oraz
+`composition/layout/flow-planner.ts` (408 LOC). `text-planner.ts` i
+`insertion-layout.ts` są fasadami o odpowiednio 154 i 17 LOC.
 Rozmiar nie jest samodzielnym kryterium podziału; ważniejsze jest to, czy moduł
 ma jeden kierunek wiedzy i głęboki interfejs.
 
@@ -162,6 +190,9 @@ ma jeden kierunek wiedzy i głęboki interfejs.
 ```text
 src/
 ├── contracts/
+│   ├── render-theme.ts
+│   ├── resolved-slide-plan.ts
+│   ├── resolved-report-plan.ts
 │   ├── input/
 │   │   ├── composition.ts
 │   │   ├── slides.ts
@@ -342,22 +373,19 @@ interfaces/mcp, interfaces/cli
 korzystać z kontraktu theme i planu, ale nie z orkiestratora brandu. `contracts`
 nie importują żadnych implementacji.
 
-## Kolejność migracji
+## Kolejność dalszej pracy
 
-1. Poprawić `architecture-check.mjs`, aby rozwiązywał importy `.js` do źródeł
-   `.ts`; obecny raport „brak cykli” jest przez to częściowo niewiarygodny.
-2. Rozdzielić publiczne input contracts i nazwać jawnie oba modele slajdu.
-3. Przenieść content i template’y bez zmiany zachowania.
-4. Przenieść source i asset processing.
-5. Rozciąć `brand-context.ts`.
-6. Rozciąć `slides.ts` na layout oraz renderery formatów.
-7. Rozciąć raport i oznaczyć legacy plan.
-8. Wydzielić rendering primitives/SVG.
-9. Wydzielić wspólne operacje narzędzi i cienkie adaptery MCP/CLI.
-10. Wykonać audyt usunięć: `text-runs.ts`, stary `Slide`, legacy plan oraz
-    nieużywane template’y.
+Pierwsze dziewięć kroków organizacyjnych zostało wykonanych: katalogi domenowe,
+kontrakty, brand, presentation, template, rendering oraz adaptery MCP/CLI mają
+już jawne granice. Dalsza praca nie powinna być mechanicznym dzieleniem plików:
 
-Po każdym seamie uruchamiamy `tsc --noEmit`, architecture check, testy
-composition oraz właściwe testy MCP, CLI, brand i artefaktów. Przed uznaniem
-migracji za zakończoną trzeba dodatkowo sprawdzić `update_plugin` oraz launcher
-na instalacji zawierającej zarówno bundle, jak i źródła template’ów.
+1. potwierdzić zachowanie aktualnych publicznych testów MCP/CLI i osobno
+   rozstrzygnąć istniejący przypadek `EMPTY_FLOW_SLOT`;
+2. audytować `flow-text-decision.ts` oraz `document-layout.ts` pod kątem
+   wspólnych kalkulatorów, bez zmiany kolejności decyzji planera;
+3. audytować `legality.ts` i `scoring.ts` jako dwa różne konteksty evaluatora,
+   wydzielając tylko seam'y, które mają własny kontrakt wejścia/wyjścia;
+4. usunąć wyłącznie potwierdzone martwe ścieżki (`text-runs.ts`, stare modele
+   slajdów, legacy plan) po pomiarze pokrycia i aktualizacji testów;
+5. przy każdym seamie uruchamiać `tsc --noEmit`, architecture check, build,
+   `npm run test:composition` oraz właściwe testy MCP/CLI/brand i artefaktów.

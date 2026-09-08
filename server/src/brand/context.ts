@@ -1,8 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { dirname, extname, join, relative } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 import { parse } from 'yaml';
-import type { RenderTheme } from '../core/model/render-theme.js';
+import type { RenderTheme } from '../contracts/render-theme.js';
 import { readRenderConfig } from '../template/builtins.js';
 import { readTemplateSource } from '../template/contracts.js';
 import { assetDataUri, readPreparedAssets } from './assets.js';
@@ -14,8 +14,9 @@ import { materializeBrandSource } from '../source/materialization.js';
 import { colorContrastRatio, defaultRenderTheme, readableInk } from './color.js';
 import { clone, isRecord, merge, stringFromTypography, type RecordValue } from './value.js';
 import { brandNameFrom, extractTheme } from './theme.js';
+import { collectBrandProfiles, collectBrandTemplates } from './discovery.js';
 
-export type { RenderTheme } from '../core/model/render-theme.js';
+export type { RenderTheme } from '../contracts/render-theme.js';
 
 export type { BrandOverrides } from './contracts.js';
 export { colorContrastRatio, defaultRenderTheme, readableInk } from './color.js';
@@ -329,19 +330,8 @@ export async function listBrandTemplates(brandRoot: string, brandRef: string, br
   const reference = parseReference(brandRef);
   if (!reference.brandId) throw new Error(`Template discovery requires a brand URI such as brand://acme/primary: ${brandRef}`);
   const templateRoot = join(await resolveBrandDirectory(materialized.brandRoot, reference.brandId), 'templates');
-  const { readdir } = await import('node:fs/promises');
   const result: Array<{ templateRef: string; path: string }> = [];
-  async function walk(directory: string): Promise<void> {
-    for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) await walk(path);
-      else if (entry.isFile() && /^template\.(ya?ml|json)$/i.test(entry.name)) {
-        const id = relative(templateRoot, directory).replaceAll('\\', '/');
-        if (id) result.push({ templateRef: id, path });
-      }
-    }
-  }
-  await walk(templateRoot);
+  await collectBrandTemplates(templateRoot, templateRoot, result);
   return result.sort((a, b) => a.templateRef.localeCompare(b.templateRef));
 }
 
@@ -391,18 +381,6 @@ export async function resolveBrandContext(
 export async function listBrandbooks(brandRoot: string, brandSource?: BrandSourceDescriptor): Promise<Array<{ id: string; name?: string; profiles: string[] }>> {
   const materialized = await materializeBrandSource(brandSource, brandRoot);
   const effectiveRoot = materialized.brandRoot;
-  const { readdir } = await import('node:fs/promises');
-  async function profileNames(directory: string, prefix = ''): Promise<string[]> {
-    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
-    const names: string[] = [];
-    for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
-      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory() && !['assets', 'releases', 'templates'].includes(entry.name)) names.push(...await profileNames(join(directory, entry.name), relative));
-      else if (entry.isFile() && /\.(ya?ml|json)$/i.test(entry.name) && !['_brand', 'brand', 'showcase'].includes(entry.name.replace(/\.(ya?ml|json)$/i, ''))) names.push(relative.replace(/\.(ya?ml|json)$/i, ''));
-    }
-    return names;
-  }
   const entries = await readdir(effectiveRoot, { withFileTypes: true }).catch(() => []);
   const result: Array<{ id: string; name?: string; profiles: string[] }> = [];
   for (const entry of entries) {
@@ -413,7 +391,7 @@ export async function listBrandbooks(brandRoot: string, brandSource?: BrandSourc
     result.push({
       id: entry.name,
       name: brandNameFrom(base.document),
-      profiles: (await profileNames(brandDir)).sort(),
+      profiles: (await collectBrandProfiles(brandDir)).sort(),
     });
   }
   return result.sort((a, b) => a.id.localeCompare(b.id));

@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { readBrandShowcase, resolveBrandContext, type BrandOverrides } from '../../brand/context.js';
 import { getBrandDir, getBrandSourceRoots } from '../../infrastructure/config.js';
 import { renderReportPdfDetailed } from '../../report/renderer.js';
-import type { RenderTheme } from '../../core/model/render-theme.js';
+import type { RenderTheme } from '../../contracts/render-theme.js';
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnostics } from '../../presentation/slides.js';
 import { resolveSlideDeck } from '../../presentation/planning/slide-context.js';
 import { slidePlanSummary } from '../../presentation/planning/slide-plan.js';

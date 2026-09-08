@@ -279,6 +279,19 @@ function blockFlowIds(document: CompositionDocument): Map<string, string> {
   return new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block: CompositionBlock) => [block.id, flowId] as const)));
 }
 
+function addFlowContent(
+  contentBySlot: Map<string, Set<string>>,
+  flowId: string | undefined,
+  slotId: string,
+  blockId: string,
+): void {
+  if (!flowId) return;
+  const key = `${flowId}:${slotId}`;
+  const blockIds = contentBySlot.get(key) ?? new Set<string>();
+  blockIds.add(blockId);
+  contentBySlot.set(key, blockIds);
+}
+
 /** Build the renderer-neutral flow-to-slot projection used by tracing and evaluation. */
 /**
  * @planner-target composition/layout/flow-space.ts
@@ -288,23 +301,12 @@ export function registerFlowPlacements(document: CompositionDocument, plan: Comp
   const flowIdsByBlock = blockFlowIds(document);
   const contentBySlot = new Map<string, Set<string>>();
   const linesBySlot = new Map<string, number>();
-  /**
-   * @planner-target composition/layout/flow-space.ts
-   * @planner-responsibility Keep the current addContent implementation intact until its target seam is extracted.
-   */
-  const addContent = (flowId: string | undefined, slotId: string, blockId: string): void => {
-    if (!flowId) return;
-    const key = `${flowId}:${slotId}`;
-    const blockIds = contentBySlot.get(key) ?? new Set<string>();
-    blockIds.add(blockId);
-    contentBySlot.set(key, blockIds);
-  };
   for (const line of plannedLines(plan)) {
-    addContent(line.flowId, line.slotId, line.blockId);
+    addFlowContent(contentBySlot, line.flowId, line.slotId, line.blockId);
     linesBySlot.set(line.slotId, (linesBySlot.get(line.slotId) ?? 0) + 1);
   }
   for (const placement of [...plan.placements, ...plan.blockPlacements, ...plan.tablePlacements]) {
-    addContent(flowIdsByBlock.get(placement.blockId), placement.slotId, placement.blockId);
+    addFlowContent(contentBySlot, flowIdsByBlock.get(placement.blockId), placement.slotId, placement.blockId);
   }
   return plan.slots
     .filter((slot): slot is CompositionSlot & { flowId: string; routeIndex: number } => slot.flowId !== undefined && slot.routeIndex !== undefined && slot.kind === 'text')
