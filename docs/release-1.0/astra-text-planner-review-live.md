@@ -1,5 +1,11 @@
 # Astra review: text planner and flow planner
 
+> Uwaga: wcześniejsze obserwacje w tym dokumencie opisują stan sprzed migracji
+> i zachowują historyczne nazwy plików. Aktualne ścieżki oraz przyjęty model
+> odpowiedzialności znajdują się w
+> [`10-composition-module-migration.md`](10-composition-module-migration.md)
+> i w bieżącym [inventory funkcji](planner-function-dependency-inventory.md).
+
 Status: delegated review started.
 
 This file is the live handoff log for Astra's read-only architectural review.
