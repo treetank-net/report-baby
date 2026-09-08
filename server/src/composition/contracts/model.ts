@@ -113,6 +113,12 @@ export interface CompositionTemplate {
   layouts: CompositionLayoutTemplate[];
   routes: Record<string, CompositionFlowRoute>;
   maxPages: number;
+  /**
+   * Per-document slots supplied by a request.  These overlays are applied to
+   * the selected page layout at materialization time and never mutate the
+   * reusable compiled template.
+   */
+  pageSlotOverlays?: Record<number, CompositionSlotTemplate[]>;
   /** Template-owned heading cluster policy; it overrides renderer defaults. */
   headingKeepWithNextLines?: number;
 }

@@ -62,6 +62,7 @@ export { compareCompositionEvaluations, createCompositionEngine, renderCompositi
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
 export { compositionDocumentFromInput } from './adapters/input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './adapters/page-template.js';
+export { applyDynamicInsertionRequests } from './adapters/request-insertion-slots.js';
 export { createTextCompositionPlanner } from './layout/text-planner.js';
 export type { MovableGraphicPolicy, MovableInsertionBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 export { createTextCompositionEngine, type TextCompositionEngineOptions } from './adapters/text-engine.js';

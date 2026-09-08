@@ -2,7 +2,7 @@ import type { jsPDF } from 'jspdf';
 import { createHash } from 'node:crypto';
 import { relative } from 'node:path';
 import type { RenderTheme } from '../contracts/render-theme.js';
-import type { CompositionInput } from '../contracts/input/schema.js';
+import type { CompositionInput, PlacementRequests } from '../contracts/input/schema.js';
 import { readRenderConfig } from '../template/builtins.js';
 import type { PageGeometry } from '../template/geometry.js';
 import type { CompiledTemplate } from '../template/contracts.js';
@@ -85,6 +85,7 @@ export interface ReportCompositionRuntimeOptions {
   template: CompiledTemplate;
   geometry: PageGeometry;
   rejectOnEvaluation?: boolean;
+  insertionRequests?: PlacementRequests;
 }
 
 /**
@@ -184,6 +185,7 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
     ...(tableCapabilities ? { measureTable: tableCapabilities.measureTable } : {}),
     ...(contrastProvider ? { contrastProvider } : {}),
     inlineFontCoverage,
+    ...(options.insertionRequests ? { insertionRequests: options.insertionRequests } : {}),
   });
   if (options.rejectOnEvaluation !== false && composition.evaluation.status === 'rejected') {
     const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');

@@ -17,6 +17,7 @@ const suites = {
     ['report plan contract', 'scripts/test-report-plan.mjs'],
     ['text composition engine', 'scripts/test-text-composition-engine.mjs'],
     ['generic soft insertions', 'scripts/test-generic-soft-insertions.mjs'],
+    ['dynamic insertion slots', 'scripts/test-dynamic-insertion-slots.mjs'],
     ['page template adapter', 'scripts/test-page-template-adapter.mjs'],
     ['jsPDF adapter', 'scripts/test-js-pdf-adapter.mjs'],
     ['composition adapter', 'scripts/test-report-composition-adapter.mjs'],
@@ -28,6 +29,7 @@ const suites = {
   ],
   artifacts: [
     ['public MCP behavior', 'scripts/test-public-behavior.mjs'],
+    ['dynamic insertion public contract', 'scripts/test-dynamic-insertion-public.mjs'],
     ['public CLI behavior', 'scripts/test-cli.mjs'],
     ['report images', 'scripts/test-report-images.mjs'],
     ['report chrome', 'scripts/test-report-chrome.mjs'],

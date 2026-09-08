@@ -130,6 +130,36 @@ try {
   assert.equal(editorialPdf.subarray(0, 5).toString(), '%PDF-');
   assert.ok(editorialPdf.length > 10_000);
 
+  const dynamicEditorial = await client.callTool({
+    name: 'render_report',
+    arguments: {
+      template: 'pages/editorial-two-column',
+      dry_run: true,
+      diagnostics: 'full',
+      brand_ref: 'brand://acme/primary',
+      data: {
+        flows: {
+          main: { blocks: [{ type: 'text', id: 'story', role: 'body', text: 'Long editorial body. '.repeat(450) }], continuation: 'allowed' },
+          quotes: { blocks: Array.from({ length: 7 }, (_, index) => ({ type: 'text', id: `quote-${index + 1}`, role: 'quote', text: `Dynamic quote ${index + 1}.` })), continuation: 'forbidden' },
+        },
+      },
+      placement_requests: {
+        insertion_flows: [{
+          flow_id: 'quotes',
+          start_page: 1,
+          repeat: 'each-page',
+          slots: [
+            { id: 'quote-top', frame: { x: 0.1, y: 0.2, width: 0.8, height: 'auto' }, allowed_roles: ['quote'] },
+            { id: 'quote-bottom', frame: { x: 0.1, y: 0.55, width: 0.8, height: 'auto' }, allowed_roles: ['quote'] },
+          ],
+        }],
+      },
+    },
+  });
+  assert.notEqual(dynamicEditorial.isError, true, JSON.stringify(dynamicEditorial.content));
+  assert.equal(dynamicEditorial.structuredContent?.compositionEvaluation?.status, 'accepted');
+  assert.equal(dynamicEditorial.structuredContent?.compositionPlan?.insertionLines?.length, 7, 'public render_report must expose all seven dynamic quote placements in dry_run');
+
   const plannerPdfPath = join(outputDir, 'editorial-planner-route.pdf');
   const plannerReport = await client.callTool({
     name: 'render_report',

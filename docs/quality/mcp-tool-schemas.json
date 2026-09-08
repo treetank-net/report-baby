@@ -1929,6 +1929,219 @@
           },
           "type": "object"
         },
+        "placement_requests": {
+          "additionalProperties": false,
+          "description": "Optional per-render insertion slots. These request-owned slots are layered onto the selected page template and do not mutate it.",
+          "properties": {
+            "insertion_flows": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "continuation": {
+                    "default": "forbidden",
+                    "enum": [
+                      "allowed",
+                      "forbidden"
+                    ],
+                    "type": "string"
+                  },
+                  "flow_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "repeat": {
+                    "default": "once",
+                    "enum": [
+                      "once",
+                      "each-page"
+                    ],
+                    "type": "string"
+                  },
+                  "slots": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "allowed_block_ids": {
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "allowed_block_kinds": {
+                          "items": {
+                            "enum": [
+                              "heading",
+                              "paragraph",
+                              "list-item",
+                              "image",
+                              "table",
+                              "chart",
+                              "metric"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "allowed_roles": {
+                          "items": {
+                            "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/role"
+                          },
+                          "type": "array"
+                        },
+                        "frame": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "height": {
+                              "anyOf": [
+                                {
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 1,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": "auto",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "width": {
+                              "exclusiveMinimum": 0,
+                              "maximum": 1,
+                              "type": "number"
+                            },
+                            "x": {
+                              "maximum": 1,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "y": {
+                              "maximum": 1,
+                              "minimum": 0,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y",
+                            "width"
+                          ],
+                          "type": "object"
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "default": "text",
+                          "enum": [
+                            "text",
+                            "block"
+                          ],
+                          "type": "string"
+                        },
+                        "sizing": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "max_height": {
+                              "anyOf": [
+                                {
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 1,
+                                  "type": "number"
+                                },
+                                {
+                                  "const": "page",
+                                  "type": "string"
+                                }
+                              ],
+                              "default": "page"
+                            },
+                            "mode": {
+                              "default": "fit-content",
+                              "enum": [
+                                "fixed",
+                                "fit-content"
+                              ],
+                              "type": "string"
+                            },
+                            "pushes": {
+                              "items": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "frame"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "start_page": {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "flow_id",
+                  "slots"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "insertions": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "block_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "flow_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "frame": {
+                    "$ref": "#/properties/placement_requests/properties/insertion_flows/items/properties/slots/items/properties/frame"
+                  },
+                  "kind": {
+                    "default": "text",
+                    "enum": [
+                      "text",
+                      "block"
+                    ],
+                    "type": "string"
+                  },
+                  "page": {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  "sizing": {
+                    "$ref": "#/properties/placement_requests/properties/insertion_flows/items/properties/slots/items/properties/sizing"
+                  }
+                },
+                "required": [
+                  "flow_id",
+                  "block_id",
+                  "page",
+                  "frame"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
         "surface": {
           "description": "Output surface, e.g. pdf-a4 or pptx-16x9",
           "type": "string"

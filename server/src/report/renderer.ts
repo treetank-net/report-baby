@@ -4,7 +4,7 @@ import { defaultRenderTheme } from '../brand/context.js';
 import { readBuiltinPageTemplateSource, readRenderConfig } from '../template/builtins.js';
 import type { RenderTheme } from '../contracts/render-theme.js';
 import type { ResolvedReportPlan } from '../contracts/resolved-report-plan.js';
-import type { CompositionInput } from '../contracts/input/schema.js';
+import type { CompositionInput, PlacementRequests } from '../contracts/input/schema.js';
 import { pageGeometryFromTemplate, type PageGeometry } from '../template/geometry.js';
 import { resolveReportPlan } from './legacy-plan.js';
 import type { ReportCompositionResult } from '../composition/report-composition-entrypoint.js';
@@ -256,8 +256,8 @@ export interface ReportRenderDiagnostics {
   composition?: ReportCompositionResult;
 }
 
-export async function renderReportPdfDetailed(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, compositionDebug = false): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
-  const planned = await renderReportCompositionPdf(name, data, theme, sourceContext, compositionDebug);
+export async function renderReportPdfDetailed(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, compositionDebug = false, insertionRequests?: PlacementRequests): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
+  const planned = await renderReportCompositionPdf(name, data, theme, sourceContext, compositionDebug, insertionRequests);
   for (const diagnostic of planned.composition.evaluation.diagnostics) if (diagnostic.severity === 'warning') warnings.push(diagnostic.message);
   const { geometry } = compositionGeometry(name);
   const plan = resolveReportPlan({ templateRef: name, theme, geometry, pageCount: Math.max(1, planned.composition.plan.pages.length), compositionDocument: planned.composition.document });
@@ -265,8 +265,8 @@ export async function renderReportPdfDetailed(name: string, data: CompositionInp
   return { buffer: planned.buffer, diagnostics: { plan, drawings: planned.drawings, composition: planned.composition } };
 }
 
-export async function renderReportPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext): Promise<Buffer> {
-  return (await renderReportPdfDetailed(name, data, theme, warnings, sourceContext)).buffer;
+export async function renderReportPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, insertionRequests?: PlacementRequests): Promise<Buffer> {
+  return (await renderReportPdfDetailed(name, data, theme, warnings, sourceContext, false, insertionRequests)).buffer;
 }
 
 function footerTextWidth(doc: jsPDF, geometry: PageGeometry, maxPages: number, theme: RenderTheme): number {
@@ -309,9 +309,9 @@ function attachPageChrome(doc: jsPDF, composition: ReportCompositionResult, geom
   }
 }
 
-export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
+export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false, insertionRequests?: PlacementRequests): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
   const resolved = compositionGeometry(name);
-  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template: resolved.template, geometry: resolved.geometry });
+  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template: resolved.template, geometry: resolved.geometry, ...(insertionRequests ? { insertionRequests } : {}) });
   attachPageChrome(prepared.doc, prepared.composition, prepared.geometry, theme);
   const { doc, geometry, template, composition, drawings } = prepared;
   const logo = await reportLogo(theme, sourceContext);
@@ -343,9 +343,9 @@ export function resolveReportPlanOnly(name: string, data: CompositionInput, them
  * jsPDF instance exists only to provide the real font metrics used by the
  * planner.
  */
-export async function resolveReportCompositionOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext): Promise<ReportCompositionResult> {
+export async function resolveReportCompositionOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, insertionRequests?: PlacementRequests): Promise<ReportCompositionResult> {
   const { template, geometry } = compositionGeometry(name);
-  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template, geometry, rejectOnEvaluation: false });
+  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template, geometry, rejectOnEvaluation: false, ...(insertionRequests ? { insertionRequests } : {}) });
   attachPageChrome(prepared.doc, prepared.composition, prepared.geometry, theme);
   return prepared.composition;
 }

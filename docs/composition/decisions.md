@@ -43,6 +43,46 @@ attempts. The planner generates complete variants, the evaluator compares them,
 and refinement searches locally around the best variant. This provides value
 without building a global solver.
 
+## Jednorazowe insertiony mogą pochodzić z requestu
+
+Reusable page templates remain the default owner of page geometry. A document
+may nevertheless need one authored insertion whose frame is not worth adding
+to a persistent template. The request may then provide a
+`placement_requests` entry containing `flow_id`, `block_id`, page and a
+normalized frame. The adapter
+materializes an in-memory slot and non-`main` insertion route for that one
+composition run; it does not mutate or persist the selected template.
+
+W publicznym kontrakcie ta geometria powinna nazywać się `frame`, zgodnie z
+terminologią template'u. `box` pozostaje nazwą zmaterializowanego prostokąta
+(`CompositionRect`) w planie i placementach; nie jest osobną domenową encją ani
+rodzajem slotu.
+
+The block itself remains content-only in `data.flows`. A raw `frame` on a
+`CompositionBlock` is not accepted, because it would mix content with layout
+and bypass slot ownership, legality checks and obstacle synchronization. The
+same insertion measurement, fit-content, obstacle and evaluator pipeline is
+used for both template-owned and request-owned slots. If the requested box has
+no legal placement, the plan is rejected.
+
+The contract is exposed as optional `placement_requests` on `render_report`
+and the report CLI. The input schema remains strict and content-only; the
+request adapter builds a per-run overlay and the renderer still selects only
+the built-in A4 template. Auto-height and fixed sizing are both validated
+before planning. Downstream obstacle movement after a genuine runtime growth
+remains a separate follow-up; the current proposal pass already prevents
+unrelated overlapping boxes.
+
+## Sloty insertionu są pulą pojemności
+
+`insertionSlots` opisuje dostępne miejsca na każdej stronie, a nie listę
+slotów tworzonych dla każdego bloku. Dwa sloty cytatów powtarzane na stronach
+mogą więc obsłużyć piętnaście cytatów w dłuższym artykule. Planner przechodzi po
+slotach w kolejności stron i pozycji, przypisując kolejne bloki flow do
+pierwszego legalnego miejsca. Konkretne przypisanie bloku do slotu może być
+preferencją albo twardym wymaganiem, ale przekroczenie całkowitej pojemności
+nie może usuwać treści — kończy się odrzuceniem planu.
+
 ## A legal gap can still be ugly
 
 The fact that an empty area is forced by an immovable element explains its

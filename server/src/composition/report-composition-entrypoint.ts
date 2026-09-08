@@ -1,6 +1,6 @@
 import type { jsPDF } from 'jspdf';
 import type { PageGeometry } from '../template/geometry.js';
-import type { CompositionInput } from '../contracts/input/schema.js';
+import type { CompositionInput, PlacementRequests } from '../contracts/input/schema.js';
 import type { CompiledTemplate } from '../template/contracts.js';
 import type { CompositionTemplate } from './contracts/model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './contracts/engine-contracts.js';
@@ -12,6 +12,7 @@ import type { JsPdfCompositionStyles, JsPdfInlineFontCoverage } from './contract
 import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './adapters/text-engine.js';
 import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 import { compositionStylesFromRenderConfig } from './adapters/render-config.js';
+import { applyDynamicInsertionRequests } from './adapters/request-insertion-slots.js';
 import { hasInlineMark, missingInlineCodePointsByStyle, missingInlineGlyphWarning, missingTableGlyphWarning } from './text/inline-runs.js';
 
 export {
@@ -44,6 +45,7 @@ export interface ReportCompositionOptions {
   measureTable?: CompositionTextMetrics['measureTable'];
   contrastProvider?: CompositionContrastProvider;
   inlineFontCoverage?: JsPdfInlineFontCoverage;
+  insertionRequests?: PlacementRequests;
 }
 
 export interface ReportCompositionResult {
@@ -74,13 +76,14 @@ export function planReportComposition(
   options: ReportCompositionOptions,
 ): ReportCompositionResult {
   const document = compositionDocumentFromInput(data);
-  const template = compositionTemplateFromPageGeometry(compiled, geometry, {
+  const baseTemplate = compositionTemplateFromPageGeometry(compiled, geometry, {
     maxPages: options.maxPages,
     ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
     includeHeaderFlow: options.includeHeaderFlow ?? true,
     ...(options.mainFlowId === undefined ? {} : { mainFlowId: options.mainFlowId }),
     ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
   });
+  const template = applyDynamicInsertionRequests(baseTemplate, document, options.insertionRequests);
   const styles = options.styles ?? compositionStylesFromRenderConfig();
   const metrics = createJsPdfTextMetrics(doc, options.family, styles, { inlineFontCoverage: options.inlineFontCoverage });
   if (options.measureBlock) metrics.measureBlock = options.measureBlock;

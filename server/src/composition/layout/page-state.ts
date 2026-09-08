@@ -32,7 +32,15 @@ function layoutById(template: CompositionTemplate, id: string): CompositionLayou
  */
 export function routeLayout(route: CompositionFlowRoute, template: CompositionTemplate, page: number): CompositionLayoutTemplate | undefined {
   const layoutId = route.layouts?.[Math.min(page - 1, route.layouts.length - 1)] ?? template.layouts[0]?.id;
-  return layoutId ? layoutById(template, layoutId) : undefined;
+  const baseLayout = layoutId ? layoutById(template, layoutId) : undefined;
+  if (!baseLayout) return undefined;
+  const overlays = template.pageSlotOverlays?.[page];
+  if (!overlays || overlays.length === 0) return baseLayout;
+  const existingIds = new Set(baseLayout.slots.map((slot) => slot.id));
+  return {
+    ...baseLayout,
+    slots: [...baseLayout.slots, ...overlays.filter((slot) => !existingIds.has(slot.id))],
+  };
 }
 
 /**
@@ -114,20 +122,30 @@ export { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
  * @planner-responsibility Validate all configured vertical slot-growth targets.
  */
 export function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
-  for (const layout of template.layouts) {
+  const checked = new Set<string>();
+  const validateLayout = (layout: CompositionLayoutTemplate, page?: number): void => {
+    const key = `${page ?? 'template'}:${layout.id}`;
+    if (checked.has(key)) return;
+    checked.add(key);
     const slotIds = new Set(layout.slots.map((slot) => slot.id));
     for (const slot of layout.slots) {
       const growth = slot.grow;
       if (!growth) continue;
       if (growth.axis !== 'y' || !Number.isFinite(growth.maxHeight) || growth.maxHeight < slot.box.height) {
-        plan.diagnostics.push(diagnostic('error', 'GROW_POLICY_INVALID', `Slot '${slot.id}' has an invalid vertical growth limit.`, { slotId: slot.id, details: { layoutId: layout.id } }));
+        plan.diagnostics.push(diagnostic('error', 'GROW_POLICY_INVALID', `Slot '${slot.id}' has an invalid vertical growth limit.`, { slotId: slot.id, details: { layoutId: layout.id, page } }));
       }
       for (const pushedId of growth.pushes ?? []) {
         if (!slotIds.has(pushedId) || pushedId === slot.id) {
-          plan.diagnostics.push(diagnostic('error', 'GROW_TARGET_NOT_FOUND', `Slot '${slot.id}' cannot push '${pushedId}' in layout '${layout.id}'.`, { slotId: slot.id, details: { pushedId, layoutId: layout.id } }));
+          plan.diagnostics.push(diagnostic('error', 'GROW_TARGET_NOT_FOUND', `Slot '${slot.id}' cannot push '${pushedId}' in layout '${layout.id}'.`, { slotId: slot.id, details: { pushedId, layoutId: layout.id, page } }));
         }
       }
     }
+  };
+  for (const layout of template.layouts) validateLayout(layout);
+  for (const page of Object.keys(template.pageSlotOverlays ?? {}).map(Number).filter(Number.isInteger)) {
+    const route = template.routes.main ?? Object.values(template.routes)[0];
+    const layout = route ? routeLayout(route, template, page) : undefined;
+    if (layout) validateLayout(layout, page);
   }
 }
 

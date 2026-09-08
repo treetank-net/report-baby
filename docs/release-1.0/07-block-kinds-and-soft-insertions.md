@@ -49,6 +49,206 @@ supported content kind: the slot filters the block, the shared capability
 measures it, and the placement layer materializes the corresponding text,
 table, or atomic placement before ordinary flow text is laid out.
 
+## Jednorazowy insertion z boxem z requestu
+
+Jeżeli dokument potrzebuje pojedynczej, niestandardowej wstawki, nie musi to
+oznaczać dodawania trwałego slotu do pliku template'u. Dopuszczalnym
+rozszerzeniem kontraktu jest deklaracja placementu na poziomie requestu, obok
+`data.flows`, na przykład:
+
+```json
+{
+  "template": "pages/editorial-two-column",
+  "data": {
+    "flows": {
+      "main": { "blocks": [] },
+      "quotes": {
+        "continuation": "forbidden",
+        "blocks": [
+          {
+            "id": "quote-1",
+            "type": "text",
+            "role": "quote",
+            "text": "Jednorazowy cytat."
+          }
+        ]
+      }
+    }
+  },
+  "placement_requests": {
+    "insertions": [
+      {
+        "flow_id": "quotes",
+        "block_id": "quote-1",
+        "page": 1,
+        "frame": { "x": 0.1, "y": 0.333, "width": 0.8, "height": "auto" },
+        "sizing": { "mode": "fit-content", "max_height": "page" }
+      }
+    ]
+  }
+}
+```
+
+`placement_requests` nie tworzy zapisanego template'u ani nie mutuje
+globalnej konfiguracji. Adapter buduje wyłącznie dla tego przebiegu tymczasowy
+slot i route `quotes` z jednym `insertionSlots`, po czym przekazuje je do
+zwykłego pipeline'u insertionów. Quote nadal musi należeć do nie-`main` flow;
+request określa tylko jego jednorazową geometrię i stronę.
+
+W publicznym requestcie mówimy o `frame`, tak samo jak w template'cie. Nie
+dodajemy `frame` do samego `CompositionBlock`. Treść pozostaje w
+`data.flows`, a geometria w deklaracji placementu. Planner nadal sprawdza
+przynależność flow, rodzaj i rolę bloku, zawarcie frame'u w stronie, kolizje z
+chrome'em i innymi twardymi elementami oraz legalność głównego flow wokół
+obstacle. Brak legalnego miejsca oznacza odrzucenie planu, nie ciche
+przesunięcie poza żądany frame.
+
+Terminologia jest celowo rozdzielona: `slot` to nazwane miejsce z regułami,
+`frame` to deklarowana geometria slotu lub requestu, a `box` to zmaterializowany
+prostokąt w jednostkach planu (`CompositionRect`) używany przez sloty stanu,
+placementy i obstacle. `box` nie jest dodatkowym rodzajem slotu.
+
+Rozszerzenie jest teraz dostępne jako opcjonalne pole `placement_requests` w
+publicznym `render_report` oraz w wejściu CLI. `CompositionInput` nadal jest
+ścisły i content-only; request adapter buduje niemutowalną nakładkę slotów na
+czas jednego planowania. Nie powstaje zapisany template ani osobna ścieżka
+planera.
+
+### Auto-height w jednorazowym insertionie
+
+Docelowe `height: "auto"` w frame oznacza, że szerokość i pozycja są zadane
+przez request, natomiast wysokość wynika z pomiaru treści. `fit-content` powinno
+zwrócić naturalną wysokość tekstu, tabeli, wykresu, metryki lub obrazu; obstacle
+otrzymuje dokładnie ten sam końcowy box. Wzrost musi następnie przesunąć
+deklarowane kolejne insertiony albo zakończyć się błędem kolizji.
+
+Requestowe `height: "auto"` i `sizing.mode: "fit-content"` są obsługiwane:
+adapter wyznacza maksymalną wysokość do końca obszaru treści, a pomiar zwęża
+slot i synchronizuje obstacle z placementem. Stały tryb wymaga liczbowej
+wysokości i zgłasza `INSERTION_OVERFLOW`, zamiast samoczynnie rosnąć. Relacje
+`grow.pushes` są walidowane; nakładające się dynamiczne sloty są legalne tylko
+gdy mają jawną relację przesunięcia. Przesuwanie już zarezerwowanych,
+następnych obstacle'ów pozostaje osobnym krokiem dalszej migracji.
+
+Jeżeli `custom block` oznacza nowy rodzaj bloku, sam request z boxem nie
+wystarczy. Potrzebne są osobne schema, capability pomiaru, placement i
+renderer. Dla obecnych rodzajów (`text`, `table`, `chart`, `metric`, `image`)
+jednorazowy insertion może korzystać ze wspólnej ścieżki.
+
+### Pula slotów powtarzana na stronach
+
+Jeden slot nie musi odpowiadać jednemu blokowi w całym dokumencie. Template
+może zdefiniować na przykład `insertion_slots: [quote-a, quote-b]`; planner
+enumeruje te dwa sloty dla każdego layoutu strony. W kontrolnym przypadku
+pięciu stron i siedmiu cytatów wykorzystuje wtedy pierwsze siedem z dziesięciu
+dostępnych miejsc, zamiast wymagać siedmiu definicji slotów. Kolejność bloków w
+flow pozostaje kolejnością przypisania: dwa pierwsze cytaty trafiają na
+pierwszą stronę, dwa następne na kolejną itd. Brak miejsca dla kolejnego
+wymaganego bloku pozostaje błędem planu.
+
+Dla jednorazowego layoutu ten sam model może być zadeklarowany w requestcie
+jako jedna pula slotów powtarzana na stronach (nazwa pola jest jeszcze
+kontraktem do ustalenia):
+
+```json
+{
+  "placement_requests": {
+    "insertion_flows": [
+      {
+        "flow_id": "quotes",
+        "start_page": 1,
+        "repeat": "each-page",
+        "slots": [
+          { "id": "quote-a", "frame": { "x": 0.1, "y": 0.25, "width": 0.8, "height": "auto" } },
+          { "id": "quote-b", "frame": { "x": 0.1, "y": 0.55, "width": 0.8, "height": "auto" } }
+        ]
+      }
+    ]
+  }
+}
+```
+
+To jest pula pojemności, nie globalny solver. Domyślnie planner zachowuje
+autoredakcyjną kolejność bloków i wybiera pierwsze legalne miejsce. Jeżeli
+konkretny cytat ma preferować albo wymagać wskazanego slotu, można dodać
+osobne przypisanie `block_id` → `slot_id`/`page`; treść nadal pozostaje
+wymagana, a preferencja konkretnego miejsca może być miękka. Wzrost pierwszego
+slotu musi przesunąć następne sloty albo spowodować odrzucenie planu — nie może
+przykryć kolejnego cytatu.
+
+## Zakres testu puli dynamicznych slotów
+
+Pierwszy fixture testowy celowo jest mały: pięć stron, siedem syntetycznych
+cytatów i dwa sloty na stronę. Główny flow zawiera dość tekstu, aby przejść
+przez wszystkie pięć stron, ale test nie korzysta z zewnętrznego artykułu ani
+marki. Bazowy układ musi przejść jako legalny przed wykonaniem jakiejkolwiek
+mutacji testowej. Każdy przypadek negatywny kopiuje ten układ i zmienia jedną
+regułę, dzięki czemu porażka nie wynika z kilku wcześniejszych konfliktów.
+
+### Stałe i rosnące sloty
+
+Testujemy oba tryby, ponieważ mają różne kontrakty:
+
+| Tryb | Oczekiwane zachowanie |
+|---|---|
+| stały (`fit_content` wyłączone, brak `grow`) | box zachowuje rozmiar; krótka treść może zostawić pustą przestrzeń, a treść większa od boxa kończy się `INSERTION_OVERFLOW` |
+| rosnący (`fit_content` + `grow`) | końcowy box wynika z pomiaru; wzrost przesuwa następny slot lub kończy się odrzuceniem przy braku miejsca |
+| auto-height | pozycja i szerokość są zadane przez frame, wysokość jest wynikiem pomiaru; nie wolno udawać auto-height przez stałą wysokość końcową |
+
+W obu trybach obstacle musi mieć dokładnie ten sam końcowy prostokąt co
+placement insertionu. Stały slot nie może zostać przesunięty tylko dlatego, że
+planner chciałby „uratować” kompozycję.
+
+### Macierz sytuacji nielegalnych
+
+Każdy poniższy przypadek powinien mieć test na właściwym seamie i jednoznaczny
+wynik odrzucenia. Najpierw odrzuca się błędy requestu/overlay, następnie błędy
+planowania, a na końcu niespójności wykryte przez evaluator.
+
+| Kategoria | Mutacja fixture'u | Oczekiwany skutek |
+|---|---|---|
+| tożsamość | nieznany `flow_id` | request odrzucony; brak route |
+| tożsamość | `flow_id: main` | odrzucony; insertion nie może należeć do `main` |
+| tożsamość | nieznany `block_id` | odrzucony; brak przypisanego bloku |
+| tożsamość | ten sam blok przypisany dwa razy | odrzucony; brak podwójnego placementu |
+| tożsamość | blok jednocześnie zwykły i insertionowy | odrzucony; brak dwóch właścicieli treści |
+| flow | quote w flow bez `insertionSlots` | `QUOTE_INSERTION_FLOW_REQUIRED` |
+| flow | `continuation: forbidden` przy wymaganiu kolejnej strony | odrzucony; brak cichego przejścia dalej |
+| flow | `start_page > maxPages` | odrzucony; route nie ma legalnej strony startowej |
+| geometria | `x`, `y`, `width` lub stała `height` niedodatnie | odrzucony przed plannerem |
+| geometria | frame wychodzi poza stronę | odrzucony przed plannerem |
+| geometria | frame nachodzi na header/footer/lockup | odrzucony jako konflikt z chrome'em |
+| geometria | dwa dynamiczne frame'y nachodzą na siebie | odrzucony przed przypisaniem bloków |
+| geometria | dynamiczny frame nachodzi na twardy insertion | odrzucony; nie wolno przykrywać obstacle |
+| geometria | `grow.max_height` poniżej minimum albo poza stroną | odrzucony jako niepoprawna polityka wzrostu |
+| geometria | `grow.pushes` wskazuje nieistniejący lub ten sam slot | odrzucony jako niepoprawna relacja przesunięcia |
+| slot | slot ma rodzaj `graphic` albo `lockup` | odrzucony jako niedozwolony cel insertionu |
+| slot | rola bloku nie pasuje do `allowedRoles` | slot pominięty; brak legalnego celu kończy plan błędem |
+| slot | rodzaj bloku nie pasuje do `allowedBlockKinds` | slot pominięty; brak legalnego celu kończy plan błędem |
+| slot | `allowedBlockIds` wyklucza blok | slot pominięty; blok nie może zmienić właściciela |
+| pojemność | siedem cytatów przy pojemności 10 jest legalne, jedenaście nie | nadmiar kończy się residualem i odrzuceniem planu |
+| pojemność | siedem cytatów, ale wszystkie sloty poza stronami route'u | odrzucony; nie wolno zapełniać przypadkowych stron |
+| pomiar | brak `measureBlock` dla obrazu/metryki/wykresu | `INSERTION_MEASUREMENT_UNAVAILABLE` |
+| pomiar | capability rzuca wyjątek | `INSERTION_MEASUREMENT_FAILED` |
+| pomiar | pomiar zwraca zero/ujemną wysokość | odrzucony jako niepoprawny measurement |
+| pomiar | tabela nie kończy się w dostępnych wierszach | `INSERTION_OVERFLOW` i residual tabeli |
+| pomiar | tekst przekracza stały box | `INSERTION_OVERFLOW`; stały slot nie rośnie |
+| wzrost | rosnący `quote-a` przykrywa `quote-b` | odrzucony albo `quote-b` przesunięty zgodnie z polityką |
+| wzrost | wzrost przekracza footer lub dolną granicę strony | odrzucony; brak kompresji treści |
+| plan | placement wskazuje inny slot niż route | `INSERTION_SLOT_NOT_FOUND` lub mismatch |
+| plan | obstacle ma inny box niż placement | evaluator odrzuca niesynchronizowany plan |
+| plan | main line przecina obstacle | evaluator odrzuca kolizję |
+| plan | insertion pozostaje w residualu mimo dostępnego legalnego slotu | test wykrywa błąd przypisania |
+| plan | dwa placementy używają tego samego slotu instancji strony | odrzucony; jedna instancja slotu ma jednego właściciela |
+
+Po tej macierzy uruchamiamy `server/scripts/test-dynamic-insertion-slots.mjs`
+oraz publiczny smoke `server/scripts/test-dynamic-insertion-public.mjs`:
+fixture ma pięć stron, siedem cytatów i dwa sloty na stronę. Test sprawdza
+zaakceptowany plan, siedem placementów, brak residuali, pulę dziesięciu
+instancji oraz każdą istotną klasę odrzucenia (main, brak flow, zakres stron,
+duplikaty, kolizje, wzrost, stały overflow i przekroczenie pojemności). Test
+PDF jest końcowym testem artefaktu, a nie substytutem kontroli planu.
+
 Kanoniczna mapa obecnych rodzajów bloków znajduje się w
 [`docs/composition/block-kinds.md`](../composition/block-kinds.md). Opisuje
 ona osobno `heading`, `paragraph`, `list-item`, `image`, `table`, `metric` i

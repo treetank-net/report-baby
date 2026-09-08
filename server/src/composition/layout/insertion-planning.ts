@@ -13,12 +13,18 @@ import { routeLayout } from './page-state.js';
 import { insertionKey, type PlannedInsertion } from './planner-candidates.js';
 import { insertionContentHeight, insertionContentIsComplete, measureInsertionContent } from './insertion-measurement.js';
 import { isAtomicBlock } from './page-state.js';
+import { rectsOverlap } from '../geometry/rectangles.js';
 
 type InsertionSlotCandidate = {
   page: number;
   slotId: string;
   box: CompositionRect;
 };
+
+function insertionProposalCanFollow(previous: PlannedInsertion | undefined, candidate: PlannedInsertion): boolean {
+  if (!previous || candidate.page !== previous.page) return true;
+  return !rectsOverlap(previous.box, candidate.box);
+}
 
 function blockMatchesAllowedId(blockId: string, allowedIds: string[]): boolean {
   return allowedIds.some((allowedId) => blockId === allowedId || blockId.startsWith(`${allowedId}:`));
@@ -89,7 +95,7 @@ function insertionSlotCandidates(
       if (slot) candidates.push({ page, slotId, box: { ...slot.box } });
     }
   }
-  return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
+  return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x || left.slotId.localeCompare(right.slotId));
 }
 
 function candidateSupportsBlock(
@@ -156,6 +162,7 @@ export function insertionProposalsFromPlan(
       ...plan.tablePlacements.filter((placement) => blockIndexes.has(placement.blockId)),
     ];
     let previousCandidateIndex = -1;
+    let previousProposal: PlannedInsertion | undefined;
     for (const block of insertionBlocks) {
       const quoteIndex = blockIndexes.get(block.id) ?? Number.POSITIVE_INFINITY;
       const line = plan.lines
@@ -179,13 +186,22 @@ export function insertionProposalsFromPlan(
         ? candidates.findIndex((candidate) => candidate.page === placed.page && candidate.slotId === placed.slotId.replace(/^\d+:/u, '') && candidateSupportsBlock(template, route, flowId, candidate, block))
         : -1;
       const earliestIndex = Math.max(previousCandidateIndex + 1, currentIndex, 0);
-      const selectedIndex = candidates.findIndex((candidate, index) => index >= earliestIndex
-        && candidateSupportsBlock(template, route, flowId, candidate, block)
-        && (!predecessorBottom || candidate.page > predecessorBottom.page || (candidate.page === predecessorBottom.page && candidate.box.y >= predecessorBottom.bottom - Number.EPSILON)));
-      const selected = selectedIndex >= 0 ? candidates[selectedIndex] : undefined;
-      if (!selected) continue;
-      proposals.set(insertionKey(flowId, block.id), fitInsertionProposal(document, metrics, template, { flowId, blockId: block.id, ...selected }));
+      let selectedIndex = -1;
+      let selected: PlannedInsertion | undefined;
+      for (let index = earliestIndex; index < candidates.length; index += 1) {
+        const candidate = candidates[index];
+        if (!candidateSupportsBlock(template, route, flowId, candidate, block)) continue;
+        if (predecessorBottom && !(candidate.page > predecessorBottom.page || (candidate.page === predecessorBottom.page && candidate.box.y >= predecessorBottom.bottom - Number.EPSILON))) continue;
+        const proposal = fitInsertionProposal(document, metrics, template, { flowId, blockId: block.id, ...candidate });
+        if (!insertionProposalCanFollow(previousProposal, proposal)) continue;
+        selectedIndex = index;
+        selected = proposal;
+        break;
+      }
+      if (selectedIndex < 0 || !selected) continue;
+      proposals.set(insertionKey(flowId, block.id), selected);
       previousCandidateIndex = selectedIndex;
+      previousProposal = selected;
     }
   }
   return proposals;
@@ -205,12 +221,23 @@ export function seedInsertionProposals(
     const insertionBlocks = insertionBlocksForFlow(template, flowId, flow.blocks);
     const candidates = insertionSlotCandidates(template, route, flowId);
     let previousCandidateIndex = -1;
+    let previousProposal: PlannedInsertion | undefined;
     insertionBlocks.forEach((block) => {
-      const selectedIndex = candidates.findIndex((candidate, index) => index > previousCandidateIndex && candidateSupportsBlock(template, route, flowId, candidate, block));
-      const candidate = selectedIndex >= 0 ? candidates[selectedIndex] : undefined;
-      if (!candidate) return;
-      proposals.set(insertionKey(flowId, block.id), fitInsertionProposal(document, metrics, template, { flowId, blockId: block.id, ...candidate }));
+      let selectedIndex = -1;
+      let selectedProposal: PlannedInsertion | undefined;
+      for (let index = previousCandidateIndex + 1; index < candidates.length; index += 1) {
+        const candidate = candidates[index];
+        if (!candidateSupportsBlock(template, route, flowId, candidate, block)) continue;
+        const proposal = fitInsertionProposal(document, metrics, template, { flowId, blockId: block.id, ...candidate });
+        if (!insertionProposalCanFollow(previousProposal, proposal)) continue;
+        selectedIndex = index;
+        selectedProposal = proposal;
+        break;
+      }
+      if (selectedIndex < 0 || !selectedProposal) return;
+      proposals.set(insertionKey(flowId, block.id), selectedProposal);
       previousCandidateIndex = selectedIndex;
+      previousProposal = selectedProposal;
     });
   }
   return proposals;

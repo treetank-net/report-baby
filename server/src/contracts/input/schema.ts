@@ -63,6 +63,60 @@ const compositionRoleSchema = z.enum([
   'quote', 'footer', 'title', 'subtitle', 'eyebrow',
 ]);
 
+/**
+ * Request-owned insertion geometry.  CompositionInput deliberately remains
+ * content-only; this envelope lets a caller add temporary slots for one
+ * render without mutating a reusable YAML template.
+ */
+const placementFrameSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  width: z.number().gt(0).max(1),
+  height: z.union([z.number().gt(0).max(1), z.literal('auto')]).optional(),
+}).strict();
+
+const placementSizingSchema = z.object({
+  mode: z.enum(['fixed', 'fit-content']).optional().default('fit-content'),
+  max_height: z.union([z.number().gt(0).max(1), z.literal('page')]).optional().default('page'),
+  pushes: z.array(z.string().min(1)).optional(),
+}).strict();
+
+const placementSlotSchema = z.object({
+  id: z.string().min(1),
+  frame: placementFrameSchema,
+  kind: z.enum(['text', 'block']).optional().default('text'),
+  allowed_roles: z.array(compositionRoleSchema).optional(),
+  allowed_block_ids: z.array(z.string().min(1)).optional(),
+  allowed_block_kinds: z.array(z.enum(['heading', 'paragraph', 'list-item', 'image', 'table', 'chart', 'metric'])).optional(),
+  sizing: placementSizingSchema.optional(),
+}).strict();
+
+const placementInsertionFlowSchema = z.object({
+  flow_id: z.string().min(1),
+  start_page: z.number().int().positive().optional(),
+  repeat: z.enum(['once', 'each-page']).optional().default('once'),
+  continuation: z.enum(['allowed', 'forbidden']).optional().default('forbidden'),
+  slots: z.array(placementSlotSchema).min(1),
+}).strict();
+
+const placementInsertionSchema = z.object({
+  flow_id: z.string().min(1),
+  block_id: z.string().min(1),
+  page: z.number().int().positive(),
+  frame: placementFrameSchema,
+  kind: z.enum(['text', 'block']).optional().default('text'),
+  sizing: placementSizingSchema.optional(),
+}).strict();
+
+export const placementRequestsSchema = z.object({
+  insertion_flows: z.array(placementInsertionFlowSchema).optional(),
+  insertions: z.array(placementInsertionSchema).optional(),
+}).strict().refine((value) => (value.insertion_flows?.length ?? 0) > 0 || (value.insertions?.length ?? 0) > 0, {
+  message: 'At least one insertion flow or insertion request is required.',
+});
+
+export type PlacementRequests = z.infer<typeof placementRequestsSchema>;
+
 const compositionGlyphSchema = z.object({
   id: z.string(),
   target: z.object({ kind: z.enum(['block', 'graphic']), id: z.string() }).strict(),
