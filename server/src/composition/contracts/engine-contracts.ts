@@ -8,7 +8,7 @@ import type {
   CompositionGlyphTargetMode,
   CompositionGraphicShape,
   CompositionSlotKind,
-} from '../model.js';
+} from './model.js';
 
 export interface CompositionTextMetrics {
   units: string;

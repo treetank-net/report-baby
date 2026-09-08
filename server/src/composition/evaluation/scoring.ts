@@ -1,6 +1,6 @@
 import { readRenderConfig } from '../../builtin-template-source.js';
 
-import type { CompositionDocument, CompositionBlock } from '../model.js';
+import type { CompositionDocument, CompositionBlock } from '../contracts/model.js';
 
 import type { CompositionContrastAssessment } from './contrast.js';
 

@@ -8,7 +8,7 @@ import type {
   CompositionBlockRole,
   CompositionBlockKind,
   CompositionTemplate,
-} from '../model.js';
+} from '../contracts/model.js';
 
 export interface PageTemplateCompositionOptions {
   maxPages: number;

@@ -2,7 +2,7 @@ import type {
   CompositionBlock,
   CompositionDocument,
   CompositionRect,
-} from '../model.js';
+} from '../contracts/model.js';
 import type {
   CompositionFlowBarrierBoxCandidate,
   CompositionFlowPlacement,

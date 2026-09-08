@@ -10,7 +10,7 @@ const compositionDocsRoot = join(root, '..', 'docs/composition');
 const evaluatorPath = join(root, 'src/composition/evaluation/evaluator.ts');
 const plannerPath = join(root, 'src/composition/layout/text-planner.ts');
 const compositionSourceRoot = join(root, 'src/composition');
-const modelPath = join(compositionSourceRoot, 'model.ts');
+const modelPath = join(compositionSourceRoot, 'contracts/model.ts');
 const blockKindsDocumentationPath = join(compositionDocsRoot, 'block-kinds.md');
 
 function leafPaths(value, prefix = '') {

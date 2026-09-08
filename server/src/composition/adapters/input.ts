@@ -1,7 +1,7 @@
 import { normalizeMarkdown, normalizeStructuredContent, normalizedText } from '../../markdown-normalizer.js';
 import type { NormalizedContentNode, NormalizedImageNode } from '../../content-model.js';
 import type { CompositionInput } from '../../contract/schema.js';
-import type { CompositionAsset, CompositionBlock, CompositionDocument, CompositionFlow, CompositionGraphic } from '../model.js';
+import type { CompositionAsset, CompositionBlock, CompositionDocument, CompositionFlow, CompositionGraphic } from '../contracts/model.js';
 
 /**
  * @planner-target composition/adapters/input.ts

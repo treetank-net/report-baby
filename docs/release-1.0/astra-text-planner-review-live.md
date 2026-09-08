@@ -5,6 +5,8 @@
 > odpowiedzialności znajdują się w
 > [`10-composition-module-migration.md`](10-composition-module-migration.md)
 > i w bieżącym [inventory funkcji](planner-function-dependency-inventory.md).
+> W szczególności `composition/engine.ts` został usunięty po migracji fasady,
+> a renderer-neutralny model znajduje się w `composition/contracts/model.ts`.
 
 Status: delegated review started.
 

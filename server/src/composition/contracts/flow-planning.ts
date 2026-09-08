@@ -5,7 +5,7 @@ import type {
   CompositionRect,
   CompositionSlotTemplate,
   CompositionTemplate,
-} from '../model.js';
+} from './model.js';
 import type {
   CompositionPlan,
   CompositionFlowBarrierBoxCandidate,

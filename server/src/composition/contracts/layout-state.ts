@@ -1,4 +1,4 @@
-import type { CompositionLayoutTemplate } from '../model.js';
+import type { CompositionLayoutTemplate } from './model.js';
 import type { CompositionSlot } from './engine-contracts.js';
 
 /** Mutable page state shared by page, flow and placement operations. */

@@ -3,7 +3,7 @@ import type {
   CompositionRect,
   CompositionSlotTemplate,
   CompositionTemplate,
-} from '../model.js';
+} from '../contracts/model.js';
 import type {
   CompositionGraphicPlacement,
   CompositionPlan,

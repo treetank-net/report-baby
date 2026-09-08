@@ -1,4 +1,4 @@
-import type { CompositionRect } from '../model.js';
+import type { CompositionRect } from '../contracts/model.js';
 import type { MovableInsertionPolicy, MovablePlacementBounds, MovableGraphicPolicy } from '../contracts/planner-policy.js';
 import { insertionKey } from './insertion-layout.js';
 

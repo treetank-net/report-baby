@@ -244,11 +244,8 @@ const targetByFunction = new Map([
   ['structured-block-placement.ts::placeTableFragment', 'composition/structured-block-placement.ts'],
   ['structured-block-placement.ts::placeStructuredBlock', 'composition/structured-block-placement.ts'],
 
-  // candidate generation and engine remain cohesive modules for now.
+  // Candidate generation and engine remain cohesive modules for now.
   ['text-planner-candidates.ts::insertionKey', 'composition/insertion-order.ts'],
-  ['engine.ts::compareCompositionEvaluations', 'composition/engine.ts'],
-  ['engine.ts::renderComposition', 'composition/engine.ts'],
-  ['engine.ts::createCompositionEngine', 'composition/engine.ts'],
 ]);
 
 const responsibilityByFunction = new Map([

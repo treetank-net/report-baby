@@ -1,4 +1,4 @@
-import type { CompositionDocument } from '../model.js';
+import type { CompositionDocument } from '../contracts/model.js';
 import type { CompositionDiagnostic, CompositionEvaluation, CompositionPlan } from '../contracts/engine-contracts.js';
 import type { CompositionContrastAssessment, CompositionContrastProvider } from './contrast.js';
 import { scoreLegalPlan } from './scoring.js';

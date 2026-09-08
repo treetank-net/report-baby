@@ -20,7 +20,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | Module | Owns | Interface used by | Must not own |
 |---|---|---|---|
 | `composition/adapters/input.ts` | Conversion of accepted input into named flows, blocks, assets and graphics | report adapter, input tests | page coordinates, wrapping, PDF drawing |
-| `composition/model.ts` | Renderer-neutral document and template types | all composition modules | planning decisions or mutable runtime state |
+| `composition/contracts/model.ts` | Renderer-neutral document and template types | all composition modules | planning decisions or mutable runtime state |
 | `composition/adapters/page-template.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
 | `composition/layout/document-layout.ts` | Full document planning cycle: preflight, obstacle reservation, flow ordering and finalization | `composition/layout/text-planner.ts`, composition engine | individual line decisions, scoring, PDF drawing |
 | `composition/layout/flow-planner.ts` | One flow's cursor, page/slot target resolution, text and structured-block dispatch | `document-layout.ts`, flow tests | candidate ranking, evaluator scoring, PDF drawing |

@@ -1,7 +1,7 @@
 import type {
   CompositionBlock,
   CompositionSlotTemplate,
-} from '../model.js';
+} from '../contracts/model.js';
 import type {
   CompositionBlockMeasurement,
   CompositionBlockPlacement,

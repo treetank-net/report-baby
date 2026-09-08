@@ -27,7 +27,7 @@ import { createJsPdfChartBlockCapabilities } from './composition/adapters/pdf/ch
 import { createJsPdfImageBlockCapabilities } from './composition/adapters/pdf/image.js';
 import { createJsPdfMetricBlockCapabilities } from './composition/adapters/pdf/metric.js';
 import { createJsPdfTableBlockCapabilities } from './composition/adapters/pdf/table.js';
-import type { CompositionBlockKind } from './composition/model.js';
+import type { CompositionBlockKind } from './composition/contracts/model.js';
 import type { JsPdfCompositionBlockCapability } from './composition/contracts/pdf.js';
 import { renderComposition } from './composition/composition-engine.js';
 import { resolveImageAsset } from './image-resolver.js';

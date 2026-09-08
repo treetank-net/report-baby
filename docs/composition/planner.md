@@ -8,8 +8,8 @@ placements, obstacles, flow placements, decisions, and trace. It does not draw
 the PDF and does not select a winner based on quality.
 
 The main interfaces are in
-[`composition/engine.ts`](../../server/src/composition/engine.ts), and the text
-planner is in [`composition/text-planner.ts`](../../server/src/composition/text-planner.ts).
+[`composition/contracts/engine-contracts.ts`](../../server/src/composition/contracts/engine-contracts.ts), and the text
+planner is in [`composition/layout/text-planner.ts`](../../server/src/composition/layout/text-planner.ts).
 
 ## Planning order
 

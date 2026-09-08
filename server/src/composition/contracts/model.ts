@@ -1,4 +1,4 @@
-import type { NormalizedContentNode } from '../content-model.js';
+import type { NormalizedContentNode } from '../../content-model.js';
 
 export interface CompositionRect {
   x: number;

@@ -1,7 +1,7 @@
 import type {
   CompositionBlock,
   CompositionRect,
-} from '../model.js';
+} from '../contracts/model.js';
 import type { CompositionPlan } from '../contracts/engine-contracts.js';
 import { flowBarrierBoxCandidatesForSlot } from './flow-space.js';
 import type {

@@ -2,7 +2,7 @@ import type {
   CompositionBlock,
   CompositionRect,
   CompositionSlotTemplate,
-} from '../model.js';
+} from '../contracts/model.js';
 import type {
   CompositionFlowBarrierBoxCandidate,
   CompositionGraphicPlacement,

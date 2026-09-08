@@ -7,7 +7,7 @@ import type {
   CompositionPlanResult,
   CompositionPlanner,
 } from './contracts/engine-contracts.js';
-import type { CompositionDocument } from './model.js';
+import type { CompositionDocument } from './contracts/model.js';
 
 /**
  * Orders two evaluated plans for a deterministic candidate-selection step.

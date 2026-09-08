@@ -17,7 +17,7 @@ export type {
   CompositionSlotTemplate,
   CompositionTable,
   CompositionTemplate,
-} from './model.js';
+} from './contracts/model.js';
 export type {
   CompositionBackend,
   CompositionBlockMeasurement,

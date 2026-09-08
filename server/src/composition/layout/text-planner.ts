@@ -1,4 +1,4 @@
-import type { CompositionDocument, CompositionTemplate } from '../model.js';
+import type { CompositionDocument, CompositionTemplate } from '../contracts/model.js';
 import type {
   CompositionPlan,
   CompositionPlanner,

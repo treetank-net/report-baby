@@ -68,7 +68,7 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
 ## Stan obecny
 
 - `createCompositionEngine()` wywołuje planner, a następnie evaluator jeden
-  raz: [`engine.ts`](../../server/src/composition/engine.ts).
+  raz: [`composition-engine.ts`](../../server/src/composition/composition-engine.ts).
 - `planReportComposition()` ignoruje jednak otrzymane `result.evaluation` i
   wywołuje `evaluateCompositionPlan()` ponownie:
   [`report-composition-entrypoint.ts`](../../server/src/composition/report-composition-entrypoint.ts#L57-L93).

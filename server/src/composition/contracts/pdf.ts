@@ -1,5 +1,5 @@
 import type { jsPDF } from 'jspdf';
-import type { CompositionBlock, CompositionBlockKind } from '../model.js';
+import type { CompositionBlock, CompositionBlockKind } from './model.js';
 import type { CompositionPlan, CompositionTextMetrics } from './engine-contracts.js';
 
 export interface JsPdfCompositionStyle {

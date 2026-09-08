@@ -2,7 +2,7 @@ import type {
   CompositionDocument,
   CompositionFlowRoute,
   CompositionTemplate,
-} from '../model.js';
+} from '../contracts/model.js';
 import type {
   CompositionMovableGraphicFrame,
   CompositionMovableInsertionFrame,

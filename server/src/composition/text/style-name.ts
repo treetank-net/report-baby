@@ -1,4 +1,4 @@
-import type { CompositionBlock } from '../model.js';
+import type { CompositionBlock } from '../contracts/model.js';
 
 /**
  * The planner and every backend must resolve a block to the same typography

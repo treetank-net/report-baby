@@ -1,4 +1,4 @@
-import type { CompositionBlock, CompositionDocument } from '../model.js';
+import type { CompositionBlock, CompositionDocument } from '../contracts/model.js';
 import type {
   CompositionDecision,
   CompositionDiagnostic,

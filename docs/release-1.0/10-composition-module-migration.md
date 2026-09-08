@@ -91,9 +91,10 @@ ani evaluatora.
 - `pdf.ts` — kontrakty stylów, assetów, rendererów i capability adaptera PDF;
   implementacja jsPDF nie może być właścicielem tych typów.
 
-`engine.ts` jest cienką ścieżką kompatybilności. Kontrakty znajdują się w
-`contracts/engine-contracts.ts`, a implementacja w `composition-engine.ts`;
-nowe moduły nie powinny importować typów z fasady kompatybilności.
+Kontrakty engine znajdują się w `contracts/engine-contracts.ts`, a
+orkiestracja w `composition-engine.ts`. Usunięto cienką ścieżkę
+kompatybilności `engine.ts`; nowe moduły importują kontrakty bezpośrednio z
+`contracts/` albo implementację z jej właściwego seamu.
 
 ### `geometry/`
 
@@ -222,7 +223,8 @@ adapters
 
 1. Utworzyć `contracts/`.
 2. Przenieść typy z `flow-planning-types.ts` do `contracts/flow-planning.ts`.
-3. Oddzielić typy z `engine.ts` od implementacji.
+3. Oddzielić typy engine od implementacji; usunąć tymczasową fasadę
+   `engine.ts` po przełączeniu importerów.
 4. Zaktualizować importy bez zmiany nazw publicznych.
 
 ### Etap 2 — czyste obliczenia
@@ -249,7 +251,7 @@ adapters
 ### Etap 5 — adaptery i runtime
 
 1. Rozdzielić `js-pdf-adapter.ts` według capability.
-2. Wydzielić kontrakt i implementację z `engine.ts`.
+2. Wydzielić kontrakt i implementację z dawnej fasady engine.
 3. Przenieść adaptery do `adapters/`, a runtime bezpośrednio do
    `composition/`.
 
@@ -290,8 +292,7 @@ adapters
   monolitycznego `js-pdf-adapter.ts` i aktualizacja importów do konkretnych
   właścicieli.
 - `64a65c9` — rozdzielenie kontraktów engine od implementacji: typy trafiły do
-  `contracts/engine-contracts.ts`, orkiestracja do `composition-engine.ts`, a
-  `engine.ts` został cienką ścieżką kompatybilności.
+  `contracts/engine-contracts.ts`, orkiestracja do `composition-engine.ts`.
 - `7f29533` — połączenie pomiaru, wrappingu, capacity i materializacji linii w
   `text/text-layout.ts`; `tokenization.ts` i `style-name.ts` pozostały
   niezależnymi, czystymi modułami, a zależności przeszły na jawny typ
@@ -325,6 +326,9 @@ adapters
   Decyzje przepływów i faz planera są zapisywane przez
   `recordFlowDecision`/`recordPlanDecision`; funkcje wywołujące nie konstruują
   już obiektów decyzji.
+- Bieżące domknięcie kontraktów — renderer-neutralny model dokumentu został
+  przeniesiony do `contracts/model.ts`, a usunięta została nieużywana fasada
+  kompatybilności `engine.ts`.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Pełny suite `npm run test:composition` przeszedł na

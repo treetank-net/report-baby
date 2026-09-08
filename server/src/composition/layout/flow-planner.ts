@@ -4,7 +4,7 @@ import type {
   CompositionFlowRoute,
   CompositionLayoutTemplate,
   CompositionTemplate,
-} from '../model.js';
+} from '../contracts/model.js';
 import type {
   CompositionPlan,
   CompositionTextMetrics,

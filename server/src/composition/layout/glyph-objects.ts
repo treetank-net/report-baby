@@ -1,4 +1,4 @@
-import type { CompositionDocument, CompositionGlyphDefinition, CompositionRect } from '../model.js';
+import type { CompositionDocument, CompositionGlyphDefinition, CompositionRect } from '../contracts/model.js';
 import type {
   CompositionGlyphSpec,
   CompositionLine,

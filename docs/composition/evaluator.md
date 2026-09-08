@@ -7,9 +7,9 @@ then returns a `CompositionEvaluation`. It does not change the plan or trace and
 does not render an artifact.
 
 The implementation is in
-[`composition/evaluator.ts`](../../server/src/composition/evaluator.ts), and the
+[`composition/evaluation/evaluator.ts`](../../server/src/composition/evaluation/evaluator.ts), and the
 result interface is in
-[`composition/engine.ts`](../../server/src/composition/engine.ts).
+[`composition/contracts/engine-contracts.ts`](../../server/src/composition/contracts/engine-contracts.ts).
 
 ## Two independent questions
 

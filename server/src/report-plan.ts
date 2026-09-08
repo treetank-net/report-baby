@@ -1,7 +1,7 @@
 import type { RenderTheme } from './core/model/render-theme.js';
 import type { ResolvedReportBlock, ResolvedReportPagePlan, ResolvedReportPlan, ReportPlanRole } from './core/model/resolved-report-plan.js';
 import type { PageGeometry, PageSegment } from './page-geometry.js';
-import type { CompositionDocument } from './composition/model.js';
+import type { CompositionDocument } from './composition/contracts/model.js';
 
 export interface ResolveReportPlanInput {
   templateRef: string;

@@ -1,4 +1,4 @@
-import type { CompositionRect } from '../model.js';
+import type { CompositionRect } from '../contracts/model.js';
 
 /** Return the lower edge of a rectangle in page coordinates. */
 /**
