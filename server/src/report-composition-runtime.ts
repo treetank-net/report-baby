@@ -28,7 +28,7 @@ import {
   createJsPdfTextBackend,
 } from './composition/adapters/pdf/js-pdf-adapter.js';
 import type { CompositionBlockKind } from './composition/model.js';
-import type { JsPdfCompositionBlockCapability } from './composition/adapters/pdf/js-pdf-adapter.js';
+import type { JsPdfCompositionBlockCapability } from './composition/contracts/pdf.js';
 import { renderComposition } from './composition/engine.js';
 import { resolveImageAsset } from './image-resolver.js';
 import { decodePngDataUri } from './image-raster.js';
