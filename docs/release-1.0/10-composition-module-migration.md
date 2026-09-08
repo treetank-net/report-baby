@@ -22,7 +22,8 @@ server/src/composition/
 │   ├── model.ts
 │   ├── engine-contracts.ts
 │   ├── flow-planning.ts
-│   └── planner-policy.ts
+│   ├── planner-policy.ts
+│   └── pdf.ts
 ├── geometry/
 │   ├── rectangles.ts
 │   ├── visual-geometry.ts
@@ -85,6 +86,8 @@ ani evaluatora.
 - `flow-planning.ts` — `FlowPlanningContext`, `FlowRuntime`, `FlowTarget` oraz
   powiązane rekordy stanu przebiegu;
 - `planner-policy.ts` — typy i polityka wejściowa planera.
+- `pdf.ts` — kontrakty stylów, assetów, rendererów i capability adaptera PDF;
+  implementacja jsPDF nie może być właścicielem tych typów.
 
 `engine.ts` jest obecnie połączeniem kontraktów i implementacji. Najpierw
 wydzielamy z niego typy do `contracts/engine-contracts.ts`, a dopiero potem
@@ -168,6 +171,10 @@ wyboru layoutu.
 capability backendu na `pdf/backend`, `pdf/text`, `pdf/image`, `pdf/metric`,
 `pdf/chart` i `pdf/table`. Każdy adapter implementuje istniejący kontrakt;
 planner nie importuje jsPDF.
+
+Kontrakt tych capability znajduje się już w `contracts/pdf.ts`. Do czasu
+rozcięcia implementacji adaptera funkcja składania capability pozostaje przy
+adapterze, ale nie definiuje już publicznych typów.
 
 ### Runtime w `composition/`
 
@@ -264,6 +271,16 @@ adapters
   `geometry/visual-geometry.ts` oraz usunięcie starych ścieżek;
 - `4b4f65d` — przeniesienie modułów stanu stron, flow-space i insertionów do
   `layout/` oraz wydzielenie `contracts/layout-state.ts`.
+- `182056a` — połączenie zarządzania stroną, route slots, kursora i wzrostu
+  slotów w `layout/page-state.ts`.
+- `22e4664` — połączenie zajętości flow i barier w `layout/flow-space.ts`.
+- `24eb756` — połączenie planowania insertionów i ich kolejności w
+  `layout/insertion-layout.ts`.
+- `9fa1f70` — rozdzielenie funkcji dawnego worka `evaluation-support.ts` na
+  diagnostykę, zapytania planu i geometrię legalności.
+- `e3cd97a` — przeniesienie implementacji jsPDF do `adapters/pdf/`.
+- `3f0ff4b` — wydzielenie kontraktów adaptera PDF do `contracts/pdf.ts` i
+  odpięcie typów od implementacji jsPDF.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
@@ -271,10 +288,10 @@ input, template, planner, adaptery i composition adapter; zatrzymał się dopier
 na oracle PDF przez sandboxowe `spawnSync pdftotext EPERM`. Ten przypadek wymaga
 ponowienia na hoście/CI z możliwością uruchamiania procesów potomnych.
 
-## Pierwszy zakres implementacyjny
+## Następny zakres implementacyjny
 
-Pierwszy commit po tym planie obejmuje wyłącznie utworzenie katalogu
-`contracts/`, przeniesienie `flow-planning-types.ts` i aktualizację importów.
-Następny commit obejmie czystą geometrię i tokenizację. Nie przenosimy
-jednocześnie adaptera PDF ani całego evaluatora, ponieważ utrudniłoby to
-wykrycie zmiany zależności.
+Kolejny seam obejmuje rozcięcie implementacji `adapters/pdf/js-pdf-adapter.ts`
+według capability (`backend`, `text`, `image`, `metric`, `chart`, `table`).
+Kontrakty pozostają w `contracts/pdf.ts`, a publiczne eksporty nadal przechodzą
+przez jedyną fasadę `composition/index.ts`. Po każdym wydzieleniu sprawdzamy
+kompilację, architekturę i testy adaptera przed przejściem do kolejnego pliku.
