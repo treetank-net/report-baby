@@ -252,6 +252,25 @@ adapters
 - przechodzą testy TypeScript, testy composition i test architektury;
 - zmiana jest osobnym, małym commitem możliwym do odtworzenia.
 
+## Zrealizowane etapy
+
+- `bf7a31c` — zapisanie tego planu i korekta: runtime pozostaje bezpośrednio w
+  `composition/`;
+- `33ba4f9` — przeniesienie `flow-planning-types.ts` do
+  `contracts/flow-planning.ts`;
+- `73019a0` — przeniesienie obecnych modułów evaluatora do `evaluation/`;
+- `74671e7` i `ca753e0` — przeniesienie modułów tekstowych do `text/`,
+  utworzenie wspólnej tokenizacji, połączenie geometrii obrazu i grafiki w
+  `geometry/visual-geometry.ts` oraz usunięcie starych ścieżek;
+- `4b4f65d` — przeniesienie modułów stanu stron, flow-space i insertionów do
+  `layout/` oraz wydzielenie `contracts/layout-state.ts`.
+
+Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
+przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
+input, template, planner, adaptery i composition adapter; zatrzymał się dopiero
+na oracle PDF przez sandboxowe `spawnSync pdftotext EPERM`. Ten przypadek wymaga
+ponowienia na hoście/CI z możliwością uruchamiania procesów potomnych.
+
 ## Pierwszy zakres implementacyjny
 
 Pierwszy commit po tym planie obejmuje wyłącznie utworzenie katalogu
