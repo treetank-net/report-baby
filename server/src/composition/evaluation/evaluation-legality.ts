@@ -3,12 +3,13 @@ import type { CompositionBlock, CompositionDocument } from '../model.js';
 import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from '../engine.js';
 
 import {
-
-  allLines, fitsInside, geometryTolerance, itemFlowIdForPlacedItem, lineEntersGraphic,
-
-  overlaps, plannerFoundNoUsableLine, pushEvaluationError, slotFor, usableLinesAfter,
-
-} from './evaluation-support.js';
+  allLines,
+  itemFlowIdForPlacedItem,
+  plannerFoundNoUsableLine,
+  slotFor,
+} from './plan-queries.js';
+import { fitsInside, geometryTolerance, lineEntersGraphic, overlaps, usableLinesAfter } from './legality-geometry.js';
+import { pushEvaluationError } from './diagnostics.js';
 
 import {
   buildFlowPlacementRegistry,

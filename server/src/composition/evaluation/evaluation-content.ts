@@ -2,7 +2,9 @@ import type { CompositionBlock, CompositionDocument } from '../model.js';
 
 import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from '../engine.js';
 
-import { allLines, firstVisualPlacement, fitsInside, geometryTolerance, pushEvaluationError, slotFor, visualOrderRegressed, type VisualPlacementKey } from './evaluation-support.js';
+import { allLines, firstVisualPlacement, slotFor, visualOrderRegressed, type VisualPlacementKey } from './plan-queries.js';
+import { fitsInside, geometryTolerance } from './legality-geometry.js';
+import { pushEvaluationError } from './diagnostics.js';
 import { wordCountOf } from '../text/tokenization.js';
 
 export type FlowPlacementSummary = {

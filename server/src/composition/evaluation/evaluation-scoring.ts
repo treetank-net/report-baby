@@ -6,7 +6,30 @@ import type { CompositionContrastAssessment } from './contrast.js';
 
 import type { CompositionLine, CompositionPlan, CompositionScoreComponent } from '../engine.js';
 
-import { allLines, horizontalOverlap, normalizeContrastQuality, saturatingQuality, scoreConfigNumber, spread } from './evaluation-support.js';
+import { allLines } from './plan-queries.js';
+
+function scoreConfigNumber(key: string): number {
+  const value = readRenderConfig().compositionScore[key];
+  if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite composition_score.${key}.`);
+  return value;
+}
+
+function horizontalOverlap(first: { x: number; width: number }, second: { x: number; width: number }): boolean {
+  return Math.min(first.x + first.width, second.x + second.width) > Math.max(first.x, second.x);
+}
+
+function spread(values: number[]): number {
+  return values.length > 1 ? Math.max(...values) - Math.min(...values) : 0;
+}
+
+function saturatingQuality(signal: number, response: number): number {
+  const nonNegativeSignal = Math.max(0, signal);
+  return nonNegativeSignal / (nonNegativeSignal + response);
+}
+
+function normalizeContrastQuality(ratio: number, targetRatio: number, response: number): number {
+  return saturatingQuality(Math.max(0, (ratio - 1) / (targetRatio - 1)), response);
+}
 
 
 
