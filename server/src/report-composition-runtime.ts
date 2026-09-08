@@ -21,12 +21,12 @@ import { createCompositionContrastProvider } from './composition/evaluation/cont
 import { compositionDocumentFromInput } from './composition/input.js';
 import {
   combineJsPdfCompositionBlockCapabilities,
-  createJsPdfChartBlockCapabilities,
-  createJsPdfImageBlockCapabilities,
-  createJsPdfMetricBlockCapabilities,
-  createJsPdfTableBlockCapabilities,
   createJsPdfTextBackend,
-} from './composition/adapters/pdf/js-pdf-adapter.js';
+} from './composition/adapters/pdf/backend.js';
+import { createJsPdfChartBlockCapabilities } from './composition/adapters/pdf/chart.js';
+import { createJsPdfImageBlockCapabilities } from './composition/adapters/pdf/image.js';
+import { createJsPdfMetricBlockCapabilities } from './composition/adapters/pdf/metric.js';
+import { createJsPdfTableBlockCapabilities } from './composition/adapters/pdf/table.js';
 import type { CompositionBlockKind } from './composition/model.js';
 import type { JsPdfCompositionBlockCapability } from './composition/contracts/pdf.js';
 import { renderComposition } from './composition/engine.js';

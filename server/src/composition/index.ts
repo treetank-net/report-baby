@@ -84,14 +84,14 @@ export type {
   CompositionGraphicColors,
 } from './render-config-styles.js';
 export {
-  createJsPdfTextBackend,
-  createJsPdfChartBlockCapabilities,
-  createJsPdfMetricBlockCapabilities,
-  createJsPdfTableBlockCapabilities,
-  createJsPdfImageBlockCapabilities,
   combineJsPdfCompositionBlockCapabilities,
-  createJsPdfTextMetrics,
-} from './adapters/pdf/js-pdf-adapter.js';
+  createJsPdfTextBackend,
+} from './adapters/pdf/backend.js';
+export { createJsPdfChartBlockCapabilities } from './adapters/pdf/chart.js';
+export { createJsPdfMetricBlockCapabilities } from './adapters/pdf/metric.js';
+export { createJsPdfTableBlockCapabilities } from './adapters/pdf/table.js';
+export { createJsPdfImageBlockCapabilities } from './adapters/pdf/image.js';
+export { createJsPdfTextMetrics } from './adapters/pdf/text.js';
 export type {
   JsPdfCompositionStyle,
   JsPdfCompositionStyles,
