@@ -7,12 +7,12 @@ import type {
   CompositionFlowBarrierBoxCandidate,
   CompositionFlowPlacement,
   CompositionGraphicPlacement,
-  CompositionLine,
   CompositionPlan,
   CompositionSlot,
 } from '../contracts/engine-contracts.js';
 import type { PageState } from '../contracts/layout-state.js';
 import { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
+import { plannedLines } from './plan-lines.js';
 
 /** Return whether a flowing text line occupies the candidate slot's box. */
 /**
@@ -269,14 +269,6 @@ export function contentStartBottom(
  */
 function coversFlowWidth(flow: CompositionRect, graphic: CompositionRect): boolean {
   return graphic.x <= flow.x && graphic.x + graphic.width >= flow.x + flow.width;
-}
-
-/**
- * @planner-target composition/layout/flow-space.ts
- * @planner-responsibility Keep the current plannedLines implementation intact until its target seam is extracted.
- */
-function plannedLines(plan: CompositionPlan): CompositionLine[] {
-  return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
 /**

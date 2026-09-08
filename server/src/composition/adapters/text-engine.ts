@@ -5,18 +5,9 @@ import type { CompositionTemplate } from '../model.js';
 import { evaluateCompositionPlan, type CompositionEvaluationOptions } from '../evaluation/evaluator.js';
 import { createTextCompositionPlanner } from '../layout/text-planner.js';
 import type { TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
+import { pdfNumber } from './render-config.js';
 
 export type TextCompositionEngineOptions = CompositionEvaluationOptions;
-
-/**
- * @planner-target composition/adapters/text-engine.ts
- * @planner-responsibility Keep the current pdfNumber implementation intact until its target seam is extracted.
- */
-function pdfNumber(pdf: Record<string, number>, key: string): number {
-  const value = pdf[key];
-  if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite pdf.${key}.`);
-  return value;
-}
 
 /**
  * Translate the renderer's PDF policy into the planner's renderer-neutral

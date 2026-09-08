@@ -6,14 +6,7 @@ import type {
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
 import { compositionStyleName } from '../text/style-name.js';
-
-/**
- * @planner-target composition/layout/glyph-objects.ts
- * @planner-responsibility Keep the current plannedLines implementation intact until its target seam is extracted.
- */
-function plannedLines(plan: CompositionPlan): CompositionLine[] {
-  return [...plan.lines, ...(plan.insertionLines ?? [])];
-}
+import { plannedLines } from './plan-lines.js';
 
 /**
  * @planner-target composition/layout/glyph-objects.ts

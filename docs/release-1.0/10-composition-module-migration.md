@@ -35,6 +35,7 @@ server/src/composition/
 ├── layout/
 │   ├── page-state.ts
 │   ├── flow-space.ts
+│   ├── plan-lines.ts
 │   ├── insertion-layout.ts
 │   ├── flow-planner.ts
 │   ├── flow-text-decision.ts
@@ -317,6 +318,12 @@ adapters
 - `adc11c8` — usunięcie starych ścieżek adapterów po przełączeniu wszystkich
   importów; `6116673` — aktualizacja kanonicznej mapy modułów i dokumentacji
   konfiguracji oraz block-kinds.
+- Bieżący seam cleanup — wspólna projekcja linii planu trafiła do
+  `layout/plan-lines.ts`, odczyt tekstu bloku jest współdzielony przez text i
+  observability, `pdfNumber` ma jednego właściciela w adapterze konfiguracji,
+  a `insertionKey` jest współdzielony przez planowanie insertionów i kandydatów.
+  Decyzje structured-block są zapisywane przez `recordFlowDecision`; funkcje
+  wywołujące nie konstruują już dla nich obiektów decyzji.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
@@ -347,11 +354,14 @@ node server/scripts/planner-function-dependency-report.mjs \
   --write-report docs/release-1.0/planner-function-dependency-inventory.md
 ```
 
-Obecny snapshot obejmuje 412 nazwanych funkcji w 38 plikach. Tabela rozmiarów
+Obecny snapshot obejmuje 405 nazwanych funkcji w 39 plikach. Tabela rozmiarów
 jest dolną granicą kodu funkcji, a nie obietnicą redukcji LOC: o przeniesieniu
 decyduje wspólna wiedza domenowa i kształt zależności. Fizycznie, razem z
 adnotacjami katalogowymi, największe aktualne moduły to `flow-text-decision.ts`
 (588 LOC), `flow-space.ts` (423 LOC), `text/text-layout.ts` (525 LOC),
 `insertion-layout.ts` (455 LOC), `flow-planner.ts` (408 LOC) i
 `evaluation/legality.ts` (659 LOC). Dalsza praca ma badać duplikaty obliczeń,
-nie ciąć funkcji mechanicznie tylko po to, aby zmniejszyć liczbę linii.
+nie ciąć funkcji mechanicznie tylko po to, aby zmniejszyć liczbę linii. Po
+usunięciu powtórzonych projekcji i wrapperów inventory wykazuje jedną grupę
+potencjalnego duplikatu (dwa typowane wrappery kandydatów), siedem funkcji
+powyżej 80 linii oraz zero funkcji bez adnotacji właściciela.

@@ -4,19 +4,12 @@ import { compositionStyleName } from '../text/style-name.js';
 
 /**
  * @planner-target composition/geometry/glyph-geometry.ts
- * @planner-responsibility Keep the current styleFor implementation intact until its target seam is extracted.
- */
-function styleFor(block: CompositionBlock): string {
-  return compositionStyleName(block);
-}
-
-/**
- * @planner-target composition/geometry/glyph-geometry.ts
  * @planner-responsibility Keep the current measure implementation intact until its target seam is extracted.
  */
 function measure(metrics: CompositionTextMetrics, text: string, block: CompositionBlock): number {
-  const width = metrics.measureText(text, styleFor(block));
-  if (!Number.isFinite(width) || width < 0) throw new Error(`Text metrics returned an invalid width for '${styleFor(block)}': ${width}.`);
+  const styleName = compositionStyleName(block);
+  const width = metrics.measureText(text, styleName);
+  if (!Number.isFinite(width) || width < 0) throw new Error(`Text metrics returned an invalid width for '${styleName}': ${width}.`);
   return width;
 }
 
@@ -36,7 +29,7 @@ export function glyphSamplingBoxes(
 ): CompositionGlyphSamplingBox[] {
   const characters = Array.from(text);
   const result: CompositionGlyphSamplingBox[] = [];
-  const styleName = styleFor(block);
+  const styleName = compositionStyleName(block);
   const foreground = metrics.foregroundColor?.(styleName);
   let previousWidth = 0;
   for (let index = 0; index < characters.length; index += 1) {

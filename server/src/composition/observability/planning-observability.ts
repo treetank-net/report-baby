@@ -6,7 +6,7 @@ import type {
   CompositionWordRange,
 } from '../contracts/engine-contracts.js';
 import type { FlowPlanningContext, FlowRuntime, FlowTarget } from '../contracts/flow-planning.js';
-import { wordsForBlock } from '../text/text-layout.js';
+import { textOf, wordsForBlock, availableLineCount } from '../text/text-layout.js';
 
 /**
  * @planner-target composition/observability/planning-observability.ts
@@ -86,37 +86,20 @@ export function recordFlowDecision(
 
 import type {
   CompositionBlockTrace,
-  CompositionLine,
   CompositionPlanTrace,
   CompositionPlanningPhaseName,
   CompositionTextMetrics,
   CompositionTraceDecision,
 } from '../contracts/engine-contracts.js';
-import { availableLineCount } from '../text/text-layout.js';
-import { wordsOf } from '../text/tokenization.js';
-
-/**
- * @planner-target composition/observability/planning-observability.ts
- * @planner-responsibility Keep the current textOf implementation intact until its target seam is extracted.
- */
-function textOf(block: CompositionBlock): string {
-  return block.text?.trim() ?? '';
-}
-
-/**
- * @planner-target composition/observability/planning-observability.ts
- * @planner-responsibility Keep the current plannedLines implementation intact until its target seam is extracted.
- */
-function plannedLines(plan: CompositionPlan): CompositionLine[] {
-  return [...plan.lines, ...(plan.insertionLines ?? [])];
-}
+import { wordCountOf } from '../text/tokenization.js';
+import { plannedLines } from '../layout/plan-lines.js';
 
 /**
  * @planner-target composition/observability/planning-observability.ts
  * @planner-responsibility Keep the current sourceWordCount implementation intact until its target seam is extracted.
  */
 function sourceWordCount(block: CompositionBlock): number {
-  return wordsOf(textOf(block)).length;
+  return wordCountOf(block.text);
 }
 
 /**

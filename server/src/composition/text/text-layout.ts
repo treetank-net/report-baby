@@ -299,7 +299,7 @@ export function availableLineCount(height: number, leading: number): number {
  * @planner-target composition/text/text-layout.ts
  * @planner-responsibility Keep the current textOf implementation intact until its target seam is extracted.
  */
-function textOf(block: CompositionBlock): string {
+export function textOf(block: CompositionBlock): string {
   return block.text?.trim() ?? '';
 }
 

@@ -1,4 +1,8 @@
 import type { CompositionPlan, CompositionSlot } from '../contracts/engine-contracts.js';
+import { plannedLines } from '../layout/plan-lines.js';
+
+/** Preserve the evaluator's read-only query name while sharing the layout projection. */
+export { plannedLines as allLines } from '../layout/plan-lines.js';
 
 /** Find a materialized slot by its page-qualified identifier. */
 /**
@@ -7,15 +11,6 @@ import type { CompositionPlan, CompositionSlot } from '../contracts/engine-contr
  */
 export function slotFor(plan: CompositionPlan, slotId: string): CompositionSlot | undefined {
   return plan.slots.find((slot) => slot.id === slotId);
-}
-
-/** Return ordinary and insertion lines through one read-only projection. */
-/**
- * @planner-target composition/evaluation/plan-queries.ts
- * @planner-responsibility Keep the current allLines implementation intact until its target seam is extracted.
- */
-export function allLines(plan: CompositionPlan): CompositionPlan['lines'] {
-  return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
 /** Determine whether planner decisions explain a missing usable fragment. */
@@ -83,7 +78,7 @@ export function visualPlacementKey(item: { page: number; routeIndex?: number; bo
  */
 export function firstVisualPlacement(plan: CompositionPlan, blockId: string): VisualPlacementKey | undefined {
   const candidates = [
-    ...allLines(plan).filter((line) => line.blockId === blockId),
+    ...plannedLines(plan).filter((line) => line.blockId === blockId),
     ...plan.blockPlacements.filter((placement) => placement.blockId === blockId),
     ...plan.tablePlacements.filter((placement) => placement.blockId === blockId),
   ].map(visualPlacementKey).filter((key): key is VisualPlacementKey => key !== undefined);

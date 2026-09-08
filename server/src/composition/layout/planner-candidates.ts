@@ -1,5 +1,6 @@
 import type { CompositionRect } from '../model.js';
 import type { MovableInsertionPolicy, MovablePlacementBounds, MovableGraphicPolicy } from '../contracts/planner-policy.js';
+import { insertionKey } from './insertion-layout.js';
 
 export interface PlannedInsertion {
   flowId: string;
@@ -21,14 +22,6 @@ export interface SelectedInsertionPlacement {
   page: number;
   slotId: string;
   box: CompositionRect;
-}
-
-/**
- * @planner-target composition/layout/insertion-layout.ts
- * @planner-responsibility Keep the current insertionKey implementation intact until its target seam is extracted.
- */
-function insertionKey(flowId: string, blockId: string): string {
-  return `${flowId}:${blockId}`;
 }
 
 /**

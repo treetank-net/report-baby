@@ -13,7 +13,7 @@ import type {
  * @planner-target composition/adapters/render-config.ts
  * @planner-responsibility Keep the current pdfNumber implementation intact until its target seam is extracted.
  */
-function pdfNumber(pdf: Record<string, number>, key: string): number {
+export function pdfNumber(pdf: Record<string, number>, key: string): number {
   const value = pdf[key];
   if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite pdf.${key}.`);
   return value;

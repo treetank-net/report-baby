@@ -11,7 +11,7 @@ import type {
 import type { PageState } from '../contracts/layout-state.js';
 import { compositionStyleName } from '../text/style-name.js';
 import { isAtomicBlock } from './page-state.js';
-import { diagnostic } from '../observability/planning-observability.js';
+import { diagnostic, recordFlowDecision } from '../observability/planning-observability.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import type {
   FlowPlanningContext,
@@ -156,7 +156,7 @@ export function placeStructuredBlock(
       return true;
     }
     if (table.body.length === 0) {
-      plan.decisions.push({ code: 'EMPTY_TABLE_SKIPPED', flowId, blockId: block.id, slotId: definition.id });
+      recordFlowDecision(context, 'EMPTY_TABLE_SKIPPED', runtime, target);
       cursor.blockIndex += 1;
       cursor.startWord = 0;
       cursor.startRow = 0;
@@ -191,12 +191,16 @@ export function placeStructuredBlock(
     }
     const availableHeight = rectBottom(slot.box) - tableTop;
     if (measurement.height > availableHeight) {
-      plan.decisions.push({ code: 'TABLE_FRAGMENT_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, startRow: cursor.startRow, reason: 'table-fragment-does-not-fit' });
+      const decision = recordFlowDecision(context, 'TABLE_FRAGMENT_PUSHED_TO_NEXT_SLOT', runtime, target, 'table-fragment-does-not-fit');
+      decision.startRow = cursor.startRow;
       advanceCursor(cursor, availableRouteSlots);
       return true;
     }
     placeTableFragment(pageState, definition, block, measurement, cursor.startRow, repeatsHeader, routeIndex, plan.tablePlacements, tableTop);
-    plan.decisions.push({ code: 'TABLE_FRAGMENT_PLACED', flowId, blockId: block.id, slotId: slot.id, page: pageState.page, startRow: cursor.startRow, endRow: measurement.endRow, repeatsHeader });
+    const decision = recordFlowDecision(context, 'TABLE_FRAGMENT_PLACED', runtime, target);
+    decision.startRow = cursor.startRow;
+    decision.endRow = measurement.endRow;
+    decision.repeatsHeader = repeatsHeader;
     cursor.startWord = 0;
     if (measurement.endRow >= rowCount) {
       cursor.blockIndex += 1;
@@ -249,20 +253,21 @@ export function placeStructuredBlock(
   if (definition.kind === 'text' && definition.grow?.axis === 'y') growSlot(context, runtime, target, blockTop + measurement.height);
   const availableBlockHeight = rectBottom(slot.box) - blockTop;
   if (measurement.height > availableBlockHeight + geometryTolerance) {
-    plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'atomic-block-does-not-fit' });
+    recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'atomic-block-does-not-fit');
     advanceCursor(cursor, availableRouteSlots);
     return true;
   }
   if (blockTop + measurement.height > rectBottom(slot.box) + geometryTolerance) {
-    plan.decisions.push({ code: 'BLOCK_PUSHED_TO_NEXT_SLOT', flowId, blockId: block.id, slotId: slot.id, reason: 'atomic-block-does-not-fit-after-existing-content' });
+    recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'atomic-block-does-not-fit-after-existing-content');
     advanceCursor(cursor, availableRouteSlots);
     return true;
   }
   placeAtomicBlock(pageState, definition, block, measurement, routeIndex, plan.blockPlacements, plan.graphicPlacements, blockTop);
   if (measurement.scaled) {
-    plan.decisions.push({ code: block.kind === 'image' ? 'IMAGE_SCALED_TO_FIT' : 'BLOCK_SCALED_TO_FIT', flowId, blockId: block.id, slotId: slot.id, page: pageState.page, reason: 'atomic-block-natural-height-exceeds-slot-height' });
+    recordFlowDecision(context, block.kind === 'image' ? 'IMAGE_SCALED_TO_FIT' : 'BLOCK_SCALED_TO_FIT', runtime, target, 'atomic-block-natural-height-exceeds-slot-height');
   }
-  plan.decisions.push({ code: 'ATOMIC_BLOCK_PLACED', flowId, blockId: block.id, slotId: slot.id, page: pageState.page, height: measurement.height });
+  const placementDecision = recordFlowDecision(context, 'ATOMIC_BLOCK_PLACED', runtime, target);
+  placementDecision.height = measurement.height;
   cursor.blockIndex += 1;
   cursor.startWord = 0;
   if (cursor.blockIndex < context.blocks.length && definition.kind !== 'text') advanceCursor(cursor, availableRouteSlots);
