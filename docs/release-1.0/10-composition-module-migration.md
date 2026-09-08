@@ -303,9 +303,14 @@ adapters
   trafiły do `layout/`, evaluator otrzymał nazwy `content.ts`, `legality.ts`
   i `scoring.ts`, a records i trace połączono w
   `observability/planning-observability.ts`.
-- bieżący seam — przeniesienie czystego próbkowania do
-  `geometry/glyph-geometry.ts` oraz materializacji obiektów glifów do
-  `layout/glyph-objects.ts`; funkcje znające plan nie trafiają do geometrii.
+- `ea333ea` — rozdzielenie próbkowania glifów od materializacji obiektów:
+  czyste obliczenia trafiły do `geometry/glyph-geometry.ts`, a funkcje
+  mutujące plan do `layout/glyph-objects.ts`.
+- `67e3e3c` — udokumentowanie właścicieli modułu glifów i reguły, że funkcje
+  znające `CompositionPlan` nie trafiają do czystej geometrii.
+- `1ab6867` — odświeżenie skryptu inventory tak, aby rekurencyjnie skanował
+  aktualne `composition/**/*.ts`, ignorował nieistniejące historyczne cele i
+  poprawnie raportował aktualne ścieżki evaluatora.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
@@ -321,3 +326,26 @@ potem łączymy tylko operacje z tą samą wiedzą domenową, bez zmiany zachowa
 planera. Publiczne eksporty nadal przechodzą przez jedyną fasadę
 `composition/index.ts`. Po każdym wydzieleniu sprawdzamy kompilację,
 architekturę i testy adaptera przed przejściem do kolejnego pliku.
+
+### Aktualny inventory
+
+`server/scripts/planner-function-dependency-report.mjs` skanuje cały bieżący
+podkatalog `composition/`, zbiera sygnatury, wartości zwracane, wywołania
+lokalnych funkcji i importy, a następnie pokazuje końcowy fan-out względem
+docelowych modułów. Raport jest zapisany w
+`planner-function-dependency-inventory.md`; przed kolejnym ruchem należy go
+regenerować poleceniem:
+
+```sh
+node server/scripts/planner-function-dependency-report.mjs \
+  --write-report docs/release-1.0/planner-function-dependency-inventory.md
+```
+
+Obecny snapshot obejmuje 412 nazwanych funkcji w 38 plikach. Tabela rozmiarów
+jest dolną granicą kodu funkcji, a nie obietnicą redukcji LOC: o przeniesieniu
+decyduje wspólna wiedza domenowa i kształt zależności. Fizycznie, razem z
+adnotacjami katalogowymi, największe aktualne moduły to `flow-text-decision.ts`
+(588 LOC), `flow-space.ts` (423 LOC), `text/text-layout.ts` (525 LOC),
+`insertion-layout.ts` (455 LOC), `flow-planner.ts` (408 LOC) i
+`evaluation/legality.ts` (659 LOC). Dalsza praca ma badać duplikaty obliczeń,
+nie ciąć funkcji mechanicznie tylko po to, aby zmniejszyć liczbę linii.
