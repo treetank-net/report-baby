@@ -147,7 +147,8 @@ empty      slot celowo pusty
 Przykłady:
 
 - powtarzany header: `brand` + `generated(section.title)`;
-- numer strony w stopce: `generated(page.number)`;
+- numer strony w stopce: `generated(page.number)`, zapisany w tekście jako
+  `{{page.number}}`;
 - sidebar z checklistą: `document.sidebar` albo domyślny `template`;
 - graficzny header: `brand.graphicComponent('editorial-header')`;
 - śródstopka: zwykły box template'u, potencjalnie spanujący regiony strony;
@@ -159,7 +160,10 @@ na konkretnej stronie nadal jest boxem zadeklarowanym przez template. Logo,
 nazwa, data lub linia nagłówka nie muszą więc być osobnymi instrukcjami LLM;
 mogą wypełniać jeden `lockup` albo kilka zwykłych boxów chrome. Header i
 footer nie są uprzywilejowanym kanałem treści — mogą być stałe, generowane,
-puste albo płynąć jak każdy inny box, zależnie od deklaracji template'u.
+puste albo płynąć jak każdy inny box, zależnie od deklaracji template'u. Dla
+zmiennych stron obowiązuje istniejąca składnia `{{page.number}}` oraz
+`{{page.count}}`; nie wprowadzamy równoległych aliasów `{page}` ani
+`{numberOfPages}`.
 
 ## Reguła fallbacku
 

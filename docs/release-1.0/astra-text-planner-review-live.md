@@ -502,3 +502,22 @@ The largest extracted validator is 46 LOC and the largest scoring helper is
 42 LOC. The full composition suite passes 13/13 checks outside the restricted
 sandbox; build, architecture, documentation, and dependency inventory checks
 also pass.
+
+### Generated page placeholders — 2026-09-09
+
+The existing page-placeholder syntax is retained as the canonical contract:
+
+```text
+{{page.number}}  — the one-based page number
+{{page.count}}   — the final number of pages in the accepted plan
+```
+
+These are the same generated values sometimes described as `page` and
+`numberOfPages`; the different spelling is not a different domain concept.
+No `{page}` or `{numberOfPages}` aliases are introduced. The local TypeScript
+name `pageCount` is an implementation variable, not a public template token.
+
+The placeholders may be used in ordinary and repeated text flows, including
+header and footer slots. They are resolved against the final accepted plan at
+render time. `pageChrome` must consume the resolved header/footer slot geometry
+and must not maintain a second hard-coded page-number text contract.
