@@ -180,11 +180,11 @@ page/coverage limits come from the `pdf` configuration seam.
 
 The configuration is intentionally consumed through different seams:
 
-- `composition/evaluator.ts` reads `composition_score` and evaluates the
+- `composition/evaluation/evaluator.ts` reads `composition_score` and evaluates the
   completed plan. Contrast measurements arrive through an injected provider;
   the evaluator does not decode image bytes. It does not read `quality`,
   `composition_search`, or PDF typography values directly.
-- `composition/text-planner.ts` does not read YAML. Its interface accepts a
+- `composition/layout/text-planner.ts` does not read YAML. Its interface accepts a
   planner policy, which keeps the core planner independent of the renderer
   configuration and makes policy injection testable.
 - `composition/adapters/text-engine.ts` is the adapter that translates `pdf`
@@ -201,7 +201,7 @@ The configuration is intentionally consumed through different seams:
   interpretation. The planner remains unaware of pixels.
 - `pdf.composition_max_pages` and `pdf.plan_coverage_max_gap` are outer
   renderer/report-plan gates. They are not score terms and are not evaluated by
-  `composition/evaluator.ts`.
+  `composition/evaluation/evaluator.ts`.
 - `composition_search` currently supplies movable-candidate policies to tests
   and experiments. The production planner accepts those policies through its
   interface; the runtime does not yet load this group automatically. That is

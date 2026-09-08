@@ -22,21 +22,24 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/adapters/input.ts` | Conversion of accepted input into named flows, blocks, assets and graphics | report adapter, input tests | page coordinates, wrapping, PDF drawing |
 | `composition/model.ts` | Renderer-neutral document and template types | all composition modules | planning decisions or mutable runtime state |
 | `composition/adapters/page-template.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
-| `composition/text-planner.ts` | Text measurement, wrapping adapter, routing, block placement and obstacle decisions | `text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks, trace projection |
-| `composition/text-planner-candidates.ts` | Deterministic legal position variants for existing movable insertion and authored-graphic frames | `text-planner.ts` | document semantics, score, rendering, candidate evaluation |
-| `composition/text-wrapping.ts` | Renderer-neutral word wrapping, available intervals, flow-barrier continuation and obstacle-gap inspection | `text-planner.ts` | page routing, insertion policy, score, PDF drawing |
-| `composition/flow-barriers.ts` | Flow-placement projection and renderer-neutral splitting of text areas around wrapping graphics | `text-planner.ts`, trace/evaluator consumers through `CompositionPlan` | page orchestration, text measurement, candidate ranking, PDF drawing |
-| `composition/glyph-objects.ts` | Resolution of authored and generated decorative glyphs against final text or graphic bounds | `text-planner.ts`, glyph/rendering tests through `CompositionPlan` | text flow, obstacle reservation, candidate ranking, PDF drawing |
-| `composition/glyph-sampling.ts` | Renderer-neutral character-cell geometry and foreground metadata for contrast sampling | `text-planner.ts`, contrast tests through `CompositionLine` | raster decoding, contrast scoring, placement decisions, PDF drawing |
-| `composition/route-slots.ts` | Pure compatibility checks and first-compatible-slot selection for a block in a route | `text-planner.ts` | page mutation, occupied-space checks, insertion placement, scoring |
-| `composition/insertion-order.ts` | Deterministic source-order lookup and vertical boundary for the next planned insertion | `text-planner.ts` | placing insertion content, text wrapping, scoring, page mutation |
-| `composition/line-capacity.ts` | Renderer-neutral conversion of a vertical interval into complete line capacity with the planner's geometry tolerance | `text-planner.ts`, `planning-trace.ts` | layout policy, text measurement, page mutation |
-| `composition/planning-trace.ts` | Read-only projection of a completed plan into block/slot fragments, decisions and planning phases | `text-planner.ts`, trace consumers through `CompositionPlan` | placement decisions, reflow, scoring, PDF drawing |
-| `composition/structured-block-placement.ts` | Measurement, fit checks and placement of tables and atomic blocks, including wrapped-image boundary reservations | `text-planner.ts`, table/image/KPI tests through `CompositionPlan` | ordinary text wrapping, route selection, candidate ranking, PDF drawing |
-| `composition/engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | text engine, composition tests | wrapping, geometry invention, PDF drawing |
-| `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
-| `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
-| `composition/js-pdf-adapter.ts` | jsPDF measurements and rendering capabilities | report adapter, PDF tests | flow routing, candidate selection, score policy |
+| `composition/layout/document-layout.ts` | Full document planning cycle: preflight, obstacle reservation, flow ordering and finalization | `composition/layout/text-planner.ts`, composition engine | individual line decisions, scoring, PDF drawing |
+| `composition/layout/flow-planner.ts` | One flow's cursor, page/slot target resolution, text and structured-block dispatch | `document-layout.ts`, flow tests | candidate ranking, evaluator scoring, PDF drawing |
+| `composition/layout/flow-text-decision.ts` | Text wrapping inputs, keep rules, line-capacity decisions and placement outcomes | `flow-planner.ts` | page materialization outside its typed state, candidate ranking, PDF drawing |
+| `composition/layout/text-planner.ts` | Candidate planning facade and refinement orchestration | `composition/adapters/text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks |
+| `composition/layout/planner-candidates.ts` | Deterministic legal position variants for existing movable insertion and authored-graphic frames | `composition/layout/text-planner.ts` | document semantics, score, rendering, candidate evaluation |
+| `composition/text/text-layout.ts` | Renderer-neutral wrapping, available intervals, line capacity and line materialization | `composition/layout/flow-text-decision.ts`, `composition/layout/insertion-layout.ts` | page routing, insertion policy, score, PDF drawing |
+| `composition/layout/flow-space.ts` | Flow-placement projection and renderer-neutral splitting of text areas around wrapping graphics | `text-planner.ts`, trace/evaluator consumers through `CompositionPlan` | page orchestration, text measurement, candidate ranking, PDF drawing |
+| `composition/layout/glyph-objects.ts` | Resolution of authored and generated decorative glyphs against final text or graphic bounds | `text-planner.ts`, glyph/rendering tests through `CompositionPlan` | text flow, obstacle reservation, candidate ranking, PDF drawing |
+| `composition/geometry/glyph-geometry.ts` | Renderer-neutral character-cell geometry and foreground metadata for contrast sampling | `text-planner.ts`, contrast tests through `CompositionLine` | raster decoding, contrast scoring, placement decisions, PDF drawing |
+| `composition/layout/page-state.ts` | Page materialization, route-slot compatibility, cursor advance and legal slot growth | `flow-planner.ts`, `document-layout.ts` | text wrapping, candidate ranking, evaluator scoring |
+| `composition/layout/insertion-layout.ts` | Insertion proposal ordering, obstacle reservation and placement of non-main flow text | `document-layout.ts`, `composition/layout/text-planner.ts` | main-flow routing, evaluator scoring, PDF drawing |
+| `composition/observability/planning-observability.ts` | Read-only projection of a completed plan into block/slot fragments, decisions and planning phases | `text-planner.ts`, trace consumers through `CompositionPlan` | placement decisions, reflow, scoring, PDF drawing |
+| `composition/layout/structured-block-placement.ts` | Measurement, fit checks and placement of tables and atomic blocks, including wrapped-image boundary reservations | `text-planner.ts`, table/image/KPI tests through `CompositionPlan` | ordinary text wrapping, route selection, candidate ranking, PDF drawing |
+| `composition/layout/graphic-planning.ts` | Graphic proposal generation, geometry validation and page obstacle materialization | `document-layout.ts`, graphic tests | text wrapping, evaluator scoring, PDF drawing |
+| `composition/composition-engine.ts` | Candidate/evaluator orchestration, legal-plan selection, refinement rounds and trace assembly | `composition/adapters/text-engine.ts`, composition tests | wrapping, geometry invention, PDF drawing |
+| `composition/evaluation/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
+| `composition/evaluation/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
+| `composition/adapters/pdf/backend.ts` | jsPDF measurements and rendering capabilities | report adapter, PDF tests | flow routing, candidate selection, score policy |
 | `composition/adapters/text-engine.ts` | Composition-specific wiring of planner, evaluator and the `pdf`-to-planner policy adapter | report renderer | layout rules, drawing, duplicated thresholds |
 | `composition/report-composition-entrypoint.ts` | Report-specific entry point that prepares composition input and jsPDF metrics, then forwards explicit policy overrides | report renderer and composition test harnesses | a second planner, a second renderer, independent layout rules, policy-default translation |
 | `report-composition-runtime.ts` | Report-specific resource preparation: fonts, assets, contrast provider, block capabilities, composition styles and the backend closure | `report-renderer.ts` | page chrome, final artifact orchestration, a second planner or renderer |
@@ -52,11 +55,11 @@ make composition decisions.
 `text-planner.ts` exposes `CompositionPlanner` through
 `createTextCompositionPlanner`. Its implementation may use private modules for
 wrapping, route-slot compatibility, flow-barrier geometry or candidate geometry, but callers should not
-need to know those modules separately. `text-wrapping.ts` has a private
+need to know those modules separately. `text/text-layout.ts` has a private
 implementation seam used by the planner's `wrapBlock` adapter; it is not a
-second planner interface. `flow-barriers.ts` similarly projects already
+second planner interface. `layout/flow-space.ts` similarly projects already
 planned slots and splits them around already placed wrapping graphics; it does
-not choose placements. `engine.ts` consumes the planner and an
+not choose placements. `composition-engine.ts` consumes the planner and an
 `CompositionEvaluator`; this is the main renderer-neutral seam for candidate
 selection. `structured-block-placement.ts` owns only the structured-block
 branch of the flow loop. It receives the planner's mutable cursor and typed
@@ -76,7 +79,7 @@ Configuration ownership is similarly directional:
 - `contrast` supplies contrast reference and sampling values;
 - `quality` belongs to artifact and visual-QA checks.
 
-The `text-engine.ts` adapter is the single implementation of the PDF policy
+The `adapters/text-engine.ts` adapter is the single implementation of the PDF policy
 mapping. Its direct engine interface retains a smaller historical fallback
 subset for renderer-neutral callers; the report entry point requests the full
 policy through that same adapter and adds only explicit caller overrides. If a

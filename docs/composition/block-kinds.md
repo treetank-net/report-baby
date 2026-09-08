@@ -69,12 +69,12 @@ part of an obstacle contract.
 
 - `composition/adapters/input.ts` owns conversion from public input to normalized
   blocks and assets.
-- `composition/text-planner.ts` owns routing, text wrapping, block placement,
+- `composition/layout/text-planner.ts` owns routing, text wrapping, block placement,
   obstacles, residual content and planning decisions.
-- `composition/engine.ts` owns planner/evaluator candidate orchestration.
-- `composition/evaluator.ts` owns hard legality and quality scoring. It does
+- `composition/composition-engine.ts` owns planner/evaluator candidate orchestration.
+- `composition/evaluation/evaluator.ts` owns hard legality and quality scoring. It does
   not measure or render blocks.
-- `composition/js-pdf-adapter.ts` owns jsPDF measurement and painting
+- `composition/adapters/pdf/backend.ts` owns jsPDF measurement and painting
   capabilities. `combineJsPdfCompositionBlockCapabilities` dispatches by the
   normalized block kind, so registering one capability cannot replace another.
 - `composition/report-composition-entrypoint.ts` supplies capabilities to the
