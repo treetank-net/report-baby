@@ -89,9 +89,9 @@ ani evaluatora.
 - `pdf.ts` — kontrakty stylów, assetów, rendererów i capability adaptera PDF;
   implementacja jsPDF nie może być właścicielem tych typów.
 
-`engine.ts` jest obecnie połączeniem kontraktów i implementacji. Najpierw
-wydzielamy z niego typy do `contracts/engine-contracts.ts`, a dopiero potem
-przenosimy implementację do `composition-engine.ts`.
+`engine.ts` jest cienką ścieżką kompatybilności. Kontrakty znajdują się w
+`contracts/engine-contracts.ts`, a implementacja w `composition-engine.ts`;
+nowe moduły nie powinny importować typów z fasady kompatybilności.
 
 ### `geometry/`
 
@@ -286,6 +286,9 @@ adapters
   `text.ts`, `image.ts`, `metric.ts`, `chart.ts` i `table.ts`; usunięcie
   monolitycznego `js-pdf-adapter.ts` i aktualizacja importów do konkretnych
   właścicieli.
+- `64a65c9` — rozdzielenie kontraktów engine od implementacji: typy trafiły do
+  `contracts/engine-contracts.ts`, orkiestracja do `composition-engine.ts`, a
+  `engine.ts` został cienką ścieżką kompatybilności.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
@@ -295,8 +298,9 @@ ponowienia na hoście/CI z możliwością uruchamiania procesów potomnych.
 
 ## Następny zakres implementacyjny
 
-Kolejny seam obejmuje oddzielenie kontraktów i implementacji `engine.ts` do
-`contracts/engine-contracts.ts` oraz `composition-engine.ts`. Publiczne eksporty
-nadal przechodzą przez jedyną fasadę `composition/index.ts`. Po każdym
-wydzieleniu sprawdzamy kompilację, architekturę i testy adaptera przed
-przejściem do kolejnego pliku.
+Kolejny seam obejmuje połączenie modułów tekstowych w `text/text-layout.ts`:
+tokenizację pozostawiamy jako czysty moduł wejściowy, a pomiar, wrapping,
+capacity i materializację placementów porządkujemy pod jednym właścicielem.
+Publiczne eksporty nadal przechodzą przez jedyną fasadę
+`composition/index.ts`. Po każdym wydzieleniu sprawdzamy kompilację,
+architekturę i testy adaptera przed przejściem do kolejnego pliku.
