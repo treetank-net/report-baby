@@ -23,6 +23,53 @@ To jest checkpoint organizacyjny. Dopiero po nim zaczyna się optymalizacja
 wnętrza dużych modułów; każda taka zmiana ma zachować te same bundle i kontrakty
 narzędzi MCP/CLI.
 
+## Stan optymalizacji — 2026-09-08
+
+Pierwszy przebieg optymalizacji nie zmienia przepływu danych ani publicznych
+eksportów. Usunięto dwa worki odpowiedzialności:
+
+| Moduł | Odpowiedzialność po podziale | LOC |
+| --- | --- | ---: |
+| `presentation/svg-renderer.ts` | SVG pojedynczego slajdu | 285 |
+| `presentation/pptx-renderer.ts` | PPTX i deduplikacja mediów | 327 |
+| `presentation/pdf-renderer.ts` | PDF/PNG przez rasteryzację | 127 |
+| `presentation/slide-layout.ts` | geometria, RTL i dopasowanie tekstu | 286 |
+| `presentation/slide-validation.ts` | walidacja zawartości slajdu | 18 |
+| `presentation/contracts.ts` | kontrakty decku | 25 |
+| `presentation/slides.ts` | stabilna fasada eksportów | 11 |
+| `brand/context.ts` | odczyt źródeł, profili i orkiestracja | 478 |
+| `brand/theme.ts` | rozwiązywanie theme/composition | 174 |
+| `brand/assets.ts` | ścieżki, cache i ostrzeżenia assetów | 124 |
+| `brand/color.ts` | palette i kontrast | 80 |
+| `brand/value.ts` | bezpieczne wartości dokumentu | 38 |
+| `brand/paths.ts` | bezpieczne ścieżki względne | 12 |
+| `brand/contracts.ts` | `BrandOverrides`, `RenderComposition` | 28 |
+
+Wcześniejsze `slides.ts` (ponad 1000 LOC) i `brand-context.ts` (ponad 900 LOC)
+nie są już miejscami, w których miesza się renderer, layout, assety i
+orkiestracja. `slides.ts` pozostał kompatybilną fasadą, więc MCP i CLI nie
+muszą znać nowego podziału. `brand/context.ts` zachowuje istniejące operacje
+publiczne (`resolveBrandContext`, `inspectBrand`, `listBrandbooks`), a nowe
+moduły są ich wewnętrznymi seamami.
+
+Po tym przebiegu `server/src` ma 18 711 linii TypeScript. Jest to metryka
+orientacyjna: kolejnym krokiem będzie usuwanie powtórzeń i ręcznych obliczeń w
+modułach composition, a nie mechaniczne dalsze rozcinanie każdego pliku.
+
+Weryfikacja tego przebiegu:
+
+- `npx tsc --noEmit` — przechodzi;
+- `node scripts/architecture-check.mjs` — 101 modułów, brak zakazanych cykli;
+- `npm run build` — cztery bundle oraz 19 wbudowanych szablonów;
+- `npm run test:composition` na hoście — 13/13 testów przechodzi, w tym oracle,
+  obrazy, kontrast, flow redakcyjny i limity stron.
+
+Pełny `npm test` dochodzi do bramki `public MCP behavior`, ale istniejący
+checkpoint `957f957` odtwarza ten sam błąd dla `pages/editorial-metrics-two-column`:
+`EMPTY_FLOW_SLOT` na `1:first:segment-1` i `1:first:segment-2`. Porównanie z
+czystym checkoutem checkpointu potwierdziło, że nie jest to regresja podziału
+`presentation`/`brand`; pozostaje osobnym zadaniem testowo-planistycznym.
+
 ## Kontekst produktu
 
 `report-baby` jest przede wszystkim bundlowanym serwerem MCP. CLI jest drugim
@@ -71,19 +118,20 @@ Niezmienny kontrakt release:
 | Obszar | Obecne pliki | Główne ryzyko |
 | --- | --- | --- |
 | Composition | `composition/**` | najbliżej docelowego układu; nie przenosić ponownie bez seam’u |
-| Input/content | `contract/schema.ts`, `content-model.ts`, `markdown-normalizer.ts` | schema miesza composition, slajdy, brand source i pola narzędzi |
-| Template/config | `template-contract.ts`, `builtin-template-source.ts`, `page-geometry.ts`, `slide-template-engine.ts` | deklaracje, kompilacja, loader i geometria w tych samych modułach |
-| Brand | `brand-context.ts`, `asset-preparation.ts` | dokument, profile, theme, assety, template’y i kolory w jednym kontekście |
-| Source | `source-contract.ts`, `source-context.ts`, `source-materialization.ts` | directory/ZIP/Git, bezpieczeństwo i cache razem |
-| Presentation | `slides.ts`, `slide-context.ts`, `slide-plan.ts` | layout, SVG, PDF, PNG, PPTX i media w `slides.ts` |
-| Report | `report-renderer.ts`, `report-composition-runtime.ts`, `report-plan*.ts` | chrome, składanie PDF i legacy plan w jednej ścieżce |
-| Rendering | `render-primitives.ts`, `svg.ts`, `image-resolver.ts`, `image-raster.ts`, `pdf-rasterizer.ts` | infrastruktura miesza się z kolorami i logiką formatów |
-| Interfaces | `index.ts`, `cli.ts`, `tools/**`, `example.ts`, `brand-tool.ts`, `tool-response.ts` | rejestracja, parsery, zapis plików i odpowiedzi są przemieszane |
+| Input/content | `contracts/input/schema.ts`, `content/**` | schema i normalizacja są rozdzielone od composition |
+| Template/config | `template/**` | kontrakty, builtin loader, kierunek i geometria mają wspólny kontekst |
+| Brand | `brand/context.ts`, `brand/theme.ts`, `brand/assets.ts`, `brand/asset-preparation.ts` | dalszy seam to rozdzielenie template’ów/showcase od orkiestracji |
+| Source | `source/**` | materializacja i kontekst źródeł mają osobny kontrakt |
+| Presentation | `presentation/**` | layout, SVG, PDF/PNG, PPTX i walidacja są rozdzielone |
+| Report | `report/**`, `composition/report-composition-entrypoint.ts` | renderer raportu i legacy plan są rozdzielone od composition |
+| Rendering | `rendering/**` | prymitywy i rozwiązywanie obrazów nie należą do planerów |
+| Interfaces | `interfaces/mcp/**`, `interfaces/cli/**` | rejestracja MCP i CLI są osobnymi adapterami |
 
-`server/src` ma obecnie około 18,6 tys. linii. Największe moduły to
-`slides.ts` (1013), `brand-context.ts` (921), `text-runs.ts` (566) i
-`template-contract.ts` (499). Rozmiar nie jest samodzielnym kryterium podziału;
-ważniejsze jest to, czy moduł ma jeden kierunek wiedzy i głęboki interfejs.
+`server/src` ma obecnie 18 711 linii TypeScript. Największe pozostałe moduły to
+`composition/evaluation/legality.ts`, `composition/layout/text-planner.ts`,
+`composition/layout/flow-planner.ts` oraz `composition/layout/insertion-layout.ts`.
+Rozmiar nie jest samodzielnym kryterium podziału; ważniejsze jest to, czy moduł
+ma jeden kierunek wiedzy i głęboki interfejs.
 
 ## Docelowa mapa katalogów
 

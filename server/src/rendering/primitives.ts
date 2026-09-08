@@ -1,7 +1,7 @@
 import { initWasm, Resvg } from '@resvg/resvg-wasm';
 import { readFile } from 'node:fs/promises';
 import { jsPDF } from 'jspdf';
-import { readableInk } from '../brand/context.js';
+import { readableInk } from '../brand/color.js';
 import type { RenderTheme } from '../core/model/render-theme.js';
 import { readRenderConfig } from '../template/builtins.js';
 import { applyPlugin } from 'jspdf-autotable';
