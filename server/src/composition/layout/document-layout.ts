@@ -4,8 +4,6 @@ import type {
   CompositionTemplate,
 } from '../contracts/model.js';
 import type {
-  CompositionMovableGraphicFrame,
-  CompositionMovableInsertionFrame,
   CompositionPlan,
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
@@ -32,6 +30,10 @@ import type {
   PlannedInsertion,
 } from './planner-candidates.js';
 import { validateMovablePlacementBounds } from './movable-placement-validation.js';
+import {
+  movableGraphicFramesForPlan,
+  movableInsertionFramesForPlan,
+} from './movable-placement-frames.js';
 
 /** Create an empty plan with all renderer-facing collections initialized. */
 /**
@@ -106,53 +108,6 @@ function planHasErrors(plan: CompositionPlan): boolean {
   return plan.diagnostics.some((item) => item.severity === 'error');
 }
 
-/** Materialize movable insertion frames from policy and proposals. */
-/**
- * @planner-target composition/layout/document-layout.ts
- * @planner-responsibility Keep the current movableInsertionFramesForPlan implementation intact until its target seam is extracted.
- */
-function movableInsertionFramesForPlan(
-  policy: TextCompositionPlannerPolicy,
-  insertionProposals: Map<string, PlannedInsertion>,
-): CompositionMovableInsertionFrame[] {
-  return Object.entries(policy.movableInsertionBounds ?? {}).flatMap(([key, movable]) => {
-    const proposal = insertionProposals.get(key);
-    if (!proposal) return [];
-    return [{
-      id: key,
-      flowId: proposal.flowId,
-      blockId: proposal.blockId,
-      page: proposal.page,
-      box: { ...movable.bounds },
-      axis: movable.axis ?? 'y',
-      candidateCount: movable.candidateCount,
-    } satisfies CompositionMovableInsertionFrame];
-  });
-}
-
-/** Materialize movable graphic frames from policy and proposals. */
-/**
- * @planner-target composition/layout/document-layout.ts
- * @planner-responsibility Keep the current movableGraphicFramesForPlan implementation intact until its target seam is extracted.
- */
-function movableGraphicFramesForPlan(
-  policy: TextCompositionPlannerPolicy,
-  graphicProposals: Map<string, PlannedGraphic>,
-): CompositionMovableGraphicFrame[] {
-  return Object.entries(policy.movableGraphicBounds ?? {}).flatMap(([key, movable]) => {
-    const proposal = graphicProposals.get(key);
-    if (!proposal) return [];
-    return [{
-      id: key,
-      graphicId: proposal.graphicId,
-      page: proposal.page,
-      box: { ...movable.bounds },
-      axis: movable.axis ?? 'y',
-      candidateCount: movable.candidateCount,
-    } satisfies CompositionMovableGraphicFrame];
-  });
-}
-
 /** Reject quote blocks that are not owned by a non-main insertion flow. */
 /**
  * @planner-target composition/layout/document-layout.ts
@@ -188,8 +143,8 @@ function preparePlanForLayout(
   graphicProposals: Map<string, PlannedGraphic>,
   plan: CompositionPlan,
 ): void {
-  plan.movableInsertionFrames = movableInsertionFramesForPlan(policy, insertionProposals);
-  plan.movableGraphicFrames = movableGraphicFramesForPlan(policy, graphicProposals);
+  plan.movableInsertionFrames = movableInsertionFramesForPlan(policy.movableInsertionBounds, insertionProposals);
+  plan.movableGraphicFrames = movableGraphicFramesForPlan(policy.movableGraphicBounds, graphicProposals);
   validateQuoteFlowContracts(document, template, plan);
   validateMovablePlacementBounds(insertionProposals, policy.movableInsertionBounds ?? {}, plan, 'insertion');
   validateMovablePlacementBounds(graphicProposals, policy.movableGraphicBounds ?? {}, plan, 'graphic');

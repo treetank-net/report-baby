@@ -57,14 +57,14 @@ publiczne (`resolveBrandContext`, `inspectBrand`, `listBrandbooks`), a
 `brand/discovery.ts` przejmuje rekurencyjne przechodzenie katalogów. Oba moduły
 mają jawne, wewnętrzne seam’y.
 
-Po tym przebiegu `server/src` ma 18 670 linii TypeScript. Jest to metryka
+Po tym przebiegu `server/src` ma 18 680 linii TypeScript. Jest to metryka
 orientacyjna: kolejnym krokiem będzie usuwanie powtórzeń i ręcznych obliczeń w
 modułach composition, a nie mechaniczne dalsze rozcinanie każdego pliku.
 
 Weryfikacja tego przebiegu:
 
 - `npx tsc --noEmit` — przechodzi;
-- `node scripts/architecture-check.mjs` — 109 modułów, brak zakazanych cykli;
+- `node scripts/architecture-check.mjs` — 110 modułów, brak zakazanych cykli;
 - `npm run build` — cztery bundle oraz 19 wbudowanych szablonów;
 - `npm run test:composition` na hoście — 13/13 testów przechodzi, w tym oracle,
   obrazy, kontrast, flow redakcyjny i limity stron.
@@ -173,12 +173,12 @@ Niezmienny kontrakt release:
 | Rendering | `rendering/**` | prymitywy i rozwiązywanie obrazów nie należą do planerów |
 | Interfaces | `interfaces/mcp/**`, `interfaces/cli/**` | rejestracja MCP i CLI są osobnymi adapterami |
 
-`server/src` ma obecnie 18 670 linii TypeScript. Największe pozostałe moduły to
+`server/src` ma obecnie 18 680 linii TypeScript. Największe pozostałe moduły to
 `composition/evaluation/legality.ts` (659 LOC),
 `composition/layout/flow-text-decision.ts` (588 LOC),
 `brand/context.ts` (456 LOC), `composition/evaluation/scoring.ts` (441 LOC),
 `composition/adapters/page-template.ts` (422 LOC),
-`composition/layout/document-layout.ts` (355 LOC),
+`composition/layout/document-layout.ts` (310 LOC),
 `composition/layout/flow-space.ts` (417 LOC) oraz
 `composition/layout/flow-planner.ts` (408 LOC). `text-planner.ts` i
 `insertion-layout.ts` są fasadami o odpowiednio 154 i 17 LOC.

@@ -116,8 +116,6 @@ const targetByFunction = new Map([
   ['document-layout.ts::normalizePlanReadingOrder', 'composition/document-layout.ts'],
   ['document-layout.ts::flattenPages', 'composition/document-layout.ts'],
   ['document-layout.ts::planHasErrors', 'composition/document-layout.ts'],
-  ['document-layout.ts::movableInsertionFramesForPlan', 'composition/document-layout.ts'],
-  ['document-layout.ts::movableGraphicFramesForPlan', 'composition/document-layout.ts'],
   ['document-layout.ts::validateQuoteFlowContracts', 'composition/document-layout.ts'],
   ['document-layout.ts::preparePlanForLayout', 'composition/document-layout.ts'],
   ['document-layout.ts::reserveDocumentObstacles', 'composition/document-layout.ts'],
@@ -132,6 +130,9 @@ const targetByFunction = new Map([
   // movable-placement-validation.ts owns shared preflight validation for
   // insertion and authored-graphic frames.
   ['movable-placement-validation.ts::validateMovablePlacementBounds', 'composition/layout/movable-placement-validation.ts'],
+  ['movable-placement-frames.ts::materializeMovablePlacementFrames', 'composition/layout/movable-placement-frames.ts'],
+  ['movable-placement-frames.ts::movableInsertionFramesForPlan', 'composition/layout/movable-placement-frames.ts'],
+  ['movable-placement-frames.ts::movableGraphicFramesForPlan', 'composition/layout/movable-placement-frames.ts'],
 
   // flow-planner.ts: occupancy and page growth
   ['flow-planner.ts::flowLineCollidesWithSlot', 'composition/flow-occupancy.ts'],
@@ -266,6 +267,9 @@ const responsibilityByFunction = new Map([
   ['growSlot', 'Apply one legal slot-growth operation and move affected slots.'],
   ['placeStructuredBlock', 'Dispatch one structured block to its atomic or table placement routine.'],
   ['validateMovablePlacementBounds', 'Validate movable placement frames and candidate counts before document planning.'],
+  ['materializeMovablePlacementFrames', 'Project matching movable policies and proposals through one frame-construction seam.'],
+  ['movableInsertionFramesForPlan', 'Materialize renderer-neutral frames for movable insertion proposals.'],
+  ['movableGraphicFramesForPlan', 'Materialize renderer-neutral frames for movable graphic proposals.'],
   ['createTextCompositionPlanner', 'Expose candidate planning while retaining the existing planner contract.'],
   ['createCompositionEngine', 'Evaluate candidates, refine legal alternatives, and select the winning plan.'],
 ]);

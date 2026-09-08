@@ -7,14 +7,16 @@ gate’u oraz audyt kilku modułów, bez mechanicznego cięcia po LOC.
 ## Ocena kryteriów — 2026-09-08
 
 Punkt 06 jest w większości zrealizowany, ale nie jest jeszcze formalnie
-zamknięty jako cały release. Aktualny inventory obejmuje 403 nazwane funkcje w
-44 modułach i pokazuje następujące właścicielstwa:
+zamknięty jako cały release. Aktualny inventory obejmuje 404 nazwane funkcje w
+45 modułach i pokazuje następujące właścicielstwa:
 
 | Moduł | LOC | Funkcje | Ocena odpowiedzialności |
 | --- | ---: | ---: | --- |
 | `composition/layout/flow-planner.ts` | 408 | 15 | orkiestracja jednego flow; nie jest już właścicielem pomiaru ani polityki keep |
 | `composition/layout/flow-text-decision.ts` | 588 | 25 | spójna polityka decyzji tekstowych; długość wynika z wielu jawnych reguł, nie z jednej funkcji-goda |
-| `composition/layout/document-layout.ts` | 355 | 16 | cykl jednego planu dokumentu od preflight do finalizacji |
+| `composition/layout/document-layout.ts` | 310 | 14 | cykl jednego planu dokumentu od preflight do finalizacji |
+| `composition/layout/movable-placement-validation.ts` | 51 | 1 | walidacja ram i liczby kandydatów; bez materializacji i routingu |
+| `composition/layout/movable-placement-frames.ts` | 67 | 3 | materializacja ramek wynikowych; bez walidacji i wyboru kandydata |
 | `composition/evaluation/legality.ts` | 659 | 28 | jeden głęboki moduł twardej legalności; nie rozcinamy go bez niezależnego kontraktu |
 | `composition/evaluation/scoring.ts` | 441 | 18 | jeden moduł jakości legalnego planu; składniki są jawnie nazwane |
 
@@ -24,11 +26,14 @@ dochodzi do znanego `EMPTY_FLOW_SLOT` w `public MCP behavior`; ten sam błąd
 odtwarza się na czystym checkpointcie `957f957`, więc nie jest regresją tej
 migracji. Nie traktujemy go jako argumentu za kolejnym podziałem modułów.
 
-Następny konkretny seam został wydzielony do
+Kolejny seam został wydzielony do
 `composition/layout/movable-placement-validation.ts`: wspólna walidacja ram i
 liczby kandydatów dla insertionów i autorskich grafik. Dokument-layout nadal
 decyduje, kiedy uruchomić preflight, a nowy moduł odpowiada wyłącznie za tę
-regułę. Po tym seamie nie ma uzasadnienia do kolejnego podziału
+regułę. Następnie wspólna projekcja dwóch niemal identycznych list ramek trafiła
+do `composition/layout/movable-placement-frames.ts`; moduł nie waliduje ani nie
+generuje kandydatów, tylko tworzy rekordy wynikowe. Po tych seamach nie ma
+uzasadnienia do kolejnego podziału
 `flow-planner.ts` ani `flow-text-decision.ts` bez nowego testu kontraktu.
 
 ## Wykonane w pierwszym kroku

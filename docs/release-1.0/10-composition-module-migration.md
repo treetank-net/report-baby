@@ -45,6 +45,7 @@ server/src/composition/
 │   ├── text-planner.ts
 │   ├── planner-candidates.ts
 │   ├── movable-placement-validation.ts
+│   ├── movable-placement-frames.ts
 │   ├── graphic-planning.ts
 │   ├── structured-block-placement.ts
 │   └── glyph-objects.ts
@@ -139,6 +140,9 @@ Stan i reguły układania dokumentu.
 - `planner-candidates.ts` — tworzenie i doprecyzowanie wariantów;
 - `movable-placement-validation.ts` — wspólna walidacja ram i liczby kandydatów
   dla ruchomych insertionów i autorskich grafik; nie generuje wariantów.
+- `movable-placement-frames.ts` — materializacja ramek wynikowych z polityk i
+  zmierzonych propozycji; nie podejmuje decyzji o legalności ani nie wybiera
+  pozycji.
 - `graphic-planning.ts` — planowanie grafik;
 - `structured-block-placement.ts` — placement tabel, KPI i innych bloków
   atomowych.
