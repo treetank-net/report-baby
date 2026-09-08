@@ -6,7 +6,7 @@ import type {
   CompositionWordRange,
 } from './engine.js';
 import type { FlowPlanningContext, FlowRuntime, FlowTarget } from './contracts/flow-planning.js';
-import { wordsForBlock } from './text-measurement.js';
+import { wordsForBlock } from './text/text-measurement.js';
 
 /**
  * @planner-target composition/planning-records.ts

@@ -2,25 +2,9 @@ import { readRenderConfig } from '../../builtin-template-source.js';
 
 import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from '../engine.js';
 
-import { graphicIntervalsForLine } from '../graphic-geometry.js';
+import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 
 
-
-/**
- * @planner-target composition/evaluation-support.ts
- * @planner-responsibility Tokenize authored text for evaluator coverage checks.
- */
-export function wordsOf(text: string | undefined): string[] {
-  return text?.trim().split(/\s+/u).filter(Boolean) ?? [];
-}
-
-/**
- * @planner-target composition/evaluation-support.ts
- * @planner-responsibility Count authored words without exposing tokenization to callers.
- */
-export function wordCountOf(text: string | undefined): number {
-  return wordsOf(text).length;
-}
 
 /**
  * @planner-target composition/evaluation-support.ts

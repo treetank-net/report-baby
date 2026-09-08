@@ -2,7 +2,8 @@ import type { CompositionBlock, CompositionDocument } from '../model.js';
 
 import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from '../engine.js';
 
-import { allLines, firstVisualPlacement, fitsInside, geometryTolerance, pushEvaluationError, slotFor, visualOrderRegressed, wordCountOf, type VisualPlacementKey } from './evaluation-support.js';
+import { allLines, firstVisualPlacement, fitsInside, geometryTolerance, pushEvaluationError, slotFor, visualOrderRegressed, type VisualPlacementKey } from './evaluation-support.js';
+import { wordCountOf } from '../text/tokenization.js';
 
 export type FlowPlacementSummary = {
   flowId: string;

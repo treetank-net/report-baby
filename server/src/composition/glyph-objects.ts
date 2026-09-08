@@ -5,7 +5,7 @@ import type {
   CompositionPlan,
   CompositionTextMetrics,
 } from './engine.js';
-import { compositionStyleName } from './style-name.js';
+import { compositionStyleName } from './text/style-name.js';
 
 function plannedLines(plan: CompositionPlan): CompositionLine[] {
   return [...plan.lines, ...(plan.insertionLines ?? [])];

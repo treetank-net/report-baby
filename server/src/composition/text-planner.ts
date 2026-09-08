@@ -26,10 +26,10 @@ import { createPlan, planDocumentOnce } from './document-layout.js';
 import type { TextCompositionPlannerPolicy } from './planner-policy.js';
 
 export type { MovableGraphicPolicy, MovableInsertionBounds } from './text-planner-candidates.js';
-export { lineHeight, styleFor, textPadding, wrapBlock, wordsForBlock } from './text-measurement.js';
+export { lineHeight, styleFor, textPadding, wrapBlock, wordsForBlock } from './text/text-measurement.js';
 export { addResidual, addTableResidual, diagnostic } from './planning-records.js';
 export { ensurePage, rectBottom, rectsOverlap, routeLayout, routeSlots, slotId, validateGrowthPolicies } from './page-management.js';
-export { placeLines } from './text-placement.js';
+export { placeLines } from './text/text-placement.js';
 export { placeGraphicsForPage } from './graphic-planning.js';
 export type { TextCompositionPlannerPolicy } from './planner-policy.js';
 

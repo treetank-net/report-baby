@@ -14,8 +14,8 @@ import type {
 import { insertionKey } from './insertion-order.js';
 import { diagnostic, addResidual } from './planning-records.js';
 import { ensurePage, rectBottom, routeLayout, type PageState } from './page-management.js';
-import { lineHeight, textPadding, wrapBlock, wordsForBlock } from './text-measurement.js';
-import { placeLines } from './text-placement.js';
+import { lineHeight, textPadding, wrapBlock, wordsForBlock } from './text/text-measurement.js';
+import { placeLines } from './text/text-placement.js';
 import type { PlannedInsertion } from './text-planner-candidates.js';
 
 type InsertionTextMeasurement = {

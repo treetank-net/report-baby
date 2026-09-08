@@ -9,7 +9,7 @@ import type {
   CompositionTableMeasurement,
 } from './engine.js';
 import type { PageState } from './page-management.js';
-import { compositionStyleName } from './style-name.js';
+import { compositionStyleName } from './text/style-name.js';
 import { isAtomicBlock } from './route-slots.js';
 import { diagnostic } from './planning-records.js';
 import { rectBottom } from './page-management.js';

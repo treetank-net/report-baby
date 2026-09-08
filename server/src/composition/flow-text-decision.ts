@@ -19,9 +19,9 @@ import {
 } from './flow-occupancy.js';
 import { advanceCursor } from './flow-cursor.js';
 import { growSlot } from './slot-growth.js';
-import { availableLineCount } from './line-capacity.js';
-import { obstructionAcrossLineBands } from './text-wrapping.js';
-import { lineHeight, styleFor, wrapBlock } from './text-measurement.js';
+import { availableLineCount } from './text/line-capacity.js';
+import { obstructionAcrossLineBands } from './text/text-wrapping.js';
+import { lineHeight, styleFor, wrapBlock } from './text/text-measurement.js';
 import { rectBottom, slotBox } from './page-management.js';
 import { addResidual, diagnostic, recordFlowDecision } from './planning-records.js';
 

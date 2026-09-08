@@ -1,8 +1,8 @@
 import type { jsPDF } from 'jspdf';
 import type { CompositionBlock, CompositionBlockKind, CompositionChart, CompositionDocument, CompositionTable } from './model.js';
 import type { CompositionBackend, CompositionPlan, CompositionTableMeasurement, CompositionTextMetrics } from './engine.js';
-import { compositionStyleName } from './style-name.js';
-import { fitContainBox } from './image-geometry.js';
+import { compositionStyleName } from './text/style-name.js';
+import { fitContainBox } from './geometry/visual-geometry.js';
 
 export interface JsPdfCompositionStyle {
   fontSize: number;

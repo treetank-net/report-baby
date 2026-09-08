@@ -11,11 +11,8 @@ import type {
   CompositionTextMetrics,
   CompositionTraceDecision,
 } from './engine.js';
-import { availableLineCount } from './line-capacity.js';
-
-function wordsOf(text: string): string[] {
-  return text.trim().split(/\s+/u).filter(Boolean);
-}
+import { availableLineCount } from './text/line-capacity.js';
+import { wordsOf } from './text/tokenization.js';
 
 function textOf(block: CompositionBlock): string {
   return block.text?.trim() ?? '';

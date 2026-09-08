@@ -29,10 +29,10 @@ import {
   textPlacementCapacity,
 } from './flow-text-decision.js';
 import { hasRoleEligibleSlot, slotFor } from './route-slots.js';
-import { wordsForBlock } from './text-measurement.js';
-import type { wrapBlock } from './text-measurement.js';
+import { wordsForBlock } from './text/text-measurement.js';
+import type { wrapBlock } from './text/text-measurement.js';
 import { ensurePage, routeSlots } from './page-management.js';
-import { placeLines } from './text-placement.js';
+import { placeLines } from './text/text-placement.js';
 import { slotCollidesWithPlacedBlock } from './flow-occupancy.js';
 import { placeStructuredBlock } from './structured-block-placement.js';
 import { addResidual, addTableResidual, diagnostic, recordFlowDecision } from './planning-records.js';

@@ -1,6 +1,6 @@
 import type { CompositionBlock } from './model.js';
 import type { CompositionGlyphSamplingBox, CompositionTextMetrics } from './engine.js';
-import { compositionStyleName } from './style-name.js';
+import { compositionStyleName } from './text/style-name.js';
 
 function styleFor(block: CompositionBlock): string {
   return compositionStyleName(block);
