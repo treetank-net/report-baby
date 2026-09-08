@@ -129,6 +129,10 @@ const targetByFunction = new Map([
   ['document-layout.ts::finalizeDocumentPlan', 'composition/document-layout.ts'],
   ['document-layout.ts::planDocumentOnce', 'composition/document-layout.ts'],
 
+  // movable-placement-validation.ts owns shared preflight validation for
+  // insertion and authored-graphic frames.
+  ['movable-placement-validation.ts::validateMovablePlacementBounds', 'composition/layout/movable-placement-validation.ts'],
+
   // flow-planner.ts: occupancy and page growth
   ['flow-planner.ts::flowLineCollidesWithSlot', 'composition/flow-occupancy.ts'],
   ['flow-planner.ts::blockPlacementCollidesWithSlot', 'composition/flow-occupancy.ts'],
@@ -261,6 +265,7 @@ const responsibilityByFunction = new Map([
   ['placeGraphicsForPage', 'Materialize graphic proposals for one page and register their obstacles.'],
   ['growSlot', 'Apply one legal slot-growth operation and move affected slots.'],
   ['placeStructuredBlock', 'Dispatch one structured block to its atomic or table placement routine.'],
+  ['validateMovablePlacementBounds', 'Validate movable placement frames and candidate counts before document planning.'],
   ['createTextCompositionPlanner', 'Expose candidate planning while retaining the existing planner contract.'],
   ['createCompositionEngine', 'Evaluate candidates, refine legal alternatives, and select the winning plan.'],
 ]);

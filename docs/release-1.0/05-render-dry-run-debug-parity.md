@@ -1,6 +1,7 @@
 # Plan 05 — render, dry_run i debug
 
-Status: punkt 1 wykonany; punkty 2–10 pozostają do domknięcia
+Status: w większości wykonany; wspólny plan render/dry_run/debug i parser PDF
+działają. Pozostają inline runs, gap-tightening oraz pełna własność chrome.
 
 ## Cel
 

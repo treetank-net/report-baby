@@ -1,8 +1,8 @@
 # Plan 11 — domenowe uporządkowanie `server/src`
 
-Status: przyjęty kierunek migracji; najpierw porządkujemy katalogi, potem
-optymalizujemy implementacje. Zmiana nie może usuwać funkcjonalności MCP ani
-opcjonalnego CLI.
+Status: pierwszy etap organizacji i pierwszy przebieg optymalizacji wykonane;
+pozostały jawnie wybrane seam’y composition. Zmiana nie może usuwać
+funkcjonalności MCP ani opcjonalnego CLI.
 
 ## Stan migracji — 2026-09-08
 
@@ -64,7 +64,7 @@ modułach composition, a nie mechaniczne dalsze rozcinanie każdego pliku.
 Weryfikacja tego przebiegu:
 
 - `npx tsc --noEmit` — przechodzi;
-- `node scripts/architecture-check.mjs` — 107 modułów, brak zakazanych cykli;
+- `node scripts/architecture-check.mjs` — 109 modułów, brak zakazanych cykli;
 - `npm run build` — cztery bundle oraz 19 wbudowanych szablonów;
 - `npm run test:composition` na hoście — 13/13 testów przechodzi, w tym oracle,
   obrazy, kontrast, flow redakcyjny i limity stron.
@@ -178,7 +178,7 @@ Niezmienny kontrakt release:
 `composition/layout/flow-text-decision.ts` (588 LOC),
 `brand/context.ts` (456 LOC), `composition/evaluation/scoring.ts` (441 LOC),
 `composition/adapters/page-template.ts` (422 LOC),
-`composition/layout/document-layout.ts` (418 LOC),
+`composition/layout/document-layout.ts` (355 LOC),
 `composition/layout/flow-space.ts` (417 LOC) oraz
 `composition/layout/flow-planner.ts` (408 LOC). `text-planner.ts` i
 `insertion-layout.ts` są fasadami o odpowiednio 154 i 17 LOC.

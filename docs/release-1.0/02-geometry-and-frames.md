@@ -1,6 +1,7 @@
 # Plan 02 — geometria i wspólne ramy
 
-Status: geometria chrome, placementów i kandydatów jest współdzielona i walidowana; pozostały pełne testy wszystkich ram
+Status: w większości wykonany; geometria chrome, placementów i kandydatów jest
+współdzielona i walidowana, a pozostały pełne testy wszystkich ram
 
 ## Cel
 
@@ -15,32 +16,32 @@ reprezentacji i usuwamy powtórne interpretacje.
 
 Geometria przechodzi przez kilka etapów:
 
-1. `template-contract.ts` waliduje i normalizuje template;
-2. `page-geometry.ts` wylicza fizyczną geometrię stron, segmenty, bands,
+1. `template/contracts.ts` waliduje i normalizuje template;
+2. `template/geometry.ts` wylicza fizyczną geometrię stron, segmenty, bands,
    obstacles i continuation;
-3. `page-template.ts` buduje z niej `CompositionTemplate`, slots,
+3. `composition/adapters/page-template.ts` buduje z niej `CompositionTemplate`, slots,
    routes i część reguł insertionów;
 4. planner tworzy faktyczne `flowPlacements` oraz wynikające z kolizji
    `flowBarrierBoxCandidates`;
 5. renderer i debug rysują wynik w osobnych miejscach.
 
-Źródła: [`template-contract.ts`](../../server/src/template-contract.ts),
-[`page-geometry.ts`](../../server/src/page-geometry.ts),
+Źródła: [`template/contracts.ts`](../../server/src/template/contracts.ts),
+[`template/geometry.ts`](../../server/src/template/geometry.ts),
 [`page-template.ts`](../../server/src/composition/adapters/page-template.ts).
 
 ## Mapa odpowiedzialności
 
 | Etap | Właściciel | Wejście | Wynik używany dalej |
 |---|---|---|---|
-| kompilacja template’u | `compileTemplateSource` w `template-contract.ts` | YAML/obiekt template’u | zwalidowany `CompiledTemplate` z normalnymi ramami, flow i slotami |
-| fizyczna geometria strony | `pageGeometryFromTemplate` w `page-geometry.ts` | `CompiledTemplate.page` | `PageGeometry`: margins, content, bands, obstacles, segments i block frames |
+| kompilacja template’u | `compileTemplateSource` w `template/contracts.ts` | YAML/obiekt template’u | zwalidowany `CompiledTemplate` z normalnymi ramami, flow i slotami |
+| fizyczna geometria strony | `pageGeometryFromTemplate` w `template/geometry.ts` | `CompiledTemplate.page` | `PageGeometry`: margins, content, bands, obstacles, segments i block frames |
 | adaptacja do composition | `compositionTemplateFromPageGeometry` w `composition/adapters/page-template.ts` | `CompiledTemplate` + `PageGeometry` | layouts, slots i routes dla pierwszej oraz kolejnych stron |
-| rezerwacja insertionów | `placeInsertionLayer` w `composition/text-planner.ts` | flows, propozycje, slots i pomiary | placements insertionów oraz grafiki będące obstacle dla zwykłego flow |
-| układanie flow | `planFlow` w `composition/text-planner.ts` | route, slots, obstacle i metryki tekstu | linie tekstu, placements i decyzje planera |
-| rejestr miejsc flow | `registerFlowPlacements` w `composition/text-planner.ts` | slots i faktyczne placements | uporządkowany rejestr także pustych miejsc |
-| rozcięcie przy kolizjach | `registerFlowBarrierBoxCandidates` w `composition/text-planner.ts` | flow placements + graphic placements | kandydaci segmentów pomiędzy krawędziami flow i obstacle |
-| legalność | `evaluateCompositionPlan` w `composition/evaluator.ts` | kompletny plan | accepted/rejected i diagnostyka |
-| obserwacja PDF | `drawCompositionDebugOverlay` oraz `renderReportPdfDetailed` w `report-renderer.ts` | wynik planu | zwykły PDF, debug overlay i artefakt do QA |
+| rezerwacja insertionów | `placeInsertionLayer` w `composition/layout/insertion-layout.ts` | flows, propozycje, slots i pomiary | placements insertionów oraz grafiki będące obstacle dla zwykłego flow |
+| układanie flow | `planFlow` w `composition/layout/flow-planner.ts` | route, slots, obstacle i metryki tekstu | linie tekstu, placements i decyzje planera |
+| rejestr miejsc flow | `registerFlowPlacements` w `composition/layout/flow-space.ts` | slots i faktyczne placements | uporządkowany rejestr także pustych miejsc |
+| rozcięcie przy kolizjach | `registerFlowBarrierBoxCandidates` w `composition/layout/flow-space.ts` | flow placements + graphic placements | kandydaci segmentów pomiędzy krawędziami flow i obstacle |
+| legalność | `evaluateCompositionPlan` w `composition/evaluation/evaluator.ts` | kompletny plan | accepted/rejected i diagnostyka |
+| obserwacja PDF | `drawCompositionDebugOverlay` oraz `renderReportPdfDetailed` w `report/renderer.ts` | wynik planu | zwykły PDF, debug overlay i artefakt do QA |
 
 Ta mapa opisuje istniejące funkcje, nie wprowadza nowych encji. Jeżeli kolejny
 etap potrzebuje tej samej informacji, powinien rozszerzyć wynik właściciela,

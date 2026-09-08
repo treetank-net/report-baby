@@ -1,8 +1,8 @@
 # Plan 03 — evaluator i score
 
-Status: hard gate, konfigurowalny score i porównanie kandydatów są
-zaimplementowane i zweryfikowane w eksperymencie 1; wagi pozostają heurystyczne
-i wymagają późniejszej kalibracji na korpusie
+Status: wykonany funkcjonalnie; hard gate, konfigurowalny score i porównanie
+kandydatów są zaimplementowane i zweryfikowane w eksperymencie 1. Wagi
+pozostają heurystyczne i wymagają późniejszej kalibracji na korpusie.
 
 ## Cel
 

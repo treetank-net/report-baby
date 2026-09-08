@@ -1,6 +1,7 @@
 # Plan 09 — ciągłość struktur i formaty obrazów
 
-Status: zaplanowane na końcu release 1.0
+Status: nierozpoczęty; zaplanowany po domknięciu soft insertionów i kalibracji
+wyszukiwania kandydatów.
 
 ## Cel
 

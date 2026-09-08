@@ -1,6 +1,9 @@
 # Release 1.0 — plany wykonawcze
 
-Status: plan do implementacji
+Status: punkty 01–05 są w większości wykonane w ograniczonym zakresie, punkt 06
+jest w większości wykonany, punkty 07–08 pozostają częściowe, a punkt 09 nie
+został rozpoczęty. Organizacja modułów 10–11 została wykonana jako praca
+utrzymaniowa bez zmiany kontraktu MCP/CLI.
 
 Ten katalog rozbija [główny plan release 1.0](../release-1.0-flow-composition-plan.md)
 na osobne dokumenty wykonawcze. Dokumenty opisują istniejące pojęcia: input,
@@ -52,6 +55,23 @@ Chcemy mieć jeden deterministyczny przebieg, w którym:
 Kroki 01–03 są fundamentem. Krok 04 daje pierwszą faktyczną optymalizację.
 Krok 06 nie powinien rozpoczynać się od mechanicznego dzielenia `planFlow`:
 najpierw muszą istnieć testy i działający seam dla pętli.
+
+## Stan wykonania — 2026-09-08
+
+| Punkt | Stan implementacji | Co pozostaje |
+|---|---|---|
+| 01 | w większości wykonany | audyt eksportów, aliasów i pozostałych legacy ścieżek |
+| 02 | w większości wykonany | pełne testy ram chrome i ich wpływu na flow |
+| 03 | wykonany funkcjonalnie | kalibracja wag i przypadki graniczne evaluatora |
+| 04 | wykonany w ograniczonym zakresie | tylko jawne, deterministyczne ruchy; bez globalnego solvera |
+| 05 | w większości wykonany | inline runs, gap-tightening i pełna własność chrome w planie |
+| 06 | w większości wykonany | utrzymanie publicznego gate’u; znany, wcześniejszy `EMPTY_FLOW_SLOT`; dalsze seam’y tylko z konkretnym kontraktem |
+| 07 | częściowo wykonany | wspólna polityka soft insertionów oraz pełny inline AST/runs |
+| 08 | częściowo wykonany | właściwy benchmark głębokości wyszukiwania, kalibracja i formaty JPEG/SVG/WebP/AVIF w realnym pipeline |
+| 09 | nierozpoczęty | ciągłość list/tabel, WebP/AVIF i budżet czasu feedbacku |
+
+Ta tabela jest nadrzędnym skrótem statusu. Szczegółowe dokumenty zachowują
+historię decyzji i kryteria.
 
 ## Dokumenty
 

@@ -1,9 +1,9 @@
 # Plan 08 — głębokość wyszukiwania kandydatów
 
-Status: eksperyment screeningu, renderer-neutralny sampler, próbkowanie komórek
+Status: częściowo wykonany; renderer-neutralny sampler, próbkowanie komórek
 glifów dla całego korpusu oraz integracja PNG z asset adapterem i evaluatorem
-wykonane; kalibracja wag, JPEG/SVG i dokładna weryfikacja finalnego PDF-a
-pozostają otwarte
+działają. Pełny eksperyment głębokości wyszukiwania, kalibracja wag, pozostałe
+formaty i dokładna weryfikacja finalnego PDF-a pozostają otwarte.
 
 ## Cel
 

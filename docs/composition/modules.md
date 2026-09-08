@@ -23,6 +23,7 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/contracts/model.ts` | Renderer-neutral document and template types | all composition modules | planning decisions or mutable runtime state |
 | `composition/adapters/page-template.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
 | `composition/layout/document-layout.ts` | Full document planning cycle: preflight, obstacle reservation, flow ordering and finalization | `composition/layout/text-planner.ts`, composition engine | individual line decisions, scoring, PDF drawing |
+| `composition/layout/movable-placement-validation.ts` | Shared preflight validation of configured bounds and candidate counts for movable insertion and graphic proposals | `composition/layout/document-layout.ts` | candidate generation, page routing, scoring, rendering |
 | `composition/layout/flow-planner.ts` | One flow's cursor, page/slot target resolution, text and structured-block dispatch | `document-layout.ts`, flow tests | candidate ranking, evaluator scoring, PDF drawing |
 | `composition/layout/flow-text-decision.ts` | Text wrapping inputs, keep rules, line-capacity decisions and placement outcomes | `flow-planner.ts` | page materialization outside its typed state, candidate ranking, PDF drawing |
 | `composition/layout/text-planner.ts` | Candidate planning facade and refinement orchestration | `composition/adapters/text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks |
@@ -94,7 +95,8 @@ renderer remains responsible for page chrome and the final PDF buffer.
 
 Extract a module only when it removes a responsibility from a caller while
 keeping a smaller interface. The safe seams currently are deterministic
-movable-placement candidate generation, renderer-neutral wrapping,
+movable-placement candidate generation, movable-placement preflight validation,
+renderer-neutral wrapping,
 flow-barrier projection, glyph-object resolution and completed-plan tracing.
 The latter transforms
 existing text or graphic geometry into painted decoration placements; it does

@@ -1,8 +1,35 @@
 # Plan 06 — utrzymywalność planera
 
-Status: mapa modułów, integracja runtime oraz wydzielone odpowiedzialności;
-`planFlow` ma własny moduł, a dalsze wydzielanie wymaga testów zachowania po
-każdym kroku
+Status: w większości wykonany; `planFlow` ma własny moduł, a odpowiedzialności
+zostały przeniesione do domenowych seamów. Pozostała weryfikacja publicznego
+gate’u oraz audyt kilku modułów, bez mechanicznego cięcia po LOC.
+
+## Ocena kryteriów — 2026-09-08
+
+Punkt 06 jest w większości zrealizowany, ale nie jest jeszcze formalnie
+zamknięty jako cały release. Aktualny inventory obejmuje 403 nazwane funkcje w
+44 modułach i pokazuje następujące właścicielstwa:
+
+| Moduł | LOC | Funkcje | Ocena odpowiedzialności |
+| --- | ---: | ---: | --- |
+| `composition/layout/flow-planner.ts` | 408 | 15 | orkiestracja jednego flow; nie jest już właścicielem pomiaru ani polityki keep |
+| `composition/layout/flow-text-decision.ts` | 588 | 25 | spójna polityka decyzji tekstowych; długość wynika z wielu jawnych reguł, nie z jednej funkcji-goda |
+| `composition/layout/document-layout.ts` | 355 | 16 | cykl jednego planu dokumentu od preflight do finalizacji |
+| `composition/evaluation/legality.ts` | 659 | 28 | jeden głęboki moduł twardej legalności; nie rozcinamy go bez niezależnego kontraktu |
+| `composition/evaluation/scoring.ts` | 441 | 18 | jeden moduł jakości legalnego planu; składniki są jawnie nazwane |
+
+Wniosek: kryterium utrzymywalności seamów jest spełnione. Nie spełniamy jeszcze
+kryterium „wszystkie publiczne gate’y zielone”, ponieważ pełny `npm test` nadal
+dochodzi do znanego `EMPTY_FLOW_SLOT` w `public MCP behavior`; ten sam błąd
+odtwarza się na czystym checkpointcie `957f957`, więc nie jest regresją tej
+migracji. Nie traktujemy go jako argumentu za kolejnym podziałem modułów.
+
+Następny konkretny seam został wydzielony do
+`composition/layout/movable-placement-validation.ts`: wspólna walidacja ram i
+liczby kandydatów dla insertionów i autorskich grafik. Dokument-layout nadal
+decyduje, kiedy uruchomić preflight, a nowy moduł odpowiada wyłącznie za tę
+regułę. Po tym seamie nie ma uzasadnienia do kolejnego podziału
+`flow-planner.ts` ani `flow-text-decision.ts` bez nowego testu kontraktu.
 
 ## Wykonane w pierwszym kroku
 
@@ -77,8 +104,8 @@ wrappingu zmieni routing grafiki albo ochronę nagłówka.
 
 ## Stan obecny
 
-`server/src/composition/text-planner.ts` ma około 2240 linii. `planFlow` ma
-około 666 linii i łączy m.in. cursor po stronie i route, insertiony, kolizje,
+Po migracji `text-planner.ts` jest fasadą (154 LOC), a `planFlow` ma własny
+moduł (408 LOC) i łączy m.in. cursor po stronie i route, insertiony, kolizje,
 grafiki, tabele, growth, wrapping, heading keeps, fragment limits, placements,
 reflow i diagnostykę.
 
@@ -196,11 +223,15 @@ przekroczenia granicy odpowiedzialności, nigdy celem samym w sobie.
 Nie wprowadzamy nowych encji domenowych i nie dzielimy pliku wyłącznie po to,
 aby każda funkcja miała mniej niż 100 linii.
 
-## Ponowna analiza flow-plannera — 2026-09-07
+## Analiza flow-plannera przed migracją — 2026-09-07
 
-Po ponownym przejściu przez [flow-planner.ts](/home/jm/projects/personal/report-baby/server/src/composition/flow-planner.ts) widać, że nie mamy jednego algorytmu, tylko kilka różnych odpowiedzialności sklejonych w jednym pliku.
+Poniższy opis jest historycznym stanem sprzed przeniesienia modułów. Nie należy
+go czytać jako aktualnego rozmiaru plików. Po ponownym przejściu przez
+[`flow-planner.ts`](/home/jm/projects/personal/report-baby/server/src/composition/layout/flow-planner.ts)
+widać, że nie mamy jednego algorytmu, tylko kilka różnych odpowiedzialności
+sklejonych w jednym przebiegu.
 
-Obecnie plik ma 1443 linie, ale logicznie można go opisać tak:
+W tamtym momencie plik miał 1443 linie; logicznie można go było opisać tak:
 
 ```text
 planFlow

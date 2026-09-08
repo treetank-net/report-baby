@@ -1,7 +1,16 @@
 # Plan 07 — block kinds i miękkie insertiony
 
-Status: mapa obecnych block kinds wykonana; soft insertiony pozostają kolejnym
-etapem po ustabilizowaniu planów 01–06
+Status: częściowo wykonany; mapa block kinds, ścieżka authored graphics oraz
+ograniczone ruchome insertiony działają. Wspólna polityka soft insertionów i
+pełne zachowanie inline AST/runs pozostają otwarte.
+
+Aktualny zakres nie traktuje `quote` jako ścieżki legacy w `main`: quote jest
+tekstem dostarczanym przez nazwany, nie-main flow z zadeklarowanymi
+`insertionSlots`. `main` nie może ani zawierać quote, ani deklarować
+`insertionSlots`; te reguły są sprawdzane w preflight i przez evaluator.
+Wspólna walidacja ram insertionów i grafik znajduje się w
+`composition/layout/movable-placement-validation.ts`, ale nie oznacza jeszcze,
+że każdy block kind może być przemieszczany.
 
 ## Cel
 

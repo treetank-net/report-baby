@@ -1,9 +1,8 @@
 # Plan 04 — pętla planner–evaluator
 
-Status: ograniczona pętla selekcji kandydatów jest zaimplementowana i
-zweryfikowana dla ruchomego cytatu; globalne feedback-driven rewrites pozostają
-poza zakresem eksperymentu 1. Najbliższym priorytetem jest podłączenie tej
-możliwości do normalnego renderowania oraz opisanie dozwolonych ruchów elementu.
+Status: wykonany w ograniczonym zakresie; selekcja i refinement kandydatów są
+podłączone do normalnego renderowania dla jawnych, ruchomych insertionów i
+grafik. Globalne feedback-driven rewrites pozostają poza zakresem.
 
 ## Cel
 

@@ -1,6 +1,8 @@
 # Plan 10 — kategorie i migracja modułów composition
 
-Status: przyjęty kierunek, migracja rozpoczęta po zatwierdzeniu planu
+Status: w większości wykonany; docelowa mapa `composition/` i migracja
+adapterów zostały przeprowadzone. Pozostaje audyt zachowania i świadome
+usunięcia legacy.
 
 ## Cel
 
@@ -42,6 +44,7 @@ server/src/composition/
 │   ├── document-layout.ts
 │   ├── text-planner.ts
 │   ├── planner-candidates.ts
+│   ├── movable-placement-validation.ts
 │   ├── graphic-planning.ts
 │   ├── structured-block-placement.ts
 │   └── glyph-objects.ts
@@ -134,6 +137,8 @@ Stan i reguły układania dokumentu.
 - `document-layout.ts` — pełny cykl planowania dokumentu;
 - `text-planner.ts` — publiczna orkiestracja kandydatów i wyboru planu;
 - `planner-candidates.ts` — tworzenie i doprecyzowanie wariantów;
+- `movable-placement-validation.ts` — wspólna walidacja ram i liczby kandydatów
+  dla ruchomych insertionów i autorskich grafik; nie generuje wariantów.
 - `graphic-planning.ts` — planowanie grafik;
 - `structured-block-placement.ts` — placement tabel, KPI i innych bloków
   atomowych.
@@ -379,7 +384,7 @@ Obecny snapshot obejmuje 406 nazwanych funkcji w 39 plikach. Tabela rozmiarów
 jest dolną granicą kodu funkcji, a nie obietnicą redukcji LOC: o przeniesieniu
 decyduje wspólna wiedza domenowa i kształt zależności. Fizycznie, razem z
 adnotacjami katalogowymi, największe aktualne moduły to
-`evaluation/legality.ts` (659 LOC), `adapters/page-template.ts` (634 LOC),
+`evaluation/legality.ts` (659 LOC), `adapters/page-template.ts` (422 LOC),
 `flow-text-decision.ts` (588 LOC), `text/text-layout.ts` (525 LOC),
 `insertion-layout.ts` (455 LOC), `flow-space.ts` (415 LOC) i
 `flow-planner.ts` (408 LOC). Dalsza praca ma badać duplikaty obliczeń,

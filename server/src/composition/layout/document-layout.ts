@@ -26,75 +26,12 @@ import {
   reserveInsertionObstacles,
 } from './insertion-layout.js';
 import { planFlow } from './flow-planner.js';
-import type { MovablePlacementBounds, TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
+import type { TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
 import type {
   PlannedGraphic,
   PlannedInsertion,
 } from './planner-candidates.js';
-
-/** Validate one family of movable placement frames and emit its diagnostics. */
-/**
- * @planner-target composition/layout/document-layout.ts
- * @planner-responsibility Keep the current validateMovableBounds implementation intact until its target seam is extracted.
- */
-function validateMovableBounds(
-  proposals: Map<string, { box: { x: number; y: number; width: number; height: number } }>,
-  policies: Record<string, MovablePlacementBounds>,
-  plan: CompositionPlan,
-  kind: 'insertion' | 'graphic',
-): void {
-  for (const [key, movable] of Object.entries(policies)) {
-    const proposal = proposals.get(key);
-    if (!proposal) {
-      plan.diagnostics.push(diagnostic(
-        'error',
-        `MOVABLE_${kind.toUpperCase()}_TARGET_NOT_FOUND`,
-        `Movable ${kind} policy '${key}' does not match a planned ${kind}.`,
-        { details: { key } },
-      ));
-      continue;
-    }
-    const { bounds } = movable;
-    const validNumbers = [bounds?.x, bounds?.y, bounds?.width, bounds?.height].every(Number.isFinite);
-    const validShape = Boolean(bounds && bounds.width > 0 && bounds.height > 0);
-    const containsMeasuredBox = Boolean(bounds && proposal.box.width <= bounds.width && proposal.box.height <= bounds.height);
-    if (!validNumbers || !validShape || !containsMeasuredBox || !Number.isInteger(movable.candidateCount) || movable.candidateCount < 1) {
-      const noun = kind === 'insertion' ? 'insertion' : 'graphic';
-      plan.diagnostics.push(diagnostic(
-        'error',
-        `MOVABLE_${kind.toUpperCase()}_BOUNDS_INVALID`,
-        `Movable ${kind} frame '${key}' cannot contain its measured ${noun} box or candidate count.`,
-        { details: { key, bounds, measuredBox: proposal.box, candidateCount: movable.candidateCount } },
-      ));
-    }
-  }
-}
-
-/** Validate movable insertion frames. */
-/**
- * @planner-target composition/layout/document-layout.ts
- * @planner-responsibility Keep the current validateMovableInsertionBounds implementation intact until its target seam is extracted.
- */
-function validateMovableInsertionBounds(
-  insertionProposals: Map<string, PlannedInsertion>,
-  policy: TextCompositionPlannerPolicy,
-  plan: CompositionPlan,
-): void {
-  validateMovableBounds(insertionProposals, policy.movableInsertionBounds ?? {}, plan, 'insertion');
-}
-
-/** Validate movable graphic frames. */
-/**
- * @planner-target composition/layout/document-layout.ts
- * @planner-responsibility Keep the current validateMovableGraphicBounds implementation intact until its target seam is extracted.
- */
-function validateMovableGraphicBounds(
-  graphicProposals: Map<string, PlannedGraphic>,
-  policy: TextCompositionPlannerPolicy,
-  plan: CompositionPlan,
-): void {
-  validateMovableBounds(graphicProposals, policy.movableGraphicBounds ?? {}, plan, 'graphic');
-}
+import { validateMovablePlacementBounds } from './movable-placement-validation.js';
 
 /** Create an empty plan with all renderer-facing collections initialized. */
 /**
@@ -254,8 +191,8 @@ function preparePlanForLayout(
   plan.movableInsertionFrames = movableInsertionFramesForPlan(policy, insertionProposals);
   plan.movableGraphicFrames = movableGraphicFramesForPlan(policy, graphicProposals);
   validateQuoteFlowContracts(document, template, plan);
-  validateMovableInsertionBounds(insertionProposals, policy, plan);
-  validateMovableGraphicBounds(graphicProposals, policy, plan);
+  validateMovablePlacementBounds(insertionProposals, policy.movableInsertionBounds ?? {}, plan, 'insertion');
+  validateMovablePlacementBounds(graphicProposals, policy.movableGraphicBounds ?? {}, plan, 'graphic');
   validateGrowthPolicies(template, plan);
   recordPlanningPhase(plan, 'preflight', planHasErrors(plan) ? 'failed' : 'completed', { layoutCount: template.layouts.length, flowCount: Object.keys(document.flows).length });
 }

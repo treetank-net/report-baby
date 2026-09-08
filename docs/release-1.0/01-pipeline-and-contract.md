@@ -1,6 +1,7 @@
 # Plan 01 — pipeline i kontrakt
 
-Status: częściowo wykonany; pozostał audyt publicznego kontraktu
+Status: w większości wykonany; pozostał audyt publicznego kontraktu i legacy
+ścieżek
 
 ## Uruchamianie testów
 
@@ -69,16 +70,18 @@ Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
 
 - `createCompositionEngine()` wywołuje planner, a następnie evaluator jeden
   raz: [`composition-engine.ts`](../../server/src/composition/composition-engine.ts).
-- `planReportComposition()` ignoruje jednak otrzymane `result.evaluation` i
-  wywołuje `evaluateCompositionPlan()` ponownie:
+- `planReportComposition()` zwraca wybraną `result.evaluation` z engine’u i
+  nie wywołuje evaluatora ponownie:
   [`report-composition-entrypoint.ts`](../../server/src/composition/report-composition-entrypoint.ts#L57-L93).
-- `dry_run` korzysta z `resolveReportPlanOnly()`, a zwykły render z
-  `planReportComposition()`: [`render-tools.ts`](../../server/src/tools/render-tools.ts#L188-L216).
+- `dry_run` i zwykły render korzystają ze wspólnego przygotowania composition;
+  `resolveReportPlanOnly()` pozostaje wyłącznie ścieżką legacy odpowiedzi.
+- Rejestrator narzędzi znajduje się w
+  [`interfaces/mcp/render-tools.ts`](../../server/src/interfaces/mcp/render-tools.ts).
 - `report-composition-entrypoint.ts` nie jest drugim rendererem: jest
   produkcyjnym punktem wejścia, który składa input, metryki jsPDF, policy
   planera i capability renderera.
-- Osobny contract test nie dochodzi obecnie do asercji z powodu błędu
-  tymczasowego bundla ESM: `Dynamic require of "process" is not supported`.
+- Contract test dochodzi do asercji i potwierdza pojedynczą ewaluację planu;
+  bundlowanie testów używa CommonJS.
 
 ## Kroki
 
