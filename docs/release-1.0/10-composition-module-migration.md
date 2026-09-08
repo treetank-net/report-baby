@@ -368,10 +368,11 @@ node server/scripts/planner-function-dependency-report.mjs \
 Obecny snapshot obejmuje 406 nazwanych funkcji w 39 plikach. Tabela rozmiarów
 jest dolną granicą kodu funkcji, a nie obietnicą redukcji LOC: o przeniesieniu
 decyduje wspólna wiedza domenowa i kształt zależności. Fizycznie, razem z
-adnotacjami katalogowymi, największe aktualne moduły to `flow-text-decision.ts`
-(588 LOC), `flow-space.ts` (423 LOC), `text/text-layout.ts` (525 LOC),
-`insertion-layout.ts` (455 LOC), `flow-planner.ts` (408 LOC) i
-`evaluation/legality.ts` (659 LOC). Dalsza praca ma badać duplikaty obliczeń,
+adnotacjami katalogowymi, największe aktualne moduły to
+`evaluation/legality.ts` (659 LOC), `adapters/page-template.ts` (634 LOC),
+`flow-text-decision.ts` (588 LOC), `text/text-layout.ts` (525 LOC),
+`insertion-layout.ts` (455 LOC), `flow-space.ts` (415 LOC) i
+`flow-planner.ts` (408 LOC). Dalsza praca ma badać duplikaty obliczeń,
 nie ciąć funkcji mechanicznie tylko po to, aby zmniejszyć liczbę linii. Po
 usunięciu powtórzonych projekcji i wrapperów inventory wykazuje jedną grupę
 potencjalnego duplikatu (dwa typowane wrappery kandydatów), siedem funkcji
