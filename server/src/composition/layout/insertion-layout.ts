@@ -11,7 +11,6 @@ import type {
   CompositionSlot,
   CompositionTextMetrics,
 } from '../engine.js';
-import { insertionKey } from './insertion-order.js';
 import { diagnostic, addResidual } from '../planning-records.js';
 import { ensurePage, routeLayout } from './page-state.js';
 import { rectBottom } from '../geometry/rectangles.js';
@@ -30,7 +29,7 @@ type InsertionTextMeasurement = {
 
 /** Measure insertion text once so proposal fitting and placement share the same calculator. */
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Keep the current measureInsertionText implementation intact until its target seam is extracted.
  */
 function measureInsertionText(
@@ -60,7 +59,7 @@ function measureInsertionText(
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Fit one insertion proposal to its measured content.
  */
 function fitInsertionProposal(
@@ -95,7 +94,7 @@ type InsertionSlotCandidate = {
 };
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Enumerate quote-eligible insertion slots in reading order.
  */
 function insertionSlotCandidates(
@@ -117,7 +116,7 @@ function insertionSlotCandidates(
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Reconstruct insertion proposals from a previous plan.
  */
 export function insertionProposalsFromPlan(
@@ -167,7 +166,7 @@ export function insertionProposalsFromPlan(
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Seed hard insertion proposals in reading order.
  */
 export function seedInsertionProposals(
@@ -192,7 +191,7 @@ export function seedInsertionProposals(
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Reserve one insertion obstacle before ordinary flow placement.
  */
 function reserveInsertionObstacle(
@@ -229,7 +228,7 @@ function reserveInsertionObstacle(
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Collapse open insertion slots without an authored proposal.
  */
 function collapseUnassignedInsertionSlots(
@@ -256,7 +255,7 @@ function collapseUnassignedInsertionSlots(
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Reserve planned insertion obstacles and collapse unused slots.
  */
 export function reserveInsertionObstacles(
@@ -278,7 +277,7 @@ type InsertionBlockTarget = {
 };
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Resolve the planned page slot for one authored insertion.
  */
 function resolveInsertionBlockTarget(
@@ -311,7 +310,7 @@ function resolveInsertionBlockTarget(
 type MeasuredInsertionBlock = InsertionTextMeasurement;
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Measure one insertion against its reserved obstacle box.
  */
 function measureInsertionBlock(
@@ -323,7 +322,7 @@ function measureInsertionBlock(
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Apply fit-content sizing to a measured insertion slot.
  */
 function fitInsertionSlotContent(
@@ -343,7 +342,7 @@ function fitInsertionSlotContent(
 
 /** Synchronize an insertion obstacle after fit-content sizing. */
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Keep the current synchronizeInsertionObstacle implementation intact until its target seam is extracted.
  */
 function synchronizeInsertionObstacle(plan: CompositionPlan, target: InsertionBlockTarget, block: CompositionBlock): void {
@@ -352,7 +351,7 @@ function synchronizeInsertionObstacle(plan: CompositionPlan, target: InsertionBl
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Validate, measure, and materialize one planned insertion block.
  */
 function placeInsertionBlock(
@@ -382,7 +381,7 @@ function placeInsertionBlock(
 }
 
 /**
- * @planner-target composition/insertion-planning.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Materialize all planned insertion text before ordinary flow placement.
  */
 export function placeInsertionLayer(
@@ -404,4 +403,41 @@ export function placeInsertionLayer(
     }
   }
   return placed;
+}
+
+/** Build the stable key shared by insertion proposals and authored blocks. */
+export function insertionKey(flowId: string, blockId: string): string {
+  return `${flowId}:${blockId}`;
+}
+
+/** Find the next planned insertion that must remain below current text. */
+export function nextInsertionProposal(
+  flow: CompositionFlowRoute,
+  blocks: CompositionBlock[],
+  blockIndex: number,
+  page: number,
+  proposals: Map<string, PlannedInsertion>,
+  flowId: string,
+  afterY = Number.NEGATIVE_INFINITY,
+): PlannedInsertion | undefined {
+  if ((flow.insertionSlots?.length ?? 0) === 0) return undefined;
+  return blocks
+    .slice(blockIndex + 1)
+    .filter((block) => block.role === 'quote')
+    .map((block) => proposals.get(insertionKey(flowId, block.id)))
+    .filter((proposal): proposal is PlannedInsertion => proposal !== undefined && proposal.page === page && proposal.box.y > afterY + Number.EPSILON)
+    .sort((left, right) => left.box.y - right.box.y)[0];
+}
+
+/** Return the next insertion's vertical boundary, if one exists. */
+export function nextInsertionBoundary(
+  flow: CompositionFlowRoute,
+  blocks: CompositionBlock[],
+  blockIndex: number,
+  page: number,
+  proposals: Map<string, PlannedInsertion>,
+  flowId: string,
+  afterY = Number.NEGATIVE_INFINITY,
+): number | undefined {
+  return nextInsertionProposal(flow, blocks, blockIndex, page, proposals, flowId, afterY)?.box.y;
 }

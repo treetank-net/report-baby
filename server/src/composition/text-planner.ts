@@ -20,7 +20,7 @@ import {
 import {
   insertionProposalsFromPlan,
   seedInsertionProposals,
-} from './layout/insertion-planning.js';
+} from './layout/insertion-layout.js';
 import { seedGraphicProposals } from './graphic-planning.js';
 import { createPlan, planDocumentOnce } from './document-layout.js';
 import type { TextCompositionPlannerPolicy } from './planner-policy.js';
