@@ -79,6 +79,13 @@ definiuje już funkcji wewnątrz `compositionTemplateFromPageGeometry` ani nie
 duplikuje mapowania text/block slots. Test adaptera zachowuje dotychczasowe dwa
 layouty i 142 linie planu.
 
+W kolejnym kroku `composition/text/text-placement.ts` (138 LOC) przejął
+materializację linii, obliczenie boxu placementu i aktualizację stanu slotu.
+`text-layout.ts` ma teraz 369 LOC i odpowiada za wrapping, przeszkody, metryki
+tekstu oraz liczbę dostępnych linii; `text-layout-contracts.ts` (10 LOC) jest
+wspólnym kontraktem `WrappedLine`. Fasada eksportowa zachowuje dotychczasowe
+importy `placeLines` i `WrappedLine`, bez cyklu zależności.
+
 ## Kontekst produktu
 
 `report-baby` jest przede wszystkim bundlowanym serwerem MCP. CLI jest drugim

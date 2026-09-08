@@ -1,31 +1,20 @@
 import type {
   CompositionBlock,
   CompositionRect,
-  CompositionSlotTemplate,
 } from '../contracts/model.js';
 import type {
   CompositionFlowBarrierBoxCandidate,
   CompositionGraphicPlacement,
-  CompositionLine,
-  CompositionPlacement,
-  CompositionSlot,
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
-import { glyphSamplingBoxes } from '../geometry/glyph-geometry.js';
 import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import { compositionStyleName } from './style-name.js';
 import { wordsOf } from './tokenization.js';
-
-export interface WrappedLine {
-  text: string;
-  naturalWidth: number;
-  startWord: number;
-  endWord: number;
-  x: number;
-  width: number;
-  lineOffset: number;
-}
+import type { WrappedLine } from './text-layout-contracts.js';
+export { placeLines } from './text-placement.js';
+export type { TextPlacementPage } from './text-placement.js';
+export type { WrappedLine } from './text-layout-contracts.js';
 
 interface Interval {
   start: number;
@@ -377,149 +366,4 @@ export function wrapBlock(
  */
 export function wordsForBlock(block: CompositionBlock): string[] {
   return wordsOf(textOf(block));
-}
-
-export interface TextPlacementPage {
-  page: number;
-  slots: Map<string, CompositionSlot>;
-}
-
-type LinePlacementGeometry = {
-  firstY: number;
-  lastBottom: number;
-  left: number;
-  right: number;
-  verticalOffset: number;
-};
-
-/**
- * @planner-target composition/text/text-layout.ts
- * @planner-responsibility Keep the current linePlacementGeometry implementation intact until its target seam is extracted.
- */
-function linePlacementGeometry(
-  slot: CompositionSlot,
-  definition: CompositionSlotTemplate,
-  lines: WrappedLine[],
-  lineHeightValue: number,
-  padding: { top: number; bottom: number },
-): LinePlacementGeometry {
-  const box = slot.box;
-  const first = lines[0];
-  const last = lines.at(-1)!;
-  const contentHeight = (last.lineOffset - first.lineOffset + 1) * lineHeightValue;
-  const freeHeight = Math.max(0, box.height - padding.top - padding.bottom - contentHeight);
-  const verticalOffset = definition.verticalAlign === 'middle'
-    ? freeHeight / 2
-    : definition.verticalAlign === 'bottom'
-      ? freeHeight
-      : 0;
-  return {
-    firstY: box.y + padding.top + first.lineOffset * lineHeightValue + verticalOffset,
-    lastBottom: box.y + padding.top + (last.lineOffset + 1) * lineHeightValue + verticalOffset,
-    left: Math.min(...lines.map((line) => line.x)),
-    right: Math.max(...lines.map((line) => line.x + line.width)),
-    verticalOffset,
-  };
-}
-
-/**
- * @planner-target composition/text/text-layout.ts
- * @planner-responsibility Keep the current alignedLineX implementation intact until its target seam is extracted.
- */
-function alignedLineX(definition: CompositionSlotTemplate, line: WrappedLine): number {
-  return definition.textAlign === 'right'
-    ? line.x + line.width - line.naturalWidth
-    : definition.textAlign === 'center'
-      ? line.x + (line.width - line.naturalWidth) / 2
-      : line.x;
-}
-
-/**
- * @planner-target composition/text/text-layout.ts
- * @planner-responsibility Keep the current appendPlacedLines implementation intact until its target seam is extracted.
- */
-function appendPlacedLines(
-  pageState: TextPlacementPage,
-  definition: CompositionSlotTemplate,
-  block: CompositionBlock,
-  metrics: CompositionTextMetrics,
-  flowId: string,
-  routeIndex: number | undefined,
-  lines: WrappedLine[],
-  lineHeightValue: number,
-  padding: { top: number; bottom: number },
-  verticalOffset: number,
-  outputLines: CompositionLine[],
-  layer: 'flow' | 'insertion',
-): void {
-  const slot = pageState.slots.get(definition.id)!;
-  lines.forEach((line) => {
-    const lineY = slot.box.y + padding.top + line.lineOffset * lineHeightValue + verticalOffset;
-    const textX = alignedLineX(definition, line);
-    outputLines.push({
-      blockId: block.id,
-      flowId,
-      slotId: slot.id,
-      page: pageState.page,
-      ...(routeIndex === undefined ? {} : { routeIndex }),
-      text: line.text,
-      box: {
-        x: line.x,
-        y: lineY,
-        width: line.width,
-        height: lineHeightValue,
-      },
-      ...(definition.textAlign ? { textAlign: definition.textAlign } : {}),
-      naturalWidth: line.naturalWidth,
-      startWord: line.startWord,
-      endWord: line.endWord,
-      glyphSamplingBoxes: glyphSamplingBoxes(metrics, block, line.text, textX, lineY, line.naturalWidth, lineHeightValue),
-      ...(layer === 'flow' ? {} : { layer }),
-    });
-  });
-}
-
-/**
- * @planner-target composition/text/text-layout.ts
- * @planner-responsibility Keep the current markLinePlacementOccupancy implementation intact until its target seam is extracted.
- */
-function markLinePlacementOccupancy(slot: CompositionSlot, lastBottom: number): void {
-  slot.state = lastBottom >= rectBottom(slot.box) ? 'exhausted' : 'partial';
-}
-
-/** Place wrapped lines, then update slot occupancy. */
-/**
- * @planner-target composition/text/text-layout.ts
- * @planner-responsibility Keep the current placeLines implementation intact until its target seam is extracted.
- */
-export function placeLines(
-  pageState: TextPlacementPage,
-  definition: CompositionSlotTemplate,
-  block: CompositionBlock,
-  metrics: CompositionTextMetrics,
-  flowId: string,
-  routeIndex: number | undefined,
-  lines: WrappedLine[],
-  lineHeightValue: number,
-  placements: CompositionPlacement[],
-  outputLines: CompositionLine[],
-  layer: 'flow' | 'insertion' = 'flow',
-  padding: { top: number; bottom: number } = { top: 0, bottom: 0 },
-): void {
-  const slot = pageState.slots.get(definition.id);
-  if (!slot || lines.length === 0) return;
-  const geometry = linePlacementGeometry(slot, definition, lines, lineHeightValue, padding);
-  placements.push({
-    id: `placement:${placements.length + 1}`,
-    blockId: block.id,
-    slotId: slot.id,
-    page: pageState.page,
-    ...(routeIndex === undefined ? {} : { routeIndex }),
-    box: { x: geometry.left, y: geometry.firstY, width: geometry.right - geometry.left, height: geometry.lastBottom - geometry.firstY },
-    startWord: lines[0].startWord,
-    endWord: lines.at(-1)!.endWord,
-    ...(layer === 'flow' ? {} : { layer }),
-  });
-  appendPlacedLines(pageState, definition, block, metrics, flowId, routeIndex, lines, lineHeightValue, padding, geometry.verticalOffset, outputLines, layer);
-  markLinePlacementOccupancy(slot, geometry.lastBottom);
 }
