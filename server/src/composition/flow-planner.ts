@@ -33,7 +33,7 @@ import { wordsForBlock } from './text/text-measurement.js';
 import type { wrapBlock } from './text/text-measurement.js';
 import { ensurePage, routeSlots } from './layout/page-state.js';
 import { placeLines } from './text/text-placement.js';
-import { slotCollidesWithPlacedBlock } from './layout/flow-occupancy.js';
+import { slotCollidesWithPlacedBlock } from './layout/flow-space.js';
 import { placeStructuredBlock } from './structured-block-placement.js';
 import { addResidual, addTableResidual, diagnostic, recordFlowDecision } from './planning-records.js';
 

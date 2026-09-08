@@ -3,9 +3,7 @@ import type {
   CompositionRect,
 } from './model.js';
 import type { CompositionPlan } from './engine.js';
-import {
-  flowBarrierBoxCandidatesForSlot,
-} from './layout/flow-barriers.js';
+import { flowBarrierBoxCandidatesForSlot } from './layout/flow-space.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,
@@ -16,7 +14,7 @@ import {
   flowingTextBottom,
   occupiedBottomInOverlappingSlots,
   previousBlockInSlot,
-} from './layout/flow-occupancy.js';
+} from './layout/flow-space.js';
 import { advanceCursor, growSlot } from './layout/page-state.js';
 import { availableLineCount } from './text/line-capacity.js';
 import { obstructionAcrossLineBands } from './text/text-wrapping.js';

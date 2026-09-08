@@ -19,7 +19,7 @@ import type {
   FlowTarget,
 } from './contracts/flow-planning.js';
 import { advanceCursor } from './layout/page-state.js';
-import { contentStartBottom, previousBlockInSlot } from './layout/flow-occupancy.js';
+import { contentStartBottom, previousBlockInSlot } from './layout/flow-space.js';
 import { growSlot } from './layout/page-state.js';
 
 /**

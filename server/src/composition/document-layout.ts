@@ -10,7 +10,7 @@ import type {
   CompositionTextMetrics,
 } from './engine.js';
 import { placeGlyphObjects } from './glyph-objects.js';
-import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './layout/flow-barriers.js';
+import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './layout/flow-space.js';
 import { recordPlanningPhase, tracePlan } from './planning-trace.js';
 import { diagnostic } from './planning-records.js';
 import {
