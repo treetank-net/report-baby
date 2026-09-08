@@ -1,6 +1,6 @@
 import type { CompositionBlock, CompositionDocument } from '../model.js';
 
-import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from '../engine.js';
+import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from '../contracts/engine-contracts.js';
 
 import { allLines, firstVisualPlacement, slotFor, visualOrderRegressed, type VisualPlacementKey } from './plan-queries.js';
 import { fitsInside, geometryTolerance } from './legality-geometry.js';

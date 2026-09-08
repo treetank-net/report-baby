@@ -9,7 +9,7 @@ import { pageGeometryFromTemplate, type PageGeometry } from './page-geometry.js'
 import { resolveReportPlan } from './report-plan.js';
 import type { ReportCompositionResult } from './composition/report-composition-entrypoint.js';
 import { compositionDocumentFromInput } from './composition/input.js';
-import type { CompositionBox, CompositionPageChrome, CompositionPlan } from './composition/engine.js';
+import type { CompositionBox, CompositionPageChrome, CompositionPlan } from './composition/contracts/engine-contracts.js';
 import { assertReportPlan } from './report-plan-assertions.js';
 import { installReportDrawingRecorder, type ReportDrawing } from './report-drawing-recorder.js';
 import { pdfFont, readableTextColor } from './render-primitives.js';

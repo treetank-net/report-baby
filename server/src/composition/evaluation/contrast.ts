@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { CompositionBox, CompositionGlyphSamplingBox, CompositionPlan } from '../engine.js';
+import type { CompositionBox, CompositionGlyphSamplingBox, CompositionPlan } from '../contracts/engine-contracts.js';
 import { fitContainBox, imagePixelAtPoint } from '../geometry/visual-geometry.js';
 
 export type CompositionContrastStatus = 'measured' | 'unknown';

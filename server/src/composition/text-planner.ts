@@ -3,7 +3,7 @@ import type {
   CompositionPlan,
   CompositionPlanner,
   CompositionTextMetrics,
-} from './engine.js';
+} from './contracts/engine-contracts.js';
 import { diagnostic } from './planning-records.js';
 import { recordPlanningPhase } from './planning-trace.js';
 import {

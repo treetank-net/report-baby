@@ -4,7 +4,7 @@ import type {
   CompositionDiagnostic,
   CompositionPlan,
   CompositionWordRange,
-} from './engine.js';
+} from './contracts/engine-contracts.js';
 import type { FlowPlanningContext, FlowRuntime, FlowTarget } from './contracts/flow-planning.js';
 import { wordsForBlock } from './text/text-measurement.js';
 

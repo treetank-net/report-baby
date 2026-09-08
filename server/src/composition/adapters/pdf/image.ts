@@ -1,6 +1,6 @@
 import type { jsPDF } from 'jspdf';
 import type { CompositionBlock, CompositionChart } from '../../model.js';
-import type { CompositionPlan, CompositionTextMetrics } from '../../engine.js';
+import type { CompositionPlan, CompositionTextMetrics } from '../../contracts/engine-contracts.js';
 import type {
   JsPdfCompositionImageAsset,
   JsPdfCompositionImageRenderer,

@@ -1,5 +1,5 @@
 import type { CompositionBlock, CompositionRect } from '../model.js';
-import type { CompositionFlowBarrierBoxCandidate, CompositionGraphicPlacement, CompositionTextMetrics } from '../engine.js';
+import type { CompositionFlowBarrierBoxCandidate, CompositionGraphicPlacement, CompositionTextMetrics } from '../contracts/engine-contracts.js';
 import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import { wordsOf } from './tokenization.js';

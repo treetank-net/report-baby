@@ -1,7 +1,7 @@
 import type { BrandDiagnostics } from './brand-context.js';
 import type { ResolvedSlidePlan } from './core/model/resolved-slide-plan.js';
 import type { ResolvedReportPlan } from './core/model/resolved-report-plan.js';
-import type { CompositionEvaluation, CompositionPlan } from './composition/engine.js';
+import type { CompositionEvaluation, CompositionPlan } from './composition/contracts/engine-contracts.js';
 import type { ReportDrawing } from './report-drawing-recorder.js';
 import type { SlideDeck } from './slides.js';
 

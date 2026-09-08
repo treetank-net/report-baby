@@ -10,7 +10,7 @@ import type {
   CompositionPlan,
   CompositionSlot,
   CompositionTextMetrics,
-} from '../engine.js';
+} from '../contracts/engine-contracts.js';
 import { diagnostic, addResidual } from '../planning-records.js';
 import { ensurePage, routeLayout } from './page-state.js';
 import { rectBottom } from '../geometry/rectangles.js';

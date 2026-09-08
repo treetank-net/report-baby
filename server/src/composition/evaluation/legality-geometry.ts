@@ -1,4 +1,4 @@
-import type { CompositionPlan, CompositionSlot } from '../engine.js';
+import type { CompositionPlan, CompositionSlot } from '../contracts/engine-contracts.js';
 import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 
 type RectLike = { x: number; y: number; width: number; height: number };

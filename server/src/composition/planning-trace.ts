@@ -10,7 +10,7 @@ import type {
   CompositionPlanningPhaseName,
   CompositionTextMetrics,
   CompositionTraceDecision,
-} from './engine.js';
+} from './contracts/engine-contracts.js';
 import { availableLineCount } from './text/line-capacity.js';
 import { wordsOf } from './text/tokenization.js';
 

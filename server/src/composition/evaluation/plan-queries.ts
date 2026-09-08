@@ -1,4 +1,4 @@
-import type { CompositionPlan, CompositionSlot } from '../engine.js';
+import type { CompositionPlan, CompositionSlot } from '../contracts/engine-contracts.js';
 
 /** Find a materialized slot by its page-qualified identifier. */
 export function slotFor(plan: CompositionPlan, slotId: string): CompositionSlot | undefined {

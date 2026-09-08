@@ -8,7 +8,7 @@ import type {
   CompositionMovableInsertionFrame,
   CompositionPlan,
   CompositionTextMetrics,
-} from './engine.js';
+} from './contracts/engine-contracts.js';
 import { placeGlyphObjects } from './glyph-objects.js';
 import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './layout/flow-space.js';
 import { recordPlanningPhase, tracePlan } from './planning-trace.js';

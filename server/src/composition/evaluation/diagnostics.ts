@@ -1,4 +1,4 @@
-import type { CompositionDiagnostic } from '../engine.js';
+import type { CompositionDiagnostic } from '../contracts/engine-contracts.js';
 
 /** Construct one renderer-neutral evaluator diagnostic. */
 export function error(code: string, message: string, details: Record<string, unknown> = {}): CompositionDiagnostic {

@@ -4,7 +4,7 @@ import type { CompositionDocument, CompositionBlock } from '../model.js';
 
 import type { CompositionContrastAssessment } from './contrast.js';
 
-import type { CompositionLine, CompositionPlan, CompositionScoreComponent } from '../engine.js';
+import type { CompositionLine, CompositionPlan, CompositionScoreComponent } from '../contracts/engine-contracts.js';
 
 import { allLines } from './plan-queries.js';
 

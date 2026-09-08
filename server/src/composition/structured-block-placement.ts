@@ -7,7 +7,7 @@ import type {
   CompositionBlockPlacement,
   CompositionPlan,
   CompositionTableMeasurement,
-} from './engine.js';
+} from './contracts/engine-contracts.js';
 import type { PageState } from './contracts/layout-state.js';
 import { compositionStyleName } from './text/style-name.js';
 import { isAtomicBlock } from './layout/page-state.js';

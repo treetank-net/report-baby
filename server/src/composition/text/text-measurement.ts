@@ -6,7 +6,7 @@ import type {
   CompositionFlowBarrierBoxCandidate,
   CompositionGraphicPlacement,
   CompositionTextMetrics,
-} from '../engine.js';
+} from '../contracts/engine-contracts.js';
 import { compositionStyleName } from './style-name.js';
 import { wordsOf } from './tokenization.js';
 import { wrapText, type WrappedLine } from './text-wrapping.js';

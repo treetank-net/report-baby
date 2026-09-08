@@ -53,8 +53,8 @@ export type {
   CompositionSlot,
   CompositionTextMetrics,
   CompositionWordRange,
-} from './engine.js';
-export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './engine.js';
+} from './contracts/engine-contracts.js';
+export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './composition-engine.js';
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
 export { compositionDocumentFromInput } from './input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './page-template-adapter.js';

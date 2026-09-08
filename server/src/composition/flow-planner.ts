@@ -8,7 +8,7 @@ import type {
 import type {
   CompositionPlan,
   CompositionTextMetrics,
-} from './engine.js';
+} from './contracts/engine-contracts.js';
 import { placeGraphicsForPage } from './graphic-planning.js';
 import type { TextCompositionPlannerPolicy } from './planner-policy.js';
 import type { PageState } from './contracts/layout-state.js';

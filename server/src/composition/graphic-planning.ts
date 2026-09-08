@@ -7,7 +7,7 @@ import type {
 import type {
   CompositionGraphicPlacement,
   CompositionPlan,
-} from './engine.js';
+} from './contracts/engine-contracts.js';
 import { polygonPoints } from './geometry/visual-geometry.js';
 import { diagnostic } from './planning-records.js';
 import { ensurePage, routeLayout, slotId } from './layout/page-state.js';

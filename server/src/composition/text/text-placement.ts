@@ -7,7 +7,7 @@ import type {
   CompositionPlacement,
   CompositionSlot,
   CompositionTextMetrics,
-} from '../engine.js';
+} from '../contracts/engine-contracts.js';
 import { glyphSamplingBoxes } from '../glyph-sampling.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import type { WrappedLine } from './text-wrapping.js';

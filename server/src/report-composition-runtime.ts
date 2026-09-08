@@ -29,7 +29,7 @@ import { createJsPdfMetricBlockCapabilities } from './composition/adapters/pdf/m
 import { createJsPdfTableBlockCapabilities } from './composition/adapters/pdf/table.js';
 import type { CompositionBlockKind } from './composition/model.js';
 import type { JsPdfCompositionBlockCapability } from './composition/contracts/pdf.js';
-import { renderComposition } from './composition/engine.js';
+import { renderComposition } from './composition/composition-engine.js';
 import { resolveImageAsset } from './image-resolver.js';
 import { decodePngDataUri } from './image-raster.js';
 import { installReportDrawingRecorder, type ReportDrawing } from './report-drawing-recorder.js';

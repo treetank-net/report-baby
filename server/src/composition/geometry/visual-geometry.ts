@@ -1,4 +1,4 @@
-import type { CompositionBox, CompositionGraphicPlacement } from '../engine.js';
+import type { CompositionBox, CompositionGraphicPlacement } from '../contracts/engine-contracts.js';
 
 export interface CompositionInterval {
   start: number;

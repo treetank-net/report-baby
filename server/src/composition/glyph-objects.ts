@@ -4,7 +4,7 @@ import type {
   CompositionLine,
   CompositionPlan,
   CompositionTextMetrics,
-} from './engine.js';
+} from './contracts/engine-contracts.js';
 import { compositionStyleName } from './text/style-name.js';
 
 function plannedLines(plan: CompositionPlan): CompositionLine[] {

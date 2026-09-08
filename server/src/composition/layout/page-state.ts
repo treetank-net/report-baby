@@ -10,7 +10,7 @@ import type {
   CompositionDiagnostic,
   CompositionPlan,
   CompositionSlot,
-} from '../engine.js';
+} from '../contracts/engine-contracts.js';
 import type { PageState } from '../contracts/layout-state.js';
 import type { FlowPlanningContext, FlowRuntime, FlowTarget } from '../contracts/flow-planning.js';
 import type { FlowCursor } from '../contracts/layout-state.js';

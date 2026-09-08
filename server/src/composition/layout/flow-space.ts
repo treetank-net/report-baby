@@ -10,7 +10,7 @@ import type {
   CompositionLine,
   CompositionPlan,
   CompositionSlot,
-} from '../engine.js';
+} from '../contracts/engine-contracts.js';
 import type { PageState } from '../contracts/layout-state.js';
 import { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
 
