@@ -42,7 +42,8 @@ server/src/composition/
 │   ├── text-planner.ts
 │   ├── planner-candidates.ts
 │   ├── graphic-planning.ts
-│   └── structured-block-placement.ts
+│   ├── structured-block-placement.ts
+│   └── glyph-objects.ts
 ├── evaluation/
 │   ├── evaluator.ts
 │   ├── content.ts
@@ -101,8 +102,7 @@ strony ani slotów.
 - `rectangles.ts` — `rectBottom`, przecięcia, nakładanie, containment;
 - `visual-geometry.ts` — geometria obrazu i grafiki (`graphic-geometry` oraz
   `image-geometry`);
-- `glyph-geometry.ts` — boxy próbkowania i końcowe boxy glifów
-  (`glyph-sampling` oraz `glyph-objects`).
+- `glyph-geometry.ts` — czyste boxy próbkowania glifów (`glyph-sampling`).
 
 Jeżeli funkcja zna `CompositionPlan`, `PageState` albo flow, nie należy do tego
 katalogu, nawet jeśli zwraca prostokąt.
@@ -135,6 +135,8 @@ Stan i reguły układania dokumentu.
 - `graphic-planning.ts` — planowanie grafik;
 - `structured-block-placement.ts` — placement tabel, KPI i innych bloków
   atomowych.
+- `glyph-objects.ts` — materializacja authored/generated glyph placements;
+  pozostaje w layout, bo zna `CompositionPlan` i mutuje jego wynik.
 
 Nie łączymy całych `flow-planner.ts` i `flow-text-decision.ts`: pierwszy
 koordynuje przebieg, drugi implementuje politykę decyzji. Nie łączymy też
@@ -296,6 +298,14 @@ adapters
 - `ae7df91` — przeniesienie polityki planera i typów ruchomych ramek do
   `contracts/planner-policy.ts`; implementacje kandydatów nie są już
   właścicielem kontraktu polityki.
+- `033883c` — ułożenie pozostałych modułów według docelowej domeny: flow,
+  document, graphic, structured-block, planner-candidates i text-planner
+  trafiły do `layout/`, evaluator otrzymał nazwy `content.ts`, `legality.ts`
+  i `scoring.ts`, a records i trace połączono w
+  `observability/planning-observability.ts`.
+- bieżący seam — przeniesienie czystego próbkowania do
+  `geometry/glyph-geometry.ts` oraz materializacji obiektów glifów do
+  `layout/glyph-objects.ts`; funkcje znające plan nie trafiają do geometrii.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
@@ -305,9 +315,9 @@ ponowienia na hoście/CI z możliwością uruchamiania procesów potomnych.
 
 ## Następny zakres implementacyjny
 
-Kolejny seam obejmuje analizę `flow-planner.ts` i `flow-text-decision.ts` pod
-kątem wspólnych obliczeń oraz granic odpowiedzialności. Najpierw opisujemy
-funkcje i ich zależności, potem łączymy tylko operacje z tą samą wiedzą domenową,
-bez zmiany zachowania planera. Publiczne eksporty nadal przechodzą przez
-jedyną fasadę `composition/index.ts`. Po każdym wydzieleniu sprawdzamy
-kompilację, architekturę i testy adaptera przed przejściem do kolejnego pliku.
+Kolejny seam obejmuje analizę wspólnych obliczeń `flow-planner.ts` i
+`flow-text-decision.ts`: najpierw opisujemy funkcje, wejścia/wyjścia i artefakty,
+potem łączymy tylko operacje z tą samą wiedzą domenową, bez zmiany zachowania
+planera. Publiczne eksporty nadal przechodzą przez jedyną fasadę
+`composition/index.ts`. Po każdym wydzieleniu sprawdzamy kompilację,
+architekturę i testy adaptera przed przejściem do kolejnego pliku.
