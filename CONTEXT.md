@@ -11,8 +11,10 @@ flows, semantic assets and author preferences.
 ## Flow
 
 A flow is an ordered stream of content that may continue through compatible
-regions on subsequent page layouts. Typical flows are `main`, `sidebar`, and
-`quote`, but names are defined by the template contract.
+regions on subsequent page layouts. Typical flows are `main`, `intro`,
+`sidebar`, and `quote`, but names are defined by the template contract. When a
+template declares an `intro` flow, introductory content belongs to that flow;
+it is not a leading block of `main`.
 
 ## Content block
 

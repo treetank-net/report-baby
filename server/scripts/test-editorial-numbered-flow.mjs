@@ -489,6 +489,30 @@ try {
       quote: [232, 117, 61],
     }),
   });
+  const shortIntroPdf = newPdf('portrait', [geometry.width, geometry.height]);
+  const shortIntroResult = planReportComposition(shortIntroPdf, template, geometry, {
+    flows: {
+      intro: { continuation: 'forbidden', blocks: [{ id: 'intro', type: 'text', role: 'intro', text: 'A short intro.' }] },
+      main: { continuation: 'allowed', blocks: [{ id: 'body', type: 'text', role: 'body', text: 'The main flow follows the intro.' }] },
+    },
+  }, {
+    family: 'DejaVu',
+    maxPages: 2,
+    styles: compositionStylesFromRenderConfig({
+      foreground: [25, 51, 79],
+      muted: [88, 106, 131],
+      primary: [42, 110, 166],
+      quote: [232, 117, 61],
+    }),
+  });
+  assert.equal(shortIntroResult.evaluation.status, 'accepted', JSON.stringify(shortIntroResult.evaluation));
+  const shortIntroSlot = shortIntroResult.plan.slots.find((slot) => slot.id === '1:intro');
+  const shortIntroLine = shortIntroResult.plan.lines.find((line) => line.flowId === 'intro' && line.blockId === 'intro');
+  assert.ok(shortIntroSlot && shortIntroLine, 'separate intro flow must place its text in the intro slot');
+  assert.ok(shortIntroSlot.box.height < template.slots.intro.frame.height * geometry.height, 'fit-content intro must shrink below its declared frame height');
+  assert.ok(Math.abs((shortIntroSlot.box.y + shortIntroSlot.box.height) - (shortIntroLine.box.y + shortIntroLine.box.height)) < 0.001, 'fit-content intro height must follow its final line box');
+  const shortIntroContentSlot = shortIntroResult.plan.slots.find((slot) => slot.id === '1:first:segment-1');
+  assert.ok(shortIntroContentSlot && shortIntroContentSlot.box.y < template.slots.content.frame.y * geometry.height, 'shrinking intro must release space to the main flow');
   const fixedQuote = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(fixedQuote, 'editorial fixture must expose the quote selected for movable-position search');
   const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_quote_window_ratio;

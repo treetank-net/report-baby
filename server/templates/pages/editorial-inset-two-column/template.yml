@@ -41,6 +41,7 @@ slots:
     frame: { x: 0.081, y: 0.19, width: 0.838, height: 0.05 }
     role: intro
     allowed_block_kinds: [paragraph, image]
+    fit_content: true
     grow: { axis: y, pushes: [content] }
   quote-a:
     type: text

@@ -259,7 +259,7 @@ export function advanceCursor(cursor: FlowCursor, routeSlotsForPage: string[]): 
   }
 }
 
-/** Apply one legal slot-growth operation, move pushed slots, and record it. */
+/** Fit or grow one vertical slot, move pushed slots, and record it. */
 /**
  * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Apply one legal slot-growth operation and move affected slots.
@@ -276,9 +276,12 @@ export function growSlot(
   const growth = definition.grow;
   if (!growth || growth.axis !== 'y') return;
   const maxBottom = definition.box.y + growth.maxHeight;
-  const nextBottom = Math.min(maxBottom, Math.max(rectBottom(slot.box), requiredBottom));
+  const requestedBottom = definition.fitContent
+    ? Math.max(definition.box.y, requiredBottom)
+    : Math.max(rectBottom(slot.box), requiredBottom);
+  const nextBottom = Math.min(maxBottom, requestedBottom);
   const delta = nextBottom - rectBottom(slot.box);
-  if (delta <= 0) return;
+  if (Math.abs(delta) <= Number.EPSILON) return;
   slot.box.height += delta;
   for (const pushedId of growth.pushes ?? []) {
     const pushed = currentPage.slots.get(pushedId);
