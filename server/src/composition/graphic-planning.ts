@@ -8,7 +8,7 @@ import type {
   CompositionGraphicPlacement,
   CompositionPlan,
 } from './engine.js';
-import { polygonPoints } from './graphic-geometry.js';
+import { polygonPoints } from './geometry/visual-geometry.js';
 import { diagnostic } from './planning-records.js';
 import { ensurePage, routeLayout, slotId, type PageState } from './page-management.js';
 import type { PlannedGraphic } from './text-planner-candidates.js';
