@@ -1,30 +1,30 @@
 import type {
   CompositionBlock,
   CompositionRect,
-} from './model.js';
-import type { CompositionPlan } from './contracts/engine-contracts.js';
-import { flowBarrierBoxCandidatesForSlot } from './layout/flow-space.js';
+} from '../model.js';
+import type { CompositionPlan } from '../contracts/engine-contracts.js';
+import { flowBarrierBoxCandidatesForSlot } from './flow-space.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,
   FlowTarget,
   PreparedTextPlacement,
-} from './contracts/flow-planning.js';
+} from '../contracts/flow-planning.js';
 import {
   flowingTextBottom,
   occupiedBottomInOverlappingSlots,
   previousBlockInSlot,
-} from './layout/flow-space.js';
-import { advanceCursor, growSlot } from './layout/page-state.js';
-import { availableLineCount, obstructionAcrossLineBands, lineHeight, styleFor, wrapBlock } from './text/text-layout.js';
-import type { WrappedLine } from './text/text-layout.js';
-import { slotBox } from './layout/page-state.js';
-import { rectBottom } from './geometry/rectangles.js';
-import { addResidual, diagnostic, recordFlowDecision } from './planning-records.js';
+} from './flow-space.js';
+import { advanceCursor, growSlot } from './page-state.js';
+import { availableLineCount, obstructionAcrossLineBands, lineHeight, styleFor, wrapBlock } from '../text/text-layout.js';
+import type { WrappedLine } from '../text/text-layout.js';
+import { slotBox } from './page-state.js';
+import { rectBottom } from '../geometry/rectangles.js';
+import { addResidual, diagnostic, recordFlowDecision } from '../observability/planning-observability.js';
 
 /** Decide whether the current block is a heading that cannot fit whole. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current headingExceedsAvailableLines implementation intact until its target seam is extracted.
  */
 function headingExceedsAvailableLines(
@@ -40,7 +40,7 @@ type ListItemKeepDecision =
 
 /** Evaluate whether a list item must remain together or may be split. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current evaluateListItemKeepTogether implementation intact until its target seam is extracted.
  */
 function evaluateListItemKeepTogether(
@@ -78,7 +78,7 @@ type HeadingClusterProbes = {
 
 /** Probe a heading and its kept lead without page obstacles. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current headingClusterProbes implementation intact until its target seam is extracted.
  */
 function headingClusterProbes(
@@ -105,7 +105,7 @@ function headingClusterProbes(
 
 /** Check whether an obstacle breaks a heading/lead keep cluster. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current evaluateHeadingClusterObstacle implementation intact until its target seam is extracted.
  */
 function evaluateHeadingClusterObstacle(
@@ -139,7 +139,7 @@ function evaluateHeadingClusterObstacle(
 
 /** Check whether a heading keep cluster exceeds the current segment. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current keepClusterExceedsAvailableLines implementation intact until its target seam is extracted.
  */
 function keepClusterExceedsAvailableLines(
@@ -153,7 +153,7 @@ function keepClusterExceedsAvailableLines(
 
 /** Check whether a non-heading keep cluster can be relaxed. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current keepClusterCanBeRelaxed implementation intact until its target seam is extracted.
  */
 function keepClusterCanBeRelaxed(
@@ -170,7 +170,7 @@ function keepClusterCanBeRelaxed(
 
 /** Calculate the first available line offset and local occupancy. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current textPlacementStartLineOffset implementation intact until its target seam is extracted.
  */
 function textPlacementStartLineOffset(
@@ -193,7 +193,7 @@ function textPlacementStartLineOffset(
 
 /** Collect graphics and flow barriers visible to one text placement. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current textPlacementObstacles implementation intact until its target seam is extracted.
  */
 function textPlacementObstacles(
@@ -215,7 +215,7 @@ function textPlacementObstacles(
 
 /** Calculate the configured gap before the current text block. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current textPlacementBlockGap implementation intact until its target seam is extracted.
  */
 function textPlacementBlockGap(
@@ -238,7 +238,7 @@ function textPlacementBlockGap(
 
 /** Wrap the current block with and without its configured gap. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current wrapTextPlacement implementation intact until its target seam is extracted.
  */
 function wrapTextPlacement(
@@ -262,7 +262,7 @@ function wrapTextPlacement(
 
 /** Compress a heading gap only when the complete heading remains legal. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current compressHeadingGapIfNeeded implementation intact until its target seam is extracted.
  */
 function compressHeadingGapIfNeeded(
@@ -292,7 +292,7 @@ function compressHeadingGapIfNeeded(
 
 /** Build the read-only inputs for one text-placement attempt. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Build the read-only inputs for one text-placement attempt.
  */
 export function prepareTextPlacement(
@@ -319,7 +319,7 @@ export function prepareTextPlacement(
 
 /** Select the lines that fit the current slot and configured keep rules. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Choose the lines that fit the current slot and keep rules.
  */
 export function selectTextLinesForPlacement(
@@ -339,7 +339,7 @@ export function selectTextLinesForPlacement(
 
 /** Move the current block when wrapping found no legal line band. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current advanceTextBlockWhenNoLinesFit implementation intact until its target seam is extracted.
  */
 export function advanceTextBlockWhenNoLinesFit(
@@ -354,7 +354,7 @@ export function advanceTextBlockWhenNoLinesFit(
 
 /** Grow a text slot when its complete first placement needs more height. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current growTextSlotForInitialPlacement implementation intact until its target seam is extracted.
  */
 export function growTextSlotForInitialPlacement(
@@ -372,7 +372,7 @@ export function growTextSlotForInitialPlacement(
 
 /** Push a heading when the complete heading cannot fit in the current segment. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current pushHeadingWhenWholeHeadingDoesNotFit implementation intact until its target seam is extracted.
  */
 export function pushHeadingWhenWholeHeadingDoesNotFit(
@@ -390,7 +390,7 @@ export function pushHeadingWhenWholeHeadingDoesNotFit(
 
 /** Record that a list item was split to avoid an undersized trailing hole. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current recordListItemSplitDecision implementation intact until its target seam is extracted.
  */
 function recordListItemSplitDecision(
@@ -404,7 +404,7 @@ function recordListItemSplitDecision(
 
 /** Push a list item when the remaining fragment would be below its minimum. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current pushListItemWhenMinimumFragmentWouldBeBroken implementation intact until its target seam is extracted.
  */
 function pushListItemWhenMinimumFragmentWouldBeBroken(
@@ -421,7 +421,7 @@ function pushListItemWhenMinimumFragmentWouldBeBroken(
 
 /** Resolve an obstacle that intersects a heading and its kept lead. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current handleHeadingClusterObstacleBeforeTextPlacement implementation intact until its target seam is extracted.
  */
 function handleHeadingClusterObstacleBeforeTextPlacement(
@@ -446,7 +446,7 @@ function handleHeadingClusterObstacleBeforeTextPlacement(
 
 /** Push a heading keep cluster when its required lines exceed local capacity. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current pushKeepClusterWhenItCannotFit implementation intact until its target seam is extracted.
  */
 function pushKeepClusterWhenItCannotFit(
@@ -466,7 +466,7 @@ function pushKeepClusterWhenItCannotFit(
 
 /** Record that a non-heading keep cluster was relaxed. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current recordRelaxedKeepCluster implementation intact until its target seam is extracted.
  */
 function recordRelaxedKeepCluster(
@@ -482,7 +482,7 @@ function recordRelaxedKeepCluster(
 
 /** Move to the next slot or reject a forbidden continuation when no lines fit. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current advanceTextBlockWhenNoCapacity implementation intact until its target seam is extracted.
  */
 function advanceTextBlockWhenNoCapacity(
@@ -515,7 +515,7 @@ type TextPlacementCapacity = {
 
 /** Calculate available and already-used lines for the current text segment. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current textPlacementCapacity implementation intact until its target seam is extracted.
  */
 export function textPlacementCapacity(target: FlowTarget, prepared: PreparedTextPlacement): TextPlacementCapacity {
@@ -532,7 +532,7 @@ type NextBlockKeepProbe = {
 
 /** Measure the next authored block needed by keep-with-next rules. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current nextBlockKeepProbe implementation intact until its target seam is extracted.
  */
 function nextBlockKeepProbe(
@@ -554,7 +554,7 @@ function nextBlockKeepProbe(
 
 /** Apply all text keep, obstacle, and capacity decisions before placement. */
 /**
- * @planner-target composition/flow-text-decision.ts
+ * @planner-target composition/layout/flow-text-decision.ts
  * @planner-responsibility Keep the current applyTextPlacementDecisionRules implementation intact until its target seam is extracted.
  */
 export function applyTextPlacementDecisionRules(

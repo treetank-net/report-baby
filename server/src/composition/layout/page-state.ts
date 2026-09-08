@@ -15,7 +15,7 @@ import type { PageState } from '../contracts/layout-state.js';
 import type { FlowPlanningContext, FlowRuntime, FlowTarget } from '../contracts/flow-planning.js';
 import type { FlowCursor } from '../contracts/layout-state.js';
 import { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
-import { diagnostic, recordFlowDecision } from '../planning-records.js';
+import { diagnostic, recordFlowDecision } from '../observability/planning-observability.js';
 export type { PageState } from '../contracts/layout-state.js';
 
 /**
@@ -84,7 +84,7 @@ function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
 }
 
 /**
- * @planner-target composition/page-management.ts
+ * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Ensure that all pages through the requested page exist.
  */
 export function ensurePage(

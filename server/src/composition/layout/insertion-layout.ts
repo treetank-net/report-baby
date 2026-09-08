@@ -11,13 +11,13 @@ import type {
   CompositionSlot,
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
-import { diagnostic, addResidual } from '../planning-records.js';
+import { diagnostic, addResidual } from '../observability/planning-observability.js';
 import { ensurePage, routeLayout } from './page-state.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import type { PageState } from '../contracts/layout-state.js';
 import { lineHeight, textPadding, wrapBlock, wordsForBlock, placeLines } from '../text/text-layout.js';
 import type { WrappedLine } from '../text/text-layout.js';
-import type { PlannedInsertion } from '../text-planner-candidates.js';
+import type { PlannedInsertion } from './planner-candidates.js';
 
 type InsertionTextMeasurement = {
   leading: number;

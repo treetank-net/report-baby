@@ -1,5 +1,5 @@
-import type { CompositionRect } from './model.js';
-import type { MovableInsertionPolicy, MovablePlacementBounds, MovableGraphicPolicy } from './contracts/planner-policy.js';
+import type { CompositionRect } from '../model.js';
+import type { MovableInsertionPolicy, MovablePlacementBounds, MovableGraphicPolicy } from '../contracts/planner-policy.js';
 
 export interface PlannedInsertion {
   flowId: string;
@@ -24,7 +24,7 @@ export interface SelectedInsertionPlacement {
 }
 
 /**
- * @planner-target composition/insertion-order.ts
+ * @planner-target composition/layout/insertion-layout.ts
  * @planner-responsibility Keep the current insertionKey implementation intact until its target seam is extracted.
  */
 function insertionKey(flowId: string, blockId: string): string {
@@ -32,7 +32,7 @@ function insertionKey(flowId: string, blockId: string): string {
 }
 
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current clamp implementation intact until its target seam is extracted.
  */
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -44,7 +44,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
  * The measured rectangle remains unchanged; only its position moves.
  */
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movablePlacementBoxes implementation intact until its target seam is extracted.
  */
 function movablePlacementBoxes(proposal: { box: CompositionRect }, policy: MovablePlacementBounds): CompositionRect[] {
@@ -77,7 +77,7 @@ function movablePlacementBoxes(proposal: { box: CompositionRect }, policy: Movab
 }
 
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movablePlacementRefinementBoxes implementation intact until its target seam is extracted.
  */
 function movablePlacementRefinementBoxes(proposal: { box: CompositionRect }, policy: MovablePlacementBounds, round: number): CompositionRect[] {
@@ -110,7 +110,7 @@ type SelectedPlacement = { id: string; page: number; slotId: string; box: Compos
 type MovablePlacementPolicy = Record<string, MovablePlacementBounds>;
 
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movablePlacementProposalCandidates implementation intact until its target seam is extracted.
  */
 function movablePlacementProposalCandidates<T extends PlannedPlacement>(
@@ -134,7 +134,7 @@ function movablePlacementProposalCandidates<T extends PlannedPlacement>(
 }
 
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movablePlacementProposalRefinements implementation intact until its target seam is extracted.
  */
 function movablePlacementProposalRefinements<T extends PlannedPlacement>(
@@ -175,7 +175,7 @@ function movablePlacementProposalRefinements<T extends PlannedPlacement>(
  * Cross-product expansion is deliberate and remains bounded by policy.
  */
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movableInsertionProposalCandidates implementation intact until its target seam is extracted.
  */
 export function movableInsertionProposalCandidates(
@@ -191,7 +191,7 @@ export function movableInsertionProposalCandidates(
  * module does not depend on the evaluator or the rest of the plan model.
  */
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movableInsertionProposalRefinements implementation intact until its target seam is extracted.
  */
 export function movableInsertionProposalRefinements(
@@ -210,7 +210,7 @@ export function movableInsertionProposalRefinements(
 }
 
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movableGraphicProposalCandidates implementation intact until its target seam is extracted.
  */
 export function movableGraphicProposalCandidates(
@@ -228,7 +228,7 @@ export interface SelectedGraphicPlacement {
 }
 
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movableGraphicProposalRefinements implementation intact until its target seam is extracted.
  */
 export function movableGraphicProposalRefinements(
@@ -247,7 +247,7 @@ export function movableGraphicProposalRefinements(
 }
 
 /**
- * @planner-target composition/text-planner-candidates.ts
+ * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movableInsertionProposalSignature implementation intact until its target seam is extracted.
  */
 export function movableInsertionProposalSignature(proposals: Map<string, PlannedInsertion>): string {

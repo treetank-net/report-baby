@@ -1,29 +1,29 @@
 import type {
   CompositionBlock,
   CompositionSlotTemplate,
-} from './model.js';
+} from '../model.js';
 import type {
   CompositionBlockMeasurement,
   CompositionBlockPlacement,
   CompositionPlan,
   CompositionTableMeasurement,
-} from './contracts/engine-contracts.js';
-import type { PageState } from './contracts/layout-state.js';
-import { compositionStyleName } from './text/style-name.js';
-import { isAtomicBlock } from './layout/page-state.js';
-import { diagnostic } from './planning-records.js';
-import { rectBottom } from './geometry/rectangles.js';
+} from '../contracts/engine-contracts.js';
+import type { PageState } from '../contracts/layout-state.js';
+import { compositionStyleName } from '../text/style-name.js';
+import { isAtomicBlock } from './page-state.js';
+import { diagnostic } from '../observability/planning-observability.js';
+import { rectBottom } from '../geometry/rectangles.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,
   FlowTarget,
-} from './contracts/flow-planning.js';
-import { advanceCursor } from './layout/page-state.js';
-import { contentStartBottom, previousBlockInSlot } from './layout/flow-space.js';
-import { growSlot } from './layout/page-state.js';
+} from '../contracts/flow-planning.js';
+import { advanceCursor } from './page-state.js';
+import { contentStartBottom, previousBlockInSlot } from './flow-space.js';
+import { growSlot } from './page-state.js';
 
 /**
- * @planner-target composition/structured-block-placement.ts
+ * @planner-target composition/layout/structured-block-placement.ts
  * @planner-responsibility Keep the current placeAtomicBlock implementation intact until its target seam is extracted.
  */
 function placeAtomicBlock(
@@ -89,7 +89,7 @@ function placeAtomicBlock(
 }
 
 /**
- * @planner-target composition/structured-block-placement.ts
+ * @planner-target composition/layout/structured-block-placement.ts
  * @planner-responsibility Keep the current placeTableFragment implementation intact until its target seam is extracted.
  */
 function placeTableFragment(
@@ -127,7 +127,7 @@ function placeTableFragment(
  * decisions, so the caller can continue its placement loop unchanged.
  */
 /**
- * @planner-target composition/structured-block-placement.ts
+ * @planner-target composition/layout/structured-block-placement.ts
  * @planner-responsibility Dispatch one structured block to its atomic or table placement routine.
  */
 export function placeStructuredBlock(

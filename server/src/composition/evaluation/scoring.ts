@@ -34,7 +34,7 @@ function normalizeContrastQuality(ratio: number, targetRatio: number, response: 
 
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreColumnBalance implementation intact until its target seam is extracted.
  */
 export function scoreColumnBalance(plan: CompositionPlan): CompositionScoreComponent {
@@ -71,7 +71,7 @@ export function scoreColumnBalance(plan: CompositionPlan): CompositionScoreCompo
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreHeadingFollowingLine implementation intact until its target seam is extracted.
  */
 export function scoreHeadingFollowingLine(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
@@ -93,7 +93,7 @@ export function scoreHeadingFollowingLine(document: CompositionDocument, plan: C
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreParagraphFragmentation implementation intact until its target seam is extracted.
  */
 export function scoreParagraphFragmentation(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
@@ -131,7 +131,7 @@ type OrphanLineDetail = {
 };
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Find orphan fragments for one paragraph.
  */
 function orphanDetailsForBlock(
@@ -175,7 +175,7 @@ function orphanDetailsForBlock(
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Group paragraph lines before orphan scoring.
  */
 function paragraphLinesForOrphanScoring(
@@ -194,7 +194,7 @@ function paragraphLinesForOrphanScoring(
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreOrphanLines implementation intact until its target seam is extracted.
  */
 export function scoreOrphanLines(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
@@ -230,7 +230,7 @@ type InsertionSpacingDetail = {
 };
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Calculate spacing details for one insertion block.
  */
 function insertionSpacingDetail(lines: CompositionLine[], plan: CompositionPlan, ordinaryLines: CompositionLine[]): InsertionSpacingDetail[] {
@@ -277,7 +277,7 @@ function insertionSpacingDetail(lines: CompositionLine[], plan: CompositionPlan,
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Group insertion lines by block, page, and slot.
  */
 function insertionLinesByPlacement(plan: CompositionPlan): Map<string, CompositionLine[]> {
@@ -290,7 +290,7 @@ function insertionLinesByPlacement(plan: CompositionPlan): Map<string, Compositi
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreInsertionSpacing implementation intact until its target seam is extracted.
  */
 export function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreComponent {
@@ -321,7 +321,7 @@ type ContrastQualitySummary = {
 };
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Summarize measured and per-glyph contrast quality.
  */
 function contrastQualitySummary(
@@ -345,7 +345,7 @@ function contrastQualitySummary(
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Calculate contrast penalty terms for localized glyph defects.
  */
 function contrastPenaltyFraction(
@@ -369,7 +369,7 @@ function contrastPenaltyFraction(
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreContrast implementation intact until its target seam is extracted.
  */
 export function scoreContrast(assessments: CompositionContrastAssessment[]): CompositionScoreComponent {
@@ -409,7 +409,7 @@ export function scoreContrast(assessments: CompositionContrastAssessment[]): Com
 }
 
 /**
- * @planner-target composition/evaluation-scoring.ts
+ * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreLegalPlan implementation intact until its target seam is extracted.
  */
 export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; breakdown: CompositionScoreComponent[] } {

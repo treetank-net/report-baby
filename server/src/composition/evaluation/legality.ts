@@ -16,7 +16,7 @@ import {
   validateEmptyFlowPlacements,
   validateUnplacedAtomicBlocks,
   validateUnplacedTables,
-} from './evaluation-content.js';
+} from './content.js';
 
 type UnderfilledFlowItem = {
   blockId: string;
@@ -31,7 +31,7 @@ type UnderfilledFlowItem = {
 
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Validate declared flow placements and fallback empty-slot continuity.
  */
 export function checkEmptyFlowPlacements(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -45,7 +45,7 @@ export function checkEmptyFlowPlacements(document: CompositionDocument, plan: Co
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Validate one declared flow placement and its content projection.
  */
 export function validateDeclaredFlowPlacement(
@@ -84,7 +84,7 @@ export function validateDeclaredFlowPlacement(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current checkFlowBarrierBoxCandidates implementation intact until its target seam is extracted.
  */
 export function checkFlowBarrierBoxCandidates(plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -131,7 +131,7 @@ export function checkFlowBarrierBoxCandidates(plan: CompositionPlan, diagnostics
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current checkEarlyRouteTransitions implementation intact until its target seam is extracted.
  */
 export function checkEarlyRouteTransitions(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -182,7 +182,7 @@ export function checkEarlyRouteTransitions(document: CompositionDocument, plan: 
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current blockMatchesSlot implementation intact until its target seam is extracted.
  */
 export function blockMatchesSlot(block: CompositionDocument['flows'][string]['blocks'][number], slot: CompositionSlot): boolean {
@@ -197,7 +197,7 @@ export function blockMatchesSlot(block: CompositionDocument['flows'][string]['bl
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Collect all material that can advance a flow.
  */
 export function underfilledFlowItems(document: CompositionDocument, plan: CompositionPlan): UnderfilledFlowItem[] {
@@ -210,7 +210,7 @@ export function underfilledFlowItems(document: CompositionDocument, plan: Compos
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Find the next authored block that can occupy a slot.
  */
 export function nextAuthoredBlockForSlot(
@@ -241,7 +241,7 @@ export function nextAuthoredBlockForSlot(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Decide whether an empty slot is fully blocked by a wrapping obstacle.
  */
 export function slotIsFullyCoveredByObstacle(slot: CompositionSlot, plan: CompositionPlan): boolean {
@@ -251,7 +251,7 @@ export function slotIsFullyCoveredByObstacle(slot: CompositionSlot, plan: Compos
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Report an empty text slot skipped before later flow material.
  */
 export function validateEmptyFlowSlot(
@@ -282,7 +282,7 @@ export function validateEmptyFlowSlot(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Report usable capacity left in a partially filled text slot.
  */
 export function validateUnderfilledFlowSlot(
@@ -314,7 +314,7 @@ export function validateUnderfilledFlowSlot(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Check one text slot for illegal empty or underfilled continuation.
  */
 export function validateFlowSlotContinuity(
@@ -347,7 +347,7 @@ export function validateFlowSlotContinuity(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Validate empty and underfilled text slots across all flows and pages.
  */
 export function checkEmptyAndUnderfilledSlots(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -371,7 +371,7 @@ type InsertionQuoteGeometry = {
 };
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Resolve the physical obstacle geometry for one insertion quote.
  */
 function insertionQuoteGeometry(
@@ -388,7 +388,7 @@ function insertionQuoteGeometry(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Report source content that appears after its insertion obstacle.
  */
 function validateInsertionPredecessorOrder(
@@ -415,7 +415,7 @@ function validateInsertionPredecessorOrder(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Report source content that appears before its insertion obstacle.
  */
 function validateInsertionSuccessorOrder(
@@ -449,7 +449,7 @@ function validateInsertionSuccessorOrder(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Validate predecessor and successor ordering for one insertion quote.
  */
 function validateQuoteInsertionOrder(
@@ -474,7 +474,7 @@ function validateQuoteInsertionOrder(
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Validate insertion source order for every quote in every flow.
  */
 export function checkInsertionSourceOrder(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -489,7 +489,7 @@ export function checkInsertionSourceOrder(document: CompositionDocument, plan: C
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Add document-level warnings to evaluator diagnostics.
  */
 export function appendDocumentDiagnostics(document: CompositionDocument, diagnostics: CompositionDiagnostic[]): void {
@@ -499,7 +499,7 @@ export function appendDocumentDiagnostics(document: CompositionDocument, diagnos
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Validate every text line target, content range identity, and slot bounds.
  */
 export function validateLineTargets(plan: CompositionPlan, repeatedFlows: Set<string>, diagnostics: CompositionDiagnostic[]): void {
@@ -518,7 +518,7 @@ export function validateLineTargets(plan: CompositionPlan, repeatedFlows: Set<st
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Detect overlapping text lines in a single slot.
  */
 export function validateLineSlotOverlaps(plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -533,7 +533,7 @@ export function validateLineSlotOverlaps(plan: CompositionPlan, diagnostics: Com
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Detect text lines entering wrapping graphic obstacles.
  */
 export function validateLineGraphicOverlaps(plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -545,7 +545,7 @@ export function validateLineGraphicOverlaps(plan: CompositionPlan, diagnostics: 
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Validate ordinary placement targets and bounds.
  */
 export function validateBlockPlacementTargets(plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -560,7 +560,7 @@ export function validateBlockPlacementTargets(plan: CompositionPlan, diagnostics
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current validateTablePlacement implementation intact until its target seam is extracted.
  */
 export function validateTablePlacement(placement: CompositionPlan['tablePlacements'][number], sourceBlocks: Map<string, CompositionBlock>, plan: CompositionPlan, seenTableRows: Map<string, number>, diagnostics: CompositionDiagnostic[]): void {
@@ -584,7 +584,7 @@ export function validateTablePlacement(placement: CompositionPlan['tablePlacemen
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current validateTableOverlaps implementation intact until its target seam is extracted.
  */
 export function validateTableOverlaps(plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -597,7 +597,7 @@ export function validateTableOverlaps(plan: CompositionPlan, diagnostics: Compos
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current validateTablePlacements implementation intact until its target seam is extracted.
  */
 export function validateTablePlacements(document: CompositionDocument, plan: CompositionPlan, sourceBlocks: Map<string, CompositionBlock>, diagnostics: CompositionDiagnostic[]): void {
@@ -608,7 +608,7 @@ export function validateTablePlacements(document: CompositionDocument, plan: Com
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current validateAtomicPlacement implementation intact until its target seam is extracted.
  */
 export function validateAtomicPlacement(placement: CompositionPlan['blockPlacements'][number], sourceBlocks: Map<string, CompositionBlock>, document: CompositionDocument, plan: CompositionPlan, seenAtomicBlocks: Set<string>, diagnostics: CompositionDiagnostic[]): void {
@@ -633,7 +633,7 @@ export function validateAtomicPlacement(placement: CompositionPlan['blockPlaceme
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current validateAtomicPlacements implementation intact until its target seam is extracted.
  */
 export function validateAtomicPlacements(document: CompositionDocument, plan: CompositionPlan, sourceBlocks: Map<string, CompositionBlock>, diagnostics: CompositionDiagnostic[]): void {
@@ -643,7 +643,7 @@ export function validateAtomicPlacements(document: CompositionDocument, plan: Co
 }
 
 /**
- * @planner-target composition/evaluation-legality.ts
+ * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Keep the current validateGraphicPlacements implementation intact until its target seam is extracted.
  */
 export function validateGraphicPlacements(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {

@@ -1,38 +1,38 @@
-import type { CompositionDocument, CompositionTemplate } from './model.js';
+import type { CompositionDocument, CompositionTemplate } from '../model.js';
 import type {
   CompositionPlan,
   CompositionPlanner,
   CompositionTextMetrics,
-} from './contracts/engine-contracts.js';
-import { diagnostic } from './planning-records.js';
-import { recordPlanningPhase } from './planning-trace.js';
+} from '../contracts/engine-contracts.js';
+import { diagnostic } from '../observability/planning-observability.js';
+import { recordPlanningPhase } from '../observability/planning-observability.js';
 import {
   movableGraphicProposalCandidates,
   movableGraphicProposalRefinements,
   movableInsertionProposalCandidates,
   movableInsertionProposalRefinements,
   movableInsertionProposalSignature,
-} from './text-planner-candidates.js';
+} from './planner-candidates.js';
 import {
   insertionProposalsFromPlan,
   seedInsertionProposals,
-} from './layout/insertion-layout.js';
+} from './insertion-layout.js';
 import { seedGraphicProposals } from './graphic-planning.js';
 import { createPlan, planDocumentOnce } from './document-layout.js';
-import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
+import type { TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
 
-export type { MovableGraphicPolicy, MovableInsertionBounds } from './contracts/planner-policy.js';
-export { lineHeight, styleFor, textPadding, wrapBlock, wordsForBlock } from './text/text-layout.js';
-export { addResidual, addTableResidual, diagnostic } from './planning-records.js';
-export { ensurePage, routeLayout, routeSlots, slotId, validateGrowthPolicies } from './layout/page-state.js';
-export { rectBottom, rectsOverlap } from './geometry/rectangles.js';
-export { placeLines } from './text/text-layout.js';
+export type { MovableGraphicPolicy, MovableInsertionBounds } from '../contracts/planner-policy.js';
+export { lineHeight, styleFor, textPadding, wrapBlock, wordsForBlock } from '../text/text-layout.js';
+export { addResidual, addTableResidual, diagnostic } from '../observability/planning-observability.js';
+export { ensurePage, routeLayout, routeSlots, slotId, validateGrowthPolicies } from './page-state.js';
+export { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
+export { placeLines } from '../text/text-layout.js';
 export { placeGraphicsForPage } from './graphic-planning.js';
-export type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
+export type { TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
 
 /** Plan every deterministic candidate produced by one planner pass. */
 /**
- * @planner-target composition/text-planner.ts
+ * @planner-target composition/layout/text-planner.ts
  * @planner-responsibility Keep the current planCandidates implementation intact until its target seam is extracted.
  */
 function planCandidates(
@@ -82,7 +82,7 @@ function planCandidates(
 
 /** Generate a local candidate neighborhood around the selected plan. */
 /**
- * @planner-target composition/text-planner.ts
+ * @planner-target composition/layout/text-planner.ts
  * @planner-responsibility Keep the current planRefinedCandidates implementation intact until its target seam is extracted.
  */
 function planRefinedCandidates(
@@ -111,7 +111,7 @@ function planRefinedCandidates(
 
 /** Expose the candidate planner while retaining the existing planner contract. */
 /**
- * @planner-target composition/text-planner.ts
+ * @planner-target composition/layout/text-planner.ts
  * @planner-responsibility Expose candidate planning while retaining the existing planner contract.
  */
 export function createTextCompositionPlanner(
@@ -120,14 +120,14 @@ export function createTextCompositionPlanner(
 ): CompositionPlanner {
   return {
     /**
-     * @planner-target composition/text-planner.ts
+ * @planner-target composition/layout/text-planner.ts
      * @planner-responsibility Keep the current plan implementation intact until its target seam is extracted.
      */
     plan(document, metrics) {
       return planCandidates(document, metrics, template, policy).at(-1)!;
     },
     /**
-     * @planner-target composition/text-planner.ts
+ * @planner-target composition/layout/text-planner.ts
      * @planner-responsibility Keep the current planCandidates implementation intact until its target seam is extracted.
      */
     planCandidates(document, metrics) {
@@ -139,7 +139,7 @@ export function createTextCompositionPlanner(
       ...Object.values(policy.movableGraphicBounds ?? {}).map((bounds) => bounds.refinementRounds ?? 0),
     ),
     /**
-     * @planner-target composition/text-planner.ts
+ * @planner-target composition/layout/text-planner.ts
      * @planner-responsibility Keep the current planRefinedCandidates implementation intact until its target seam is extracted.
      */
     planRefinedCandidates(document, metrics, selected, round) {

@@ -2,39 +2,39 @@ import type {
   CompositionDocument,
   CompositionFlowRoute,
   CompositionTemplate,
-} from './model.js';
+} from '../model.js';
 import type {
   CompositionMovableGraphicFrame,
   CompositionMovableInsertionFrame,
   CompositionPlan,
   CompositionTextMetrics,
-} from './contracts/engine-contracts.js';
-import { placeGlyphObjects } from './glyph-objects.js';
-import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './layout/flow-space.js';
-import { recordPlanningPhase, tracePlan } from './planning-trace.js';
-import { diagnostic } from './planning-records.js';
+} from '../contracts/engine-contracts.js';
+import { placeGlyphObjects } from '../glyph-objects.js';
+import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './flow-space.js';
+import { recordPlanningPhase, tracePlan } from '../observability/planning-observability.js';
+import { diagnostic } from '../observability/planning-observability.js';
 import {
   ensurePage,
   validateGrowthPolicies,
-} from './layout/page-state.js';
-import type { PageState } from './contracts/layout-state.js';
+} from './page-state.js';
+import type { PageState } from '../contracts/layout-state.js';
 import {
   materializeGraphicPages,
 } from './graphic-planning.js';
 import {
   placeInsertionLayer,
   reserveInsertionObstacles,
-} from './layout/insertion-layout.js';
+} from './insertion-layout.js';
 import { planFlow } from './flow-planner.js';
-import type { MovablePlacementBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
+import type { MovablePlacementBounds, TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
 import type {
   PlannedGraphic,
   PlannedInsertion,
-} from './text-planner-candidates.js';
+} from './planner-candidates.js';
 
 /** Validate one family of movable placement frames and emit its diagnostics. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current validateMovableBounds implementation intact until its target seam is extracted.
  */
 function validateMovableBounds(
@@ -72,7 +72,7 @@ function validateMovableBounds(
 
 /** Validate movable insertion frames. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current validateMovableInsertionBounds implementation intact until its target seam is extracted.
  */
 function validateMovableInsertionBounds(
@@ -85,7 +85,7 @@ function validateMovableInsertionBounds(
 
 /** Validate movable graphic frames. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current validateMovableGraphicBounds implementation intact until its target seam is extracted.
  */
 function validateMovableGraphicBounds(
@@ -98,7 +98,7 @@ function validateMovableGraphicBounds(
 
 /** Create an empty plan with all renderer-facing collections initialized. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current createPlan implementation intact until its target seam is extracted.
  */
 export function createPlan(minimumFragmentLines?: number): CompositionPlan {
@@ -124,7 +124,7 @@ export function createPlan(minimumFragmentLines?: number): CompositionPlan {
 
 /** Normalize line reading order after all flow layers have been materialized. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current normalizePlanReadingOrder implementation intact until its target seam is extracted.
  */
 function normalizePlanReadingOrder(document: CompositionDocument, plan: CompositionPlan): void {
@@ -141,7 +141,7 @@ function normalizePlanReadingOrder(document: CompositionDocument, plan: Composit
 
 /** Flatten mutable page state into the renderer-neutral plan projection. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current flattenPages implementation intact until its target seam is extracted.
  */
 function flattenPages(pages: PageState[], plan: CompositionPlan, template: CompositionTemplate): void {
@@ -162,7 +162,7 @@ function flattenPages(pages: PageState[], plan: CompositionPlan, template: Compo
 
 /** Tell whether a plan has any error diagnostics. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current planHasErrors implementation intact until its target seam is extracted.
  */
 function planHasErrors(plan: CompositionPlan): boolean {
@@ -171,7 +171,7 @@ function planHasErrors(plan: CompositionPlan): boolean {
 
 /** Materialize movable insertion frames from policy and proposals. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current movableInsertionFramesForPlan implementation intact until its target seam is extracted.
  */
 function movableInsertionFramesForPlan(
@@ -195,7 +195,7 @@ function movableInsertionFramesForPlan(
 
 /** Materialize movable graphic frames from policy and proposals. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current movableGraphicFramesForPlan implementation intact until its target seam is extracted.
  */
 function movableGraphicFramesForPlan(
@@ -218,7 +218,7 @@ function movableGraphicFramesForPlan(
 
 /** Reject quote blocks that are not owned by a non-main insertion flow. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current validateQuoteFlowContracts implementation intact until its target seam is extracted.
  */
 function validateQuoteFlowContracts(document: CompositionDocument, template: CompositionTemplate, plan: CompositionPlan): void {
@@ -240,7 +240,7 @@ function validateQuoteFlowContracts(document: CompositionDocument, template: Com
 
 /** Attach candidate frames and run all preflight validations for one layout pass. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current preparePlanForLayout implementation intact until its target seam is extracted.
  */
 function preparePlanForLayout(
@@ -262,7 +262,7 @@ function preparePlanForLayout(
 
 /** Create the first document page and reserve planned insertion obstacles. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current reserveDocumentObstacles implementation intact until its target seam is extracted.
  */
 function reserveDocumentObstacles(
@@ -283,7 +283,7 @@ function reserveDocumentObstacles(
 
 /** Materialize all planned insertion text before ordinary flow placement. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current placeDocumentInsertions implementation intact until its target seam is extracted.
  */
 function placeDocumentInsertions(
@@ -309,7 +309,7 @@ type DocumentFlowPlanningContext = {
 
 /** Plan a repeated flow once for every already-materialized page. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current planRepeatedFlow implementation intact until its target seam is extracted.
  */
 function planRepeatedFlow(context: DocumentFlowPlanningContext, flowId: string, route: CompositionFlowRoute): void {
@@ -323,7 +323,7 @@ function planRepeatedFlow(context: DocumentFlowPlanningContext, flowId: string, 
 
 /** Validate and plan one ordinary flow from its configured start page. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current planOrdinaryFlow implementation intact until its target seam is extracted.
  */
 function planOrdinaryFlow(context: DocumentFlowPlanningContext, flowId: string, route: CompositionFlowRoute): void {
@@ -336,7 +336,7 @@ function planOrdinaryFlow(context: DocumentFlowPlanningContext, flowId: string, 
 
 /** Dispatch one flow to its repeated or ordinary planning path. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current planDocumentFlow implementation intact until its target seam is extracted.
  */
 function planDocumentFlow(context: DocumentFlowPlanningContext, flowId: string, flow: CompositionDocument['flows'][string]): void {
@@ -354,7 +354,7 @@ function planDocumentFlow(context: DocumentFlowPlanningContext, flowId: string, 
 
 /** Preserve ordinary-before-repeated ordering and plan every document flow. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current planDocumentFlows implementation intact until its target seam is extracted.
  */
 function planDocumentFlows(
@@ -376,7 +376,7 @@ function planDocumentFlows(
 
 /** Finalize page, flow, barrier, glyph, and trace projections after flow planning. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current finalizeDocumentPlan implementation intact until its target seam is extracted.
  */
 function finalizeDocumentPlan(
@@ -397,7 +397,7 @@ function finalizeDocumentPlan(
 
 /** Coordinate one complete document-layout run from preflight through finalization. */
 /**
- * @planner-target composition/document-layout.ts
+ * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Coordinate one complete document-layout run from preflight through finalization.
  */
 export function planDocumentOnce(

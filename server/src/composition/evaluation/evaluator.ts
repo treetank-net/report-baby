@@ -1,7 +1,7 @@
 import type { CompositionDocument } from '../model.js';
 import type { CompositionDiagnostic, CompositionEvaluation, CompositionPlan } from '../contracts/engine-contracts.js';
 import type { CompositionContrastAssessment, CompositionContrastProvider } from './contrast.js';
-import { scoreLegalPlan } from './evaluation-scoring.js';
+import { scoreLegalPlan } from './scoring.js';
 import {
   appendDocumentDiagnostics,
   checkEarlyRouteTransitions,
@@ -16,13 +16,13 @@ import {
   validateLineSlotOverlaps,
   validateLineTargets,
   validateTablePlacements,
-} from './evaluation-legality.js';
+} from './legality.js';
 import {
   sourceBlocksForDocument,
   validateContentCoverage,
   validateFlowVisualOrder,
   validateResidualContent,
-} from './evaluation-content.js';
+} from './content.js';
 
 /**
  * @planner-target composition/evaluator.ts

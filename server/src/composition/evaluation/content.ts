@@ -18,7 +18,7 @@ export type FlowPlacementSummary = {
 };
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Collect flow/slot keys that contain any planned material.
  */
 export function collectFallbackFlowContent(document: CompositionDocument, plan: CompositionPlan): Set<string> {
@@ -33,7 +33,7 @@ export function collectFallbackFlowContent(document: CompositionDocument, plan: 
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Build the fallback flow-placement registry from text slots.
  */
 export function buildFlowPlacementRegistry(document: CompositionDocument, plan: CompositionPlan): FlowPlacementSummary[] {
@@ -60,7 +60,7 @@ export function buildFlowPlacementRegistry(document: CompositionDocument, plan: 
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Report empty flow placements between occupied route positions.
  */
 export function validateEmptyFlowPlacements(registry: FlowPlacementSummary[], diagnostics: CompositionDiagnostic[]): void {
@@ -94,7 +94,7 @@ export function validateEmptyFlowPlacements(registry: FlowPlacementSummary[], di
 
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Index source blocks once for all content validators.
  */
 export function sourceBlocksForDocument(document: CompositionDocument): Map<string, CompositionBlock> {
@@ -102,7 +102,7 @@ export function sourceBlocksForDocument(document: CompositionDocument): Map<stri
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateFlowBlockOrder implementation intact until its target seam is extracted.
  */
 export function validateFlowBlockOrder(flow: CompositionDocument['flows'][string], plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -116,7 +116,7 @@ export function validateFlowBlockOrder(flow: CompositionDocument['flows'][string
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateFlowFragmentOrder implementation intact until its target seam is extracted.
  */
 export function validateFlowFragmentOrder(flow: CompositionDocument['flows'][string], plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -147,7 +147,7 @@ export function validateFlowFragmentOrder(flow: CompositionDocument['flows'][str
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateFlowQuoteOrder implementation intact until its target seam is extracted.
  */
 export function validateFlowQuoteOrder(flow: CompositionDocument['flows'][string], plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -161,7 +161,7 @@ export function validateFlowQuoteOrder(flow: CompositionDocument['flows'][string
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current occupiedRouteIndexesByPage implementation intact until its target seam is extracted.
  */
 export function occupiedRouteIndexesByPage(flow: CompositionDocument['flows'][string], plan: CompositionPlan): Map<number, Set<number>> {
@@ -179,7 +179,7 @@ export function occupiedRouteIndexesByPage(flow: CompositionDocument['flows'][st
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateFlowRouteGaps implementation intact until its target seam is extracted.
  */
 export function validateFlowRouteGaps(flow: CompositionDocument['flows'][string], plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -194,7 +194,7 @@ export function validateFlowRouteGaps(flow: CompositionDocument['flows'][string]
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateFlowVisualOrder implementation intact until its target seam is extracted.
  */
 export function validateFlowVisualOrder(document: CompositionDocument, plan: CompositionPlan, repeatedFlows: Set<string>, diagnostics: CompositionDiagnostic[]): void {
@@ -208,7 +208,7 @@ export function validateFlowVisualOrder(document: CompositionDocument, plan: Com
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateUnplacedTables implementation intact until its target seam is extracted.
  */
 export function validateUnplacedTables(document: CompositionDocument, seenTableRows: Map<string, number>, diagnostics: CompositionDiagnostic[]): void {
@@ -222,7 +222,7 @@ export function validateUnplacedTables(document: CompositionDocument, seenTableR
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateUnplacedAtomicBlocks implementation intact until its target seam is extracted.
  */
 export function validateUnplacedAtomicBlocks(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -235,7 +235,7 @@ export function validateUnplacedAtomicBlocks(document: CompositionDocument, plan
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateResidualContent implementation intact until its target seam is extracted.
  */
 export function validateResidualContent(plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -245,7 +245,7 @@ export function validateResidualContent(plan: CompositionPlan, diagnostics: Comp
 type ContentRange = { start: number; end: number };
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current contentRangesForBlock implementation intact until its target seam is extracted.
  */
 export function contentRangesForBlock(plan: CompositionPlan, flowId: string, blockId: string, page?: number): ContentRange[] {
@@ -253,7 +253,7 @@ export function contentRangesForBlock(plan: CompositionPlan, flowId: string, blo
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateRepeatedBlockCoverage implementation intact until its target seam is extracted.
  */
 export function validateRepeatedBlockCoverage(flowId: string, block: CompositionBlock, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -274,7 +274,7 @@ export function validateRepeatedBlockCoverage(flowId: string, block: Composition
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateOrdinaryBlockCoverage implementation intact until its target seam is extracted.
  */
 export function validateOrdinaryBlockCoverage(flowId: string, block: CompositionBlock, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
@@ -296,7 +296,7 @@ export function validateOrdinaryBlockCoverage(flowId: string, block: Composition
 }
 
 /**
- * @planner-target composition/evaluation-content.ts
+ * @planner-target composition/evaluation/content.ts
  * @planner-responsibility Keep the current validateContentCoverage implementation intact until its target seam is extracted.
  */
 export function validateContentCoverage(document: CompositionDocument, plan: CompositionPlan, repeatedFlows: Set<string>, diagnostics: CompositionDiagnostic[]): void {

@@ -4,22 +4,22 @@ import type {
   CompositionFlowRoute,
   CompositionLayoutTemplate,
   CompositionTemplate,
-} from './model.js';
+} from '../model.js';
 import type {
   CompositionPlan,
   CompositionTextMetrics,
-} from './contracts/engine-contracts.js';
+} from '../contracts/engine-contracts.js';
 import { placeGraphicsForPage } from './graphic-planning.js';
-import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
-import type { PageState } from './contracts/layout-state.js';
-import { advanceCursor } from './layout/page-state.js';
+import type { TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
+import type { PageState } from '../contracts/layout-state.js';
+import { advanceCursor } from './page-state.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,
   FlowTarget,
   PreparedTextPlacement,
   SelectedFlowSlot,
-} from './contracts/flow-planning.js';
+} from '../contracts/flow-planning.js';
 import {
   advanceTextBlockWhenNoLinesFit,
   applyTextPlacementDecisionRules,
@@ -28,21 +28,21 @@ import {
   selectTextLinesForPlacement,
   textPlacementCapacity,
 } from './flow-text-decision.js';
-import { hasRoleEligibleSlot, slotFor } from './layout/page-state.js';
-import { wordsForBlock } from './text/text-layout.js';
-import type { WrappedLine } from './text/text-layout.js';
-import { ensurePage, routeSlots } from './layout/page-state.js';
-import { placeLines } from './text/text-layout.js';
-import { slotCollidesWithPlacedBlock } from './layout/flow-space.js';
+import { hasRoleEligibleSlot, slotFor } from './page-state.js';
+import { wordsForBlock } from '../text/text-layout.js';
+import type { WrappedLine } from '../text/text-layout.js';
+import { ensurePage, routeSlots } from './page-state.js';
+import { placeLines } from '../text/text-layout.js';
+import { slotCollidesWithPlacedBlock } from './flow-space.js';
 import { placeStructuredBlock } from './structured-block-placement.js';
-import { addResidual, addTableResidual, diagnostic, recordFlowDecision } from './planning-records.js';
+import { addResidual, addTableResidual, diagnostic, recordFlowDecision } from '../observability/planning-observability.js';
 
 export type {
   FlowPlanningContext,
   FlowRuntime,
   FlowTarget,
   SelectedFlowSlot,
-} from './contracts/flow-planning.js';
+} from '../contracts/flow-planning.js';
 
 type FlowTargetResolution =
   | { kind: 'ready'; target: FlowTarget }
@@ -52,7 +52,7 @@ type FlowTargetResolution =
 type FlowTargetUnavailableResolution = Exclude<FlowTargetResolution, { kind: 'ready' }>;
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Keep the current createFlowPlanningContext implementation intact until its target seam is extracted.
  */
 function createFlowPlanningContext(
@@ -89,7 +89,7 @@ function createFlowPlanningContext(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Keep the current createFlowRuntime implementation intact until its target seam is extracted.
  */
 function createFlowRuntime(context: FlowPlanningContext): FlowRuntime {
@@ -105,7 +105,7 @@ function createFlowRuntime(context: FlowPlanningContext): FlowRuntime {
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Keep the current recordFlowResidual implementation intact until its target seam is extracted.
  */
 function recordFlowResidual(
@@ -122,7 +122,7 @@ function recordFlowResidual(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Reject a flow at a page boundary that violates its configured contract.
  */
 function flowReachedTerminalPage(context: FlowPlanningContext, runtime: FlowRuntime): boolean {
@@ -142,7 +142,7 @@ function flowReachedTerminalPage(context: FlowPlanningContext, runtime: FlowRunt
 }
 
 /**
- * @planner-target composition/page-management.ts
+ * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Keep the current ensureCurrentFlowPage implementation intact until its target seam is extracted.
  */
 function ensureCurrentFlowPage(context: FlowPlanningContext, runtime: FlowRuntime): PageState | undefined {
@@ -150,7 +150,7 @@ function ensureCurrentFlowPage(context: FlowPlanningContext, runtime: FlowRuntim
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Keep the current resolveUnavailableFlowSlot implementation intact until its target seam is extracted.
  */
 function resolveUnavailableFlowSlot(
@@ -179,7 +179,7 @@ type FlowTargetSelectionResolution =
   | { kind: 'stop' };
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Build the immutable target record after a legal slot has been selected.
  */
 function createFlowTarget(
@@ -199,7 +199,7 @@ function createFlowTarget(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Select and validate the legal target slot for the current flow block.
  */
 function selectFlowTarget(
@@ -220,7 +220,7 @@ function selectFlowTarget(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Resolve the legal slot and page target for the next flow block.
  */
 function resolveFlowTarget(
@@ -237,7 +237,7 @@ function resolveFlowTarget(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Push a non-text block when its target slot is already occupied.
  */
 function pushNonTextBlockForCollision(
@@ -259,7 +259,7 @@ function pushNonTextBlockForCollision(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Reject an inline asset that has no asset-to-slot mapping.
  */
 function skipUnsupportedInlineAsset(
@@ -276,7 +276,7 @@ function skipUnsupportedInlineAsset(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Dispatch non-text block placement after collision and asset checks.
  */
 function handleNonTextFlowPlacement(
@@ -290,7 +290,7 @@ function handleNonTextFlowPlacement(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Materialize selected lines and update the flow cursor.
  */
 function commitSelectedTextLines(
@@ -320,7 +320,7 @@ function commitSelectedTextLines(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Decide whether the flow continues on this page or moves forward.
  */
 function advanceFlowAfterTextPlacement(
@@ -349,7 +349,7 @@ type TextBlockAttemptResult =
   | { kind: 'done' };
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Coordinate one text-placement attempt through prepared inputs, decisions, placement, and cursor advancement.
  */
 function planTextBlockAttempt(
@@ -373,7 +373,7 @@ function planTextBlockAttempt(
 }
 
 /**
- * @planner-target composition/flow-planner.ts
+ * @planner-target composition/layout/flow-planner.ts
  * @planner-responsibility Keep the current planFlow implementation intact until its target seam is extracted.
  */
 export function planFlow(

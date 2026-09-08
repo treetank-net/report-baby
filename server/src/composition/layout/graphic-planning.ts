@@ -3,19 +3,19 @@ import type {
   CompositionRect,
   CompositionSlotTemplate,
   CompositionTemplate,
-} from './model.js';
+} from '../model.js';
 import type {
   CompositionGraphicPlacement,
   CompositionPlan,
-} from './contracts/engine-contracts.js';
-import { polygonPoints } from './geometry/visual-geometry.js';
-import { diagnostic } from './planning-records.js';
-import { ensurePage, routeLayout, slotId } from './layout/page-state.js';
-import type { PageState } from './contracts/layout-state.js';
-import type { PlannedGraphic } from './text-planner-candidates.js';
+} from '../contracts/engine-contracts.js';
+import { polygonPoints } from '../geometry/visual-geometry.js';
+import { diagnostic } from '../observability/planning-observability.js';
+import { ensurePage, routeLayout, slotId } from './page-state.js';
+import type { PageState } from '../contracts/layout-state.js';
+import type { PlannedGraphic } from './planner-candidates.js';
 
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Calculate the default box for one authored graphic.
  */
 function graphicBox(
@@ -36,7 +36,7 @@ type DocumentGraphic = NonNullable<CompositionDocument['graphics']>[number];
 
 /** Find the graphic slot definition on one materialized page. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current graphicDefinitionForPage implementation intact until its target seam is extracted.
  */
 function graphicDefinitionForPage(pageState: PageState, graphic: DocumentGraphic): CompositionSlotTemplate | undefined {
@@ -46,7 +46,7 @@ function graphicDefinitionForPage(pageState: PageState, graphic: DocumentGraphic
 
 /** Validate shape-specific graphic parameters. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current graphicShapeValidationError implementation intact until its target seam is extracted.
  */
 function graphicShapeValidationError(graphic: DocumentGraphic): string | undefined {
@@ -69,7 +69,7 @@ function graphicShapeValidationError(graphic: DocumentGraphic): string | undefin
 
 /** Check whether a proposed graphic box remains inside its slot. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current graphicBoxFitsSlot implementation intact until its target seam is extracted.
  */
 function graphicBoxFitsSlot(box: CompositionRect, definition: CompositionSlotTemplate): boolean {
@@ -81,7 +81,7 @@ function graphicBoxFitsSlot(box: CompositionRect, definition: CompositionSlotTem
 
 /** Build the renderer-neutral placement record for a graphic. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current createGraphicPlacement implementation intact until its target seam is extracted.
  */
 function createGraphicPlacement(
@@ -110,7 +110,7 @@ function createGraphicPlacement(
 
 /** Validate and materialize one graphic on its target page. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current placeGraphicForPage implementation intact until its target seam is extracted.
  */
 function placeGraphicForPage(
@@ -146,7 +146,7 @@ function placeGraphicForPage(
 
 /** Materialize graphic proposals for one page and register their obstacles. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Materialize graphic proposals for one page and register their obstacles.
  */
 export function placeGraphicsForPage(
@@ -160,7 +160,7 @@ export function placeGraphicsForPage(
 
 /** Seed authored graphic proposals from the main route's layout. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current seedGraphicProposals implementation intact until its target seam is extracted.
  */
 export function seedGraphicProposals(document: CompositionDocument, template: CompositionTemplate): Map<string, PlannedGraphic> {
@@ -179,7 +179,7 @@ export function seedGraphicProposals(document: CompositionDocument, template: Co
 
 /** Convert normalized graphic points into page coordinates. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current absoluteGraphicPoints implementation intact until its target seam is extracted.
  */
 function absoluteGraphicPoints(graphic: { points?: Array<{ x: number; y: number }> }, box: CompositionRect): Array<{ x: number; y: number }> | undefined {
@@ -189,7 +189,7 @@ function absoluteGraphicPoints(graphic: { points?: Array<{ x: number; y: number 
 
 /** Materialize all authored graphics on their configured pages. */
 /**
- * @planner-target composition/graphic-planning.ts
+ * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current materializeGraphicPages implementation intact until its target seam is extracted.
  */
 export function materializeGraphicPages(
