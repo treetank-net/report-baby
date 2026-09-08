@@ -8,13 +8,13 @@ import type {
 } from '../model.js';
 import type {
   CompositionPlan,
+  CompositionFlowBarrierBoxCandidate,
   CompositionSlot,
   CompositionTextMetrics,
 } from '../engine.js';
 import type { TextCompositionPlannerPolicy } from '../planner-policy.js';
 import type { PageState, FlowCursor } from './layout-state.js';
-import type { flowBarrierBoxCandidatesForSlot } from '../layout/flow-barriers.js';
-import type { wrapBlock } from '../text/text-measurement.js';
+import type { WrappedLine } from '../text/text-wrapping.js';
 
 /** Immutable inputs shared by every operation in one flow-planning run. */
 export interface FlowPlanningContext {
@@ -59,9 +59,9 @@ export interface PreparedTextPlacement {
   initialBox: CompositionRect;
   startLineOffset: number;
   pageGraphics: CompositionPlan['graphicPlacements'];
-  flowBarrierBoxCandidates: ReturnType<typeof flowBarrierBoxCandidatesForSlot>;
+  flowBarrierBoxCandidates: CompositionFlowBarrierBoxCandidate[];
   blockGap: number;
   isHeadingBlock: boolean;
-  wrapped: ReturnType<typeof wrapBlock>;
-  completeWrapped: ReturnType<typeof wrapBlock>;
+  wrapped: WrappedLine[];
+  completeWrapped: WrappedLine[];
 }
