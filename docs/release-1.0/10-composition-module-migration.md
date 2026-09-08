@@ -289,6 +289,13 @@ adapters
 - `64a65c9` — rozdzielenie kontraktów engine od implementacji: typy trafiły do
   `contracts/engine-contracts.ts`, orkiestracja do `composition-engine.ts`, a
   `engine.ts` został cienką ścieżką kompatybilności.
+- `7f29533` — połączenie pomiaru, wrappingu, capacity i materializacji linii w
+  `text/text-layout.ts`; `tokenization.ts` i `style-name.ts` pozostały
+  niezależnymi, czystymi modułami, a zależności przeszły na jawny typ
+  `WrappedLine[]`.
+- `ae7df91` — przeniesienie polityki planera i typów ruchomych ramek do
+  `contracts/planner-policy.ts`; implementacje kandydatów nie są już
+  właścicielem kontraktu polityki.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,
@@ -298,9 +305,9 @@ ponowienia na hoście/CI z możliwością uruchamiania procesów potomnych.
 
 ## Następny zakres implementacyjny
 
-Kolejny seam obejmuje połączenie modułów tekstowych w `text/text-layout.ts`:
-tokenizację pozostawiamy jako czysty moduł wejściowy, a pomiar, wrapping,
-capacity i materializację placementów porządkujemy pod jednym właścicielem.
-Publiczne eksporty nadal przechodzą przez jedyną fasadę
-`composition/index.ts`. Po każdym wydzieleniu sprawdzamy kompilację,
-architekturę i testy adaptera przed przejściem do kolejnego pliku.
+Kolejny seam obejmuje analizę `flow-planner.ts` i `flow-text-decision.ts` pod
+kątem wspólnych obliczeń oraz granic odpowiedzialności. Najpierw opisujemy
+funkcje i ich zależności, potem łączymy tylko operacje z tą samą wiedzą domenową,
+bez zmiany zachowania planera. Publiczne eksporty nadal przechodzą przez
+jedyną fasadę `composition/index.ts`. Po każdym wydzieleniu sprawdzamy
+kompilację, architekturę i testy adaptera przed przejściem do kolejnego pliku.
