@@ -1,6 +1,6 @@
-import { normalizeMarkdown, normalizeStructuredContent, normalizedText } from '../../markdown-normalizer.js';
-import type { NormalizedContentNode, NormalizedImageNode } from '../../content-model.js';
-import type { CompositionInput } from '../../contract/schema.js';
+import { normalizeMarkdown, normalizeStructuredContent, normalizedText } from '../../content/markdown-normalizer.js';
+import type { NormalizedContentNode, NormalizedImageNode } from '../../content/contracts/normalized-content.js';
+import type { CompositionInput } from '../../contracts/input/schema.js';
 import type { CompositionAsset, CompositionBlock, CompositionDocument, CompositionFlow, CompositionGraphic } from '../contracts/model.js';
 
 /**

@@ -73,9 +73,9 @@ function build(entry, output, extra = []) {
 
 build('src/composition/report-composition-entrypoint.ts', adapterBundle);
 build('src/composition/index.ts', backendBundle);
-build('src/render-primitives.ts', primitivesBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
-build('src/template-contract.ts', templateBundle);
-build('src/page-geometry.ts', geometryBundle);
+build('src/rendering/primitives.ts', primitivesBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
+build('src/template/contracts.ts', templateBundle);
+build('src/template/geometry.ts', geometryBundle);
 
 function numberedTokens(text, prefixes) {
   const pattern = prefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|');

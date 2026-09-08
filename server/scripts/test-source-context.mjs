@@ -20,7 +20,7 @@ function run(command, args) {
 }
 
 try {
-  await run('npx', ['esbuild', 'src/source-context.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${output}`]);
+  await run('npx', ['esbuild', 'src/source/context.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${output}`]);
   const { createSourceContext } = await import(output);
   const context = createSourceContext({
     contentRoot: join(temporary, 'content'),

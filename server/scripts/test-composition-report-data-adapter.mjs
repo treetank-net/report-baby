@@ -20,7 +20,7 @@ const build = runProcess('npx', [
 if (build.status !== 0) throw new Error(`composition adapter test bundle failed: ${build.stderr || build.stdout}`);
 const buildSchema = runProcess('npx', [
   'esbuild',
-  'src/contract/schema.ts',
+  'src/contracts/input/schema.ts',
   '--bundle',
   '--platform=node',
   '--format=cjs',

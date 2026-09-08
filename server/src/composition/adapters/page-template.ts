@@ -1,5 +1,5 @@
-import type { PageGeometry, PageSegment } from '../../page-geometry.js';
-import type { CompiledTemplate } from '../../template-contract.js';
+import type { PageGeometry, PageSegment } from '../../template/geometry.js';
+import type { CompiledTemplate } from '../../template/contracts.js';
 import type {
   CompositionFlowRoute,
   CompositionLayoutTemplate,

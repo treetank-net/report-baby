@@ -17,7 +17,7 @@ import { rectBottom } from '../geometry/rectangles.js';
 import type { PageState } from '../contracts/layout-state.js';
 import { lineHeight, textPadding, wrapBlock, wordsForBlock, placeLines } from '../text/text-layout.js';
 import type { WrappedLine } from '../text/text-layout.js';
-import type { PlannedInsertion } from './planner-candidates.js';
+import { insertionKey, type PlannedInsertion } from './planner-candidates.js';
 
 type InsertionTextMeasurement = {
   leading: number;
@@ -429,14 +429,6 @@ export function placeInsertionLayer(
 }
 
 /** Build the stable key shared by insertion proposals and authored blocks. */
-/**
- * @planner-target composition/layout/insertion-layout.ts
- * @planner-responsibility Keep the current insertionKey implementation intact until its target seam is extracted.
- */
-export function insertionKey(flowId: string, blockId: string): string {
-  return `${flowId}:${blockId}`;
-}
-
 /** Find the next planned insertion that must remain below current text. */
 /**
  * @planner-target composition/layout/insertion-layout.ts

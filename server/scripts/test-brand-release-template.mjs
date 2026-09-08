@@ -11,7 +11,7 @@ const temporary = await mkdtemp(join(tmpdir(), 'report-baby-brand-release-templa
 const bundle = join(temporary, 'brand-context.cjs');
 const build = runProcess('npx', [
   'esbuild',
-  'src/brand-context.ts',
+  'src/brand/context.ts',
   '--bundle',
   '--platform=node',
   '--format=cjs',

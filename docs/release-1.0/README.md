@@ -78,6 +78,9 @@ najpierw muszą istnieć testy i działający seam dla pętli.
 10. [Kategorie i migracja modułów composition](10-composition-module-migration.md) —
     docelowa mapa katalogów, właściciele odpowiedzialności i kolejność
     przenoszenia plików bez katalogu `runtime/`.
+11. [Domenowe uporządkowanie całego `server/src`](11-src-domain-organization.md) —
+    mapa poza `composition/`, MCP-first, opcjonalne CLI, artefakty release i
+    bezpieczna migracja szablonów.
 
 ## Granica wykonalności
 

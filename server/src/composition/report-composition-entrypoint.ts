@@ -1,7 +1,7 @@
 import type { jsPDF } from 'jspdf';
-import type { PageGeometry } from '../page-geometry.js';
-import type { CompositionInput } from '../contract/schema.js';
-import type { CompiledTemplate } from '../template-contract.js';
+import type { PageGeometry } from '../template/geometry.js';
+import type { CompositionInput } from '../contracts/input/schema.js';
+import type { CompiledTemplate } from '../template/contracts.js';
 import type { CompositionTemplate } from './contracts/model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './contracts/engine-contracts.js';
 import type { CompositionContrastProvider } from './evaluation/contrast.js';

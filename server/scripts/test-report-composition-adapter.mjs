@@ -37,7 +37,7 @@ const buildBackend = runProcess('npx', [
 if (buildBackend.status !== 0) throw new Error(`composition backend bundle failed: ${buildBackend.stderr || buildBackend.stdout}`);
 const buildPrimitives = runProcess('npx', [
   'esbuild',
-  'src/render-primitives.ts',
+  'src/rendering/primitives.ts',
   '--bundle',
   '--platform=node',
   '--target=node18',
@@ -49,7 +49,7 @@ const buildPrimitives = runProcess('npx', [
 if (buildPrimitives.status !== 0) throw new Error(`render primitives bundle failed: ${buildPrimitives.stderr || buildPrimitives.stdout}`);
 const buildTemplate = runProcess('npx', [
   'esbuild',
-  'src/template-contract.ts',
+  'src/template/contracts.ts',
   '--bundle',
   '--platform=node',
   '--format=cjs',
@@ -58,7 +58,7 @@ const buildTemplate = runProcess('npx', [
 if (buildTemplate.status !== 0) throw new Error(`composition adapter template bundle failed: ${buildTemplate.stderr || buildTemplate.stdout}`);
 const buildGeometry = runProcess('npx', [
   'esbuild',
-  'src/page-geometry.ts',
+  'src/template/geometry.ts',
   '--bundle',
   '--platform=node',
   '--format=cjs',

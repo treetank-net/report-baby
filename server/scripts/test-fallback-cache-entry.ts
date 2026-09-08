@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { resolveBrandContext } from '../src/brand-context.js';
-import { clearPreparedBrandAssetCache, preparedBrandAssetCacheStats, renderReportPdf } from '../src/report-renderer.js';
+import { resolveBrandContext } from '../src/brand/context.js';
+import { clearPreparedBrandAssetCache, preparedBrandAssetCacheStats, renderReportPdf } from '../src/report/renderer.js';
 
 async function main(): Promise<void> {
   const brandRoot = process.env.REPORT_BABY_BRAND_DIR;

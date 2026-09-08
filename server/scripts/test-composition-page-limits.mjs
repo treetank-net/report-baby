@@ -23,9 +23,9 @@ function build(entry, output, extra = []) {
 }
 
 build('src/composition/report-composition-entrypoint.ts', bundles.adapter);
-build('src/render-primitives.ts', bundles.primitives, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
-build('src/template-contract.ts', bundles.template);
-build('src/page-geometry.ts', bundles.geometry);
+build('src/rendering/primitives.ts', bundles.primitives, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
+build('src/template/contracts.ts', bundles.template);
+build('src/template/geometry.ts', bundles.geometry);
 
 const prose = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny. Firmy spedycyjne reaguja konsolidacja floty i inwestycjami w cyfrowe platformy wymiany ladunkow.';
 const validEditorialInput = (body) => legacyFixtureToCompositionInput({

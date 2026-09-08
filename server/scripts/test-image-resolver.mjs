@@ -12,8 +12,8 @@ const compositionOutput = join(temporary, 'composition.cjs');
 const contentRoot = join(root, '..', 'examples/brand-showcase/brands/flux');
 
 try {
-  await build({ entryPoints: [join(root, 'src/image-resolver.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', loader: { '.ttf': 'binary', '.wasm': 'binary' }, outfile: output });
-  await build({ entryPoints: [join(root, 'src/image-raster.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', outfile: rasterOutput });
+  await build({ entryPoints: [join(root, 'src/rendering/image-resolver.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', loader: { '.ttf': 'binary', '.wasm': 'binary' }, outfile: output });
+  await build({ entryPoints: [join(root, 'src/rendering/image-raster.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', outfile: rasterOutput });
   await build({ entryPoints: [join(root, 'src/composition/index.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', outfile: compositionOutput });
   const bundled = await import(output);
   const rasterBundled = await import(rasterOutput);
@@ -21,7 +21,7 @@ try {
   const resolver = bundled.resolveImageAsset ?? bundled.default.resolveImageAsset;
   const decodePngDataUri = rasterBundled.decodePngDataUri ?? rasterBundled.default.decodePngDataUri;
   const createCompositionContrastProvider = composition.createCompositionContrastProvider ?? composition.default.createCompositionContrastProvider;
-  const sourceModule = await build({ entryPoints: [join(root, 'src/source-context.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: join(temporary, 'source-context.cjs'), write: false });
+  const sourceModule = await build({ entryPoints: [join(root, 'src/source/context.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: join(temporary, 'source-context.cjs'), write: false });
   const sourceOutput = join(temporary, 'source-context.cjs');
   await writeFile(sourceOutput, sourceModule.outputFiles[0].contents);
   const sourceBundled = await import(sourceOutput);

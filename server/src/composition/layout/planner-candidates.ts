@@ -1,6 +1,5 @@
 import type { CompositionRect } from '../contracts/model.js';
 import type { MovableInsertionPolicy, MovablePlacementBounds, MovableGraphicPolicy } from '../contracts/planner-policy.js';
-import { insertionKey } from './insertion-layout.js';
 
 export interface PlannedInsertion {
   flowId: string;
@@ -218,6 +217,10 @@ export interface SelectedGraphicPlacement {
   page: number;
   slotId: string;
   box: CompositionRect;
+}
+
+export function insertionKey(flowId: string, blockId: string): string {
+  return `${flowId}:${blockId}`;
 }
 
 /**

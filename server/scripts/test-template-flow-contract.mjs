@@ -12,7 +12,7 @@ const bundle = join(temporary, 'template-contract.cjs');
 const geometryBundle = join(temporary, 'page-geometry.cjs');
 const build = runProcess('npx', [
   'esbuild',
-  'src/template-contract.ts',
+  'src/template/contracts.ts',
   '--bundle',
   '--platform=node',
   '--format=cjs',
@@ -21,7 +21,7 @@ const build = runProcess('npx', [
 if (build.status !== 0) throw new Error(`template contract test bundle failed: ${build.stderr || build.stdout}`);
 const geometryBuild = runProcess('npx', [
   'esbuild',
-  'src/page-geometry.ts',
+  'src/template/geometry.ts',
   '--bundle',
   '--platform=node',
   '--format=cjs',

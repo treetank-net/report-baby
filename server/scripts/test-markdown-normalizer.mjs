@@ -9,7 +9,7 @@ const temporary = await mkdtemp(join(tmpdir(), 'report-baby-markdown-normalizer-
 const output = join(temporary, 'markdown-normalizer.cjs');
 
 try {
-  await build({ entryPoints: [join(root, 'src/markdown-normalizer.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: output });
+  await build({ entryPoints: [join(root, 'src/content/markdown-normalizer.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: output });
   const bundled = await import(output);
   const normalizeMarkdown = bundled.normalizeMarkdown ?? bundled.default.normalizeMarkdown;
   const normalizedText = bundled.normalizedText ?? bundled.default.normalizedText;

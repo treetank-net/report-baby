@@ -12,7 +12,7 @@ const sourceData = join(temporary, 'data');
 process.env.REPORT_BABY_DATA = sourceData;
 
 try {
-  await build({ entryPoints: [join(root, 'src/source-materialization.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: modulePath });
+  await build({ entryPoints: [join(root, 'src/source/materialization.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: modulePath });
   const bundled = await import(modulePath);
   const materializeBrandSource = bundled.materializeBrandSource ?? bundled.default.materializeBrandSource;
   const archive = Buffer.from(zipSync({

@@ -1,4 +1,4 @@
-import { readRenderConfig } from '../../builtin-template-source.js';
+import { readRenderConfig } from '../../template/builtins.js';
 
 import type { CompositionDocument, CompositionBlock } from '../contracts/model.js';
 

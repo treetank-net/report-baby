@@ -29,9 +29,9 @@ function build(entry, output, extra = []) {
   if (result.status !== 0) throw new Error(`editorial parity bundle '${entry}' failed: ${result.stderr || result.stdout}`);
 }
 
-build('src/report-renderer.ts', rendererBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
-build('src/source-context.ts', sourceBundle);
-build('src/brand-context.ts', brandBundle);
+build('src/report/renderer.ts', rendererBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
+build('src/source/context.ts', sourceBundle);
+build('src/brand/context.ts', brandBundle);
 
 try {
   const { renderReportCompositionPdf } = await import(rendererBundle);

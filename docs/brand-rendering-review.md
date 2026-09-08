@@ -49,7 +49,7 @@ Parts that are working well and should not be disturbed:
 
 ## 3. Blocking defects
 
-### 3.1 The bundle is no longer self-contained (release blocker)
+### 3.1 Bundle/template delivery (resolved in the current organization pass)
 
 `slides.ts` calls `readRenderConfig()` at module scope, and
 `builtin-template-loader.ts` resolves a `templates/` directory on disk.
@@ -60,19 +60,15 @@ before any tool call:
 Error: Render configuration was not found in <cwd>/templates
 ```
 
-Meanwhile `scripts/start-mcp.js` downloads only `server/bundle.cjs`, and
-`update_plugin` (`tools/auth.ts`) downloads bundle, `package.json`,
-`start-mcp.js` and `CHANGELOG.md` — no file under `server/templates/`. So the
-wrapper install (`~/.report-baby`) and any self-update that introduces a new
-template yield a server that cannot boot. `server/templates/` is also still
-untracked in git.
-
-Recommended fix: generate `src/generated/builtin-templates.ts` from the YAML
-files at build time (or use an esbuild text loader with explicit imports), and
-keep `REPORT_BABY_TEMPLATE_DIR` as an optional development override. The YAML
-files stay the source of truth and the bundle stays a single file. Adding the
-files to `update_plugin` and `start-mcp.js` instead is fragile: the list grows
-with every new template.
+The current build embeds the built-ins in
+`src/generated/builtin-template-files.ts`, while the YAML files remain the
+source of truth for development overrides and checkout installs. The launcher
+still fetches `server/bundle.cjs` only when it is missing, preserving the
+MCP-first startup contract. `update_plugin` now updates all four runtime
+bundles, both plugin manifests, the launcher/package/changelog, and every file
+under `server/templates/` from the generated registry. This keeps optional CLI
+fronts and template overrides in sync without hard-coding a second template
+list.
 
 ### 3.2 An absolute path bypasses the path boundary
 

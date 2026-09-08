@@ -126,7 +126,7 @@ const build = runProcess('npx', [
 if (build.status !== 0) throw new Error(`text composition engine test bundle failed: ${build.stderr || build.stdout}`);
 const primitivesBuild = runProcess('npx', [
   'esbuild',
-  'src/render-primitives.ts',
+  'src/rendering/primitives.ts',
   '--bundle',
   '--platform=node',
   '--target=node18',

@@ -14,7 +14,7 @@ const sourceBundle = join(temporary, 'source-context.cjs');
 
 const rendererBuild = runProcess('npx', [
   'esbuild',
-  'src/report-renderer.ts',
+  'src/report/renderer.ts',
   '--bundle',
   '--platform=node',
   '--target=node18',
@@ -27,7 +27,7 @@ if (rendererBuild.status !== 0) throw new Error(`composition image renderer bund
 
 const sourceBuild = runProcess('npx', [
   'esbuild',
-  'src/source-context.ts',
+  'src/source/context.ts',
   '--bundle',
   '--platform=node',
   '--target=node18',

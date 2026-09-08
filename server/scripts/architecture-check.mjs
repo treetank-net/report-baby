@@ -22,7 +22,12 @@ function display(path) {
 
 function resolveLocal(from, specifier) {
   if (!specifier.startsWith('.')) return undefined;
-  const base = resolve(dirname(from), specifier);
+  // TypeScript sources use Node-style `.js` specifiers so that the emitted
+  // ESM graph is executable. Resolve that suffix back to the source module
+  // before checking `.ts` files; otherwise every local edge becomes invisible
+  // to this guard (`brand-context.js.ts` never exists).
+  const sourceSpecifier = specifier.replace(/\.(?:js|mjs|cjs)$/, '');
+  const base = resolve(dirname(from), sourceSpecifier);
   const candidates = [base, `${base}.ts`, `${base}.tsx`, `${base}.d.ts`, join(base, 'index.ts')];
   return candidates.find((candidate) => files.has(candidate));
 }
@@ -89,7 +94,10 @@ for (const [from, source] of sources) {
     if (!item.typeOnly) runtimeGraph.get(from).add(target);
     const fromName = display(from);
     const targetName = display(target);
-    if (fromName.startsWith('contract/') && targetName !== fromName) violations.push(`${fromName} imports local module ${targetName}`);
+    // Contract modules may share other type-only contracts (for example the
+    // source descriptor used by the Zod input schema), but they must not load
+    // implementations at runtime.
+    if (fromName.startsWith('contracts/') && !item.typeOnly) violations.push(`${fromName} imports local module ${targetName}`);
     if (fromName.startsWith('core/model/') && (targetName.startsWith('tools/') || ['example.ts', 'brand-tool.ts'].includes(targetName))) violations.push(`${fromName} imports adapter ${targetName}`);
   }
 }

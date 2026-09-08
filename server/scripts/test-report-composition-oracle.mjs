@@ -35,12 +35,12 @@ function build(entry, output, extra = []) {
   if (result.status !== 0) throw new Error(`oracle comparison bundle '${entry}' failed: ${result.stderr || result.stdout}`);
 }
 
-build('src/report-renderer.ts', reportBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
+build('src/report/renderer.ts', reportBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
 build('src/composition/report-composition-entrypoint.ts', adapterBundle);
 build('src/composition/index.ts', backendBundle);
-build('src/render-primitives.ts', primitivesBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
-build('src/template-contract.ts', templateBundle);
-build('src/page-geometry.ts', geometryBundle);
+build('src/rendering/primitives.ts', primitivesBundle, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
+build('src/template/contracts.ts', templateBundle);
+build('src/template/geometry.ts', geometryBundle);
 
 function normalizeToken(token) {
   return token.toLocaleLowerCase('und').replace(/[^\p{L}\p{N}]+/gu, '');
