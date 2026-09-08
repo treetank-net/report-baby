@@ -52,6 +52,28 @@ Istnieje również starszy plan miękkich insertionów:
 Należy traktować go jako materiał badawczy do konfrontacji z planami 02–04,
 nie jako drugie źródło prawdy.
 
+## Audyt inline AST/runs — 2026-09-08
+
+Obecny przepływ zachowuje AST, ale jeszcze go nie renderuje jako styled runs:
+
+```text
+markdown-normalizer
+  → NormalizedContentNode[]
+  → composition/adapters/input.ts
+  → CompositionBlock.content + plain block.text
+  → text-layout i adapter PDF używają block.text
+```
+
+`server/src/content/text-runs.ts` zawiera starszy parser regexowy, pomiar,
+fallback fontów i łamanie styled runs, ale nie ma importów z produkcyjnego
+`server/src` ani z testowych entrypointów i nie trafia do bundla przez bieżącą
+ścieżkę composition. Jest więc kandydatem do usunięcia, nie dowodem działającej
+obsługi inline. Nie usuwamy go jeszcze: najpierw trzeba wybrać kontrakt punktu
+7 — albo przenieść `NormalizedContentNode[]` do renderer-neutralnego modelu
+linii i zachować style, albo formalnie zakończyć starszą ścieżkę runs wraz z jej
+testami. Mieszanie obu parserów utrwalałoby dwie różne interpretacje tego samego
+tekstu.
+
 ## Kroki
 
 1. Dla każdego obecnego block kind opisać:
