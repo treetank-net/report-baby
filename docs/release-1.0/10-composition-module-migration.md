@@ -311,6 +311,9 @@ adapters
 - `1ab6867` — odświeżenie skryptu inventory tak, aby rekurencyjnie skanował
   aktualne `composition/**/*.ts`, ignorował nieistniejące historyczne cele i
   poprawnie raportował aktualne ścieżki evaluatora.
+- bieżący seam — adaptery wejścia, geometrii szablonu, konfiguracji renderera
+  i składania text engine trafiły do `composition/adapters/`: odpowiednio
+  `input.ts`, `page-template.ts`, `render-config.ts` i `text-engine.ts`.
 
 Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
 przechodziły pomyślnie. Suite `test:composition` przeszedł kontrakty engine,

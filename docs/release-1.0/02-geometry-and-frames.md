@@ -18,7 +18,7 @@ Geometria przechodzi przez kilka etapów:
 1. `template-contract.ts` waliduje i normalizuje template;
 2. `page-geometry.ts` wylicza fizyczną geometrię stron, segmenty, bands,
    obstacles i continuation;
-3. `page-template-adapter.ts` buduje z niej `CompositionTemplate`, slots,
+3. `page-template.ts` buduje z niej `CompositionTemplate`, slots,
    routes i część reguł insertionów;
 4. planner tworzy faktyczne `flowPlacements` oraz wynikające z kolizji
    `flowBarrierBoxCandidates`;
@@ -26,7 +26,7 @@ Geometria przechodzi przez kilka etapów:
 
 Źródła: [`template-contract.ts`](../../server/src/template-contract.ts),
 [`page-geometry.ts`](../../server/src/page-geometry.ts),
-[`page-template-adapter.ts`](../../server/src/composition/page-template-adapter.ts).
+[`page-template.ts`](../../server/src/composition/adapters/page-template.ts).
 
 ## Mapa odpowiedzialności
 
@@ -34,7 +34,7 @@ Geometria przechodzi przez kilka etapów:
 |---|---|---|---|
 | kompilacja template’u | `compileTemplateSource` w `template-contract.ts` | YAML/obiekt template’u | zwalidowany `CompiledTemplate` z normalnymi ramami, flow i slotami |
 | fizyczna geometria strony | `pageGeometryFromTemplate` w `page-geometry.ts` | `CompiledTemplate.page` | `PageGeometry`: margins, content, bands, obstacles, segments i block frames |
-| adaptacja do composition | `compositionTemplateFromPageGeometry` w `composition/page-template-adapter.ts` | `CompiledTemplate` + `PageGeometry` | layouts, slots i routes dla pierwszej oraz kolejnych stron |
+| adaptacja do composition | `compositionTemplateFromPageGeometry` w `composition/adapters/page-template.ts` | `CompiledTemplate` + `PageGeometry` | layouts, slots i routes dla pierwszej oraz kolejnych stron |
 | rezerwacja insertionów | `placeInsertionLayer` w `composition/text-planner.ts` | flows, propozycje, slots i pomiary | placements insertionów oraz grafiki będące obstacle dla zwykłego flow |
 | układanie flow | `planFlow` w `composition/text-planner.ts` | route, slots, obstacle i metryki tekstu | linie tekstu, placements i decyzje planera |
 | rejestr miejsc flow | `registerFlowPlacements` w `composition/text-planner.ts` | slots i faktyczne placements | uporządkowany rejestr także pustych miejsc |

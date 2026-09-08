@@ -5,13 +5,13 @@ import type { CompiledTemplate } from '../template-contract.js';
 import type { CompositionTemplate } from './model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './contracts/engine-contracts.js';
 import type { CompositionContrastProvider } from './evaluation/contrast.js';
-import { compositionDocumentFromInput } from './input.js';
-import { compositionTemplateFromPageGeometry } from './page-template-adapter.js';
+import { compositionDocumentFromInput } from './adapters/input.js';
+import { compositionTemplateFromPageGeometry } from './adapters/page-template.js';
 import { createJsPdfTextMetrics } from './adapters/pdf/text.js';
 import type { JsPdfCompositionStyles } from './contracts/pdf.js';
-import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './text-engine.js';
+import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './adapters/text-engine.js';
 import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
-import { compositionStylesFromRenderConfig } from './render-config-styles.js';
+import { compositionStylesFromRenderConfig } from './adapters/render-config.js';
 
 export {
   compositionChartStyleFromRenderConfig,
@@ -21,14 +21,14 @@ export {
   compositionPdfBackendOptionsFromRenderConfig,
   compositionStylesFromRenderConfig,
   compositionTableStyleFromRenderConfig,
-} from './render-config-styles.js';
+} from './adapters/render-config.js';
 export type {
   CompositionChartColors,
   CompositionGraphicColors,
   CompositionMetricColors,
   CompositionTableColors,
   CompositionTextColors,
-} from './render-config-styles.js';
+} from './adapters/render-config.js';
 
 export interface ReportCompositionOptions {
   family: string;

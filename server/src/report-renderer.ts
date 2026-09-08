@@ -8,7 +8,7 @@ import type { CompositionInput } from './contract/schema.js';
 import { pageGeometryFromTemplate, type PageGeometry } from './page-geometry.js';
 import { resolveReportPlan } from './report-plan.js';
 import type { ReportCompositionResult } from './composition/report-composition-entrypoint.js';
-import { compositionDocumentFromInput } from './composition/input.js';
+import { compositionDocumentFromInput } from './composition/adapters/input.js';
 import type { CompositionBox, CompositionPageChrome, CompositionPlan } from './composition/contracts/engine-contracts.js';
 import { assertReportPlan } from './report-plan-assertions.js';
 import { installReportDrawingRecorder, type ReportDrawing } from './report-drawing-recorder.js';

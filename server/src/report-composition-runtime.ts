@@ -18,7 +18,7 @@ import {
   planReportComposition,
 } from './composition/report-composition-entrypoint.js';
 import { createCompositionContrastProvider } from './composition/evaluation/contrast.js';
-import { compositionDocumentFromInput } from './composition/input.js';
+import { compositionDocumentFromInput } from './composition/adapters/input.js';
 import {
   combineJsPdfCompositionBlockCapabilities,
   createJsPdfTextBackend,

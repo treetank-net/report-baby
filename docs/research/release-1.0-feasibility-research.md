@@ -78,7 +78,7 @@ reserved bands, obstacles, block frames i continuation;
 slots i routes dla composition.
 [`template-contract.ts:348-469`](../../server/src/template-contract.ts#L348-L469)
 [`page-geometry.ts:61-133`](../../server/src/page-geometry.ts#L61-L133)
-[`page-template-adapter.ts:370-624`](../../server/src/composition/page-template-adapter.ts#L370-L624)
+[`page-template.ts:370-624`](../../server/src/composition/adapters/page-template.ts#L370-L624)
 
 To nie są trzy całkowicie niezależne modele: adapter ponownie interpretuje
 source slots, continuation frames, insertiony, wzrost i kolejność route.
@@ -95,19 +95,19 @@ TypeScript 5.9.3; liczba linii obejmuje deklarację i ciało funkcji.
 | --- | --- | ---: | --- |
 | `planFlow` | `server/src/composition/text-planner.ts:1639-2304` | 666 linii | cursor po stronie i route, max pages, deferred/repositioned insertions, wybór slotu, collision, pomiar tabel, atomic blocks, growth, wrapping, heading/list keeps, widow/orphan-like fragment limits, placement, reflow i residual diagnostics |
 | `evaluateCompositionPlan` | `server/src/composition/evaluator.ts:373-744` | 372 linii | targety slotów, containment, duplicate ranges, overlap linii/grafik/blocks/tables, kolejność flow, insertion order, coverage, residual content, atomic blocks, graphics i status |
-| `compositionTemplateFromPageGeometry` | `server/src/composition/page-template-adapter.ts:370-624` | 255 linii | first/continuation/title layouts, normalized frames, segmenty, auxiliary flows, block/text/lockup slots, growth targets i route mapping |
+| `compositionTemplateFromPageGeometry` | `server/src/composition/adapters/page-template.ts:370-624` | 255 linii | first/continuation/title layouts, normalized frames, segmenty, auxiliary flows, block/text/lockup slots, growth targets i route mapping |
 | `drawCompositionDebugOverlay` | `server/src/report-renderer.ts:150-277` | 128 linii | chrome, flow placements, obstacles, barrier candidates, blocks, tables, footer/page number, lines i glyphs |
-| `compositionStylesFromRenderConfig` | `server/src/composition/render-config-styles.ts:16-143` | 128 linii | odczyt wartości PDF, body/list/title/subtitle/quote styles, padding, markers, glyphs i kolory |
+| `compositionStylesFromRenderConfig` | `server/src/composition/adapters/render-config.ts:16-143` | 128 linii | odczyt wartości PDF, body/list/title/subtitle/quote styles, padding, markers, glyphs i kolory |
 | `compileTemplateSource` | `server/src/template-contract.ts:348-469` | 122 linii | walidacja schema, canvas/direction, regions, slotów, flowów, archetype, page, composition i no-overlap |
 | `drawCompositionChart` | `server/src/composition/js-pdf-adapter.ts:437-546` | 110 linii | geometria wykresu, skale, osie, etykiety, kolory i rysowanie elementów chartu |
 | `checkEmptyAndUnderfilledSlots` | `server/src/composition/evaluator.ts:211-310` | 100 linii | wykrywanie pustych route segments, underfill, minimalnych fragmentów i diagnostyki przejścia |
 
 Rozmiary całych kluczowych modułów wynoszą: `text-planner.ts` 2418 linii,
-`evaluator.ts` 744, `page-template-adapter.ts` 624, `js-pdf-adapter.ts` 947,
+`evaluator.ts` 744, `page-template.ts` 624, `js-pdf-adapter.ts` 947,
 `report-composition-entrypoint.ts` oraz `report-renderer.ts`.
 [`text-planner.ts:1-2418`](../../server/src/composition/text-planner.ts#L1-L2418)
 [`evaluator.ts:1-744`](../../server/src/composition/evaluator.ts#L1-L744)
-[`page-template-adapter.ts:1-624`](../../server/src/composition/page-template-adapter.ts#L1-L624)
+[`page-template.ts:1-624`](../../server/src/composition/adapters/page-template.ts#L1-L624)
 [`js-pdf-adapter.ts:1-947`](../../server/src/composition/js-pdf-adapter.ts#L1-L947)
 
 `planFlow` jest monolitem, ale nie jest tylko „dużą funkcją wrappingu”:
@@ -389,7 +389,7 @@ ink bounds i style, a backend używa `doc.text`, `doc.rect`, `doc.addPage`,
 - [`server/src/composition/engine.ts`](../../server/src/composition/engine.ts) — neutralne typy planu, evaluation, planner/evaluator/backend interfaces i engine.
 - [`server/src/composition/text-planner.ts`](../../server/src/composition/text-planner.ts) — materializacja flow, wrapping, insertion, growth, obstacles, trace i obecna iteracja stabilizacyjna.
 - [`server/src/composition/evaluator.ts`](../../server/src/composition/evaluator.ts) — obecna legalność, coverage, overlap i status.
-- [`server/src/composition/page-template-adapter.ts`](../../server/src/composition/page-template-adapter.ts) — mapowanie page geometry na layouts/routes/slots.
+- [`server/src/composition/adapters/page-template.ts`](../../server/src/composition/adapters/page-template.ts) — mapowanie page geometry na layouts/routes/slots.
 - [`server/src/composition/js-pdf-adapter.ts`](../../server/src/composition/js-pdf-adapter.ts) — pomiar i wykonanie planu przez jsPDF.
 - [`server/src/report-renderer.ts`](../../server/src/report-renderer.ts) i [`server/src/tools/render-tools.ts`](../../server/src/tools/render-tools.ts) — publiczny call graph, chrome, debug i `dry_run`.
 - [`server/scripts/prototype-composition-debug.mjs`](../../server/scripts/prototype-composition-debug.mjs) — istniejący, ale prototypowy score z hard gate.

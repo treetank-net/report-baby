@@ -19,9 +19,9 @@ downstream module may silently repair or reinterpret an earlier decision.
 
 | Module | Owns | Interface used by | Must not own |
 |---|---|---|---|
-| `composition/input.ts` | Conversion of accepted input into named flows, blocks, assets and graphics | report adapter, input tests | page coordinates, wrapping, PDF drawing |
+| `composition/adapters/input.ts` | Conversion of accepted input into named flows, blocks, assets and graphics | report adapter, input tests | page coordinates, wrapping, PDF drawing |
 | `composition/model.ts` | Renderer-neutral document and template types | all composition modules | planning decisions or mutable runtime state |
-| `composition/page-template-adapter.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
+| `composition/adapters/page-template.ts` | Conversion of page-template geometry into composition layouts and routes | report adapter, template tests | text measurement, candidate ranking |
 | `composition/text-planner.ts` | Text measurement, wrapping adapter, routing, block placement and obstacle decisions | `text-engine.ts`, planner tests | PDF primitives, pixel decoding, final artifact checks, trace projection |
 | `composition/text-planner-candidates.ts` | Deterministic legal position variants for existing movable insertion and authored-graphic frames | `text-planner.ts` | document semantics, score, rendering, candidate evaluation |
 | `composition/text-wrapping.ts` | Renderer-neutral word wrapping, available intervals, flow-barrier continuation and obstacle-gap inspection | `text-planner.ts` | page routing, insertion policy, score, PDF drawing |
@@ -37,10 +37,10 @@ downstream module may silently repair or reinterpret an earlier decision.
 | `composition/evaluator.ts` | Hard-rule checks and quality score for a complete plan | text engine, evaluator tests | mutating plans, text reflow, raster PDF decoding |
 | `composition/contrast.ts` | Renderer-neutral contrast measurements over supplied page/asset rasters | evaluator, contrast tests | decoding assets, choosing layout, binary plan rejection |
 | `composition/js-pdf-adapter.ts` | jsPDF measurements and rendering capabilities | report adapter, PDF tests | flow routing, candidate selection, score policy |
-| `composition/text-engine.ts` | Composition-specific wiring of planner, evaluator and the `pdf`-to-planner policy adapter | report renderer | layout rules, drawing, duplicated thresholds |
+| `composition/adapters/text-engine.ts` | Composition-specific wiring of planner, evaluator and the `pdf`-to-planner policy adapter | report renderer | layout rules, drawing, duplicated thresholds |
 | `composition/report-composition-entrypoint.ts` | Report-specific entry point that prepares composition input and jsPDF metrics, then forwards explicit policy overrides | report renderer and composition test harnesses | a second planner, a second renderer, independent layout rules, policy-default translation |
 | `report-composition-runtime.ts` | Report-specific resource preparation: fonts, assets, contrast provider, block capabilities, composition styles and the backend closure | `report-renderer.ts` | page chrome, final artifact orchestration, a second planner or renderer |
-| `composition/render-config-styles.ts` | Translates render-config values and theme colors into jsPDF composition styles and backend options | report renderer and composition entry point | layout decisions, document input, planner state |
+| `composition/adapters/render-config.ts` | Translates render-config values and theme colors into jsPDF composition styles and backend options | report renderer and composition entry point | layout decisions, document input, planner state |
 | `report-renderer.ts` | Report-level orchestration, chrome, theme/config loading for chrome and artifact output | MCP/CLI entrypoints | deciding text breaks, ranking candidates or preparing composition capabilities |
 
 Small geometry helpers such as `graphic-geometry.ts` and `image-geometry.ts`

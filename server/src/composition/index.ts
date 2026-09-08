@@ -56,11 +56,11 @@ export type {
 } from './contracts/engine-contracts.js';
 export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './composition-engine.js';
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
-export { compositionDocumentFromInput } from './input.js';
-export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './page-template-adapter.js';
+export { compositionDocumentFromInput } from './adapters/input.js';
+export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './adapters/page-template.js';
 export { createTextCompositionPlanner } from './layout/text-planner.js';
 export type { MovableGraphicPolicy, MovableInsertionBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
-export { createTextCompositionEngine, type TextCompositionEngineOptions } from './text-engine.js';
+export { createTextCompositionEngine, type TextCompositionEngineOptions } from './adapters/text-engine.js';
 export { fitContainBox, imagePixelAtPoint } from './geometry/visual-geometry.js';
 export {
   contrastRatio,
@@ -80,10 +80,10 @@ export {
 export {
   compositionGraphicStyleFromRenderConfig,
   compositionStylesFromRenderConfig,
-} from './render-config-styles.js';
+} from './adapters/render-config.js';
 export type {
   CompositionGraphicColors,
-} from './render-config-styles.js';
+} from './adapters/render-config.js';
 export {
   combineJsPdfCompositionBlockCapabilities,
   createJsPdfTextBackend,

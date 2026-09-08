@@ -12,7 +12,7 @@ decorations attached to a planned block or graphic, not content blocks.
 
 ```text
 CompositionInput
-  → composition/input.ts
+  → composition/adapters/input.ts
   → CompositionBlock
   → planner measurement and placement
   → evaluator legality and quality
@@ -67,7 +67,7 @@ part of an obstacle contract.
 
 ## Capability ownership
 
-- `composition/input.ts` owns conversion from public input to normalized
+- `composition/adapters/input.ts` owns conversion from public input to normalized
   blocks and assets.
 - `composition/text-planner.ts` owns routing, text wrapping, block placement,
   obstacles, residual content and planning decisions.
