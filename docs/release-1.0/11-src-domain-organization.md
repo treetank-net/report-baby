@@ -70,6 +70,15 @@ checkpoint `957f957` odtwarza ten sam błąd dla `pages/editorial-metrics-two-co
 czystym checkoutem checkpointu potwierdziło, że nie jest to regresja podziału
 `presentation`/`brand`; pozostaje osobnym zadaniem testowo-planistycznym.
 
+Następny seam adaptera template’u został wydzielony w
+`composition/adapters/page-template-slots.ts` (192 LOC). Zawiera wspólne
+mapowanie deklaracji tekstowych, blokowych, lockupów i grafik, wzrost slotów oraz
+rozwijanie celów `content`. Dzięki temu `page-template.ts` (422 LOC) jest
+orkiestratorem geometrii, layoutów, routingu i polityki title/auxiliary; nie
+definiuje już funkcji wewnątrz `compositionTemplateFromPageGeometry` ani nie
+duplikuje mapowania text/block slots. Test adaptera zachowuje dotychczasowe dwa
+layouty i 142 linie planu.
+
 ## Kontekst produktu
 
 `report-baby` jest przede wszystkim bundlowanym serwerem MCP. CLI jest drugim
