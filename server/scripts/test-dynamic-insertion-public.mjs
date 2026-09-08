@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { writePublicBrandFixture } from './lib/fixtures.mjs';
+import { createDeterministicLorem, loremWords } from './lib/deterministic-lorem.mjs';
 
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-dynamic-public-'));
 const brandDir = join(temporary, 'brands');
@@ -19,6 +20,7 @@ const transport = new StdioClientTransport({
   stderr: 'pipe',
 });
 const client = new Client({ name: 'report-baby-dynamic-public-test', version: '1.0.0' });
+const lorem = createDeterministicLorem();
 
 try {
   await client.connect(transport);
@@ -31,8 +33,8 @@ try {
       brand_ref: 'brand://acme/primary',
       data: {
         flows: {
-          main: { continuation: 'allowed', blocks: [{ type: 'text', id: 'story', role: 'body', text: 'Dynamic public flow. '.repeat(500) }] },
-          quotes: { continuation: 'forbidden', blocks: Array.from({ length: 7 }, (_, index) => ({ type: 'text', id: `quote-${index + 1}`, role: 'quote', text: `Quote ${index + 1}.` })) },
+          main: { continuation: 'allowed', blocks: [{ type: 'text', id: 'story', role: 'body', text: loremWords(lorem, 1000) }] },
+          quotes: { continuation: 'forbidden', blocks: Array.from({ length: 7 }, (_, index) => ({ type: 'text', id: `quote-${index + 1}`, role: 'quote', text: `Quote ${index + 1}: ${loremWords(lorem, 4)}.` })) },
         },
       },
       placement_requests: {
@@ -56,4 +58,3 @@ try {
   await client.close().catch(() => {});
   await rm(temporary, { recursive: true, force: true });
 }
-

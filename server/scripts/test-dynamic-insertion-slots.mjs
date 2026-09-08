@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runProcess } from './lib/process.mjs';
+import { createDeterministicLorem, loremWords } from './lib/deterministic-lorem.mjs';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-dynamic-slots-'));
@@ -21,6 +22,7 @@ const build = runProcess('npx', [
 if (build.status !== 0) throw new Error(`dynamic insertion test bundle failed: ${build.stderr || build.stdout}`);
 
 function fixture() {
+  const lorem = createDeterministicLorem();
   return {
     template: {
       maxPages: 5,
@@ -31,8 +33,8 @@ function fixture() {
     },
     document: {
       flows: {
-        main: { id: 'main', continuation: 'allowed', blocks: [{ id: 'story', kind: 'paragraph', role: 'body', text: 'article '.repeat(700) }] },
-        quotes: { id: 'quotes', continuation: 'forbidden', blocks: Array.from({ length: 7 }, (_, index) => ({ id: `quote-${index + 1}`, kind: 'paragraph', role: 'quote', text: `Quote ${index + 1} with a short authored sentence.` })) },
+        main: { id: 'main', continuation: 'allowed', blocks: [{ id: 'story', kind: 'paragraph', role: 'body', text: loremWords(lorem, 1000) }] },
+        quotes: { id: 'quotes', continuation: 'forbidden', blocks: Array.from({ length: 7 }, (_, index) => ({ id: `quote-${index + 1}`, kind: 'paragraph', role: 'quote', text: `Quote ${index + 1}: ${loremWords(lorem, 4)}.` })) },
       },
     },
     metrics: {
