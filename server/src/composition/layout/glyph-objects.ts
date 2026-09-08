@@ -1,11 +1,11 @@
-import type { CompositionDocument, CompositionGlyphDefinition, CompositionRect } from './model.js';
+import type { CompositionDocument, CompositionGlyphDefinition, CompositionRect } from '../model.js';
 import type {
   CompositionGlyphSpec,
   CompositionLine,
   CompositionPlan,
   CompositionTextMetrics,
-} from './contracts/engine-contracts.js';
-import { compositionStyleName } from './text/style-name.js';
+} from '../contracts/engine-contracts.js';
+import { compositionStyleName } from '../text/style-name.js';
 
 function plannedLines(plan: CompositionPlan): CompositionLine[] {
   return [...plan.lines, ...(plan.insertionLines ?? [])];

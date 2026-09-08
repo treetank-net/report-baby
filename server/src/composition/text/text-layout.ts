@@ -11,7 +11,7 @@ import type {
   CompositionSlot,
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
-import { glyphSamplingBoxes } from '../glyph-sampling.js';
+import { glyphSamplingBoxes } from '../geometry/glyph-geometry.js';
 import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import { compositionStyleName } from './style-name.js';

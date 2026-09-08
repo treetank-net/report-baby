@@ -9,7 +9,7 @@ import type {
   CompositionPlan,
   CompositionTextMetrics,
 } from '../contracts/engine-contracts.js';
-import { placeGlyphObjects } from '../glyph-objects.js';
+import { placeGlyphObjects } from './glyph-objects.js';
 import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './flow-space.js';
 import { recordPlanningPhase, tracePlan } from '../observability/planning-observability.js';
 import { diagnostic } from '../observability/planning-observability.js';
