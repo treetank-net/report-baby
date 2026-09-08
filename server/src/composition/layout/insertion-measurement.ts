@@ -55,13 +55,16 @@ export function measureInsertionContent(
   box: CompositionRect,
   block: CompositionBlock,
 ): InsertionContentMeasurement | undefined {
+  const measurementBox = definition.fitContent && definition.grow?.axis === 'y'
+    ? { ...box, height: Math.max(box.height, definition.grow.maxHeight) }
+    : box;
   if (block.kind === 'table') {
     if (!metrics.measureTable) return undefined;
-    return { kind: 'table', table: metrics.measureTable(block, box, 0, { repeatHeader: false }) };
+    return { kind: 'table', table: metrics.measureTable(block, measurementBox, 0, { repeatHeader: false }) };
   }
   if (block.atomic === true || block.kind === 'image' || block.kind === 'metric' || block.kind === 'chart') {
     if (!metrics.measureBlock) return undefined;
-    return { kind: 'block', block: metrics.measureBlock(block, box) };
+    return { kind: 'block', block: metrics.measureBlock(block, measurementBox) };
   }
   return { kind: 'text', text: measureInsertionText(metrics, definition, box, block) };
 }

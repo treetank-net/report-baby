@@ -33,6 +33,15 @@ function flowLineCollidesWithSlot(
     && rectsOverlap(box, line.box));
 }
 
+/**
+ * Return whether a block was deliberately materialized as an insertion obstacle.
+ * Its exclusion geometry is handled by flow-barrier candidates, so the generic
+ * structured-block collision guard must not treat it as an accidental overlap.
+ */
+function isPlannedInsertionPlacement(plan: CompositionPlan, blockId: string, page: number): boolean {
+  return plan.graphicPlacements.some((graphic) => graphic.page === page && graphic.graphicId === `insertion:${blockId}`);
+}
+
 /** Return whether a structured block occupies the candidate slot's box. */
 /**
  * @planner-target composition/layout/flow-space.ts
@@ -45,6 +54,7 @@ function blockPlacementCollidesWithSlot(
   plan: CompositionPlan,
 ): boolean {
   return plan.blockPlacements.some((placement) => placement.page === pageState.page
+    && !isPlannedInsertionPlacement(plan, placement.blockId, placement.page)
     && placement.slotId !== slot.id
     && rectsOverlap(box, placement.box));
 }
@@ -61,6 +71,7 @@ function tablePlacementCollidesWithSlot(
   plan: CompositionPlan,
 ): boolean {
   return plan.tablePlacements.some((placement) => placement.page === pageState.page
+    && !isPlannedInsertionPlacement(plan, placement.blockId, placement.page)
     && placement.slotId !== slot.id
     && rectsOverlap(box, placement.box));
 }

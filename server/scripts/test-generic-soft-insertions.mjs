@@ -29,7 +29,7 @@ try {
       { id: 'metric', regionId: 'insertions', kind: 'block', box: { x: 5, y: 40, width: 20, height: 30 }, allowedRoles: ['metric'], allowedBlockKinds: ['metric'], fitContent: true },
       { id: 'chart', regionId: 'insertions', kind: 'block', box: { x: 30, y: 40, width: 30, height: 20 }, allowedRoles: ['chart'], allowedBlockKinds: ['chart'] },
       { id: 'image', regionId: 'insertions', kind: 'block', box: { x: 65, y: 40, width: 30, height: 20 }, allowedRoles: ['body'], allowedBlockKinds: ['image'] },
-      { id: 'table', regionId: 'insertions', kind: 'block', box: { x: 5, y: 70, width: 90, height: 30 }, allowedRoles: ['table'], allowedBlockKinds: ['table'] },
+      { id: 'table', regionId: 'insertions', kind: 'block', box: { x: 5, y: 70, width: 90, height: 30 }, allowedRoles: ['table'], allowedBlockKinds: ['table'], fitContent: true, grow: { axis: 'y', maxHeight: 40 } },
     ] }],
     routes: {
       main: { slots: ['body'], continuation: 'forbidden' },
@@ -55,13 +55,21 @@ try {
     lineHeight() { return 5; },
     textPadding() { return { top: 0, bottom: 0 }; },
     measureBlock(block) { return { height: block.kind === 'image' ? 16 : 12 }; },
-    measureTable(block) { return { height: 20, endRow: block.table.body.length }; },
+    measureTable(block, box) { return { height: box.height >= 40 ? 20 : 30, endRow: block.table.body.length }; },
   };
   const result = createTextCompositionEngine(template).plan(document, metrics);
   assert.equal(result.evaluation.status, 'accepted', JSON.stringify(result.evaluation));
   assert.equal(result.plan.residualContent.length, 0, JSON.stringify(result.plan.residualContent));
   assert.deepEqual(new Set(result.plan.blockPlacements.map((placement) => placement.blockId)), new Set(['metric-card', 'chart-block', 'image-block']), 'all atomic insertion kinds must be placed through block capabilities');
   assert.deepEqual(result.plan.tablePlacements.map((placement) => placement.blockId), ['table-block'], 'table insertion must use the table placement contract');
+  const metricSlot = result.plan.slots.find((slot) => slot.id === '1:metric');
+  const metricObstacle = result.plan.graphicPlacements.find((placement) => placement.graphicId === 'insertion:metric-card');
+  assert.ok(metricSlot && metricSlot.box.height < 30, 'fit-content metric insertion must shrink to its measured height');
+  assert.ok(metricObstacle && metricSlot && metricObstacle.box.height === metricSlot.box.height, 'metric exclusion obstacle must use the measured height');
+  const tableSlot = result.plan.slots.find((slot) => slot.id === '1:table');
+  const tableObstacle = result.plan.graphicPlacements.find((placement) => placement.graphicId === 'insertion:table-block');
+  assert.equal(tableSlot?.box.height, 20, 'fit-content table insertion must measure against its auto-growth limit before fitting');
+  assert.ok(tableObstacle && tableSlot && tableObstacle.box.height === tableSlot.box.height, 'table exclusion obstacle must use the fitted table height');
   assert.equal(result.plan.insertionLines?.length ?? 0, 0, 'atomic and table insertions must not be fabricated as text lines');
   assert.equal(result.plan.graphicPlacements.filter((placement) => placement.graphicId.startsWith('insertion:')).length, 4, 'every insertion kind must reserve one text-flow obstacle');
   assert.ok(result.plan.decisions.filter((decision) => decision.code === 'INSERTION_LAYER_PLACED').length === 4, 'every insertion kind must expose one placement decision');
