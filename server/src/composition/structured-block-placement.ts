@@ -17,7 +17,7 @@ import type {
   FlowPlanningContext,
   FlowRuntime,
   FlowTarget,
-} from './flow-planning-types.js';
+} from './contracts/flow-planning.js';
 import { advanceCursor } from './flow-cursor.js';
 import { contentStartBottom, previousBlockInSlot } from './flow-occupancy.js';
 import { growSlot } from './slot-growth.js';

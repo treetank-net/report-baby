@@ -19,7 +19,7 @@ import type {
   FlowTarget,
   PreparedTextPlacement,
   SelectedFlowSlot,
-} from './flow-planning-types.js';
+} from './contracts/flow-planning.js';
 import {
   advanceTextBlockWhenNoLinesFit,
   applyTextPlacementDecisionRules,
@@ -42,7 +42,7 @@ export type {
   FlowRuntime,
   FlowTarget,
   SelectedFlowSlot,
-} from './flow-planning-types.js';
+} from './contracts/flow-planning.js';
 
 type FlowTargetResolution =
   | { kind: 'ready'; target: FlowTarget }

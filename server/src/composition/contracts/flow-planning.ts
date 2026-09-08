@@ -5,17 +5,17 @@ import type {
   CompositionRect,
   CompositionSlotTemplate,
   CompositionTemplate,
-} from './model.js';
+} from '../model.js';
 import type {
   CompositionPlan,
   CompositionSlot,
   CompositionTextMetrics,
-} from './engine.js';
-import type { TextCompositionPlannerPolicy } from './planner-policy.js';
-import type { PageState } from './page-management.js';
-import type { FlowCursor } from './flow-cursor.js';
-import type { flowBarrierBoxCandidatesForSlot } from './flow-barriers.js';
-import type { wrapBlock } from './text-measurement.js';
+} from '../engine.js';
+import type { TextCompositionPlannerPolicy } from '../planner-policy.js';
+import type { PageState } from '../page-management.js';
+import type { FlowCursor } from '../flow-cursor.js';
+import type { flowBarrierBoxCandidatesForSlot } from '../flow-barriers.js';
+import type { wrapBlock } from '../text-measurement.js';
 
 /** Immutable inputs shared by every operation in one flow-planning run. */
 export interface FlowPlanningContext {

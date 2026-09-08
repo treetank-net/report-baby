@@ -11,7 +11,7 @@ import type {
   FlowRuntime,
   FlowTarget,
   PreparedTextPlacement,
-} from './flow-planning-types.js';
+} from './contracts/flow-planning.js';
 import {
   flowingTextBottom,
   occupiedBottomInOverlappingSlots,

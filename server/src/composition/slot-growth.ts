@@ -3,7 +3,7 @@ import type {
   FlowPlanningContext,
   FlowRuntime,
   FlowTarget,
-} from './flow-planning-types.js';
+} from './contracts/flow-planning.js';
 import { recordFlowDecision } from './planning-records.js';
 
 /** Apply one legal slot-growth operation, move pushed slots, and record it. */

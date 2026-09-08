@@ -5,7 +5,7 @@ import type {
   CompositionPlan,
   CompositionWordRange,
 } from './engine.js';
-import type { FlowPlanningContext, FlowRuntime, FlowTarget } from './flow-planner.js';
+import type { FlowPlanningContext, FlowRuntime, FlowTarget } from './contracts/flow-planning.js';
 import { wordsForBlock } from './text-measurement.js';
 
 /**
