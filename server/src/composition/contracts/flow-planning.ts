@@ -12,7 +12,7 @@ import type {
   CompositionSlot,
   CompositionTextMetrics,
 } from './engine-contracts.js';
-import type { TextCompositionPlannerPolicy } from '../planner-policy.js';
+import type { TextCompositionPlannerPolicy } from './planner-policy.js';
 import type { PageState, FlowCursor } from './layout-state.js';
 import type { WrappedLine } from '../text/text-layout.js';
 

@@ -1,4 +1,5 @@
 import type { CompositionRect } from './model.js';
+import type { MovableInsertionPolicy, MovablePlacementBounds, MovableGraphicPolicy } from './contracts/planner-policy.js';
 
 export interface PlannedInsertion {
   flowId: string;
@@ -15,26 +16,12 @@ export interface PlannedGraphic {
   box: CompositionRect;
 }
 
-export interface MovablePlacementBounds {
-  bounds: CompositionRect;
-  axis?: 'x' | 'y';
-  preferred?: { x?: number; y?: number };
-  candidateCount: number;
-  refinementRounds?: number;
-  refinementCandidateCount?: number;
-}
-
-/** @deprecated Use MovablePlacementBounds; retained for the quote API. */
-export type MovableInsertionBounds = MovablePlacementBounds;
-
 export interface SelectedInsertionPlacement {
   graphicId: string;
   page: number;
   slotId: string;
   box: CompositionRect;
 }
-
-export type MovableInsertionPolicy = Record<string, MovableInsertionBounds>;
 
 /**
  * @planner-target composition/insertion-order.ts
@@ -221,8 +208,6 @@ export function movableInsertionProposalRefinements(
     (_key, proposal) => `insertion:${proposal.blockId}`,
   );
 }
-
-export type MovableGraphicPolicy = Record<string, MovablePlacementBounds>;
 
 /**
  * @planner-target composition/text-planner-candidates.ts

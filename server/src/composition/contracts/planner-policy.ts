@@ -1,7 +1,19 @@
-import type {
-  MovableGraphicPolicy,
-  MovableInsertionBounds,
-} from './text-planner-candidates.js';
+import type { CompositionRect } from '../model.js';
+
+export interface MovablePlacementBounds {
+  bounds: CompositionRect;
+  axis?: 'x' | 'y';
+  preferred?: { x?: number; y?: number };
+  candidateCount: number;
+  refinementRounds?: number;
+  refinementCandidateCount?: number;
+}
+
+/** @deprecated Use MovablePlacementBounds; retained for the quote API. */
+export type MovableInsertionBounds = MovablePlacementBounds;
+
+export type MovableInsertionPolicy = Record<string, MovableInsertionBounds>;
+export type MovableGraphicPolicy = Record<string, MovablePlacementBounds>;
 
 /** Configuration knobs shared by document and flow planning. */
 export interface TextCompositionPlannerPolicy {
@@ -19,7 +31,7 @@ export interface TextCompositionPlannerPolicy {
   /** Tolerance for renderer-neutral geometry comparisons, in planner units. */
   geometryTolerance?: number;
   /** Optional legal frame for an insertion. */
-  movableInsertionBounds?: Record<string, MovableInsertionBounds>;
+  movableInsertionBounds?: MovableInsertionPolicy;
   /** Optional legal frames for authored graphics with an explicit size. */
   movableGraphicBounds?: MovableGraphicPolicy;
 }

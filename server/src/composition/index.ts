@@ -58,7 +58,8 @@ export { compareCompositionEvaluations, createCompositionEngine, renderCompositi
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
 export { compositionDocumentFromInput } from './input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './page-template-adapter.js';
-export { createTextCompositionPlanner, type MovableGraphicPolicy, type MovableInsertionBounds, type TextCompositionPlannerPolicy } from './text-planner.js';
+export { createTextCompositionPlanner } from './text-planner.js';
+export type { MovableGraphicPolicy, MovableInsertionBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 export { createTextCompositionEngine, type TextCompositionEngineOptions } from './text-engine.js';
 export { fitContainBox, imagePixelAtPoint } from './geometry/visual-geometry.js';
 export {

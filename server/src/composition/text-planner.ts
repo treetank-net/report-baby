@@ -12,10 +12,6 @@ import {
   movableInsertionProposalCandidates,
   movableInsertionProposalRefinements,
   movableInsertionProposalSignature,
-  type MovableGraphicPolicy,
-  type MovableInsertionBounds,
-  type PlannedGraphic,
-  type PlannedInsertion,
 } from './text-planner-candidates.js';
 import {
   insertionProposalsFromPlan,
@@ -23,16 +19,16 @@ import {
 } from './layout/insertion-layout.js';
 import { seedGraphicProposals } from './graphic-planning.js';
 import { createPlan, planDocumentOnce } from './document-layout.js';
-import type { TextCompositionPlannerPolicy } from './planner-policy.js';
+import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 
-export type { MovableGraphicPolicy, MovableInsertionBounds } from './text-planner-candidates.js';
+export type { MovableGraphicPolicy, MovableInsertionBounds } from './contracts/planner-policy.js';
 export { lineHeight, styleFor, textPadding, wrapBlock, wordsForBlock } from './text/text-layout.js';
 export { addResidual, addTableResidual, diagnostic } from './planning-records.js';
 export { ensurePage, routeLayout, routeSlots, slotId, validateGrowthPolicies } from './layout/page-state.js';
 export { rectBottom, rectsOverlap } from './geometry/rectangles.js';
 export { placeLines } from './text/text-layout.js';
 export { placeGraphicsForPage } from './graphic-planning.js';
-export type { TextCompositionPlannerPolicy } from './planner-policy.js';
+export type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 
 /** Plan every deterministic candidate produced by one planner pass. */
 /**

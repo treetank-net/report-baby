@@ -10,7 +10,7 @@ import { compositionTemplateFromPageGeometry } from './page-template-adapter.js'
 import { createJsPdfTextMetrics } from './adapters/pdf/text.js';
 import type { JsPdfCompositionStyles } from './contracts/pdf.js';
 import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './text-engine.js';
-import type { TextCompositionPlannerPolicy } from './text-planner.js';
+import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 import { compositionStylesFromRenderConfig } from './render-config-styles.js';
 
 export {

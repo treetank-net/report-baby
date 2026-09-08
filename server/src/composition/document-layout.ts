@@ -26,9 +26,8 @@ import {
   reserveInsertionObstacles,
 } from './layout/insertion-layout.js';
 import { planFlow } from './flow-planner.js';
-import type { TextCompositionPlannerPolicy } from './planner-policy.js';
+import type { MovablePlacementBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 import type {
-  MovablePlacementBounds,
   PlannedGraphic,
   PlannedInsertion,
 } from './text-planner-candidates.js';

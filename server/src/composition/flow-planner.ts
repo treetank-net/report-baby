@@ -10,7 +10,7 @@ import type {
   CompositionTextMetrics,
 } from './contracts/engine-contracts.js';
 import { placeGraphicsForPage } from './graphic-planning.js';
-import type { TextCompositionPlannerPolicy } from './planner-policy.js';
+import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 import type { PageState } from './contracts/layout-state.js';
 import { advanceCursor } from './layout/page-state.js';
 import type {
