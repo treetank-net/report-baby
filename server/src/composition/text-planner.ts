@@ -28,7 +28,7 @@ import type { TextCompositionPlannerPolicy } from './planner-policy.js';
 export type { MovableGraphicPolicy, MovableInsertionBounds } from './text-planner-candidates.js';
 export { lineHeight, styleFor, textPadding, wrapBlock, wordsForBlock } from './text/text-measurement.js';
 export { addResidual, addTableResidual, diagnostic } from './planning-records.js';
-export { ensurePage, routeLayout, routeSlots, slotId, validateGrowthPolicies } from './layout/page-management.js';
+export { ensurePage, routeLayout, routeSlots, slotId, validateGrowthPolicies } from './layout/page-state.js';
 export { rectBottom, rectsOverlap } from './geometry/rectangles.js';
 export { placeLines } from './text/text-placement.js';
 export { placeGraphicsForPage } from './graphic-planning.js';

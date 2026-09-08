@@ -10,7 +10,7 @@ import type {
 } from './engine.js';
 import { polygonPoints } from './geometry/visual-geometry.js';
 import { diagnostic } from './planning-records.js';
-import { ensurePage, routeLayout, slotId } from './layout/page-management.js';
+import { ensurePage, routeLayout, slotId } from './layout/page-state.js';
 import type { PageState } from './contracts/layout-state.js';
 import type { PlannedGraphic } from './text-planner-candidates.js';
 

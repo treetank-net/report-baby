@@ -13,7 +13,7 @@ import type {
 } from '../engine.js';
 import { insertionKey } from './insertion-order.js';
 import { diagnostic, addResidual } from '../planning-records.js';
-import { ensurePage, routeLayout } from './page-management.js';
+import { ensurePage, routeLayout } from './page-state.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import type { PageState } from '../contracts/layout-state.js';
 import { lineHeight, textPadding, wrapBlock, wordsForBlock } from '../text/text-measurement.js';

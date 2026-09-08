@@ -10,7 +10,7 @@ import type {
 } from './engine.js';
 import type { PageState } from './contracts/layout-state.js';
 import { compositionStyleName } from './text/style-name.js';
-import { isAtomicBlock } from './layout/route-slots.js';
+import { isAtomicBlock } from './layout/page-state.js';
 import { diagnostic } from './planning-records.js';
 import { rectBottom } from './geometry/rectangles.js';
 import type {
@@ -18,9 +18,9 @@ import type {
   FlowRuntime,
   FlowTarget,
 } from './contracts/flow-planning.js';
-import { advanceCursor } from './layout/flow-cursor.js';
+import { advanceCursor } from './layout/page-state.js';
 import { contentStartBottom, previousBlockInSlot } from './layout/flow-occupancy.js';
-import { growSlot } from './layout/slot-growth.js';
+import { growSlot } from './layout/page-state.js';
 
 /**
  * @planner-target composition/structured-block-placement.ts

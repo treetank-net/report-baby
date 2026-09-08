@@ -12,7 +12,7 @@ import type {
 import { placeGraphicsForPage } from './graphic-planning.js';
 import type { TextCompositionPlannerPolicy } from './planner-policy.js';
 import type { PageState } from './contracts/layout-state.js';
-import { advanceCursor } from './layout/flow-cursor.js';
+import { advanceCursor } from './layout/page-state.js';
 import type {
   FlowPlanningContext,
   FlowRuntime,
@@ -28,10 +28,10 @@ import {
   selectTextLinesForPlacement,
   textPlacementCapacity,
 } from './flow-text-decision.js';
-import { hasRoleEligibleSlot, slotFor } from './layout/route-slots.js';
+import { hasRoleEligibleSlot, slotFor } from './layout/page-state.js';
 import { wordsForBlock } from './text/text-measurement.js';
 import type { wrapBlock } from './text/text-measurement.js';
-import { ensurePage, routeSlots } from './layout/page-management.js';
+import { ensurePage, routeSlots } from './layout/page-state.js';
 import { placeLines } from './text/text-placement.js';
 import { slotCollidesWithPlacedBlock } from './layout/flow-occupancy.js';
 import { placeStructuredBlock } from './structured-block-placement.js';

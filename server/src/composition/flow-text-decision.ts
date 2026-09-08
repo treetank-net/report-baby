@@ -17,12 +17,11 @@ import {
   occupiedBottomInOverlappingSlots,
   previousBlockInSlot,
 } from './layout/flow-occupancy.js';
-import { advanceCursor } from './layout/flow-cursor.js';
-import { growSlot } from './layout/slot-growth.js';
+import { advanceCursor, growSlot } from './layout/page-state.js';
 import { availableLineCount } from './text/line-capacity.js';
 import { obstructionAcrossLineBands } from './text/text-wrapping.js';
 import { lineHeight, styleFor, wrapBlock } from './text/text-measurement.js';
-import { slotBox } from './layout/page-management.js';
+import { slotBox } from './layout/page-state.js';
 import { rectBottom } from './geometry/rectangles.js';
 import { addResidual, diagnostic, recordFlowDecision } from './planning-records.js';
 

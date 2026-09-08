@@ -16,7 +16,7 @@ import { diagnostic } from './planning-records.js';
 import {
   ensurePage,
   validateGrowthPolicies,
-} from './layout/page-management.js';
+} from './layout/page-state.js';
 import type { PageState } from './contracts/layout-state.js';
 import {
   materializeGraphicPages,
