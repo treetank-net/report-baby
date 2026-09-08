@@ -7,8 +7,8 @@ import { parse } from 'yaml';
 const root = process.cwd();
 const configPath = join(root, 'templates/render-config.yml');
 const compositionDocsRoot = join(root, '..', 'docs/composition');
-const evaluatorPath = join(root, 'src/composition/evaluator.ts');
-const plannerPath = join(root, 'src/composition/text-planner.ts');
+const evaluatorPath = join(root, 'src/composition/evaluation/evaluator.ts');
+const plannerPath = join(root, 'src/composition/layout/text-planner.ts');
 const compositionSourceRoot = join(root, 'src/composition');
 const modelPath = join(compositionSourceRoot, 'model.ts');
 const blockKindsDocumentationPath = join(compositionDocsRoot, 'block-kinds.md');
@@ -80,19 +80,19 @@ if (missingPdfFields.length > 0) {
 
 const sourceText = async (relativePath) => readFile(join(compositionSourceRoot, relativePath), 'utf8');
 const sourceOwnership = [
-  { file: 'text-planner.ts', allowedGroups: [], reason: 'the renderer-neutral planner must receive policy instead of reading YAML' },
-  { file: 'text-planner-candidates.ts', allowedGroups: [], reason: 'candidate geometry must remain independent of configuration loading' },
-  { file: 'text-wrapping.ts', allowedGroups: [], reason: 'wrapping must remain independent of configuration loading' },
-  { file: 'flow-barriers.ts', allowedGroups: [], reason: 'barrier geometry must remain independent of configuration loading' },
-  { file: 'glyph-objects.ts', allowedGroups: [], reason: 'glyph placement must remain independent of configuration loading' },
-  { file: 'glyph-sampling.ts', allowedGroups: [], reason: 'sampling geometry must receive its inputs through the composition interface' },
-  { file: 'route-slots.ts', allowedGroups: [], reason: 'route compatibility must remain independent of configuration loading' },
-  { file: 'insertion-order.ts', allowedGroups: [], reason: 'source-order geometry must remain independent of configuration loading' },
-  { file: 'contrast.ts', allowedGroups: [], reason: 'contrast measurement must receive sampling policy through its provider options' },
-  { file: 'evaluator.ts', allowedGroups: ['compositionScore', 'contrast'], reason: 'the evaluator owns score interpretation and contrast target policy' },
-  { file: 'text-engine.ts', allowedGroups: ['pdf'], reason: 'the text-engine adapter translates PDF policy into planner policy' },
+  { file: 'layout/text-planner.ts', allowedGroups: [], reason: 'the renderer-neutral planner must receive policy instead of reading YAML' },
+  { file: 'layout/planner-candidates.ts', allowedGroups: [], reason: 'candidate geometry must remain independent of configuration loading' },
+  { file: 'text/text-layout.ts', allowedGroups: [], reason: 'wrapping must remain independent of configuration loading' },
+  { file: 'layout/flow-space.ts', allowedGroups: [], reason: 'barrier geometry must remain independent of configuration loading' },
+  { file: 'layout/glyph-objects.ts', allowedGroups: [], reason: 'glyph placement must remain independent of configuration loading' },
+  { file: 'geometry/glyph-geometry.ts', allowedGroups: [], reason: 'sampling geometry must receive its inputs through the composition interface' },
+  { file: 'layout/page-state.ts', allowedGroups: [], reason: 'route compatibility must remain independent of configuration loading' },
+  { file: 'layout/insertion-layout.ts', allowedGroups: [], reason: 'source-order geometry must remain independent of configuration loading' },
+  { file: 'evaluation/contrast.ts', allowedGroups: [], reason: 'contrast measurement must receive sampling policy through its provider options' },
+  { file: 'evaluation/evaluator.ts', allowedGroups: ['compositionScore', 'contrast'], reason: 'the evaluator owns score interpretation and contrast target policy' },
+  { file: 'adapters/text-engine.ts', allowedGroups: ['pdf'], reason: 'the text-engine adapter translates PDF policy into planner policy' },
   { file: 'report-composition-entrypoint.ts', allowedGroups: [], reason: 'the report entrypoint delegates policy translation to the text-engine adapter' },
-  { file: 'render-config-styles.ts', allowedGroups: ['pdf', 'chart'], reason: 'the styles adapter owns renderer style configuration only' },
+  { file: 'adapters/render-config.ts', allowedGroups: ['pdf', 'chart'], reason: 'the styles adapter owns renderer style configuration only' },
 ];
 const ownershipViolations = [];
 for (const rule of sourceOwnership) {
