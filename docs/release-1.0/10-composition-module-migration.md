@@ -351,6 +351,12 @@ adaptera, którego obecnie nie ma.
 Publiczne eksporty nadal przechodzą przez jedyną fasadę `composition/index.ts`.
 Po każdym seamie sprawdzamy kompilację, architekturę i suite composition.
 
+Pełny `npm test` uruchomiony po migracji zatrzymuje się poza suite composition
+na istniejącym scenariuszu `public MCP behavior` dla
+`pages/editorial-metrics-two-column` (`EMPTY_FLOW_SLOT`). Zmiany tej migracji
+nie dotykają evaluatora ani logiki przepływu odpowiedzialnej za ten komunikat;
+przypadek pozostaje osobnym zadaniem zachowania publicznego.
+
 ### Aktualny inventory
 
 `server/scripts/planner-function-dependency-report.mjs` skanuje cały bieżący
