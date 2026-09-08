@@ -1,10 +1,10 @@
-import { readRenderConfig } from '../builtin-template-source.js';
+import { readRenderConfig } from '../../builtin-template-source.js';
 
-import type { CompositionDocument, CompositionBlock } from './model.js';
+import type { CompositionDocument, CompositionBlock } from '../model.js';
 
 import type { CompositionContrastAssessment } from './contrast.js';
 
-import type { CompositionLine, CompositionPlan, CompositionScoreComponent } from './engine.js';
+import type { CompositionLine, CompositionPlan, CompositionScoreComponent } from '../engine.js';
 
 import { allLines, horizontalOverlap, normalizeContrastQuality, saturatingQuality, scoreConfigNumber, spread } from './evaluation-support.js';
 

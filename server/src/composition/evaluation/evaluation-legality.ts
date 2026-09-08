@@ -1,6 +1,6 @@
-import type { CompositionBlock, CompositionDocument } from './model.js';
+import type { CompositionBlock, CompositionDocument } from '../model.js';
 
-import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from './engine.js';
+import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from '../engine.js';
 
 import {
 

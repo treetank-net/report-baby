@@ -1,7 +1,7 @@
 import { createCompositionEngine, type CompositionEngine } from './engine.js';
 import { readRenderConfig } from '../builtin-template-source.js';
 import type { CompositionTemplate } from './model.js';
-import { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluator.js';
+import { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
 import { createTextCompositionPlanner, type TextCompositionPlannerPolicy } from './text-planner.js';
 import type { CompositionPlan } from './engine.js';
 

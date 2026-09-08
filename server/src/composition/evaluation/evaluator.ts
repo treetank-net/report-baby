@@ -1,5 +1,5 @@
-import type { CompositionDocument } from './model.js';
-import type { CompositionDiagnostic, CompositionEvaluation, CompositionPlan } from './engine.js';
+import type { CompositionDocument } from '../model.js';
+import type { CompositionDiagnostic, CompositionEvaluation, CompositionPlan } from '../engine.js';
 import type { CompositionContrastAssessment, CompositionContrastProvider } from './contrast.js';
 import { scoreLegalPlan } from './evaluation-scoring.js';
 import {

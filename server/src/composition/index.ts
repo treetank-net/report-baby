@@ -55,7 +55,7 @@ export type {
   CompositionWordRange,
 } from './engine.js';
 export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './engine.js';
-export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluator.js';
+export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
 export { compositionDocumentFromInput } from './input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './page-template-adapter.js';
 export { createTextCompositionPlanner, type MovableGraphicPolicy, type MovableInsertionBounds, type TextCompositionPlannerPolicy } from './text-planner.js';
@@ -75,7 +75,7 @@ export {
   type CompositionContrastStatus,
   type CompositionRasterImage,
   type CompositionRgbColor,
-} from './contrast.js';
+} from './evaluation/contrast.js';
 export {
   compositionGraphicStyleFromRenderConfig,
   compositionStylesFromRenderConfig,

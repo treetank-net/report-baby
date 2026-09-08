@@ -4,7 +4,7 @@ import type { CompositionInput } from '../contract/schema.js';
 import type { CompiledTemplate } from '../template-contract.js';
 import type { CompositionTemplate } from './model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './engine.js';
-import type { CompositionContrastProvider } from './contrast.js';
+import type { CompositionContrastProvider } from './evaluation/contrast.js';
 import { compositionDocumentFromInput } from './input.js';
 import { compositionTemplateFromPageGeometry } from './page-template-adapter.js';
 import { createJsPdfTextMetrics, type JsPdfCompositionStyles } from './js-pdf-adapter.js';

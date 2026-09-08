@@ -1,8 +1,8 @@
-import { readRenderConfig } from '../builtin-template-source.js';
+import { readRenderConfig } from '../../builtin-template-source.js';
 
-import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from './engine.js';
+import type { CompositionDiagnostic, CompositionPlan, CompositionSlot } from '../engine.js';
 
-import { graphicIntervalsForLine } from './graphic-geometry.js';
+import { graphicIntervalsForLine } from '../graphic-geometry.js';
 
 
 
