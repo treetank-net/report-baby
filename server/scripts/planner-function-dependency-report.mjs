@@ -670,7 +670,7 @@ function renderReport(records) {
   const unresolved = records.flatMap((record) => record.dependencies
     .filter((dependency) => dependency.kind === 'external')
     .map((dependency) => `${record.file}:${record.lineStart} ${record.name} → ${dependency.name}`));
-  const defaults = records.filter((record) => record.target === `composition/${record.fileBase}`);
+  const defaults = records.filter((record) => record.target === record.file);
   const missingComments = records.filter((record) => !record.hasPlannerComment);
   const lines = [
     '# Planner function and dependency inventory',
@@ -736,7 +736,7 @@ function renderReport(records) {
     'The target table is the intended import shape after relocation. A target with many unrelated dependencies is a signal to review ownership and possible shared helpers; it is not an instruction to split functions automatically. Dependencies shown as `external/state` are calls or member expressions that the inventory cannot assign to another scanned function; they need a deliberate ownership decision during the move.',
     '',
     `- Functions still defaulted to their current file: ${defaults.length}. These are intentionally left in place until a target seam is agreed.`,
-    `- Functions without an @planner-target comment: ${missingComments.length}. Run the inventory with --annotate to add missing comments.`,
+    `- Functions without an @planner-target comment: ${missingComments.length}.${missingComments.length ? ' Run the inventory with --annotate to add missing comments.' : ' All scanned functions are explicitly tagged.'}`,
     `- External/state dependency expressions: ${unresolved.length}.`,
     `- Functions above 80 lines in the relocation review queue: ${records.filter((record) => record.lineEnd - record.lineStart + 1 > 80).length}.`,
     `- Possible exact normalized-body duplicate groups: ${duplicateGroups(records).length}.`,
