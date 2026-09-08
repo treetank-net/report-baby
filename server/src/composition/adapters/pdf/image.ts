@@ -10,16 +10,28 @@ import type {
 import { chartTextSize } from './chart.js';
 import { oneLine } from './text.js';
 
+/**
+ * @planner-target composition/adapters/pdf/image.ts
+ * @planner-responsibility Keep the current imageFromBlock implementation intact until its target seam is extracted.
+ */
 function imageFromBlock(block: CompositionBlock): NonNullable<CompositionBlock['image']> {
   if (block.kind !== 'image' || !block.image) throw new Error(`Block '${block.id}' is not an image.`);
   return block.image;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/image.ts
+ * @planner-responsibility Keep the current imageWidth implementation intact until its target seam is extracted.
+ */
 function imageWidth(block: CompositionBlock, boxWidth: number): number {
   const image = imageFromBlock(block);
   return image.width === 'full' ? boxWidth : boxWidth * Number.parseFloat(image.width) / 100;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/image.ts
+ * @planner-responsibility Keep the current drawRasterChartTextLayer implementation intact until its target seam is extracted.
+ */
 function drawRasterChartTextLayer(
   pdf: jsPDF,
   family: string,
@@ -49,6 +61,10 @@ function drawRasterChartTextLayer(
   }
 }
 
+/**
+ * @planner-target composition/adapters/pdf/image.ts
+ * @planner-responsibility Keep the current drawCompositionImage implementation intact until its target seam is extracted.
+ */
 function drawCompositionImage(
   pdf: jsPDF,
   family: string,
@@ -98,6 +114,10 @@ function drawCompositionImage(
   });
 }
 
+/**
+ * @planner-target composition/adapters/pdf/image.ts
+ * @planner-responsibility Keep the current createJsPdfImageBlockCapabilities implementation intact until its target seam is extracted.
+ */
 export function createJsPdfImageBlockCapabilities(
   doc: jsPDF,
   family: string,
@@ -108,6 +128,10 @@ export function createJsPdfImageBlockCapabilities(
     throw new Error('Image block style requires non-negative gaps and positive caption metrics.');
   }
   return {
+    /**
+     * @planner-target composition/adapters/pdf/image.ts
+     * @planner-responsibility Keep the current measureBlock implementation intact until its target seam is extracted.
+     */
     measureBlock(block, box) {
       const image = imageFromBlock(block);
       const asset = assets.get(image.assetId);
@@ -131,6 +155,10 @@ export function createJsPdfImageBlockCapabilities(
         },
       };
     },
+    /**
+     * @planner-target composition/adapters/pdf/image.ts
+     * @planner-responsibility Keep the current renderer implementation intact until its target seam is extracted.
+     */
     renderer(pdf, block, placement) {
       drawCompositionImage(pdf, family, block, placement, assets, style);
     },

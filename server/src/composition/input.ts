@@ -3,19 +3,35 @@ import type { NormalizedContentNode, NormalizedImageNode } from '../content-mode
 import type { CompositionInput } from '../contract/schema.js';
 import type { CompositionAsset, CompositionBlock, CompositionDocument, CompositionFlow, CompositionGraphic } from './model.js';
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current blockId implementation intact until its target seam is extracted.
+ */
 function blockId(value: string | undefined, flowId: string, index: number): string {
   return value ?? `${flowId}-block-${index + 1}`;
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current imageAssetId implementation intact until its target seam is extracted.
+ */
 function imageAssetId(id: string): string {
   return `${id}:asset-1`;
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current contentNodes implementation intact until its target seam is extracted.
+ */
 function contentNodes(input: { text?: string; content?: unknown[] }): { nodes: NormalizedContentNode[]; text: string; diagnostics: string[] } {
   const normalized = Array.isArray(input.content) ? normalizeStructuredContent(input.content) : normalizeMarkdown(input.text ?? '');
   return { nodes: normalized.nodes, text: normalizedText(normalized), diagnostics: normalized.diagnostics };
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current imageNodes implementation intact until its target seam is extracted.
+ */
 function imageNodes(nodes: NormalizedContentNode[]): NormalizedImageNode[] {
   return nodes.flatMap((node) => {
     if (node.type === 'image') return [node];
@@ -25,10 +41,18 @@ function imageNodes(nodes: NormalizedContentNode[]): NormalizedImageNode[] {
   });
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current plainText implementation intact until its target seam is extracted.
+ */
 function plainText(nodes: NormalizedContentNode[]): string {
   return normalizedText({ nodes, source: 'commonmark', diagnostics: [] });
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current textBlock implementation intact until its target seam is extracted.
+ */
 function textBlock(id: string, role: CompositionBlock['role'], text: string, content?: NormalizedContentNode[], diagnostics?: string[]): CompositionBlock {
   return {
     id,
@@ -40,6 +64,10 @@ function textBlock(id: string, role: CompositionBlock['role'], text: string, con
   };
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current imageBlock implementation intact until its target seam is extracted.
+ */
 function imageBlock(id: string, role: CompositionBlock['role'], image: NormalizedImageNode, assetId: string): CompositionBlock {
   return {
     id,
@@ -58,9 +86,17 @@ function imageBlock(id: string, role: CompositionBlock['role'], image: Normalize
   };
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current inlineParts implementation intact until its target seam is extracted.
+ */
 function inlineParts(nodes: NormalizedContentNode[]): Array<{ kind: 'text'; nodes: NormalizedContentNode[] } | { kind: 'image'; image: NormalizedImageNode }> {
   const parts: Array<{ kind: 'text'; nodes: NormalizedContentNode[] } | { kind: 'image'; image: NormalizedImageNode }> = [];
   let textNodes: NormalizedContentNode[] = [];
+  /**
+   * @planner-target composition/input.ts
+   * @planner-responsibility Keep the current flush implementation intact until its target seam is extracted.
+   */
   const flush = (): void => {
     if (textNodes.length > 0) parts.push({ kind: 'text', nodes: textNodes });
     textNodes = [];
@@ -86,16 +122,28 @@ function inlineParts(nodes: NormalizedContentNode[]): Array<{ kind: 'text'; node
   return parts;
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current contentBlocks implementation intact until its target seam is extracted.
+ */
 function contentBlocks(id: string, role: CompositionBlock['role'], normalized: ReturnType<typeof contentNodes>): CompositionBlock[] {
   const blocks: CompositionBlock[] = [];
   let imageIndex = 0;
   let textIndex = 0;
+  /**
+   * @planner-target composition/input.ts
+   * @planner-responsibility Keep the current addText implementation intact until its target seam is extracted.
+   */
   const addText = (nodes: NormalizedContentNode[]): void => {
     const text = plainText(nodes);
     if (!text.trim()) return;
     textIndex += 1;
     blocks.push(textBlock(textIndex === 1 ? id : `${id}:part-${textIndex}`, role, text, nodes));
   };
+  /**
+   * @planner-target composition/input.ts
+   * @planner-responsibility Keep the current addParts implementation intact until its target seam is extracted.
+   */
   const addParts = (parts: ReturnType<typeof inlineParts>): void => {
     for (const part of parts) {
       if (part.kind === 'text') addText(part.nodes);
@@ -119,6 +167,10 @@ function contentBlocks(id: string, role: CompositionBlock['role'], normalized: R
   return blocks;
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current convertBlock implementation intact until its target seam is extracted.
+ */
 function convertBlock(flowId: string, input: CompositionInput['flows'][string]['blocks'][number], index: number): CompositionBlock[] {
   const id = blockId(input.id, flowId, index);
   const role = input.role ?? (input.type === 'heading' ? 'heading' : input.type === 'image' ? 'body' : input.type === 'table' ? 'table' : input.type === 'chart' ? 'chart' : input.type === 'metric' ? 'metric' : 'body');
@@ -146,6 +198,10 @@ function convertBlock(flowId: string, input: CompositionInput['flows'][string]['
   return [{ ...common, kind: 'chart', chart, atomic: input.atomic ?? true }];
 }
 
+/**
+ * @planner-target composition/input.ts
+ * @planner-responsibility Keep the current compositionDocumentFromInput implementation intact until its target seam is extracted.
+ */
 export function compositionDocumentFromInput(input: CompositionInput): CompositionDocument {
   const flows: Record<string, CompositionFlow> = {};
   for (const [flowId, flow] of Object.entries(input.flows)) {

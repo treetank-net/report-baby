@@ -6,6 +6,10 @@ export interface CompositionInterval {
 }
 
 /** Return the painted image bounds for an image fitted with `contain`. */
+/**
+ * @planner-target composition/geometry/visual-geometry.ts
+ * @planner-responsibility Keep the current fitContainBox implementation intact until its target seam is extracted.
+ */
 export function fitContainBox(container: CompositionBox, sourceWidth: number, sourceHeight: number): CompositionBox {
   const scale = Math.min(container.width / sourceWidth, container.height / sourceHeight);
   const width = sourceWidth * scale;
@@ -19,6 +23,10 @@ export function fitContainBox(container: CompositionBox, sourceWidth: number, so
 }
 
 /** Map a page-space point to a source-raster pixel inside a painted image box. */
+/**
+ * @planner-target composition/geometry/visual-geometry.ts
+ * @planner-responsibility Keep the current imagePixelAtPoint implementation intact until its target seam is extracted.
+ */
 export function imagePixelAtPoint(
   paintedBox: CompositionBox,
   imageWidth: number,
@@ -33,6 +41,10 @@ export function imagePixelAtPoint(
   };
 }
 
+/**
+ * @planner-target composition/geometry/visual-geometry.ts
+ * @planner-responsibility Keep the current polygonPoints implementation intact until its target seam is extracted.
+ */
 export function polygonPoints(graphic: CompositionGraphicPlacement): Array<{ x: number; y: number }> {
   if (graphic.points && graphic.points.length >= 3) return graphic.points;
   if (graphic.shape === 'polygon') return [];
@@ -57,6 +69,10 @@ export function polygonPoints(graphic: CompositionGraphicPlacement): Array<{ x: 
   return points;
 }
 
+/**
+ * @planner-target composition/geometry/visual-geometry.ts
+ * @planner-responsibility Keep the current mergeIntervals implementation intact until its target seam is extracted.
+ */
 function mergeIntervals(intervals: CompositionInterval[]): CompositionInterval[] {
   const sorted = intervals.filter((interval) => interval.end > interval.start).sort((left, right) => left.start - right.start);
   const merged: CompositionInterval[] = [];
@@ -68,6 +84,10 @@ function mergeIntervals(intervals: CompositionInterval[]): CompositionInterval[]
   return merged;
 }
 
+/**
+ * @planner-target composition/geometry/visual-geometry.ts
+ * @planner-responsibility Keep the current polygonIntervals implementation intact until its target seam is extracted.
+ */
 function polygonIntervals(points: Array<{ x: number; y: number }>, y: number): CompositionInterval[] {
   const intersections: number[] = [];
   for (let index = 0; index < points.length; index += 1) {
@@ -84,6 +104,10 @@ function polygonIntervals(points: Array<{ x: number; y: number }>, y: number): C
 }
 
 /** Return the exact horizontal shape intervals intersected by one line box. */
+/**
+ * @planner-target composition/geometry/visual-geometry.ts
+ * @planner-responsibility Keep the current graphicIntervalsForLine implementation intact until its target seam is extracted.
+ */
 export function graphicIntervalsForLine(graphic: CompositionGraphicPlacement, y: number, lineHeight: number): CompositionInterval[] {
   const top = graphic.box.y;
   const bottom = graphic.box.y + graphic.box.height;

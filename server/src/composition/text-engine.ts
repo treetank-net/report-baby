@@ -8,6 +8,10 @@ import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js
 
 export type TextCompositionEngineOptions = CompositionEvaluationOptions;
 
+/**
+ * @planner-target composition/text-engine.ts
+ * @planner-responsibility Keep the current pdfNumber implementation intact until its target seam is extracted.
+ */
 function pdfNumber(pdf: Record<string, number>, key: string): number {
   const value = pdf[key];
   if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite pdf.${key}.`);
@@ -18,6 +22,10 @@ function pdfNumber(pdf: Record<string, number>, key: string): number {
  * Translate the renderer's PDF policy into the planner's renderer-neutral
  * policy. This is the only composition adapter that owns these defaults;
  * callers may override them through the returned policy or engine argument.
+ */
+/**
+ * @planner-target composition/text-engine.ts
+ * @planner-responsibility Keep the current plannerPolicyFromRenderConfig implementation intact until its target seam is extracted.
  */
 export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
   const pdf = readRenderConfig().pdf;
@@ -32,6 +40,10 @@ export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
   };
 }
 
+/**
+ * @planner-target composition/text-engine.ts
+ * @planner-responsibility Keep the current createTextCompositionEngine implementation intact until its target seam is extracted.
+ */
 export function createTextCompositionEngine(
   template: CompositionTemplate,
   policy: TextCompositionPlannerPolicy = {},
@@ -46,6 +58,10 @@ export function createTextCompositionEngine(
     ...(template.headingKeepWithNextLines === undefined ? {} : { headingKeepWithNextLines: template.headingKeepWithNextLines }),
   };
   return createCompositionEngine(createTextCompositionPlanner(template, configuredPolicy), {
+    /**
+     * @planner-target composition/text-engine.ts
+     * @planner-responsibility Keep the current evaluate implementation intact until its target seam is extracted.
+     */
     evaluate(document, plan: CompositionPlan) {
       return evaluateCompositionPlan(document, plan, options);
     },

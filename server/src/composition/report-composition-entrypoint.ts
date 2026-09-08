@@ -60,6 +60,10 @@ export interface ReportCompositionResult {
  * the real jsPDF measurement capability, and returns the engine result. It
  * does not render PDF content and does not contain layout rules.
  */
+/**
+ * @planner-target composition/report-composition-entrypoint.ts
+ * @planner-responsibility Keep the current planReportComposition implementation intact until its target seam is extracted.
+ */
 export function planReportComposition(
   doc: jsPDF,
   compiled: CompiledTemplate,

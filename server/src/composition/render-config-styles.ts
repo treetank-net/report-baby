@@ -9,6 +9,10 @@ import type {
   JsPdfCompositionTableStyle,
 } from './contracts/pdf.js';
 
+/**
+ * @planner-target composition/render-config-styles.ts
+ * @planner-responsibility Keep the current pdfNumber implementation intact until its target seam is extracted.
+ */
 function pdfNumber(pdf: Record<string, number>, key: string): number {
   const value = pdf[key];
   if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite pdf.${key}.`);
@@ -30,8 +34,16 @@ export interface CompositionGraphicColors {
   drawColor: [number, number, number];
 }
 
+/**
+ * @planner-target composition/render-config-styles.ts
+ * @planner-responsibility Keep the current compositionStylesFromRenderConfig implementation intact until its target seam is extracted.
+ */
 export function compositionStylesFromRenderConfig(colors?: CompositionTextColors, titleCase: 'normal' | 'upper' = 'normal', glyphFontFamily?: string): JsPdfCompositionStyles {
   const pdf = readRenderConfig().pdf;
+  /**
+   * @planner-target composition/render-config-styles.ts
+   * @planner-responsibility Keep the current textColor implementation intact until its target seam is extracted.
+   */
   const textColor = (color: [number, number, number] | undefined) => color === undefined ? {} : { textColor: color };
   const body: JsPdfCompositionStyle = {
     fontSize: pdfNumber(pdf, 'bodySize'),
@@ -182,6 +194,10 @@ export interface CompositionTableColors {
   lineColor: [number, number, number];
 }
 
+/**
+ * @planner-target composition/render-config-styles.ts
+ * @planner-responsibility Keep the current compositionMetricStyleFromRenderConfig implementation intact until its target seam is extracted.
+ */
 export function compositionMetricStyleFromRenderConfig(colors: CompositionMetricColors): JsPdfCompositionMetricStyle {
   const pdf = readRenderConfig().pdf;
   return {
@@ -206,8 +222,16 @@ export function compositionMetricStyleFromRenderConfig(colors: CompositionMetric
 }
 
 /** Keep chart geometry in render-config.yml; a brand supplies only colors. */
+/**
+ * @planner-target composition/render-config-styles.ts
+ * @planner-responsibility Keep the current compositionChartStyleFromRenderConfig implementation intact until its target seam is extracted.
+ */
 export function compositionChartStyleFromRenderConfig(colors: CompositionChartColors): JsPdfCompositionChartStyle {
   const chart = readRenderConfig().chart;
+  /**
+   * @planner-target composition/render-config-styles.ts
+   * @planner-responsibility Keep the current chartNumber implementation intact until its target seam is extracted.
+   */
   const chartNumber = (key: string): number => {
     const value = chart[key];
     if (!Number.isFinite(value)) throw new Error(`Render configuration is missing finite chart.${key}.`);
@@ -253,6 +277,10 @@ export function compositionChartStyleFromRenderConfig(colors: CompositionChartCo
   };
 }
 
+/**
+ * @planner-target composition/render-config-styles.ts
+ * @planner-responsibility Keep the current compositionTableStyleFromRenderConfig implementation intact until its target seam is extracted.
+ */
 export function compositionTableStyleFromRenderConfig(colors: CompositionTableColors): JsPdfCompositionTableStyle {
   const pdf = readRenderConfig().pdf;
   return {
@@ -265,6 +293,10 @@ export function compositionTableStyleFromRenderConfig(colors: CompositionTableCo
   };
 }
 
+/**
+ * @planner-target composition/render-config-styles.ts
+ * @planner-responsibility Keep the current compositionImageStyleFromRenderConfig implementation intact until its target seam is extracted.
+ */
 export function compositionImageStyleFromRenderConfig(overrides: Partial<JsPdfCompositionImageStyle> = {}): JsPdfCompositionImageStyle {
   const pdf = readRenderConfig().pdf;
   return {
@@ -279,6 +311,10 @@ export function compositionImageStyleFromRenderConfig(overrides: Partial<JsPdfCo
   };
 }
 
+/**
+ * @planner-target composition/render-config-styles.ts
+ * @planner-responsibility Keep the current compositionGraphicStyleFromRenderConfig implementation intact until its target seam is extracted.
+ */
 export function compositionGraphicStyleFromRenderConfig(colors: CompositionGraphicColors): JsPdfCompositionGraphicStyle {
   return {
     ...colors,
@@ -286,6 +322,10 @@ export function compositionGraphicStyleFromRenderConfig(colors: CompositionGraph
   };
 }
 
+/**
+ * @planner-target composition/render-config-styles.ts
+ * @planner-responsibility Keep the current compositionPdfBackendOptionsFromRenderConfig implementation intact until its target seam is extracted.
+ */
 export function compositionPdfBackendOptionsFromRenderConfig(): { pageSizeTolerance: number } {
   return { pageSizeTolerance: pdfNumber(readRenderConfig().pdf, 'pageSizeTolerance') };
 }

@@ -7,10 +7,18 @@ import type {
 } from '../contracts/engine-contracts.js';
 import { compositionStyleName } from '../text/style-name.js';
 
+/**
+ * @planner-target composition/layout/glyph-objects.ts
+ * @planner-responsibility Keep the current plannedLines implementation intact until its target seam is extracted.
+ */
 function plannedLines(plan: CompositionPlan): CompositionLine[] {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
+/**
+ * @planner-target composition/layout/glyph-objects.ts
+ * @planner-responsibility Keep the current glyphTargetBox implementation intact until its target seam is extracted.
+ */
 function glyphTargetBox(
   target: CompositionGlyphDefinition['target'],
   page: number,
@@ -33,6 +41,10 @@ function glyphTargetBox(
   return placement ? { box: placement.box, slotId: placement.slotId, flowId: undefined } : undefined;
 }
 
+/**
+ * @planner-target composition/layout/glyph-objects.ts
+ * @planner-responsibility Keep the current glyphAnchorX implementation intact until its target seam is extracted.
+ */
 function glyphAnchorX(metrics: CompositionTextMetrics, spec: CompositionGlyphSpec, target: { box: CompositionRect; line?: CompositionLine }): number {
   const offsetX = spec.offsetX ?? 0;
   if (spec.anchor === 'text-start') {
@@ -55,6 +67,10 @@ function glyphAnchorX(metrics: CompositionTextMetrics, spec: CompositionGlyphSpe
 }
 
 /** Resolves authored and backend-generated decorations against final geometry. */
+/**
+ * @planner-target composition/layout/glyph-objects.ts
+ * @planner-responsibility Keep the current placeGlyphObjects implementation intact until its target seam is extracted.
+ */
 export function placeGlyphObjects(document: CompositionDocument, metrics: CompositionTextMetrics, plan: CompositionPlan): void {
   plan.glyphPlacements ??= [];
   const lines = plannedLines(plan);

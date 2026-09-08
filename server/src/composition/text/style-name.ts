@@ -5,6 +5,10 @@ import type { CompositionBlock } from '../model.js';
  * style. In particular, a heading block in the header flow is still a
  * heading; the flow role only controls routing, not the glyph metrics.
  */
+/**
+ * @planner-target composition/text/style-name.ts
+ * @planner-responsibility Keep the current compositionStyleName implementation intact until its target seam is extracted.
+ */
 export function compositionStyleName(block: CompositionBlock): string {
   if (block.kind === 'list-item') return 'list-item';
   if (block.role === 'title') return 'title';

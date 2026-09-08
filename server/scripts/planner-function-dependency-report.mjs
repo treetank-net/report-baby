@@ -300,6 +300,7 @@ function functionName(node) {
   if (node.name && ts.isIdentifier(node.name)) return node.name.text;
   if (node.name && (ts.isStringLiteral(node.name) || ts.isNumericLiteral(node.name))) return node.name.text;
   if (node.parent && ts.isVariableDeclaration(node.parent) && ts.isIdentifier(node.parent.name)) return node.parent.name.text;
+  if (node.parent && ts.isPropertyAssignment(node.parent) && ts.isIdentifier(node.parent.name)) return node.parent.name.text;
   return undefined;
 }
 
@@ -328,12 +329,30 @@ function collectFunctions(sourceFile) {
 }
 
 function leadingPlannerComment(sourceFile, node) {
-  const ranges = ts.getLeadingCommentRanges(sourceFile.text, node.getFullStart()) ?? [];
+  const anchor = annotationAnchor(node);
+  const ranges = ts.getLeadingCommentRanges(sourceFile.text, anchor.getFullStart()) ?? [];
   for (let index = ranges.length - 1; index >= 0; index -= 1) {
     const text = sourceFile.text.slice(ranges[index].pos, ranges[index].end);
     if (text.includes('@planner-target')) return text;
   }
+  const anchorLineStart = lineStart(sourceFile, anchor.getStart());
+  const preceding = sourceFile.text.slice(Math.max(0, anchorLineStart - 2000), anchorLineStart);
+  const targetPosition = preceding.lastIndexOf('@planner-target');
+  if (targetPosition >= 0) {
+    const commentStart = preceding.lastIndexOf('/**', targetPosition);
+    const commentEnd = preceding.indexOf('*/', targetPosition);
+    if (commentStart >= 0 && commentEnd >= 0 && /^\s*$/u.test(preceding.slice(commentEnd + 2))) {
+      return preceding.slice(commentStart, commentEnd + 2);
+    }
+  }
   return undefined;
+}
+
+function annotationAnchor(node) {
+  if (node.parent && (ts.isVariableDeclaration(node.parent) || ts.isPropertyAssignment(node.parent))) {
+    return node.parent;
+  }
+  return node;
 }
 
 function commentMetadata(comment, fallbackTarget, fallbackResponsibility) {
@@ -354,11 +373,12 @@ function indentAt(sourceFile, position) {
 function annotationFor(sourceFile, node) {
   const name = functionName(node);
   if (!name) return undefined;
+  const anchor = annotationAnchor(node);
   const target = targetFor(sourceFile.fileName, name);
   const responsibility = responsibilityFor(name);
-  const indent = indentAt(sourceFile, node.getStart());
+  const indent = indentAt(sourceFile, anchor.getStart());
   return {
-    position: lineStart(sourceFile, node.getStart()),
+    position: lineStart(sourceFile, anchor.getStart()),
     text: `${indent}/**\n${indent} * @planner-target ${target}\n${indent} * @planner-responsibility ${responsibility}\n${indent} */\n`,
   };
 }
@@ -371,9 +391,14 @@ function annotateSources() {
       .map((node) => annotationFor(sourceFile, node))
       .filter(Boolean)
       .sort((left, right) => right.position - left.position);
-    if (insertions.length === 0) continue;
     let text = sourceFile.text;
     for (const insertion of insertions) text = `${text.slice(0, insertion.position)}${insertion.text}${text.slice(insertion.position)}`;
+    let previous;
+    do {
+      previous = text;
+      text = text.replace(/(^[ \t]*\/\*\*[\r\n]+[ \t]*\* @planner-target ([^\r\n]+)[\r\n]+[ \t]*\* @planner-responsibility ([^\r\n]+)[\r\n]+[ \t]*\*\/[\r\n]+)(?:^[ \t]*\/\*\*[\r\n]+[ \t]*\* @planner-target \2[\r\n]+[ \t]*\* @planner-responsibility \3[\r\n]+[ \t]*\*\/[\r\n]+)+/gmu, '$1');
+    } while (text !== previous);
+    if (text === sourceFile.text) continue;
     fs.writeFileSync(file, text);
   }
 }

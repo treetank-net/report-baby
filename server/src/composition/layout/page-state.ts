@@ -132,22 +132,42 @@ export function validateGrowthPolicies(template: CompositionTemplate, plan: Comp
 }
 
 /** Return whether a block requires an atomic/block slot. */
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Keep the current isAtomicBlock implementation intact until its target seam is extracted.
+ */
 export function isAtomicBlock(block: CompositionBlock): boolean {
   return block.atomic === true || block.kind === 'metric' || block.kind === 'chart';
 }
 
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Keep the current requiresBlockSlot implementation intact until its target seam is extracted.
+ */
 function requiresBlockSlot(block: CompositionBlock): boolean {
   return isAtomicBlock(block) && (block.kind !== 'image' || block.role === 'chart' || block.role === 'metric');
 }
 
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Keep the current blockMatchesAllowedId implementation intact until its target seam is extracted.
+ */
 function blockMatchesAllowedId(blockId: string, allowedIds: string[]): boolean {
   return allowedIds.some((allowedId) => blockId === allowedId || blockId.startsWith(`${allowedId}:`));
 }
 
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Keep the current routeHasBlockSlot implementation intact until its target seam is extracted.
+ */
 function routeHasBlockSlot(layout: CompositionLayoutTemplate, slotIds: string[]): boolean {
   return slotIds.some((id) => layout.slots.some((slot) => slot.id === id && slot.kind === 'block'));
 }
 
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Keep the current slotMatchesBlock implementation intact until its target seam is extracted.
+ */
 function slotMatchesBlock(
   definition: CompositionSlotTemplate,
   hasBlockSlot: boolean,
@@ -166,6 +186,10 @@ function slotMatchesBlock(
 }
 
 /** Select the first compatible slot without changing page or plan state. */
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Keep the current slotFor implementation intact until its target seam is extracted.
+ */
 export function slotFor(
   layout: CompositionLayoutTemplate,
   slotIds: string[],
@@ -183,6 +207,10 @@ export function slotFor(
 }
 
 /** Report whether a compatible slot remains from a route position onward. */
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Keep the current hasRoleEligibleSlot implementation intact until its target seam is extracted.
+ */
 export function hasRoleEligibleSlot(
   layout: CompositionLayoutTemplate,
   slotIds: string[],
@@ -198,6 +226,10 @@ export function hasRoleEligibleSlot(
 }
 
 /** Advance to the next route slot, wrapping to the next page when necessary. */
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Keep the current advanceCursor implementation intact until its target seam is extracted.
+ */
 export function advanceCursor(cursor: FlowCursor, routeSlotsForPage: string[]): void {
   cursor.routeIndex += 1;
   cursor.resumeY = undefined;
@@ -210,6 +242,10 @@ export function advanceCursor(cursor: FlowCursor, routeSlotsForPage: string[]): 
 }
 
 /** Apply one legal slot-growth operation, move pushed slots, and record it. */
+/**
+ * @planner-target composition/layout/page-state.ts
+ * @planner-responsibility Apply one legal slot-growth operation and move affected slots.
+ */
 export function growSlot(
   context: FlowPlanningContext,
   runtime: FlowRuntime,

@@ -7,11 +7,19 @@ import type {
 } from '../../contracts/pdf.js';
 import { oneLine } from './text.js';
 
+/**
+ * @planner-target composition/adapters/pdf/metric.ts
+ * @planner-responsibility Keep the current metricFromBlock implementation intact until its target seam is extracted.
+ */
 function metricFromBlock(block: CompositionBlock): NonNullable<CompositionBlock['metric']> {
   if (block.kind !== 'metric' || !block.metric) throw new Error(`Block '${block.id}' is not a metric.`);
   return block.metric;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/metric.ts
+ * @planner-responsibility Keep the current createJsPdfMetricBlockCapabilities implementation intact until its target seam is extracted.
+ */
 export function createJsPdfMetricBlockCapabilities(
   doc: jsPDF,
   family: string,
@@ -19,11 +27,19 @@ export function createJsPdfMetricBlockCapabilities(
 ): { measureBlock: NonNullable<CompositionTextMetrics['measureBlock']>; renderer: JsPdfCompositionBlockRenderer } {
   if (!Number.isFinite(style.height) || style.height <= 0) throw new Error('Metric block style requires a positive height.');
   return {
+    /**
+     * @planner-target composition/adapters/pdf/metric.ts
+     * @planner-responsibility Keep the current measureBlock implementation intact until its target seam is extracted.
+     */
     measureBlock(block, box) {
       metricFromBlock(block);
       if (!Number.isFinite(box.width) || box.width <= style.padding * 2) throw new Error(`Metric block '${block.id}' has no usable width.`);
       return { height: style.height };
     },
+    /**
+     * @planner-target composition/adapters/pdf/metric.ts
+     * @planner-responsibility Keep the current renderer implementation intact until its target seam is extracted.
+     */
     renderer(pdf, block, placement) {
       const metric = metricFromBlock(block);
       const contentWidth = placement.box.width - style.padding * 2;

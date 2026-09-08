@@ -263,23 +263,43 @@ export function contentStartBottom(
   return occupiedBottomInOverlappingSlots(pageState, plan, slot, local);
 }
 
+/**
+ * @planner-target composition/layout/flow-space.ts
+ * @planner-responsibility Keep the current coversFlowWidth implementation intact until its target seam is extracted.
+ */
 function coversFlowWidth(flow: CompositionRect, graphic: CompositionRect): boolean {
   return graphic.x <= flow.x && graphic.x + graphic.width >= flow.x + flow.width;
 }
 
+/**
+ * @planner-target composition/layout/flow-space.ts
+ * @planner-responsibility Keep the current plannedLines implementation intact until its target seam is extracted.
+ */
 function plannedLines(plan: CompositionPlan): CompositionLine[] {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
+/**
+ * @planner-target composition/layout/flow-space.ts
+ * @planner-responsibility Keep the current blockFlowIds implementation intact until its target seam is extracted.
+ */
 function blockFlowIds(document: CompositionDocument): Map<string, string> {
   return new Map(Object.entries(document.flows).flatMap(([flowId, flow]) => flow.blocks.map((block: CompositionBlock) => [block.id, flowId] as const)));
 }
 
 /** Build the renderer-neutral flow-to-slot projection used by tracing and evaluation. */
+/**
+ * @planner-target composition/layout/flow-space.ts
+ * @planner-responsibility Keep the current registerFlowPlacements implementation intact until its target seam is extracted.
+ */
 export function registerFlowPlacements(document: CompositionDocument, plan: CompositionPlan): CompositionFlowPlacement[] {
   const flowIdsByBlock = blockFlowIds(document);
   const contentBySlot = new Map<string, Set<string>>();
   const linesBySlot = new Map<string, number>();
+  /**
+   * @planner-target composition/layout/flow-space.ts
+   * @planner-responsibility Keep the current addContent implementation intact until its target seam is extracted.
+   */
   const addContent = (flowId: string | undefined, slotId: string, blockId: string): void => {
     if (!flowId) return;
     const key = `${flowId}:${slotId}`;
@@ -324,6 +344,10 @@ export function registerFlowPlacements(document: CompositionDocument, plan: Comp
 }
 
 /** Split a text-flow placement at each overlapping wrap graphic. */
+/**
+ * @planner-target composition/layout/flow-space.ts
+ * @planner-responsibility Keep the current splitFlowBarrierBoxCandidates implementation intact until its target seam is extracted.
+ */
 export function splitFlowBarrierBoxCandidates(
   textPlacements: Array<Pick<CompositionFlowPlacement, 'id' | 'flowId' | 'page' | 'slotId' | 'box'>>,
   graphics: CompositionGraphicPlacement[],
@@ -369,6 +393,10 @@ export function splitFlowBarrierBoxCandidates(
   return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.flowId.localeCompare(right.flowId) || left.placementId.localeCompare(right.placementId) || (left.nextSourceId ?? '').localeCompare(right.nextSourceId ?? ''));
 }
 
+/**
+ * @planner-target composition/layout/flow-space.ts
+ * @planner-responsibility Keep the current flowBarrierBoxCandidatesForSlot implementation intact until its target seam is extracted.
+ */
 export function flowBarrierBoxCandidatesForSlot(
   page: number,
   slot: CompositionSlot,
@@ -385,6 +413,10 @@ export function flowBarrierBoxCandidatesForSlot(
   }], graphics);
 }
 
+/**
+ * @planner-target composition/layout/flow-space.ts
+ * @planner-responsibility Keep the current registerFlowBarrierBoxCandidates implementation intact until its target seam is extracted.
+ */
 export function registerFlowBarrierBoxCandidates(plan: CompositionPlan): CompositionFlowBarrierBoxCandidate[] {
   const textPlacements = (plan.flowPlacements ?? []).filter((placement) => placement.flowId !== undefined);
   return splitFlowBarrierBoxCandidates(textPlacements, plan.graphicPlacements);

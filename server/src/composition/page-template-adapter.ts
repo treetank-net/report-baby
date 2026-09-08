@@ -18,6 +18,10 @@ export interface PageTemplateCompositionOptions {
   includeHeaderFlow?: boolean;
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current box implementation intact until its target seam is extracted.
+ */
 function box(segment: PageSegment): CompositionRect {
   return {
     x: segment.x,
@@ -27,6 +31,10 @@ function box(segment: PageSegment): CompositionRect {
   };
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current normalizedBox implementation intact until its target seam is extracted.
+ */
 function normalizedBox(frame: { x: number; y: number; width: number; height: number }, geometry: PageGeometry): CompositionRect {
   return {
     x: frame.x * geometry.width,
@@ -36,6 +44,10 @@ function normalizedBox(frame: { x: number; y: number; width: number; height: num
   };
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current slotGrowth implementation intact until its target seam is extracted.
+ */
 function slotGrowth(source: CompiledTemplate['slots'][string], geometry: PageGeometry, continuation = false): CompositionSlotTemplate['grow'] | undefined {
   if (!source.grow) return undefined;
   const frame = slotFrame(source, continuation);
@@ -51,16 +63,28 @@ function slotGrowth(source: CompiledTemplate['slots'][string], geometry: PageGeo
   };
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current slotFrame implementation intact until its target seam is extracted.
+ */
 function slotFrame(source: CompiledTemplate['slots'][string], continuation: boolean): { x: number; y: number; width: number; height: number } {
   return continuation ? source.continuationFrame ?? source.frame : source.frame;
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current clipSegments implementation intact until its target seam is extracted.
+ */
 function clipSegments(segments: PageSegment[], top: number, bottom: number): PageSegment[] {
   return segments
     .map((segment) => ({ ...segment, top: Math.max(segment.top, top), bottom: Math.min(segment.bottom, bottom) }))
     .filter((segment) => segment.bottom > segment.top);
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current clipSegmentsToFrame implementation intact until its target seam is extracted.
+ */
 function clipSegmentsToFrame(segments: PageSegment[], frame: CompositionRect): PageSegment[] {
   return segments
     .map((segment) => {
@@ -76,6 +100,10 @@ function clipSegmentsToFrame(segments: PageSegment[], frame: CompositionRect): P
     .filter((segment) => segment.width > 0 && segment.bottom > segment.top);
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current segmentSlots implementation intact until its target seam is extracted.
+ */
 function segmentSlots(prefix: string, segments: PageSegment[], allowedBlockKinds: CompositionBlockKind[] = [], restrictSpecialRoles = false, flowId?: string): CompositionSlotTemplate[] {
   return segments.map((segment, index) => ({
     id: `${prefix}:segment-${index + 1}`,
@@ -94,10 +122,18 @@ function segmentSlots(prefix: string, segments: PageSegment[], allowedBlockKinds
   }));
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current layout implementation intact until its target seam is extracted.
+ */
 function layout(id: string, geometry: PageGeometry, slots: CompositionSlotTemplate[]): CompositionLayoutTemplate {
   return { id, width: geometry.width, height: geometry.height, slots };
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current auxiliaryFrame implementation intact until its target seam is extracted.
+ */
 function auxiliaryFrame(flowId: string, compiled: CompiledTemplate, geometry: PageGeometry): PageSegment | undefined {
   if (flowId === 'header' && geometry.bands.header) {
     const band = geometry.bands.header;
@@ -130,6 +166,10 @@ function auxiliaryFrame(flowId: string, compiled: CompiledTemplate, geometry: Pa
   return geometry.bands[declaredSlots[0]] ?? geometry.blockFrames[declaredSlots[0]];
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current auxiliarySlot implementation intact until its target seam is extracted.
+ */
 function auxiliarySlot(flowId: string, frame: PageSegment, textWidth?: number): CompositionSlotTemplate {
   return {
     id: `flow:${flowId}`,
@@ -139,6 +179,10 @@ function auxiliarySlot(flowId: string, frame: PageSegment, textWidth?: number): 
   };
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current declaredTextSlotsForFlow implementation intact until its target seam is extracted.
+ */
 function declaredTextSlotsForFlow(compiled: CompiledTemplate, flowId: string, pageGeometry: PageGeometry, continuation = false, sourceSlotIds?: string[]): CompositionSlotTemplate[] {
   return (sourceSlotIds ?? compiled.flows[flowId]?.slots ?? []).flatMap((slotId) => {
     const source = compiled.slots[slotId];
@@ -160,6 +204,10 @@ function declaredTextSlotsForFlow(compiled: CompiledTemplate, flowId: string, pa
   });
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current addAutomaticSegmentPushes implementation intact until its target seam is extracted.
+ */
 function addAutomaticSegmentPushes(
   slot: CompositionSlotTemplate,
   source: CompiledTemplate['slots'][string],
@@ -174,6 +222,10 @@ function addAutomaticSegmentPushes(
   };
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current declaredAuxiliaryTextSlotsForFlow implementation intact until its target seam is extracted.
+ */
 function declaredAuxiliaryTextSlotsForFlow(compiled: CompiledTemplate, flowId: string, pageGeometry: PageGeometry, continuation = false): CompositionSlotTemplate[] {
   return (compiled.flows[flowId]?.slots ?? []).flatMap((slotId) => {
     const source = compiled.slots[slotId];
@@ -195,6 +247,10 @@ function declaredAuxiliaryTextSlotsForFlow(compiled: CompiledTemplate, flowId: s
   });
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current declaredAuxiliaryBlockSlotsForFlow implementation intact until its target seam is extracted.
+ */
 function declaredAuxiliaryBlockSlotsForFlow(compiled: CompiledTemplate, flowId: string, pageGeometry: PageGeometry, continuation = false): CompositionSlotTemplate[] {
   return (compiled.flows[flowId]?.slots ?? []).flatMap((slotId) => {
     const source = compiled.slots[slotId];
@@ -219,6 +275,10 @@ function declaredAuxiliaryBlockSlotsForFlow(compiled: CompiledTemplate, flowId: 
   });
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current declaredAuxiliaryLockupSlotsForFlow implementation intact until its target seam is extracted.
+ */
 function declaredAuxiliaryLockupSlotsForFlow(compiled: CompiledTemplate, flowId: string, pageGeometry: PageGeometry, continuation = false): CompositionSlotTemplate[] {
   return (compiled.flows[flowId]?.slots ?? []).flatMap((slotId) => {
     const source = compiled.slots[slotId];
@@ -234,6 +294,10 @@ function declaredAuxiliaryLockupSlotsForFlow(compiled: CompiledTemplate, flowId:
   });
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current declaredGraphicSlots implementation intact until its target seam is extracted.
+ */
 function declaredGraphicSlots(compiled: CompiledTemplate, pageGeometry: PageGeometry, continuation = false): CompositionSlotTemplate[] {
   return Object.entries(compiled.slots)
     .filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[1]?.kind === 'graphic')
@@ -245,6 +309,10 @@ function declaredGraphicSlots(compiled: CompiledTemplate, pageGeometry: PageGeom
     }));
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current orderedMainSlotIds implementation intact until its target seam is extracted.
+ */
 function orderedMainSlotIds(
   sourceSlotIds: string[],
   textSlots: CompositionSlotTemplate[],
@@ -252,12 +320,20 @@ function orderedMainSlotIds(
   segments: CompositionSlotTemplate[],
 ): string[] {
   const byId = new Map([...textSlots, ...blockSlots].map((slot) => [slot.id, slot]));
+  /**
+   * @planner-target composition/page-template-adapter.ts
+   * @planner-responsibility Keep the current expandSimple implementation intact until its target seam is extracted.
+   */
   const expandSimple = (sourceId: string): CompositionSlotTemplate[] => sourceId === 'content'
     ? segments
     : byId.has(sourceId) ? [byId.get(sourceId)!] : [];
   return sourceSlotIds.flatMap(expandSimple).map((slot) => slot.id);
 }
 
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current routeForMain implementation intact until its target seam is extracted.
+ */
 function routeForMain(
   leadSlot: CompositionSlotTemplate | undefined,
   firstTextSlots: CompositionSlotTemplate[],
@@ -292,6 +368,10 @@ function routeForMain(
  * restriction prevents the next block from consuming leftover leading space.
  * Quote insertions are represented by their own named flow instead of this
  * main-flow lead mechanism.
+ */
+/**
+ * @planner-target composition/page-template-adapter.ts
+ * @planner-responsibility Keep the current compositionTemplateFromPageGeometry implementation intact until its target seam is extracted.
  */
 export function compositionTemplateFromPageGeometry(
   compiled: CompiledTemplate,
@@ -328,6 +408,10 @@ export function compositionTemplateFromPageGeometry(
   const continuationSegments = segmentSlots('continuation', clipSegmentsToFrame(clipSegments(continuationGeometry.segments, continuationTop, continuationContentBottom), continuationContentFrame ?? box(continuationGeometry.content)), contentBlockKinds, restrictSpecialRoles, mainFlowId);
   const firstMainSlotIds = mainFlow.slots;
   const continuationSourceIds = mainFlow.continuationSlots ?? mainFlow.slots;
+  /**
+   * @planner-target composition/page-template-adapter.ts
+   * @planner-responsibility Keep the current declaredBlockSlotsFor implementation intact until its target seam is extracted.
+   */
   const declaredBlockSlotsFor = (pageGeometry: PageGeometry, sourceSlotIds: string[], continuation = false): CompositionSlotTemplate[] => sourceSlotIds
     .map((slotId) => [slotId, compiled.slots[slotId]] as const)
     .filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[1]?.kind === 'image' || entry[1]?.kind === 'metric-card' || entry[1]?.kind === 'chart' || entry[1]?.kind === 'table')
@@ -345,6 +429,10 @@ export function compositionTemplateFromPageGeometry(
     });
   const declaredBlockSlots = declaredBlockSlotsFor(geometry, firstMainSlotIds);
   const continuationBlockSlots = declaredBlockSlotsFor(continuationGeometry, continuationSourceIds, true);
+  /**
+   * @planner-target composition/page-template-adapter.ts
+   * @planner-responsibility Keep the current declaredTextSlotsFor implementation intact until its target seam is extracted.
+   */
   const declaredTextSlotsFor = (pageGeometry: PageGeometry, sourceSlotIds: string[], segments: CompositionSlotTemplate[], continuation = false): CompositionSlotTemplate[] => sourceSlotIds
     .map((slotId) => [slotId, compiled.slots[slotId]] as const)
     .filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[0] !== 'content' && entry[1]?.kind === 'text')
@@ -386,6 +474,10 @@ export function compositionTemplateFromPageGeometry(
   const auxiliary: Array<{ flowId: string; first: CompositionSlotTemplate[]; continuation: CompositionSlotTemplate[]; reservedFirst: CompositionSlotTemplate[]; reservedContinuation: CompositionSlotTemplate[] }> = [];
   const auxiliaryFlowIds = new Set(Object.keys(compiled.flows));
   if (options.includeHeaderFlow) auxiliaryFlowIds.add('header');
+  /**
+   * @planner-target composition/page-template-adapter.ts
+   * @planner-responsibility Keep the current expandGrowthTargets implementation intact until its target seam is extracted.
+   */
   const expandGrowthTargets = (slots: CompositionSlotTemplate[], segments: CompositionSlotTemplate[]): CompositionSlotTemplate[] => slots.map((slot) => {
     if (!slot.grow?.pushes?.includes('content')) return slot;
     return {

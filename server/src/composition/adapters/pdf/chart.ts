@@ -7,12 +7,20 @@ import type {
 } from '../../contracts/pdf.js';
 import { oneLine } from './text.js';
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current chartFromBlock implementation intact until its target seam is extracted.
+ */
 function chartFromBlock(block: CompositionBlock): CompositionChart {
   if (block.kind !== 'chart' || !block.chart) throw new Error(`Block '${block.id}' is not a chart.`);
   if (block.chart.data.some((datum) => !Number.isFinite(datum.value))) throw new Error(`Chart '${block.id}' contains a non-finite value.`);
   return block.chart;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current chartHeaderTop implementation intact until its target seam is extracted.
+ */
 function chartHeaderTop(chart: CompositionChart, style: JsPdfCompositionChartStyle): number {
   if (!chart.title && !chart.subtitle) return style.headerEmptyTop;
   let y = style.headerTitleY;
@@ -21,19 +29,35 @@ function chartHeaderTop(chart: CompositionChart, style: JsPdfCompositionChartSty
   return y + style.headerBottomGap;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current chartTextSize implementation intact until its target seam is extracted.
+ */
 export function chartTextSize(size: number, renderedWidth: number, renderWidth: number, minimumFontSize: number): number {
   return Math.max(Number.isFinite(minimumFontSize) ? minimumFontSize : 1, size * renderedWidth / renderWidth * 72 / 25.4);
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current chartValue implementation intact until its target seam is extracted.
+ */
 function chartValue(value: number, chart: CompositionChart): string {
   const rounded = Math.round(value * 100) / 100;
   return `${chart.prefix ?? ''}${rounded}${chart.suffix ?? ''}`;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current chartPalette implementation intact until its target seam is extracted.
+ */
 function chartPalette(style: JsPdfCompositionChartStyle, index: number): [number, number, number] {
   return style.palette[index % Math.max(1, style.palette.length)] ?? style.foregroundColor;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current chartColor implementation intact until its target seam is extracted.
+ */
 function chartColor(value: string | undefined, fallback: [number, number, number]): [number, number, number] {
   if (!value) return fallback;
   const normalized = value.replace('#', '');
@@ -42,6 +66,10 @@ function chartColor(value: string | undefined, fallback: [number, number, number
   return [(parsed >> 16) & 255, (parsed >> 8) & 255, parsed & 255];
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current drawChartLabel implementation intact until its target seam is extracted.
+ */
 function drawChartLabel(doc: jsPDF, family: string, text: string, x: number, y: number, size: number, color: [number, number, number], bold = false): void {
   doc.setFont(family, bold ? 'bold' : 'normal');
   doc.setFontSize(size);
@@ -49,6 +77,10 @@ function drawChartLabel(doc: jsPDF, family: string, text: string, x: number, y: 
   doc.text(text, x, y);
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current drawChartOneLineLabel implementation intact until its target seam is extracted.
+ */
 function drawChartOneLineLabel(doc: jsPDF, family: string, text: string, x: number, y: number, size: number, maxWidth: number, color: [number, number, number], bold = false, align: 'left' | 'center' = 'left'): void {
   doc.setFont(family, bold ? 'bold' : 'normal');
   doc.setFontSize(size);
@@ -56,6 +88,10 @@ function drawChartOneLineLabel(doc: jsPDF, family: string, text: string, x: numb
   doc.text(oneLine(doc, text, Math.max(1, maxWidth)), x, y, { align });
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current drawCompositionChart implementation intact until its target seam is extracted.
+ */
 function drawCompositionChart(doc: jsPDF, family: string, block: CompositionBlock, placement: CompositionPlan['blockPlacements'][number], style: JsPdfCompositionChartStyle): void {
   const chart = chartFromBlock(block);
   const scale = Math.min(placement.box.width / style.width, placement.box.height / style.height);
@@ -64,7 +100,15 @@ function drawCompositionChart(doc: jsPDF, family: string, block: CompositionBloc
   const renderedHeight = style.height * scale;
   const originX = placement.box.x + (placement.box.width - renderedWidth) / 2;
   const originY = placement.box.y + (placement.box.height - renderedHeight) / 2;
+  /**
+   * @planner-target composition/adapters/pdf/chart.ts
+   * @planner-responsibility Keep the current sx implementation intact until its target seam is extracted.
+   */
   const sx = (value: number) => originX + value * scale;
+  /**
+   * @planner-target composition/adapters/pdf/chart.ts
+   * @planner-responsibility Keep the current sy implementation intact until its target seam is extracted.
+   */
   const sy = (value: number) => originY + value * scale;
   const plotTop = chartHeaderTop(chart, style);
   const plotBottom = style.height - style.padBottom;
@@ -76,6 +120,10 @@ function drawCompositionChart(doc: jsPDF, family: string, block: CompositionBloc
   const minimum = Math.min(0, ...values);
   const maximum = Math.max(0, ...values, 1);
   const valueRange = Math.max(1, maximum - minimum);
+  /**
+   * @planner-target composition/adapters/pdf/chart.ts
+   * @planner-responsibility Keep the current yFor implementation intact until its target seam is extracted.
+   */
   const yFor = (value: number) => plotBottom - (value - minimum) / valueRange * plotHeight;
   const tickCount = Math.max(1, Math.floor(style.ticks));
 
@@ -167,6 +215,10 @@ function drawCompositionChart(doc: jsPDF, family: string, block: CompositionBloc
   });
 }
 
+/**
+ * @planner-target composition/adapters/pdf/chart.ts
+ * @planner-responsibility Keep the current createJsPdfChartBlockCapabilities implementation intact until its target seam is extracted.
+ */
 export function createJsPdfChartBlockCapabilities(
   doc: jsPDF,
   family: string,
@@ -178,12 +230,20 @@ export function createJsPdfChartBlockCapabilities(
   if (!Number.isFinite(style.renderWidth) || style.renderWidth <= 0) throw new Error('Chart block style requires a positive render width.');
   if (!Number.isFinite(style.lineAreaOpacity) || style.lineAreaOpacity < 0 || style.lineAreaOpacity > 1) throw new Error('Chart block style requires line area opacity between 0 and 1.');
   return {
+    /**
+     * @planner-target composition/adapters/pdf/chart.ts
+     * @planner-responsibility Keep the current measureBlock implementation intact until its target seam is extracted.
+     */
     measureBlock(block, box) {
       chartFromBlock(block);
       if (!Number.isFinite(box.width) || box.width <= 0 || !Number.isFinite(box.height) || box.height <= 0) throw new Error(`Chart block '${block.id}' has no usable target box.`);
       const scale = Math.min(box.width / style.width, box.height / style.height);
       return { height: style.height * scale, scaled: scale < box.width / style.width };
     },
+    /**
+     * @planner-target composition/adapters/pdf/chart.ts
+     * @planner-responsibility Keep the current renderer implementation intact until its target seam is extracted.
+     */
     renderer(pdf, block, placement) {
       drawCompositionChart(pdf, family, block, placement, style);
     },

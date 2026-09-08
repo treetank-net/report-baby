@@ -7,6 +7,10 @@ import type {
 } from '../../contracts/pdf.js';
 import { compositionStyleName } from '../../text/style-name.js';
 
+/**
+ * @planner-target composition/adapters/pdf/text.ts
+ * @planner-responsibility Keep the current styleFor implementation intact until its target seam is extracted.
+ */
 export function styleFor(styles: JsPdfCompositionStyles, block: CompositionBlock): JsPdfCompositionStyle {
   const name = compositionStyleName(block);
   const style = styles[name];
@@ -14,6 +18,10 @@ export function styleFor(styles: JsPdfCompositionStyles, block: CompositionBlock
   return style;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/text.ts
+ * @planner-responsibility Keep the current applyStyle implementation intact until its target seam is extracted.
+ */
 export function applyStyle(doc: jsPDF, family: string, style: JsPdfCompositionStyle): void {
   doc.setFont(style.fontFamily ?? family, style.fontStyle);
   doc.setFontSize(style.fontSize);
@@ -28,6 +36,10 @@ interface JsPdfFontMetricsMetadata {
 /**
  * Read the same font metadata that jsPDF uses for the eventual PDF text.
  * jsPDF exposes ascender/decender in its normalized 1000-unit font space.
+ */
+/**
+ * @planner-target composition/adapters/pdf/text.ts
+ * @planner-responsibility Keep the current measureLineInkBounds implementation intact until its target seam is extracted.
  */
 function measureLineInkBounds(doc: jsPDF, family: string, style: JsPdfCompositionStyle): { top: number; bottom: number } {
   applyStyle(doc, family, style);
@@ -52,6 +64,10 @@ function measureLineInkBounds(doc: jsPDF, family: string, style: JsPdfCompositio
   };
 }
 
+/**
+ * @planner-target composition/adapters/pdf/text.ts
+ * @planner-responsibility Keep the current measureGlyphInkBounds implementation intact until its target seam is extracted.
+ */
 function measureGlyphInkBounds(doc: jsPDF, family: string, text: string, style: JsPdfCompositionStyle): { top: number; bottom: number } {
   applyStyle(doc, family, style);
   const internal = doc.internal as unknown as { getFont?: () => { metadata?: JsPdfFontMetricsMetadata } };
@@ -73,10 +89,18 @@ function measureGlyphInkBounds(doc: jsPDF, family: string, text: string, style: 
   return { top: style.baselineOffset - height, bottom: style.baselineOffset };
 }
 
+/**
+ * @planner-target composition/adapters/pdf/text.ts
+ * @planner-responsibility Keep the current textForStyle implementation intact until its target seam is extracted.
+ */
 export function textForStyle(value: string, style: JsPdfCompositionStyle): string {
   return style.textTransform === 'uppercase' ? value.toUpperCase() : value;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/text.ts
+ * @planner-responsibility Keep the current oneLine implementation intact until its target seam is extracted.
+ */
 export function oneLine(doc: jsPDF, value: string, width: number): string {
   const lines = doc.splitTextToSize(value, width) as string[];
   if (lines.length <= 1) return lines[0] ?? '';
@@ -88,6 +112,10 @@ export function oneLine(doc: jsPDF, value: string, width: number): string {
 /**
  * Adapt the real PDF font metrics to the renderer-neutral planner contract.
  * The planner only sees this interface; it never imports or calls jsPDF.
+ */
+/**
+ * @planner-target composition/adapters/pdf/text.ts
+ * @planner-responsibility Keep the current createJsPdfTextMetrics implementation intact until its target seam is extracted.
  */
 export function createJsPdfTextMetrics(
   doc: jsPDF,
@@ -102,47 +130,83 @@ export function createJsPdfTextMetrics(
   return {
     units: 'mm',
     family,
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current measureText implementation intact until its target seam is extracted.
+     */
     measureText(text, style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       applyStyle(doc, family, selected);
       return doc.getTextWidth(textForStyle(text, selected));
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current lineHeight implementation intact until its target seam is extracted.
+     */
     lineHeight(style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return selected.lineHeight;
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current lineInkBounds implementation intact until its target seam is extracted.
+     */
     lineInkBounds(style) {
       const bounds = measuredLineInkBounds.get(style);
       if (!bounds) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return bounds;
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current glyphInkBounds implementation intact until its target seam is extracted.
+     */
     glyphInkBounds(text, style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return measureGlyphInkBounds(doc, family, text, selected);
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current textPadding implementation intact until its target seam is extracted.
+     */
     textPadding(style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return { top: selected.paddingTop ?? 0, bottom: selected.paddingBottom ?? 0 };
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current foregroundColor implementation intact until its target seam is extracted.
+     */
     foregroundColor(style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return selected.textColor;
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current glyphBaselineOffset implementation intact until its target seam is extracted.
+     */
     glyphBaselineOffset(style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return selected.baselineOffset;
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current textIndent implementation intact until its target seam is extracted.
+     */
     textIndent(style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
       return selected.textIndent ?? 0;
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current textTrailingReserve implementation intact until its target seam is extracted.
+     */
     textTrailingReserve(style) {
       const selected = styles[style];
       if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
@@ -152,6 +216,10 @@ export function createJsPdfTextMetrics(
       doc.setFontSize(selected.quoteMarks.size);
       return doc.getTextWidth(selected.quoteMarks.close) + selected.quoteMarks.gap;
     },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current blockGap implementation intact until its target seam is extracted.
+     */
     blockGap(previousStyle, nextStyle) {
       const previous = styles[previousStyle];
       const next = styles[nextStyle];

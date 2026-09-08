@@ -2,10 +2,18 @@ import type { CompositionBlock } from '../model.js';
 import type { CompositionGlyphSamplingBox, CompositionTextMetrics } from '../contracts/engine-contracts.js';
 import { compositionStyleName } from '../text/style-name.js';
 
+/**
+ * @planner-target composition/geometry/glyph-geometry.ts
+ * @planner-responsibility Keep the current styleFor implementation intact until its target seam is extracted.
+ */
 function styleFor(block: CompositionBlock): string {
   return compositionStyleName(block);
 }
 
+/**
+ * @planner-target composition/geometry/glyph-geometry.ts
+ * @planner-responsibility Keep the current measure implementation intact until its target seam is extracted.
+ */
 function measure(metrics: CompositionTextMetrics, text: string, block: CompositionBlock): number {
   const width = metrics.measureText(text, styleFor(block));
   if (!Number.isFinite(width) || width < 0) throw new Error(`Text metrics returned an invalid width for '${styleFor(block)}': ${width}.`);
@@ -13,6 +21,10 @@ function measure(metrics: CompositionTextMetrics, text: string, block: Compositi
 }
 
 /** Creates renderer-neutral full-line-height sampling cells for each visible character. */
+/**
+ * @planner-target composition/geometry/glyph-geometry.ts
+ * @planner-responsibility Keep the current glyphSamplingBoxes implementation intact until its target seam is extracted.
+ */
 export function glyphSamplingBoxes(
   metrics: CompositionTextMetrics,
   block: CompositionBlock,

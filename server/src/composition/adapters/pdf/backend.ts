@@ -18,6 +18,10 @@ import { applyStyle, styleFor, textForStyle } from './text.js';
  * Dispatch is intentionally keyed by the normalized block kind, so a caller
  * can register images, metrics and charts for one plan.
  */
+/**
+ * @planner-target composition/adapters/pdf/backend.ts
+ * @planner-responsibility Keep the current combineJsPdfCompositionBlockCapabilities implementation intact until its target seam is extracted.
+ */
 export function combineJsPdfCompositionBlockCapabilities(
   capabilities: Partial<Record<CompositionBlockKind, JsPdfCompositionBlockCapability>>,
 ): { measureBlock: NonNullable<CompositionTextMetrics['measureBlock']>; blockRenderers: Partial<Record<CompositionBlockKind, JsPdfCompositionBlockRenderer>> } {
@@ -25,6 +29,10 @@ export function combineJsPdfCompositionBlockCapabilities(
     .filter(([, capability]) => capability !== undefined)
     .map(([kind, capability]) => [kind, capability!.renderer])) as Partial<Record<CompositionBlockKind, JsPdfCompositionBlockRenderer>>;
   return {
+    /**
+     * @planner-target composition/adapters/pdf/backend.ts
+     * @planner-responsibility Keep the current measureBlock implementation intact until its target seam is extracted.
+     */
     measureBlock(block, box) {
       const capability = capabilities[block.kind];
       if (!capability) throw new Error(`No jsPDF composition measurement capability was provided for '${block.kind}'.`);
@@ -34,10 +42,18 @@ export function combineJsPdfCompositionBlockCapabilities(
   };
 }
 
+/**
+ * @planner-target composition/adapters/pdf/backend.ts
+ * @planner-responsibility Keep the current assertInitialPageSize implementation intact until its target seam is extracted.
+ */
 function assertInitialPageSize(doc: jsPDF, page: CompositionPlan['pages'][number], tolerance: number): void {
   if (!Number.isFinite(tolerance) || tolerance < 0) throw new Error('jsPDF composition backend requires a non-negative page-size tolerance.');
   const width = doc.internal.pageSize.getWidth();
   const height = doc.internal.pageSize.getHeight();
+  /**
+   * @planner-target composition/adapters/pdf/backend.ts
+   * @planner-responsibility Keep the current sameDimension implementation intact until its target seam is extracted.
+   */
   const sameDimension = (actual: number, expected: number): boolean => Math.abs(actual - expected)
     <= tolerance + Number.EPSILON * Math.max(1, Math.abs(actual), Math.abs(expected)) * 1000;
   if (!sameDimension(width, page.width) || !sameDimension(height, page.height)) {
@@ -45,6 +61,10 @@ function assertInitialPageSize(doc: jsPDF, page: CompositionPlan['pages'][number
   }
 }
 
+/**
+ * @planner-target composition/adapters/pdf/backend.ts
+ * @planner-responsibility Keep the current drawGraphic implementation intact until its target seam is extracted.
+ */
 function drawGraphic(
   doc: jsPDF,
   placement: CompositionPlan['graphicPlacements'][number],
@@ -82,6 +102,10 @@ function drawGraphic(
  * placements. Asset-backed graphics require prepared image bytes in the
  * backend options; the planner remains independent of that representation.
  */
+/**
+ * @planner-target composition/adapters/pdf/backend.ts
+ * @planner-responsibility Keep the current createJsPdfTextBackend implementation intact until its target seam is extracted.
+ */
 export function createJsPdfTextBackend(
   doc: jsPDF,
   family: string,
@@ -89,6 +113,10 @@ export function createJsPdfTextBackend(
   options: JsPdfCompositionBackendOptions,
 ): CompositionBackend<Buffer> {
   return {
+    /**
+     * @planner-target composition/adapters/pdf/backend.ts
+     * @planner-responsibility Keep the current render implementation intact until its target seam is extracted.
+     */
     render(document: CompositionDocument, plan: CompositionPlan): Buffer {
       const blocks = new Map(Object.values(document.flows).flatMap((flow) => flow.blocks).map((block) => [block.id, block]));
       const firstPage = plan.pages[0];
@@ -120,6 +148,10 @@ export function createJsPdfTextBackend(
         doc.setPage(placement.page);
         renderer(doc, block, placement);
       }
+      /**
+       * @planner-target composition/adapters/pdf/backend.ts
+       * @planner-responsibility Keep the current renderLine implementation intact until its target seam is extracted.
+       */
       const renderLine = (line: CompositionPlan['lines'][number]): void => {
         const block = blocks.get(line.blockId);
         if (!block) throw new Error(`Composition line '${line.blockId}' has no source block.`);

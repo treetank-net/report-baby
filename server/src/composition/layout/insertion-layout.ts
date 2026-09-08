@@ -406,11 +406,19 @@ export function placeInsertionLayer(
 }
 
 /** Build the stable key shared by insertion proposals and authored blocks. */
+/**
+ * @planner-target composition/layout/insertion-layout.ts
+ * @planner-responsibility Keep the current insertionKey implementation intact until its target seam is extracted.
+ */
 export function insertionKey(flowId: string, blockId: string): string {
   return `${flowId}:${blockId}`;
 }
 
 /** Find the next planned insertion that must remain below current text. */
+/**
+ * @planner-target composition/layout/insertion-layout.ts
+ * @planner-responsibility Keep the current nextInsertionProposal implementation intact until its target seam is extracted.
+ */
 export function nextInsertionProposal(
   flow: CompositionFlowRoute,
   blocks: CompositionBlock[],
@@ -430,6 +438,10 @@ export function nextInsertionProposal(
 }
 
 /** Return the next insertion's vertical boundary, if one exists. */
+/**
+ * @planner-target composition/layout/insertion-layout.ts
+ * @planner-responsibility Keep the current nextInsertionBoundary implementation intact until its target seam is extracted.
+ */
 export function nextInsertionBoundary(
   flow: CompositionFlowRoute,
   blocks: CompositionBlock[],

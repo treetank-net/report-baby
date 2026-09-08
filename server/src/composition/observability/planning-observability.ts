@@ -95,18 +95,34 @@ import type {
 import { availableLineCount } from '../text/text-layout.js';
 import { wordsOf } from '../text/tokenization.js';
 
+/**
+ * @planner-target composition/observability/planning-observability.ts
+ * @planner-responsibility Keep the current textOf implementation intact until its target seam is extracted.
+ */
 function textOf(block: CompositionBlock): string {
   return block.text?.trim() ?? '';
 }
 
+/**
+ * @planner-target composition/observability/planning-observability.ts
+ * @planner-responsibility Keep the current plannedLines implementation intact until its target seam is extracted.
+ */
 function plannedLines(plan: CompositionPlan): CompositionLine[] {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
+/**
+ * @planner-target composition/observability/planning-observability.ts
+ * @planner-responsibility Keep the current sourceWordCount implementation intact until its target seam is extracted.
+ */
 function sourceWordCount(block: CompositionBlock): number {
   return wordsOf(textOf(block)).length;
 }
 
+/**
+ * @planner-target composition/observability/planning-observability.ts
+ * @planner-responsibility Keep the current recordPlanningPhase implementation intact until its target seam is extracted.
+ */
 export function recordPlanningPhase(
   plan: CompositionPlan,
   name: CompositionPlanningPhaseName,
@@ -124,6 +140,10 @@ export function recordPlanningPhase(
  * content goes and must stay after placement, normalization, and glyph
  * resolution have completed.
  */
+/**
+ * @planner-target composition/observability/planning-observability.ts
+ * @planner-responsibility Keep the current tracePlan implementation intact until its target seam is extracted.
+ */
 export function tracePlan(document: CompositionDocument, metrics: CompositionTextMetrics, plan: CompositionPlan): void {
   const sourceBlocks = Object.values(document.flows).flatMap((flow) => flow.blocks.map((block) => ({ flowId: flow.id, block })));
   const decisionsByBlock = new Map<string, CompositionTraceDecision[]>();
@@ -138,6 +158,10 @@ export function tracePlan(document: CompositionDocument, metrics: CompositionTex
     decisionsByBlock.set(blockId, decisions);
   }
   const fragmentsByBlock = new Map<string, CompositionBlockTrace['fragments']>();
+  /**
+   * @planner-target composition/observability/planning-observability.ts
+   * @planner-responsibility Keep the current addFragment implementation intact until its target seam is extracted.
+   */
   const addFragment = (blockId: string, fragment: CompositionBlockTrace['fragments'][number]): void => {
     const fragments = fragmentsByBlock.get(blockId) ?? [];
     fragments.push(fragment);

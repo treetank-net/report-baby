@@ -79,27 +79,47 @@ export interface CompositionContrastProvider {
   assess(plan: Pick<CompositionPlan, 'graphicPlacements' | 'lines' | 'insertionLines'>): CompositionContrastAssessment[];
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current channelLuminance implementation intact until its target seam is extracted.
+ */
 function channelLuminance(value: number): number {
   const srgb = value / 255;
   return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current relativeLuminance implementation intact until its target seam is extracted.
+ */
 export function relativeLuminance(color: CompositionRgbColor): number {
   return 0.2126 * channelLuminance(color[0])
     + 0.7152 * channelLuminance(color[1])
     + 0.0722 * channelLuminance(color[2]);
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current contrastRatio implementation intact until its target seam is extracted.
+ */
 export function contrastRatio(first: CompositionRgbColor, second: CompositionRgbColor): number {
   const lighter = Math.max(relativeLuminance(first), relativeLuminance(second));
   const darker = Math.min(relativeLuminance(first), relativeLuminance(second));
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current validColor implementation intact until its target seam is extracted.
+ */
 function validColor(color: CompositionRgbColor | undefined): color is CompositionRgbColor {
   return color !== undefined && [0, 1, 2].every((channel) => Number.isFinite(color[channel]) && color[channel] >= 0 && color[channel] <= 255);
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current validRegion implementation intact until its target seam is extracted.
+ */
 function validRegion(image: CompositionRasterImage, region: CompositionBox): boolean {
   return Number.isFinite(region.x)
     && Number.isFinite(region.y)
@@ -113,6 +133,10 @@ function validRegion(image: CompositionRasterImage, region: CompositionBox): boo
     && region.y + region.height <= image.height;
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current pixelAt implementation intact until its target seam is extracted.
+ */
 function pixelAt(image: CompositionRasterImage, x: number, y: number, pageBackground?: CompositionRgbColor): CompositionRgbColor | undefined {
   const offset = (y * image.width + x) * image.channels;
   const alpha = image.channels === 4 ? image.pixels[offset + 3] / 255 : 1;
@@ -127,10 +151,18 @@ interface SeededRandom {
   next(): number;
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current seededRandom implementation intact until its target seam is extracted.
+ */
 function seededRandom(seed: string): SeededRandom {
   const digest = createHash('sha1').update(seed).digest();
   let state = digest.readUInt32LE(0) || 0x6d2b79f5;
   return {
+    /**
+     * @planner-target composition/evaluation/contrast.ts
+     * @planner-responsibility Keep the current next implementation intact until its target seam is extracted.
+     */
     next() {
       state |= 0;
       state = Math.imul(state ^ (state >>> 16), 2246822507);
@@ -141,6 +173,10 @@ function seededRandom(seed: string): SeededRandom {
   };
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current normalizedSampleOffsets implementation intact until its target seam is extracted.
+ */
 function normalizedSampleOffsets(sampleCount: number, random: SeededRandom): Array<{ x: number; y: number }> {
   const whole = Math.floor(sampleCount);
   const fraction = sampleCount - whole;
@@ -148,6 +184,10 @@ function normalizedSampleOffsets(sampleCount: number, random: SeededRandom): Arr
   return Array.from({ length: resolvedCount }, () => ({ x: random.next() * 2 - 1, y: random.next() * 2 - 1 }));
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current samplePixelInBox implementation intact until its target seam is extracted.
+ */
 function samplePixelInBox(
   image: CompositionRasterImage,
   box: CompositionBox,
@@ -163,6 +203,10 @@ function samplePixelInBox(
   return { x, y, color: pixelAt(image, x, y, pageBackground) };
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current sampleGlyphFrames implementation intact until its target seam is extracted.
+ */
 function sampleGlyphFrames(
   glyphs: readonly CompositionGlyphSamplingBox[],
   foreground: CompositionRgbColor,
@@ -211,6 +255,10 @@ function sampleGlyphFrames(
   };
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current sampleCompositionContrast implementation intact until its target seam is extracted.
+ */
 export function sampleCompositionContrast(image: CompositionRasterImage, options: CompositionContrastSampleOptions): CompositionContrastResult {
   if (!Number.isInteger(image.width) || !Number.isInteger(image.height) || image.width <= 0 || image.height <= 0 || ![3, 4].includes(image.channels) || image.pixels.length < image.width * image.height * image.channels) {
     return { status: 'unknown', sampleCount: 0, reason: 'invalid-image' };
@@ -261,6 +309,10 @@ export function sampleCompositionContrast(image: CompositionRasterImage, options
   };
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current intersection implementation intact until its target seam is extracted.
+ */
 function intersection(first: CompositionBox, second: CompositionBox): CompositionBox | undefined {
   const x = Math.max(first.x, second.x);
   const y = Math.max(first.y, second.y);
@@ -270,10 +322,18 @@ function intersection(first: CompositionBox, second: CompositionBox): Compositio
   return { x, y, width: right - x, height: bottom - y };
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current pointInBox implementation intact until its target seam is extracted.
+ */
 function pointInBox(box: CompositionBox, x: number, y: number): boolean {
   return x >= box.x && x < box.x + box.width && y >= box.y && y < box.y + box.height;
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current backgroundAtPoint implementation intact until its target seam is extracted.
+ */
 function backgroundAtPoint(
   x: number,
   y: number,
@@ -297,6 +357,10 @@ function backgroundAtPoint(
   return base;
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current aggregateAssessment implementation intact until its target seam is extracted.
+ */
 function aggregateAssessment(
   graphicId: string | undefined,
   assetId: string | undefined,
@@ -327,8 +391,16 @@ function aggregateAssessment(
   };
 }
 
+/**
+ * @planner-target composition/evaluation/contrast.ts
+ * @planner-responsibility Keep the current createCompositionContrastProvider implementation intact until its target seam is extracted.
+ */
 export function createCompositionContrastProvider(options: CompositionContrastProviderOptions): CompositionContrastProvider {
   return {
+    /**
+     * @planner-target composition/evaluation/contrast.ts
+     * @planner-responsibility Keep the current assess implementation intact until its target seam is extracted.
+     */
     assess(plan) {
       const lines = [...plan.lines, ...(plan.insertionLines ?? [])];
       const pages = [...new Set(lines.map((line) => line.page))].sort((left, right) => left - right);

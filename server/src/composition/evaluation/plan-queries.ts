@@ -1,16 +1,28 @@
 import type { CompositionPlan, CompositionSlot } from '../contracts/engine-contracts.js';
 
 /** Find a materialized slot by its page-qualified identifier. */
+/**
+ * @planner-target composition/evaluation/plan-queries.ts
+ * @planner-responsibility Keep the current slotFor implementation intact until its target seam is extracted.
+ */
 export function slotFor(plan: CompositionPlan, slotId: string): CompositionSlot | undefined {
   return plan.slots.find((slot) => slot.id === slotId);
 }
 
 /** Return ordinary and insertion lines through one read-only projection. */
+/**
+ * @planner-target composition/evaluation/plan-queries.ts
+ * @planner-responsibility Keep the current allLines implementation intact until its target seam is extracted.
+ */
 export function allLines(plan: CompositionPlan): CompositionPlan['lines'] {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
 /** Determine whether planner decisions explain a missing usable fragment. */
+/**
+ * @planner-target composition/evaluation/plan-queries.ts
+ * @planner-responsibility Keep the current plannerFoundNoUsableLine implementation intact until its target seam is extracted.
+ */
 export function plannerFoundNoUsableLine(
   plan: CompositionPlan,
   blockId: string,
@@ -42,6 +54,10 @@ export function plannerFoundNoUsableLine(
 }
 
 /** Resolve a placed item to its source flow. */
+/**
+ * @planner-target composition/evaluation/plan-queries.ts
+ * @planner-responsibility Keep the current itemFlowIdForPlacedItem implementation intact until its target seam is extracted.
+ */
 export function itemFlowIdForPlacedItem(
   item: CompositionPlan['lines'][number] | CompositionPlan['blockPlacements'][number] | CompositionPlan['tablePlacements'][number],
   blockFlowIds: Map<string, string>,
@@ -52,11 +68,19 @@ export function itemFlowIdForPlacedItem(
 export type VisualPlacementKey = [number, number, number, number];
 
 /** Convert a placement with a route position to visual order coordinates. */
+/**
+ * @planner-target composition/evaluation/plan-queries.ts
+ * @planner-responsibility Keep the current visualPlacementKey implementation intact until its target seam is extracted.
+ */
 export function visualPlacementKey(item: { page: number; routeIndex?: number; box: { x: number; y: number } }): VisualPlacementKey | undefined {
   return item.routeIndex === undefined ? undefined : [item.page, item.routeIndex, item.box.y, item.box.x];
 }
 
 /** Find the first visual placement of a source block. */
+/**
+ * @planner-target composition/evaluation/plan-queries.ts
+ * @planner-responsibility Keep the current firstVisualPlacement implementation intact until its target seam is extracted.
+ */
 export function firstVisualPlacement(plan: CompositionPlan, blockId: string): VisualPlacementKey | undefined {
   const candidates = [
     ...allLines(plan).filter((line) => line.blockId === blockId),
@@ -67,6 +91,10 @@ export function firstVisualPlacement(plan: CompositionPlan, blockId: string): Vi
 }
 
 /** Compare two visual placement keys for semantic order regression. */
+/**
+ * @planner-target composition/evaluation/plan-queries.ts
+ * @planner-responsibility Keep the current visualOrderRegressed implementation intact until its target seam is extracted.
+ */
 export function visualOrderRegressed(current: VisualPlacementKey, previous: VisualPlacementKey): boolean {
   return current[0] < previous[0]
     || (current[0] === previous[0] && current[1] < previous[1])

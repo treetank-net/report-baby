@@ -6,11 +6,19 @@ import type {
   JsPdfCompositionTableStyle,
 } from '../../contracts/pdf.js';
 
+/**
+ * @planner-target composition/adapters/pdf/table.ts
+ * @planner-responsibility Keep the current tableFromBlock implementation intact until its target seam is extracted.
+ */
 function tableFromBlock(block: CompositionBlock): CompositionTable {
   if (block.kind !== 'table' || !block.table) throw new Error(`Block '${block.id}' is not a table.`);
   return block.table;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/table.ts
+ * @planner-responsibility Keep the current tableColumnWidths implementation intact until its target seam is extracted.
+ */
 function tableColumnWidths(pdf: jsPDF, family: string, table: CompositionTable, width: number, style: JsPdfCompositionTableStyle): number[] {
   const columnCount = Math.max(table.head.length, ...table.body.map((row) => row.length), 1);
   pdf.setFont(family, 'normal');
@@ -27,10 +35,18 @@ function tableColumnWidths(pdf: jsPDF, family: string, table: CompositionTable, 
   return naturalWidths.map((item) => width * item / naturalTotal);
 }
 
+/**
+ * @planner-target composition/adapters/pdf/table.ts
+ * @planner-responsibility Keep the current tableLineHeight implementation intact until its target seam is extracted.
+ */
 function tableLineHeight(style: JsPdfCompositionTableStyle): number {
   return style.fontSize * 25.4 / 72 * style.lineHeightRatio;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/table.ts
+ * @planner-responsibility Keep the current tableRowHeight implementation intact until its target seam is extracted.
+ */
 function tableRowHeight(pdf: jsPDF, family: string, row: Array<string | number>, widths: number[], style: JsPdfCompositionTableStyle, bold: boolean): number {
   pdf.setFont(family, bold ? 'bold' : 'normal');
   pdf.setFontSize(style.fontSize);
@@ -39,16 +55,28 @@ function tableRowHeight(pdf: jsPDF, family: string, row: Array<string | number>,
   return Math.max(1, ...lines.map((items) => items.length)) * lineHeight + style.cellPadding * 2;
 }
 
+/**
+ * @planner-target composition/adapters/pdf/table.ts
+ * @planner-responsibility Keep the current tableRowsFromBlock implementation intact until its target seam is extracted.
+ */
 function tableRowsFromBlock(block: CompositionBlock): { table: CompositionTable; head: Array<string | number>; body: Array<Array<string | number>> } {
   const table = tableFromBlock(block);
   return { table, head: table.head, body: table.body };
 }
 
+/**
+ * @planner-target composition/adapters/pdf/table.ts
+ * @planner-responsibility Keep the current drawCompositionTable implementation intact until its target seam is extracted.
+ */
 function drawCompositionTable(pdf: jsPDF, family: string, block: CompositionBlock, placement: CompositionPlan['tablePlacements'][number], style: JsPdfCompositionTableStyle): void {
   const { table, head, body } = tableRowsFromBlock(block);
   const widths = tableColumnWidths(pdf, family, table, placement.box.width, style);
   const lineHeight = tableLineHeight(style);
   let y = placement.box.y;
+  /**
+   * @planner-target composition/adapters/pdf/table.ts
+   * @planner-responsibility Keep the current drawRow implementation intact until its target seam is extracted.
+   */
   const drawRow = (row: Array<string | number>, bold: boolean, fill: [number, number, number], rowIndex: number) => {
     const height = tableRowHeight(pdf, family, row, widths, style, bold);
     let x = placement.box.x;
@@ -76,6 +104,10 @@ function drawCompositionTable(pdf: jsPDF, family: string, block: CompositionBloc
   }
 }
 
+/**
+ * @planner-target composition/adapters/pdf/table.ts
+ * @planner-responsibility Keep the current createJsPdfTableBlockCapabilities implementation intact until its target seam is extracted.
+ */
 export function createJsPdfTableBlockCapabilities(
   doc: jsPDF,
   family: string,
@@ -85,6 +117,10 @@ export function createJsPdfTableBlockCapabilities(
     throw new Error('Table block style requires positive font, line-height and row-fragment limits.');
   }
   return {
+    /**
+     * @planner-target composition/adapters/pdf/table.ts
+     * @planner-responsibility Keep the current measureTable implementation intact until its target seam is extracted.
+     */
     measureTable(block, box, startRow, options = { repeatHeader: startRow === 0 }) {
       const { table, head, body } = tableRowsFromBlock(block);
       if (!Number.isFinite(box.width) || box.width <= style.cellPadding * 2) throw new Error(`Table block '${block.id}' has no usable width.`);
@@ -102,6 +138,10 @@ export function createJsPdfTableBlockCapabilities(
       }
       return { height, endRow };
     },
+    /**
+     * @planner-target composition/adapters/pdf/table.ts
+     * @planner-responsibility Keep the current renderer implementation intact until its target seam is extracted.
+     */
     renderer(pdf, block, placement) {
       drawCompositionTable(pdf, family, block, placement, style);
     },

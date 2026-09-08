@@ -32,12 +32,20 @@ interface Interval {
   end: number;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current measure implementation intact until its target seam is extracted.
+ */
 function measure(metrics: CompositionTextMetrics, text: string, styleName: string): number {
   const width = metrics.measureText(text, styleName);
   if (!Number.isFinite(width) || width < 0) throw new Error(`Text metrics returned an invalid width for '${styleName}': ${width}.`);
   return width;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current lineInkBounds implementation intact until its target seam is extracted.
+ */
 function lineInkBounds(metrics: CompositionTextMetrics, styleName: string, lineHeight: number): { top: number; bottom: number } {
   const bounds = metrics.lineInkBounds?.(styleName) ?? { top: 0, bottom: lineHeight };
   if (!Number.isFinite(bounds.top) || !Number.isFinite(bounds.bottom) || bounds.bottom < bounds.top) {
@@ -46,6 +54,10 @@ function lineInkBounds(metrics: CompositionTextMetrics, styleName: string, lineH
   return bounds;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current mergeIntervals implementation intact until its target seam is extracted.
+ */
 function mergeIntervals(intervals: Interval[]): Interval[] {
   const sorted = intervals
     .filter((interval) => interval.end > interval.start)
@@ -59,6 +71,10 @@ function mergeIntervals(intervals: Interval[]): Interval[] {
   return merged;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current availableIntervals implementation intact until its target seam is extracted.
+ */
 function availableIntervals(
   slot: CompositionRect,
   y: number,
@@ -78,6 +94,10 @@ function availableIntervals(
   return available;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current lineFitsFlowBarrierBox implementation intact until its target seam is extracted.
+ */
 function lineFitsFlowBarrierBox(
   y: number,
   lineBounds: { top: number; bottom: number },
@@ -91,6 +111,10 @@ function lineFitsFlowBarrierBox(
   );
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current nextFlowBarrierBoxLineY implementation intact until its target seam is extracted.
+ */
 function nextFlowBarrierBoxLineY(
   currentY: number,
   lineBounds: { top: number; bottom: number },
@@ -105,6 +129,10 @@ function nextFlowBarrierBoxLineY(
       && candidate.lineY + lineBounds.bottom <= candidate.bottom + tolerance)?.lineY;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current widestInterval implementation intact until its target seam is extracted.
+ */
 function widestInterval(intervals: Interval[], minimumWidth = 0): Interval | undefined {
   return intervals.filter((interval) => interval.end - interval.start >= minimumWidth).reduce<Interval | undefined>((widest, current) => {
     if (!widest || current.end - current.start > widest.end - widest.start) return current;
@@ -112,6 +140,10 @@ function widestInterval(intervals: Interval[], minimumWidth = 0): Interval | und
   }, undefined);
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current wrapText implementation intact until its target seam is extracted.
+ */
 export function wrapText(
   metrics: CompositionTextMetrics,
   text: string,
@@ -196,6 +228,10 @@ export function wrapText(
   return lines;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current obstructionBetweenLines implementation intact until its target seam is extracted.
+ */
 export function obstructionBetweenLines(
   lines: WrappedLine[],
   graphics: CompositionGraphicPlacement[],
@@ -219,6 +255,10 @@ export function obstructionBetweenLines(
   return undefined;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current obstructionAcrossLineBands implementation intact until its target seam is extracted.
+ */
 export function obstructionAcrossLineBands(
   bands: Array<{ lines: WrappedLine[]; lineHeight: number }>,
   slot: CompositionRect,
@@ -245,22 +285,38 @@ export function obstructionAcrossLineBands(
 }
 
 /** Return the number of complete line boxes that fit in a vertical interval. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current availableLineCount implementation intact until its target seam is extracted.
+ */
 export function availableLineCount(height: number, leading: number): number {
   const roundingUlps = 1024;
   return Math.max(0, Math.floor(height / leading + Number.EPSILON * roundingUlps));
 }
 
 /** Read the authored text carried by one block. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current textOf implementation intact until its target seam is extracted.
+ */
 function textOf(block: CompositionBlock): string {
   return block.text?.trim() ?? '';
 }
 
 /** Resolve the renderer-neutral style name for one block. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current styleFor implementation intact until its target seam is extracted.
+ */
 export function styleFor(block: CompositionBlock): string {
   return compositionStyleName(block);
 }
 
 /** Validate and return the line height for one block. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current lineHeight implementation intact until its target seam is extracted.
+ */
 export function lineHeight(metrics: CompositionTextMetrics, block: CompositionBlock): number {
   const height = metrics.lineHeight(styleFor(block));
   if (!Number.isFinite(height) || height <= 0) throw new Error(`Text metrics returned an invalid line-height for '${styleFor(block)}': ${height}.`);
@@ -268,6 +324,10 @@ export function lineHeight(metrics: CompositionTextMetrics, block: CompositionBl
 }
 
 /** Validate and return the text padding for one block. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current textPadding implementation intact until its target seam is extracted.
+ */
 export function textPadding(metrics: CompositionTextMetrics, block: CompositionBlock): { top: number; bottom: number } {
   const padding = metrics.textPadding?.(styleFor(block)) ?? { top: 0, bottom: 0 };
   if (!Number.isFinite(padding.top) || !Number.isFinite(padding.bottom) || padding.top < 0 || padding.bottom < 0) {
@@ -277,6 +337,10 @@ export function textPadding(metrics: CompositionTextMetrics, block: CompositionB
 }
 
 /** Wrap one block against the supplied geometry and obstacles. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current wrapBlock implementation intact until its target seam is extracted.
+ */
 export function wrapBlock(
   metrics: CompositionTextMetrics,
   block: CompositionBlock,
@@ -307,6 +371,10 @@ export function wrapBlock(
 }
 
 /** Return the normalized word count basis for one block. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current wordsForBlock implementation intact until its target seam is extracted.
+ */
 export function wordsForBlock(block: CompositionBlock): string[] {
   return wordsOf(textOf(block));
 }
@@ -324,6 +392,10 @@ type LinePlacementGeometry = {
   verticalOffset: number;
 };
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current linePlacementGeometry implementation intact until its target seam is extracted.
+ */
 function linePlacementGeometry(
   slot: CompositionSlot,
   definition: CompositionSlotTemplate,
@@ -350,6 +422,10 @@ function linePlacementGeometry(
   };
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current alignedLineX implementation intact until its target seam is extracted.
+ */
 function alignedLineX(definition: CompositionSlotTemplate, line: WrappedLine): number {
   return definition.textAlign === 'right'
     ? line.x + line.width - line.naturalWidth
@@ -358,6 +434,10 @@ function alignedLineX(definition: CompositionSlotTemplate, line: WrappedLine): n
       : line.x;
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current appendPlacedLines implementation intact until its target seam is extracted.
+ */
 function appendPlacedLines(
   pageState: TextPlacementPage,
   definition: CompositionSlotTemplate,
@@ -399,11 +479,19 @@ function appendPlacedLines(
   });
 }
 
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current markLinePlacementOccupancy implementation intact until its target seam is extracted.
+ */
 function markLinePlacementOccupancy(slot: CompositionSlot, lastBottom: number): void {
   slot.state = lastBottom >= rectBottom(slot.box) ? 'exhausted' : 'partial';
 }
 
 /** Place wrapped lines, then update slot occupancy. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current placeLines implementation intact until its target seam is extracted.
+ */
 export function placeLines(
   pageState: TextPlacementPage,
   definition: CompositionSlotTemplate,

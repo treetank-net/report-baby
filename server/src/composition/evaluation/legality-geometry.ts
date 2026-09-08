@@ -4,11 +4,19 @@ import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 type RectLike = { x: number; y: number; width: number; height: number };
 
 /** Return the floating-point tolerance used by evaluator geometry checks. */
+/**
+ * @planner-target composition/evaluation/legality-geometry.ts
+ * @planner-responsibility Keep the current geometryTolerance implementation intact until its target seam is extracted.
+ */
 export function geometryTolerance(...values: number[]): number {
   return Number.EPSILON * Math.max(1, ...values.map((value) => Math.abs(value))) * 64;
 }
 
 /** Determine whether one box remains within another, allowing numeric tolerance. */
+/**
+ * @planner-target composition/evaluation/legality-geometry.ts
+ * @planner-responsibility Keep the current fitsInside implementation intact until its target seam is extracted.
+ */
 export function fitsInside(inner: RectLike, outer: RectLike): boolean {
   const tolerance = geometryTolerance(inner.x, inner.y, inner.width, inner.height, outer.x, outer.y, outer.width, outer.height);
   return inner.x >= outer.x - tolerance
@@ -18,6 +26,10 @@ export function fitsInside(inner: RectLike, outer: RectLike): boolean {
 }
 
 /** Determine whether two boxes overlap using evaluator precision. */
+/**
+ * @planner-target composition/evaluation/legality-geometry.ts
+ * @planner-responsibility Keep the current overlaps implementation intact until its target seam is extracted.
+ */
 export function overlaps(a: RectLike, b: RectLike): boolean {
   const horizontal = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
   const vertical = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
@@ -27,6 +39,10 @@ export function overlaps(a: RectLike, b: RectLike): boolean {
 }
 
 /** Determine whether a text line enters the painted interval of a wrapping graphic. */
+/**
+ * @planner-target composition/evaluation/legality-geometry.ts
+ * @planner-responsibility Keep the current lineEntersGraphic implementation intact until its target seam is extracted.
+ */
 export function lineEntersGraphic(line: CompositionPlan['lines'][number], graphic: CompositionPlan['graphicPlacements'][number]): boolean {
   return graphicIntervalsForLine(graphic, line.box.y, line.box.height).some((interval) => {
     const overlap = Math.min(line.box.x + line.box.width, interval.end) - Math.max(line.box.x, interval.start);
@@ -36,6 +52,10 @@ export function lineEntersGraphic(line: CompositionPlan['lines'][number], graphi
 }
 
 /** Count usable complete lines after an existing line and wrapping graphics. */
+/**
+ * @planner-target composition/evaluation/legality-geometry.ts
+ * @planner-responsibility Keep the current usableLinesAfter implementation intact until its target seam is extracted.
+ */
 export function usableLinesAfter(
   line: CompositionPlan['lines'][number],
   slot: CompositionSlot,
