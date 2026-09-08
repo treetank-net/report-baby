@@ -521,3 +521,27 @@ The placeholders may be used in ordinary and repeated text flows, including
 header and footer slots. They are resolved against the final accepted plan at
 render time. `pageChrome` must consume the resolved header/footer slot geometry
 and must not maintain a second hard-coded page-number text contract.
+
+### Dynamic repeated header — 2026-09-09
+
+The header is not a separate content entity. It is an ordinary repeated flow
+(`repeat: each-page`) whose slots are planned before the `main` flow and before
+lower-priority insertion candidates for each page. Its distinction is the
+repeat policy, not a different layout or measurement mechanism.
+
+Header geometry is content-driven:
+
+- an empty header collapses to zero height, unless the template explicitly
+  declares a non-zero minimum for brand chrome;
+- a non-empty header is measured after text and generated placeholders are
+  resolved, then receives the configured shared top and bottom padding;
+- a wrapped or otherwise taller header moves the following insertion and main
+  slots down, subject to the template's maximum and hard legality rules;
+- the rule, background, lockup, and page label are rendered from this resolved
+  header geometry rather than from an independent fixed `reserved_bands.header`
+  envelope.
+
+`pageChrome` remains a renderer-facing projection for decoration and
+page-dependent metadata. It is not an independent owner of header height or
+page-number text. A template may still choose a fixed minimum lockup area, but
+that is an explicit slot requirement rather than an implicit empty band.

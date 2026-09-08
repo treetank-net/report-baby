@@ -70,6 +70,17 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
 - evaluator sprawdza także kandydatów barier: ich dodatnią geometrię, przynależność
   do placementu i referencje do istniejących obstacle’ów z `wrap: around`.
 
+### Przyjęty kontrakt dynamicznego headera — 2026-09-09
+
+Header jest zwykłym powtarzalnym flow (`repeat: each-page`), a nie osobną
+encją. Jego sloty są rozpatrywane przed `main` oraz przed niższymi priorytetami
+insertionów na każdej stronie. Wysokość wynika z rzeczywistej zawartości i
+konfigurowanych paddingów: pusty header może się zwinąć, a zawijający się
+tytuł powiększa obszar i przesuwa kolejne sloty. `pageChrome` pozostaje tylko
+projekcją renderera (tło, reguła, lockup, numer strony) i nie jest drugim
+źródłem geometrii headera. Implementacja tego kontraktu jest kolejnym krokiem;
+obecne stałe `reserved_bands.header` opisują jeszcze stan przejściowy.
+
 ## Kroki
 
 1. Narysować tabelę wejście → wyjście dla każdej funkcji geometrycznej:
