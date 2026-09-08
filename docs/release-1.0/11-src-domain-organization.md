@@ -86,6 +86,14 @@ tekstu oraz liczbę dostępnych linii; `text-layout-contracts.ts` (10 LOC) jest
 wspólnym kontraktem `WrappedLine`. Fasada eksportowa zachowuje dotychczasowe
 importy `placeLines` i `WrappedLine`, bez cyklu zależności.
 
+`composition/layout/insertion-layout.ts` jest teraz cienką fasadą. Konkretne
+odpowiedzialności są rozdzielone na `insertion-planning.ts` (propozycje,
+reflow i kolejność), `insertion-measurement.ts` (jedna kalkulacja tekstu
+wstawki) oraz `insertion-placement.ts` (rezerwacja przeszkód, fit-content i
+materializacja). To usuwa powtórzenie pomiaru między planowaniem a placementem,
+bez zmiany kontraktu `insertion-layout.ts` dla `text-planner` i
+`flow-text-decision`.
+
 ## Kontekst produktu
 
 `report-baby` jest przede wszystkim bundlowanym serwerem MCP. CLI jest drugim
