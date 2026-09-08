@@ -16,9 +16,8 @@ import {
   previousBlockInSlot,
 } from './layout/flow-space.js';
 import { advanceCursor, growSlot } from './layout/page-state.js';
-import { availableLineCount } from './text/line-capacity.js';
-import { obstructionAcrossLineBands } from './text/text-wrapping.js';
-import { lineHeight, styleFor, wrapBlock } from './text/text-measurement.js';
+import { availableLineCount, obstructionAcrossLineBands, lineHeight, styleFor, wrapBlock } from './text/text-layout.js';
+import type { WrappedLine } from './text/text-layout.js';
 import { slotBox } from './layout/page-state.js';
 import { rectBottom } from './geometry/rectangles.js';
 import { addResidual, diagnostic, recordFlowDecision } from './planning-records.js';
@@ -71,8 +70,8 @@ type HeadingClusterObstacleDecision =
   | { kind: 'push-to-next-slot'; obstacleId: string; requiredClusterLines: number; availableAfterObstacle: number };
 
 type HeadingClusterProbes = {
-  headingProbe: ReturnType<typeof wrapBlock>;
-  leadProbe: ReturnType<typeof wrapBlock>;
+  headingProbe: WrappedLine[];
+  leadProbe: WrappedLine[];
   keepLines: number;
   nextLeading: number;
 };
@@ -253,7 +252,7 @@ function wrapTextPlacement(
   flowBarrierBoxCandidates: PreparedTextPlacement['flowBarrierBoxCandidates'],
   leading: number,
   blockGap: number,
-): { wrapped: ReturnType<typeof wrapBlock>; completeWrapped: ReturnType<typeof wrapBlock> } {
+): { wrapped: WrappedLine[]; completeWrapped: WrappedLine[] } {
   const { metrics, policy, geometryTolerance } = context;
   const { block } = target;
   const wrapped = wrapBlock(metrics, block, runtime.cursor.startWord, initialBox, startLineOffset + blockGap / leading, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
@@ -277,9 +276,9 @@ function compressHeadingGapIfNeeded(
   flowBarrierBoxCandidates: PreparedTextPlacement['flowBarrierBoxCandidates'],
   leading: number,
   blockGap: number,
-  wrapped: ReturnType<typeof wrapBlock>,
-  completeWrapped: ReturnType<typeof wrapBlock>,
-): { blockGap: number; wrapped: ReturnType<typeof wrapBlock>; completeWrapped: ReturnType<typeof wrapBlock> } {
+  wrapped: WrappedLine[],
+  completeWrapped: WrappedLine[],
+): { blockGap: number; wrapped: WrappedLine[]; completeWrapped: WrappedLine[] } {
   const { metrics, policy, geometryTolerance } = context;
   const isHeadingBlock = target.block.kind === 'heading' || target.block.role === 'heading' || target.block.role === 'title';
   const availableWithoutGap = availableLineCount(rectBottom(initialBox) - (initialBox.y + startLineOffset * leading), leading);
@@ -327,7 +326,7 @@ export function selectTextLinesForPlacement(
   context: FlowPlanningContext,
   prepared: PreparedTextPlacement,
   currentAvailableLines: number,
-): ReturnType<typeof wrapBlock> {
+): WrappedLine[] {
   const { policy } = context;
   const { wrapped, completeWrapped } = prepared;
   let take = Math.min(currentAvailableLines, wrapped.length);
@@ -528,7 +527,7 @@ export function textPlacementCapacity(target: FlowTarget, prepared: PreparedText
 
 type NextBlockKeepProbe = {
   keepLines: number;
-  nextWrapped: ReturnType<typeof wrapBlock>;
+  nextWrapped: WrappedLine[];
 };
 
 /** Measure the next authored block needed by keep-with-next rules. */

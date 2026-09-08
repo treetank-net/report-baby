@@ -15,14 +15,14 @@ import { diagnostic, addResidual } from '../planning-records.js';
 import { ensurePage, routeLayout } from './page-state.js';
 import { rectBottom } from '../geometry/rectangles.js';
 import type { PageState } from '../contracts/layout-state.js';
-import { lineHeight, textPadding, wrapBlock, wordsForBlock } from '../text/text-measurement.js';
-import { placeLines } from '../text/text-placement.js';
+import { lineHeight, textPadding, wrapBlock, wordsForBlock, placeLines } from '../text/text-layout.js';
+import type { WrappedLine } from '../text/text-layout.js';
 import type { PlannedInsertion } from '../text-planner-candidates.js';
 
 type InsertionTextMeasurement = {
   leading: number;
   padding: { top: number; bottom: number };
-  lines: ReturnType<typeof wrapBlock>;
+  lines: WrappedLine[];
   wordCount: number;
   consumed: number;
 };

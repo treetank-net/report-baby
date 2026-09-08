@@ -29,10 +29,10 @@ import {
   textPlacementCapacity,
 } from './flow-text-decision.js';
 import { hasRoleEligibleSlot, slotFor } from './layout/page-state.js';
-import { wordsForBlock } from './text/text-measurement.js';
-import type { wrapBlock } from './text/text-measurement.js';
+import { wordsForBlock } from './text/text-layout.js';
+import type { WrappedLine } from './text/text-layout.js';
 import { ensurePage, routeSlots } from './layout/page-state.js';
-import { placeLines } from './text/text-placement.js';
+import { placeLines } from './text/text-layout.js';
 import { slotCollidesWithPlacedBlock } from './layout/flow-space.js';
 import { placeStructuredBlock } from './structured-block-placement.js';
 import { addResidual, addTableResidual, diagnostic, recordFlowDecision } from './planning-records.js';
@@ -298,7 +298,7 @@ function commitSelectedTextLines(
   runtime: FlowRuntime,
   target: FlowTarget,
   prepared: PreparedTextPlacement,
-  selected: ReturnType<typeof wrapBlock>,
+  selected: WrappedLine[],
 ): { completed: boolean } {
   const { currentPage, block, selectedSlot, definition } = target;
   const { cursor } = runtime;

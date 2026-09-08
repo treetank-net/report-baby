@@ -1,7 +1,20 @@
-import type { CompositionBlock, CompositionRect } from '../model.js';
-import type { CompositionFlowBarrierBoxCandidate, CompositionGraphicPlacement, CompositionTextMetrics } from '../contracts/engine-contracts.js';
+import type {
+  CompositionBlock,
+  CompositionRect,
+  CompositionSlotTemplate,
+} from '../model.js';
+import type {
+  CompositionFlowBarrierBoxCandidate,
+  CompositionGraphicPlacement,
+  CompositionLine,
+  CompositionPlacement,
+  CompositionSlot,
+  CompositionTextMetrics,
+} from '../contracts/engine-contracts.js';
+import { glyphSamplingBoxes } from '../glyph-sampling.js';
 import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 import { rectBottom } from '../geometry/rectangles.js';
+import { compositionStyleName } from './style-name.js';
 import { wordsOf } from './tokenization.js';
 
 export interface WrappedLine {
@@ -229,4 +242,196 @@ export function obstructionAcrossLineBands(
       && graphic.box.x < slot.x + slot.width + tolerance
       && graphic.box.x + graphic.box.width > slot.x - tolerance)
     .sort((left, right) => left.box.y - right.box.y)[0];
+}
+
+/** Return the number of complete line boxes that fit in a vertical interval. */
+export function availableLineCount(height: number, leading: number): number {
+  const roundingUlps = 1024;
+  return Math.max(0, Math.floor(height / leading + Number.EPSILON * roundingUlps));
+}
+
+/** Read the authored text carried by one block. */
+function textOf(block: CompositionBlock): string {
+  return block.text?.trim() ?? '';
+}
+
+/** Resolve the renderer-neutral style name for one block. */
+export function styleFor(block: CompositionBlock): string {
+  return compositionStyleName(block);
+}
+
+/** Validate and return the line height for one block. */
+export function lineHeight(metrics: CompositionTextMetrics, block: CompositionBlock): number {
+  const height = metrics.lineHeight(styleFor(block));
+  if (!Number.isFinite(height) || height <= 0) throw new Error(`Text metrics returned an invalid line-height for '${styleFor(block)}': ${height}.`);
+  return height;
+}
+
+/** Validate and return the text padding for one block. */
+export function textPadding(metrics: CompositionTextMetrics, block: CompositionBlock): { top: number; bottom: number } {
+  const padding = metrics.textPadding?.(styleFor(block)) ?? { top: 0, bottom: 0 };
+  if (!Number.isFinite(padding.top) || !Number.isFinite(padding.bottom) || padding.top < 0 || padding.bottom < 0) {
+    throw new Error(`Text metrics returned invalid padding for '${styleFor(block)}': ${JSON.stringify(padding)}.`);
+  }
+  return padding;
+}
+
+/** Wrap one block against the supplied geometry and obstacles. */
+export function wrapBlock(
+  metrics: CompositionTextMetrics,
+  block: CompositionBlock,
+  startWord: number,
+  slot: CompositionRect,
+  startLineOffset: number,
+  bottom: number,
+  graphics: CompositionGraphicPlacement[],
+  lineHeightValue: number,
+  minimumWrapWidth = 0,
+  flowBarrierBoxCandidates: CompositionFlowBarrierBoxCandidate[] = [],
+  geometryTolerance = 0,
+): WrappedLine[] {
+  return wrapText(
+    metrics,
+    textOf(block),
+    styleFor(block),
+    startWord,
+    slot,
+    startLineOffset,
+    bottom,
+    graphics,
+    lineHeightValue,
+    minimumWrapWidth,
+    flowBarrierBoxCandidates,
+    geometryTolerance,
+  );
+}
+
+/** Return the normalized word count basis for one block. */
+export function wordsForBlock(block: CompositionBlock): string[] {
+  return wordsOf(textOf(block));
+}
+
+export interface TextPlacementPage {
+  page: number;
+  slots: Map<string, CompositionSlot>;
+}
+
+type LinePlacementGeometry = {
+  firstY: number;
+  lastBottom: number;
+  left: number;
+  right: number;
+  verticalOffset: number;
+};
+
+function linePlacementGeometry(
+  slot: CompositionSlot,
+  definition: CompositionSlotTemplate,
+  lines: WrappedLine[],
+  lineHeightValue: number,
+  padding: { top: number; bottom: number },
+): LinePlacementGeometry {
+  const box = slot.box;
+  const first = lines[0];
+  const last = lines.at(-1)!;
+  const contentHeight = (last.lineOffset - first.lineOffset + 1) * lineHeightValue;
+  const freeHeight = Math.max(0, box.height - padding.top - padding.bottom - contentHeight);
+  const verticalOffset = definition.verticalAlign === 'middle'
+    ? freeHeight / 2
+    : definition.verticalAlign === 'bottom'
+      ? freeHeight
+      : 0;
+  return {
+    firstY: box.y + padding.top + first.lineOffset * lineHeightValue + verticalOffset,
+    lastBottom: box.y + padding.top + (last.lineOffset + 1) * lineHeightValue + verticalOffset,
+    left: Math.min(...lines.map((line) => line.x)),
+    right: Math.max(...lines.map((line) => line.x + line.width)),
+    verticalOffset,
+  };
+}
+
+function alignedLineX(definition: CompositionSlotTemplate, line: WrappedLine): number {
+  return definition.textAlign === 'right'
+    ? line.x + line.width - line.naturalWidth
+    : definition.textAlign === 'center'
+      ? line.x + (line.width - line.naturalWidth) / 2
+      : line.x;
+}
+
+function appendPlacedLines(
+  pageState: TextPlacementPage,
+  definition: CompositionSlotTemplate,
+  block: CompositionBlock,
+  metrics: CompositionTextMetrics,
+  flowId: string,
+  routeIndex: number | undefined,
+  lines: WrappedLine[],
+  lineHeightValue: number,
+  padding: { top: number; bottom: number },
+  verticalOffset: number,
+  outputLines: CompositionLine[],
+  layer: 'flow' | 'insertion',
+): void {
+  const slot = pageState.slots.get(definition.id)!;
+  lines.forEach((line) => {
+    const lineY = slot.box.y + padding.top + line.lineOffset * lineHeightValue + verticalOffset;
+    const textX = alignedLineX(definition, line);
+    outputLines.push({
+      blockId: block.id,
+      flowId,
+      slotId: slot.id,
+      page: pageState.page,
+      ...(routeIndex === undefined ? {} : { routeIndex }),
+      text: line.text,
+      box: {
+        x: line.x,
+        y: lineY,
+        width: line.width,
+        height: lineHeightValue,
+      },
+      ...(definition.textAlign ? { textAlign: definition.textAlign } : {}),
+      naturalWidth: line.naturalWidth,
+      startWord: line.startWord,
+      endWord: line.endWord,
+      glyphSamplingBoxes: glyphSamplingBoxes(metrics, block, line.text, textX, lineY, line.naturalWidth, lineHeightValue),
+      ...(layer === 'flow' ? {} : { layer }),
+    });
+  });
+}
+
+function markLinePlacementOccupancy(slot: CompositionSlot, lastBottom: number): void {
+  slot.state = lastBottom >= rectBottom(slot.box) ? 'exhausted' : 'partial';
+}
+
+/** Place wrapped lines, then update slot occupancy. */
+export function placeLines(
+  pageState: TextPlacementPage,
+  definition: CompositionSlotTemplate,
+  block: CompositionBlock,
+  metrics: CompositionTextMetrics,
+  flowId: string,
+  routeIndex: number | undefined,
+  lines: WrappedLine[],
+  lineHeightValue: number,
+  placements: CompositionPlacement[],
+  outputLines: CompositionLine[],
+  layer: 'flow' | 'insertion' = 'flow',
+  padding: { top: number; bottom: number } = { top: 0, bottom: 0 },
+): void {
+  const slot = pageState.slots.get(definition.id);
+  if (!slot || lines.length === 0) return;
+  const geometry = linePlacementGeometry(slot, definition, lines, lineHeightValue, padding);
+  placements.push({
+    id: `placement:${placements.length + 1}`,
+    blockId: block.id,
+    slotId: slot.id,
+    page: pageState.page,
+    ...(routeIndex === undefined ? {} : { routeIndex }),
+    box: { x: geometry.left, y: geometry.firstY, width: geometry.right - geometry.left, height: geometry.lastBottom - geometry.firstY },
+    startWord: lines[0].startWord,
+    endWord: lines.at(-1)!.endWord,
+    ...(layer === 'flow' ? {} : { layer }),
+  });
+  appendPlacedLines(pageState, definition, block, metrics, flowId, routeIndex, lines, lineHeightValue, padding, geometry.verticalOffset, outputLines, layer);
+  markLinePlacementOccupancy(slot, geometry.lastBottom);
 }

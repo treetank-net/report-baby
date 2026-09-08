@@ -11,7 +11,7 @@ import type {
   CompositionTextMetrics,
   CompositionTraceDecision,
 } from './contracts/engine-contracts.js';
-import { availableLineCount } from './text/line-capacity.js';
+import { availableLineCount } from './text/text-layout.js';
 import { wordsOf } from './text/tokenization.js';
 
 function textOf(block: CompositionBlock): string {
