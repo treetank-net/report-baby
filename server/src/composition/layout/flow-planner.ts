@@ -144,7 +144,39 @@ function flowReachedTerminalPage(context: FlowPlanningContext, runtime: FlowRunt
  * @planner-responsibility Keep the current ensureCurrentFlowPage implementation intact until its target seam is extracted.
  */
 function ensureCurrentFlowPage(context: FlowPlanningContext, runtime: FlowRuntime): PageState | undefined {
-  return ensurePage(context.pages, context.template, context.route, runtime.cursor.page, context.plan.diagnostics, context.flowId);
+  const page = ensurePage(context.pages, context.template, context.route, runtime.cursor.page, context.plan.diagnostics, context.flowId);
+  if (!page) return undefined;
+  // Repeated flows are materialized by the document-layout coordinator. If a
+  // repeated flow tried to materialize its peers here, two empty repeated
+  // flows could recursively plan each other before either one placed a block.
+  // Only an ordinary flow (typically main) may trigger repeated chrome for a
+  // newly-created page.
+  if (context.flowId !== 'footer' && context.route.repeat !== 'each-page') {
+    materializeRepeatedFlowsBeforeCurrentFlow(context, runtime.cursor.page);
+  }
+  return page;
+}
+
+function flowHasContentOnPage(context: FlowPlanningContext, flowId: string, page: number): boolean {
+  const blockIds = new Set((context.document.flows[flowId]?.blocks ?? []).map((block) => block.id));
+  return [
+    ...context.plan.lines,
+    ...(context.plan.insertionLines ?? []),
+    ...context.plan.blockPlacements,
+    ...context.plan.tablePlacements,
+  ].some((item) => item.page === page && blockIds.has(item.blockId));
+}
+
+function materializeRepeatedFlowsBeforeCurrentFlow(context: FlowPlanningContext, page: number): void {
+  for (const [flowId, route] of Object.entries(context.template.routes)) {
+    if (flowId === context.flowId || flowId === 'footer' || route.repeat !== 'each-page') continue;
+    if (route.insertionSlots?.length) continue;
+    if (route.startPage !== undefined && page < route.startPage) continue;
+    if (flowHasContentOnPage(context, flowId, page)) continue;
+    const flow = context.document.flows[flowId];
+    if (!flow || flow.blocks.length === 0) continue;
+    planFlow(context.document, context.metrics, context.template, context.policy, flowId, route, context.pages, context.plan, page);
+  }
 }
 
 /**
@@ -187,12 +219,15 @@ function createFlowTarget(
   block: CompositionBlock,
   selectedSlot: SelectedFlowSlot,
 ): FlowTarget {
+  const definition = selectedSlot.definition.priority === undefined && context.route.priority !== undefined
+    ? { ...selectedSlot.definition, priority: context.route.priority }
+    : selectedSlot.definition;
   return {
     currentPage,
     availableRouteSlots,
     block,
-    selectedSlot,
-    definition: selectedSlot.definition,
+    selectedSlot: { ...selectedSlot, definition },
+    definition,
   };
 }
 

@@ -92,7 +92,7 @@ function sourceHash(path: string): string {
 }
 
 export function preparedImagePath(brandDir: string, originalPath: string | undefined, role: string, manifest: PreparedAssetsManifest | undefined): { path?: string; warning?: string } {
-  if (!originalPath || !['.png', '.jpg', '.jpeg', '.webp'].includes(extname(originalPath).toLowerCase())) return { path: originalPath };
+  if (!originalPath || !['.png', '.jpg', '.jpeg', '.webp', '.avif'].includes(extname(originalPath).toLowerCase())) return { path: originalPath };
   const relativeSource = relative(brandDir, originalPath).replaceAll('\\', '/');
   const entry = manifest?.assets.find((item: PreparedAssetEntry) => item.source.path === relativeSource);
   const derivative = entry?.derivatives.find((item) => item.role === role);
@@ -111,7 +111,7 @@ const assetUriCache = new Map<string, string>();
 export async function assetDataUri(filePath: string | undefined): Promise<string | undefined> {
   if (!filePath) return undefined;
   const extension = extname(filePath).toLowerCase();
-  const mime = extension === '.svg' ? 'image/svg+xml' : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.webp' ? 'image/webp' : 'image/png';
+  const mime = extension === '.svg' ? 'image/svg+xml' : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : extension === '.webp' ? 'image/webp' : extension === '.avif' ? 'image/avif' : 'image/png';
   const metadata = statSync(filePath);
   const cacheKey = `${filePath}|${metadata.mtimeMs}|${metadata.size}`;
   const cached = assetUriCache.get(cacheKey);

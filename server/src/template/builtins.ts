@@ -17,9 +17,10 @@ export interface RenderConfig {
   canvas: { width: number; height: number; pptxWidth: number; pptxHeight: number; pdfWidthMm: number; pdfHeightMm: number; pointsPerInch: number };
   quality: { pptxTextRegionMaxChangedPixelRatio: number };
   compositionScore: Record<string, number>;
+  compositionPriority: { default: number };
   assets: Record<string, number>;
   sources: { zipMaxEntries: number; zipMaxFileBytes: number; zipMaxTotalBytes: number; zipMaxCompressionRatio: number; zipMaxNestedArchives: number };
-  images: { maxAssetBytes: number; maxDecodedPixels: number; maxDimensionPx: number; maxPerDocument: number; remoteTimeoutMs: number; remoteMaxRedirects: number };
+  images: { maxAssetBytes: number; maxDecodedPixels: number; maxDimensionPx: number; maxPerDocument: number; remoteTimeoutMs: number; remoteMaxRedirects: number; decoderTimeoutMs: number };
   pdf: Record<string, number>;
   compositionDebug: Record<string, number>;
   chart: Record<string, number>;
@@ -119,6 +120,7 @@ export function readRenderConfig(): RenderConfig {
   const shapes = source.shapes as Record<string, unknown>;
   const metrics = source.metrics as Record<string, unknown>;
   const text = source.text as Record<string, unknown>;
+  const compositionPriority = source.composition_priority as Record<string, unknown>;
   const chrome = source.chrome as Record<string, unknown>;
   const lockup = chrome.lockup as Record<string, unknown>;
   const reportLockup = chrome.report_lockup as Record<string, unknown>;
@@ -165,9 +167,10 @@ export function readRenderConfig(): RenderConfig {
     canvas: { width: get(canvas, 'width'), height: get(canvas, 'height'), pptxWidth: get(canvas, 'pptx_width'), pptxHeight: get(canvas, 'pptx_height'), pdfWidthMm: get(canvas, 'pdf_width_mm'), pdfHeightMm: get(canvas, 'pdf_height_mm'), pointsPerInch: get(canvas, 'points_per_inch') },
     quality: { pptxTextRegionMaxChangedPixelRatio: get(quality, 'pptx_text_region_max_changed_pixel_ratio') },
     compositionScore: camelDictionary('composition_score'),
+    compositionPriority: { default: get(compositionPriority, 'default') },
     assets: camelDictionary('assets'),
     sources: { zipMaxEntries: get(sources, 'zip_max_entries'), zipMaxFileBytes: get(sources, 'zip_max_file_bytes'), zipMaxTotalBytes: get(sources, 'zip_max_total_bytes'), zipMaxCompressionRatio: get(sources, 'zip_max_compression_ratio'), zipMaxNestedArchives: get(sources, 'zip_max_nested_archives') },
-    images: { maxAssetBytes: get(images, 'max_asset_bytes'), maxDecodedPixels: get(images, 'max_decoded_pixels'), maxDimensionPx: get(images, 'max_dimension_px'), maxPerDocument: get(images, 'max_per_document'), remoteTimeoutMs: get(images, 'remote_timeout_ms'), remoteMaxRedirects: get(images, 'remote_max_redirects') },
+    images: { maxAssetBytes: get(images, 'max_asset_bytes'), maxDecodedPixels: get(images, 'max_decoded_pixels'), maxDimensionPx: get(images, 'max_dimension_px'), maxPerDocument: get(images, 'max_per_document'), remoteTimeoutMs: get(images, 'remote_timeout_ms'), remoteMaxRedirects: get(images, 'remote_max_redirects'), decoderTimeoutMs: get(images, 'decoder_timeout_ms') },
     pdf: camelDictionary('pdf'),
     compositionDebug: camelDictionary('composition_debug'),
     chart: camelDictionary('chart'),

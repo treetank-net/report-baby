@@ -97,7 +97,9 @@ wyliczania geometrii.
   lockup na każdej stronie i debugową etykietę numeracji `{page} / {pages}`.
   Ta etykieta nie jest publicznym placeholderem template'u. Nie porównuje
   tekstowego hash-a całego artykułu, więc fixture może zmienić treść i łamanie.
-- Regresja `test:editorial-flow` przechodzi dla 506 fixture’ów po tej zmianie.
+- Regresja `test:editorial-flow` przechodzi dla szybkiego zestawu 26 fixture’ów;
+  pełna macierz 506 fixture’ów pozostaje dostępna przez
+  `npm run test:editorial-full`.
 
 ## Wymaga uzupełnienia po wykonaniu punktu X
 

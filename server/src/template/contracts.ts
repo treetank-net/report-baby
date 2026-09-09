@@ -46,6 +46,8 @@ export interface CompiledTemplateFlow {
   continuationSlots?: string[];
   insertionSlots?: string[];
   continuation: TemplateFlowContinuation;
+  /** Higher values reserve geometry before lower-priority flows. */
+  priority?: number;
   repeat?: 'each-page';
   startPage?: number;
 }
@@ -144,7 +146,7 @@ function numberAt(value: unknown, path: string): number {
   return value;
 }
 
-function frameAt(value: unknown, path: string): NormalizedFrame {
+function frameAt(value: unknown, path: string, allowZeroHeight = false): NormalizedFrame {
   if (!isRecord(value)) fail(path, 'must contain a frame object.');
   const frame = isRecord(value.frame) ? value.frame : value;
   const result = {
@@ -153,7 +155,7 @@ function frameAt(value: unknown, path: string): NormalizedFrame {
     width: numberAt(frame.width, `${path}.width`),
     height: numberAt(frame.height, `${path}.height`),
   };
-  if (result.width <= 0 || result.height <= 0) fail(path, 'width and height must be greater than zero.');
+  if (result.width <= 0 || result.height < 0 || (!allowZeroHeight && result.height === 0)) fail(path, allowZeroHeight ? 'width must be greater than zero and height must not be negative.' : 'width and height must be greater than zero.');
   if (result.x < 0 || result.y < 0 || result.x + result.width > 1 || result.y + result.height > 1) {
     fail(path, 'must stay inside the normalized canvas (0..1).');
   }
@@ -183,6 +185,14 @@ function optionalPositiveInteger(value: unknown, path: string): number | undefin
 function optionalNonNegativeInteger(value: unknown, path: string): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) fail(path, 'must be a non-negative integer.');
+  return value;
+}
+
+function optionalPriority(value: unknown, path: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    fail(path, 'must be a non-negative integer.');
+  }
   return value;
 }
 
@@ -257,9 +267,10 @@ function templateFlowsAt(value: unknown, path: string, slots: Record<string, Com
       if (slots[slot]?.kind === 'graphic' || slots[slot]?.kind === 'lockup') fail(`${path}.${id}.insertion_slots`, `slot '${slot}' must be a content slot, not '${slots[slot]?.kind}'.`);
     }
     const continuation = raw.continuation === undefined || raw.continuation === 'allowed' ? 'allowed' : raw.continuation === 'forbidden' ? 'forbidden' : fail(`${path}.${id}.continuation`, "must be 'allowed' or 'forbidden'.");
+    const priority = optionalPriority(raw.priority, `${path}.${id}.priority`);
     const repeat = raw.repeat === undefined ? undefined : raw.repeat === 'each-page' ? raw.repeat : fail(`${path}.${id}.repeat`, "must be 'each-page'.");
     const startPage = optionalPositiveInteger(raw.start_page, `${path}.${id}.start_page`);
-    return [id, { id, slots: [...rawSlots], ...(rawContinuationSlots === undefined ? {} : { continuationSlots: [...rawContinuationSlots] }), ...(rawInsertionSlots === undefined ? {} : { insertionSlots: [...rawInsertionSlots] }), continuation, ...(repeat === undefined ? {} : { repeat }), ...(startPage === undefined ? {} : { startPage }) }];
+    return [id, { id, slots: [...rawSlots], ...(rawContinuationSlots === undefined ? {} : { continuationSlots: [...rawContinuationSlots] }), ...(rawInsertionSlots === undefined ? {} : { insertionSlots: [...rawInsertionSlots] }), continuation, ...(priority === undefined ? {} : { priority }), ...(repeat === undefined ? {} : { repeat }), ...(startPage === undefined ? {} : { startPage }) }];
   }));
 }
 
@@ -372,23 +383,23 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
     if (allowedBlockKinds !== undefined && (!Array.isArray(allowedBlockKinds) || allowedBlockKinds.some((item) => typeof item !== 'string' || item.length === 0))) {
       fail(`slots.${slotId}.allowed_block_kinds`, 'must contain non-empty block kinds.');
     }
+    const fitContent = slot.fit_content === undefined || typeof slot.fit_content === 'boolean'
+      ? slot.fit_content
+      : fail(`slots.${slotId}.fit_content`, 'must be boolean.');
     const frame = slot.frame !== undefined
-      ? frameAt(slot.frame, `slots.${slotId}.frame`)
+      ? frameAt(slot.frame, `slots.${slotId}.frame`, fitContent === true)
       : region
         ? regions[region]
         : fail(`slots.${slotId}`, 'needs a frame or a region.');
     const continuationFrame = slot.continuation_frame === undefined
       ? undefined
-      : frameAt(slot.continuation_frame, `slots.${slotId}.continuation_frame`);
+      : frameAt(slot.continuation_frame, `slots.${slotId}.continuation_frame`, fitContent === true);
     const overflow = slot.overflow === undefined || slot.overflow === 'reject' || slot.overflow === 'shrink-to-fit'
       ? slot.overflow
       : fail(`slots.${slotId}.overflow`, "must be 'reject' or 'shrink-to-fit'.");
     const verticalAlign = slot.vertical_align === undefined || slot.vertical_align === 'top' || slot.vertical_align === 'middle' || slot.vertical_align === 'bottom'
       ? slot.vertical_align
       : fail(`slots.${slotId}.vertical_align`, "must be 'top', 'middle' or 'bottom'.");
-    const fitContent = slot.fit_content === undefined || typeof slot.fit_content === 'boolean'
-      ? slot.fit_content
-      : fail(`slots.${slotId}.fit_content`, 'must be boolean.');
     const gap = slotKind === 'lockup' ? lengthAt(slot.gap, `slots.${slotId}.gap`) : undefined;
     const grow = blockGrowthAt(slot.grow, `slots.${slotId}.grow`, frame);
     slots[slotId] = {

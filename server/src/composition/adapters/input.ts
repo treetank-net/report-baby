@@ -228,6 +228,10 @@ function convertBlock(flowId: string, input: CompositionInput['flows'][string]['
     ...(input.caption === undefined ? {} : { caption: input.caption }),
   } }];
   if (input.type === 'metric') return [{ ...common, kind: 'metric', metric: { label: input.label, value: input.value, ...(input.delta === undefined ? {} : { delta: input.delta }), ...(input.trend === undefined ? {} : { trend: input.trend }), ...(input.note === undefined ? {} : { note: input.note }) }, atomic: input.atomic ?? true }];
+  if (input.type === 'lockup') return [{ ...common, kind: 'lockup', lockup: {
+    ...(input.lockup.mark_asset_id === undefined ? {} : { markAssetId: input.lockup.mark_asset_id }),
+    ...(input.lockup.label === undefined ? {} : { label: input.lockup.label }),
+  }, atomic: true }];
   const chart = { type: input.chart_type, title: input.title, subtitle: input.subtitle, prefix: input.prefix, suffix: input.suffix, data: input.data };
   return [{ ...common, kind: 'chart', chart, atomic: input.atomic ?? true }];
 }

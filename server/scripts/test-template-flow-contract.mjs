@@ -64,6 +64,19 @@ try {
     constraints: { inside_canvas: true, no_overlap: false },
   };
   const compiled = compileTemplateSource(source);
+  const dynamicHeaderSource = structuredClone(source);
+  dynamicHeaderSource.id = 'pages/dynamic-header-contract';
+  dynamicHeaderSource.slots.dynamic = { type: 'text', frame: { x: 0.1, y: 0.05, width: 0.8, height: 0 }, fit_content: true, grow: { axis: 'y', max_height: 0.2, pushes: ['content'] }, role: 'header' };
+  dynamicHeaderSource.flows.header = { slots: ['dynamic'], priority: 500, continuation: 'forbidden', repeat: 'each-page' };
+  const dynamicHeaderCompiled = compileTemplateSource(dynamicHeaderSource);
+  assert.equal(dynamicHeaderCompiled.slots.dynamic.frame.height, 0, 'fit-content slots may start with no reserved height');
+  assert.equal(dynamicHeaderCompiled.slots.dynamic.fitContent, true);
+  assert.equal(dynamicHeaderCompiled.flows.header.priority, 500, 'flow priority must survive template compilation');
+  assert.throws(
+    () => compileTemplateSource({ ...structuredClone(source), slots: { ...source.slots, zero: { type: 'text', frame: { x: 0.1, y: 0.1, width: 0.8, height: 0 } } } }),
+    /height must be greater than zero/u,
+    'a fixed slot must still reject a zero-height frame',
+  );
   assert.equal(compiled.composition.headingKeepWithNextLines, 1, 'template composition policy must preserve the configured heading cluster size');
   assert.deepEqual(compiled.slots.lockup.gap, { value: 12, unit: 'px' }, 'lockup gap must preserve its explicit unit');
   assert.equal(compiled.slots.content.verticalAlign, 'middle', 'slot vertical alignment must survive template compilation');

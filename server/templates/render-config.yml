@@ -9,6 +9,10 @@ canvas:
   points_per_inch: 72
 quality:
   pptx_text_region_max_changed_pixel_ratio: 0.20
+  test_feedback:
+    smoke_budget_ms: 60000
+    release_budget_ms: 900000
+    check_warning_ms: 120000
   layout_diff:
     movement_warn_mm: 3
     movement_error_mm: 8
@@ -49,6 +53,15 @@ composition_score:
   insertion_internal_spacing_penalty: 1
   insertion_external_spacing_penalty: 1
   insertion_cross_stream_spacing_penalty: 1
+  list_item_fragmentation_penalty: 3
+  list_split_penalty: 2
+  list_column_split_penalty: 1
+  table_split_penalty: 2
+  table_column_split_penalty: 1
+  table_widow_min_rows: 3
+  table_widow_penalty: 3
+  tiny_fragment_max_lines: 1
+  tiny_fragment_penalty: 2
   contrast_penalty: 6
   contrast_mean_quality_weight: 0.25
   contrast_worst_glyph_weight: 0.60
@@ -56,6 +69,8 @@ composition_score:
   contrast_severe_ratio: 1.5
   contrast_affected_glyph_saturation: 10
   contrast_quality_response: 0.25
+composition_priority:
+  default: 100
 composition_search:
   movable_quote_window_ratio: 0.02
   movable_quote_candidate_count: 5
@@ -88,6 +103,7 @@ images:
   max_per_document: 32
   remote_timeout_ms: 15000
   remote_max_redirects: 3
+  decoder_timeout_ms: 15000
 pdf:
   page_width: 210
   page_height: 297

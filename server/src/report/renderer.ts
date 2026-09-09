@@ -17,6 +17,7 @@ import { compileTemplateSource, type CompiledTemplate } from '../template/contra
 import { resolveImageAsset } from '../rendering/image-resolver.js';
 import type { SourceContext } from '../source/context.js';
 import { prepareReportComposition } from './composition-runtime.js';
+import { resolvePagePlaceholders } from '../composition/text/page-placeholders.js';
 
 export interface TemplateInfo { name: string; description: string; }
 
@@ -24,6 +25,7 @@ const TEMPLATES: TemplateInfo[] = [
   { name: 'default-report', description: 'Branded A4 report rendered from named semantic flows.' },
   { name: 'campaign-summary', description: 'Compact A4 campaign summary using the same semantic flow contract.' },
   { name: 'pages/editorial-two-column', description: 'A4 editorial page with two equal text columns.' },
+  { name: 'pages/editorial-dynamic-chrome', description: 'A4 editorial page with fit-content repeated header chrome.' },
   { name: 'pages/editorial-inset-two-column', description: 'A4 editorial page with a full-width intro and full-width in-text insertions between two narrative columns.' },
   { name: 'pages/editorial-metrics-two-column', description: 'A4 editorial page with KPI slots above two narrative columns.' },
   { name: 'pages/editorial-chart-two-column', description: 'A4 editorial page with a chart slot above two narrative columns.' },
@@ -70,6 +72,14 @@ async function reportLogo(theme: RenderTheme, sourceContext: SourceContext | und
   return resolveImageAsset(`brand://${relativePath}`, sourceContext);
 }
 
+async function reportHeaderImage(theme: RenderTheme, sourceContext: SourceContext | undefined) {
+  const path = theme.reportHeaderImagePath;
+  if (!path || !sourceContext) return undefined;
+  const relativePath = relative(sourceContext.brandRoot, path).replaceAll('\\', '/');
+  if (!relativePath || relativePath.startsWith('../')) return undefined;
+  return resolveImageAsset(`brand://${relativePath}`, sourceContext);
+}
+
 function drawContainedImage(doc: jsPDF, asset: Awaited<ReturnType<typeof resolveImageAsset>> | undefined, x: number, y: number, width: number, height: number): { x: number; y: number; width: number; height: number } | undefined {
   if (!asset) return undefined;
   const properties = doc.getImageProperties(asset.data);
@@ -81,7 +91,7 @@ function drawContainedImage(doc: jsPDF, asset: Awaited<ReturnType<typeof resolve
   return rendered;
 }
 
-function drawReportChrome(doc: jsPDF, page: number, pageCount: number, geometry: PageGeometry, theme: RenderTheme, logo: Awaited<ReturnType<typeof resolveImageAsset>> | undefined, brand: string | undefined, chrome: CompositionPageChrome, continuation = false): void {
+function drawReportChrome(doc: jsPDF, page: number, pageCount: number, geometry: PageGeometry, theme: RenderTheme, logo: Awaited<ReturnType<typeof resolveImageAsset>> | undefined, headerImage: Awaited<ReturnType<typeof resolveImageAsset>> | undefined, brand: string | undefined, chrome: CompositionPageChrome, continuation = false, plannedLockup = false): void {
   doc.setFillColor(...rgb(theme.background));
   doc.rect(0, 0, geometry.width, geometry.height, 'F');
   const headerBandHeight = chrome.headerBand.height;
@@ -89,23 +99,27 @@ function drawReportChrome(doc: jsPDF, page: number, pageCount: number, geometry:
   if (band) {
     doc.setFillColor(...rgb(band));
     doc.rect(chrome.headerBand.x, chrome.headerBand.y, chrome.headerBand.width, chrome.headerBand.height, 'F');
+  } else if (theme.reportHeaderStyle === 'image-band' && headerImage) {
+    drawContainedImage(doc, headerImage, chrome.headerBand.x, chrome.headerBand.y, chrome.headerBand.width, chrome.headerBand.height);
   }
-  const lockup = continuation ? REPORT_LOCKUP.continuation : REPORT_LOCKUP.standard;
-  const logoWidth = theme.logoMarkPath || theme.logoWhiteMarkPath ? lockup.markWidthMm : lockup.fullLogoWidthMm;
-  const logoX = chrome.lockup?.x ?? PDF_CONFIG.margin;
-  const logoY = continuation ? PDF_CONFIG.headerRepeatLogoY : chrome.lockup?.y ?? PDF_CONFIG.headerLogoY;
-  const logoHeight = lockup.maxHeightMm;
-  const renderedLogo = drawContainedImage(doc, logo, logoX, logoY, logoWidth, logoHeight) ?? { x: logoX, y: logoY, width: logoWidth, height: logoHeight };
-  if (brand && theme.showReportBrandName) {
-    doc.setFont(pdfFont(theme), 'bold');
-    const brandSize = lockup.nameSizePt;
-    doc.setFontSize(brandSize);
-    doc.setTextColor(...rgb(band ? readableTextColor(band, theme, brandSize * PT_TO_PX, true) : theme.primary));
-    const brandHeight = doc.getTextDimensions(brand.toUpperCase()).h;
-    const freeHeight = Math.max(0, renderedLogo.height - brandHeight);
-    const brandOffset = lockup.verticalAlign === 'middle' ? freeHeight / 2 : lockup.verticalAlign === 'bottom' ? freeHeight : 0;
-    const brandBaseline = renderedLogo.y + brandOffset + brandHeight;
-    doc.text(brand.toUpperCase(), renderedLogo.x + renderedLogo.width + lockup.gapMm, brandBaseline);
+  if (!plannedLockup) {
+    const lockup = continuation ? REPORT_LOCKUP.continuation : REPORT_LOCKUP.standard;
+    const logoWidth = theme.logoMarkPath || theme.logoWhiteMarkPath ? lockup.markWidthMm : lockup.fullLogoWidthMm;
+    const logoX = chrome.lockup?.x ?? PDF_CONFIG.margin;
+    const logoY = continuation ? PDF_CONFIG.headerRepeatLogoY : chrome.lockup?.y ?? PDF_CONFIG.headerLogoY;
+    const logoHeight = lockup.maxHeightMm;
+    const renderedLogo = drawContainedImage(doc, logo, logoX, logoY, logoWidth, logoHeight) ?? { x: logoX, y: logoY, width: logoWidth, height: logoHeight };
+    if (brand && theme.showReportBrandName) {
+      doc.setFont(pdfFont(theme), 'bold');
+      const brandSize = lockup.nameSizePt;
+      doc.setFontSize(brandSize);
+      doc.setTextColor(...rgb(band ? readableTextColor(band, theme, brandSize * PT_TO_PX, true) : theme.primary));
+      const brandHeight = doc.getTextDimensions(brand.toUpperCase()).h;
+      const freeHeight = Math.max(0, renderedLogo.height - brandHeight);
+      const brandOffset = lockup.verticalAlign === 'middle' ? freeHeight / 2 : lockup.verticalAlign === 'bottom' ? freeHeight : 0;
+      const brandBaseline = renderedLogo.y + brandOffset + brandHeight;
+      doc.text(brand.toUpperCase(), renderedLogo.x + renderedLogo.width + lockup.gapMm, brandBaseline);
+    }
   }
   if (!band && theme.reportHeaderStyle !== 'image-band') {
     doc.setDrawColor(...rgb(theme.primary));
@@ -119,7 +133,7 @@ function drawReportChrome(doc: jsPDF, page: number, pageCount: number, geometry:
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.footerFontSize);
   doc.setTextColor(...rgb(theme.muted));
-  const pageNumber = `${page} / ${pageCount}`;
+  const pageNumber = resolvePagePlaceholders('{{page.number}} / {{page.count}}', page, pageCount);
   doc.text(pageNumber, chrome.pageNumber.x + chrome.pageNumber.width, chrome.pageNumber.y + chrome.pageNumber.height, { align: 'right' });
 }
 
@@ -277,8 +291,17 @@ function footerTextWidth(doc: jsPDF, geometry: PageGeometry, maxPages: number, t
   return Math.min(...pages.map((page) => Math.max(1, page.width - page.margins.right - page.margins.left - PDF_CONFIG.footerNumberGap - labelWidth)));
 }
 
-function pageChrome(doc: jsPDF, page: CompositionPlan['pages'][number], pageCount: number, geometry: PageGeometry, theme: RenderTheme, lockup?: CompositionBox): CompositionPageChrome {
-  const headerBandHeight = geometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight;
+function dynamicHeaderBandHeight(composition: ReportCompositionResult, page: CompositionPlan['pages'][number], geometry: PageGeometry): number {
+  const staticHeight = geometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight;
+  const headerSlots = composition.plan.slots.filter((slot) => slot.page === page.page && slot.flowId === 'header');
+  if (!headerSlots.some((slot) => slot.fitContent)) return staticHeight;
+  const contentSlots = new Set(composition.plan.flowPlacements?.filter((placement) => placement.page === page.page && placement.flowId === 'header' && placement.hasContent).map((placement) => placement.slotId) ?? []);
+  const activeSlots = headerSlots.filter((slot) => slot.fitContent !== true || contentSlots.has(slot.id) || slot.kind === 'graphic');
+  return activeSlots.reduce((bottom, slot) => Math.max(bottom, slot.box.y + slot.box.height), 0);
+}
+
+function pageChrome(doc: jsPDF, page: CompositionPlan['pages'][number], pageCount: number, geometry: PageGeometry, theme: RenderTheme, lockup?: CompositionBox, headerHeight?: number): CompositionPageChrome {
+  const headerBandHeight = headerHeight ?? geometry.bands.header?.bottom ?? PDF_CONFIG.headerBandHeight;
   const headerBand: CompositionBox = { x: 0, y: 0, width: page.width, height: headerBandHeight };
   const headerRuleY = headerBandHeight - PDF_CONFIG.headerBottomGap;
   const headerRule = theme.reportHeaderStyle === 'accent-band' || theme.reportHeaderStyle === 'dark-band' || theme.reportHeaderStyle === 'image-band'
@@ -288,7 +311,7 @@ function pageChrome(doc: jsPDF, page: CompositionPlan['pages'][number], pageCoun
   const footerRule: CompositionBox = { x: PDF_CONFIG.margin, y: footerTop, width: page.width - PDF_CONFIG.margin * 2, height: PDF_CONFIG.footerLineWidth };
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.footerFontSize);
-  const pageNumberText = `${page.page} / ${pageCount}`;
+  const pageNumberText = resolvePagePlaceholders('{{page.number}} / {{page.count}}', page.page, pageCount);
   const pageNumberWidth = doc.getTextWidth(pageNumberText);
   const pageNumberHeight = doc.getTextDimensions(pageNumberText).h;
   const pageNumberBaseline = footerTop + PDF_CONFIG.footerBaselineOffset;
@@ -305,7 +328,7 @@ function attachPageChrome(doc: jsPDF, composition: ReportCompositionResult, geom
   for (const page of composition.plan.pages) {
     const pageGeometry = page.layoutId.endsWith(':continuation') ? geometry.continuation ?? geometry : geometry;
     const lockup = composition.plan.slots.find((slot) => slot.page === page.page && slot.id === `${page.page}:header-lockup`);
-    page.chrome = pageChrome(doc, page, composition.plan.pages.length, pageGeometry, theme, lockup?.box);
+    page.chrome = pageChrome(doc, page, composition.plan.pages.length, pageGeometry, theme, lockup?.box, dynamicHeaderBandHeight(composition, page, pageGeometry));
   }
 }
 
@@ -315,14 +338,19 @@ export async function renderReportCompositionPdf(name: string, data: Composition
   attachPageChrome(prepared.doc, prepared.composition, prepared.geometry, theme);
   const { doc, geometry, template, composition, drawings } = prepared;
   const logo = await reportLogo(theme, sourceContext);
+  const headerImage = await reportHeaderImage(theme, sourceContext);
   for (const page of composition.plan.pages) {
     if (doc.getNumberOfPages() < page.page) doc.addPage([page.width, page.height]);
     doc.setPage(page.page);
     const pageGeometry = page.layoutId === `${template.id}:continuation` ? geometry.continuation ?? geometry : geometry;
-    if (!(template.pageTitle && page.page === 1)) {
+    // Reserve the title-page surface only when the input actually contains a
+    // title flow. A template may support a title page, but a content-only
+    // report still needs the normal report chrome on page one.
+    if (!(template.pageTitle && composition.document.flows.title && page.page === 1)) {
       const chrome = composition.plan.pages[page.page - 1].chrome;
       if (!chrome) throw new Error(`Composition plan has no chrome geometry for page ${page.page}.`);
-      drawReportChrome(doc, page.page, composition.plan.pages.length, pageGeometry, theme, logo, theme.brandName, chrome, page.layoutId === `${template.id}:continuation`);
+      const plannedLockup = composition.plan.blockPlacements.some((placement) => placement.page === page.page && placement.kind === 'lockup');
+      drawReportChrome(doc, page.page, composition.plan.pages.length, pageGeometry, theme, logo, headerImage, theme.brandName, chrome, page.layoutId === `${template.id}:continuation`, plannedLockup);
     }
   }
   if (compositionDebug) drawCompositionDebugOverlay(doc, composition, theme, geometry);

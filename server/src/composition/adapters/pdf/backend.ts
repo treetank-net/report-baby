@@ -12,6 +12,7 @@ import type {
 import { fitContainBox } from '../../geometry/visual-geometry.js';
 import { applyStyle, resolveInlineRunStyle, styleFor, textForStyle } from './text.js';
 import { splitInlineRunByCoverage } from '../../text/inline-runs.js';
+import { resolvePagePlaceholders } from '../../text/page-placeholders.js';
 
 /**
  * Combine independently owned atomic-block capabilities without allowing the
@@ -159,9 +160,7 @@ export function createJsPdfTextBackend(
         const style = styleFor(styles, block);
         doc.setPage(line.page);
         applyStyle(doc, family, style);
-        const renderedText = textForStyle(line.text, style)
-          .replaceAll('{{page.number}}', String(line.page))
-          .replaceAll('{{page.count}}', String(plan.pages.length));
+        const renderedText = resolvePagePlaceholders(textForStyle(line.text, style), line.page, plan.pages.length);
         const textX = line.textAlign === 'right'
           ? line.box.x + line.box.width
           : line.textAlign === 'center'
@@ -182,9 +181,7 @@ export function createJsPdfTextBackend(
             const resolvedStyle = segment.fallback && options.inlineFontCoverage
               ? { ...runStyle, fontFamily: options.inlineFontCoverage.family }
               : runStyle;
-            const runText = textForStyle(segment.run.text, resolvedStyle)
-              .replaceAll('{{page.number}}', String(line.page))
-              .replaceAll('{{page.count}}', String(plan.pages.length));
+            const runText = resolvePagePlaceholders(textForStyle(segment.run.text, resolvedStyle), line.page, plan.pages.length);
             if (!runText) continue;
             applyStyle(doc, family, resolvedStyle);
             doc.text(runText, cursor, line.box.y + resolvedStyle.baselineOffset);

@@ -234,6 +234,10 @@ function overlappingItemBottom(
   if (item.layer === 'insertion') return fallback;
   const source = occupiedSlots.get(item.slotId);
   if (!source || source.flowId !== targetSlot.flowId) return fallback;
+  // Role-constrained slots are independently addressed regions (for example
+  // title, subtitle, and eyebrow). Their boxes may intentionally touch or
+  // overlap, but content in one must not push content in another.
+  if ((source.allowedRoles?.length ?? 0) > 0 && (targetSlot.allowedRoles?.length ?? 0) > 0) return fallback;
   if (source.box.y >= rectBottom(targetSlot.box)) return fallback;
   if (!horizontalOverlap(source.box, targetSlot.box)) return fallback;
   return item.box.y + item.box.height;

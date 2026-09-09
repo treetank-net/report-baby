@@ -32,6 +32,61 @@ planner is in [`composition/layout/text-planner.ts`](../../server/src/compositio
 7. The planner also registers empty and blocked locations so the evaluator can
    distinguish a natural flow tail from an illegal gap.
 
+## Continuation policy and the target route model
+
+The continuation policy belongs to the compiled template route
+(`CompositionFlowRoute.continuation`), not to document input. It describes how
+that flow is designed to behave in this template: an unfinished bottom-note
+flow may continue on another page, while a page-local sidebar must stop when
+its current page route is exhausted. Moving through multiple route slots on
+the same page remains possible.
+
+`CompositionInput.flows[id]` supplies content only. Its current
+`continuation` field is a conflicting legacy declaration and should be removed
+from the public input and `CompositionFlow` model; it must never override the
+template's policy. Request-owned insertion declarations likewise supply slots
+and page assignments, not a second continuation policy. A dynamic insertion
+that needs continuation must use a template route whose policy allows it.
+
+The similarly named fields have different jobs: `continuationSlots` selects
+the route slots on a continuation layout, `continuationFrame` selects the
+alternate geometry of one slot, and `PageGeometry.continuation` is the
+alternate page geometry. `continuationTextSlots` and
+`continuationBlockSlots` in the page-template adapter are only local arrays of
+slot definitions for that layout; they are not persisted blocks or new domain
+entities. None of these fields represents a `continuation_block` entity.
+
+The refactor removes `continuation_slots`, but keeps `continuation` as
+template-owned behavior. The policy does not create a destination by itself:
+`layoutForPage(page)` and its `slotsByLayout` projection must still expose a
+compatible slot. The effective rule is therefore the conjunction of the two:
+the template permits continuation *and* the next scheduled page offers a
+legal slot. `repeat: each-page` remains separate: it creates a new flow
+instance and is not continuation.
+
+## Dedicated flows versus slots of `main`
+
+The current `showcase-report*` and `editorial-metrics/chart-*` templates still
+put `intro`, metric slots and the chart slot into the `main` route. That is a
+legacy template shape, not a rule that those elements belong to the primary
+text stream. The accepted target separates content by lifecycle and routing:
+
+```text
+intro   flow → intro slot(s) → usually first page, own growth policy
+metrics flow → metric-1…metric-n → opening metric area
+chart   flow → chart slot → opening chart area
+main    flow → content slot(s) → article text and its continuation
+```
+
+`metric-1` is therefore a slot in a possible `metrics` flow, not a reason to
+create one flow per card. The block kind alone does not create a flow: a chart
+that is genuinely inline in the article may remain a `chart` block in `main`,
+while a chart reserved in an opening area belongs in the named `chart` flow.
+For the showcase templates, where intro/metrics/chart are dedicated opening
+areas, migration should move them out of `main` and make their routes and
+input flows explicit. This distinction is also why a route may have a slot
+named `content` without allowing every block in the document to use it.
+
 ## Candidates and movable insertions
 
 The default path produces one plan. Alternatives are generated only when the

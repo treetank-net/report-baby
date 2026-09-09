@@ -28,6 +28,42 @@ measured box is an obstacle for text, while its content is materialized through
 the capability for its own block kind. This allows the element type to change
 without rewriting column-text mechanics.
 
+## Priority, route order, layer and paint
+
+The composition contract uses one `priority` metadata value for the strength of
+an element's claim to have its geometry materialized first. An adapter may
+provide or derive it; the planner carries it with the placement and uses it for
+reservation/materialization order; the evaluator checks the resulting legal
+geometry. A larger number means a stronger claim. `priority` is not a paint
+layer, a reading-order replacement, or a `z-index`.
+During migration, an omitted route value means `composition_priority.default`
+from `server/templates/render-config.yml` (currently `100`), the lowest
+geometry-claim class; `0` is not a valid default.
+
+The other existing order-related terms retain separate meanings:
+
+- route/slot order controls where a flow may continue;
+- source/visual order is an evaluator hard rule for authored blocks and
+  fragments;
+- `layer: flow | insertion` marks the two current text rendering categories;
+- `paint: false` on a graphic placement suppresses physical drawing while
+  retaining a planned geometry/obstacle;
+- `reserved` marks a slot/box that reserves space without being ordinary flow
+  content;
+- obstacles and `flowBarrierBoxCandidates` describe geometry around which text
+  may continue;
+- prototype `z_order` values belong only to raster occlusion QA for overlapping
+  paint-only graphics.
+
+The PDF backend currently keeps its existing fixed paint order. This is a
+migration baseline, not a claim that the order cannot be made explicit. The
+proposed explicit contract is tracked in
+[`release-1.1/01-paint-order-contract.md`](../release-1.1/01-paint-order-contract.md).
+If intentional overlap or backend portability makes ordering a real contract,
+we may configure it and/or derive it from `priority`; the direction and
+tie-break rules must then be written down and tested. We do not silently
+reinterpret the current `layer` field as stacking semantics.
+
 ## Flow barriers as shared continuation areas
 
 `flowBarrierBoxCandidates` are rectangles created where ordinary flow meets an

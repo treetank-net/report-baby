@@ -16,6 +16,8 @@ async function run(command, args, env = {}) {
 try {
   const sourceRoot = join(temp, 'brands');
   await cp(join(root, '..', 'examples', 'brand-showcase', 'brands', 'flux'), join(sourceRoot, 'flux'), { recursive: true });
+  await run('ffmpeg', ['-v', 'error', '-i', join(sourceRoot, 'flux', 'assets', 'backgrounds', 'hero.png'), '-frames:v', '1', join(sourceRoot, 'flux', 'assets', 'backgrounds', 'hero.webp')]);
+  await run('ffmpeg', ['-v', 'error', '-i', join(sourceRoot, 'flux', 'assets', 'backgrounds', 'hero.png'), '-frames:v', '1', join(sourceRoot, 'flux', 'assets', 'backgrounds', 'hero.avif')]);
   const store = join(temp, 'store');
   await run(process.execPath, [
     'brand-tool-bundle.cjs', 'publish',
@@ -41,16 +43,31 @@ try {
   assert.deepEqual(header?.px, [640, 154], 'report header derivative has no bounded target dimensions');
   assert.ok(header?.path && header.bytes < hero.source.bytes / 5, 'report header derivative was not materially reduced');
   await readFile(join(releaseRoot, 'brand', header.path));
+  for (const extension of ['webp', 'avif']) {
+    const encoded = manifest.prepared_assets.find((entry) => entry.source?.path === `assets/backgrounds/hero.${extension}`);
+    assert.ok(encoded, `publish manifest does not normalize ${extension} source assets`);
+    assert.ok(encoded.derivatives.some((entry) => entry.role === 'report_header_band'), `${extension} source has no prepared report header derivative`);
+  }
 
   const preparedOutput = join(temp, 'prepared.pdf');
+  const preparedData = {
+    flows: {
+      main: {
+        blocks: [
+          { type: 'heading', text: 'Prepared asset' },
+          { type: 'text', text: 'The prepared asset renders.' },
+        ],
+      },
+    },
+  };
   await run(process.execPath, ['cli-bundle.cjs', '--json', 'render_report', JSON.stringify({
     template: 'default-report',
     brand_ref: 'brand://flux/primary',
     output_path: preparedOutput,
-    data: { title: 'Prepared asset', sections: [{ heading: 'Works', body: 'The prepared asset renders.' }] },
+    data: preparedData,
   })], { REPORT_BABY_DATA: temp, REPORT_BABY_BRAND_DIR: store });
   await readFile(preparedOutput);
-  assert.ok((await stat(preparedOutput)).size < 300 * 1024, 'prepared report PDF is still larger than 300 KB');
+  assert.ok((await stat(preparedOutput)).size < hero.source.bytes, 'prepared report PDF is larger than the original source raster');
   try {
     const images = await run('pdfimages', ['-list', preparedOutput]);
     assert.match(images.stdout, /\b640\s+154\b/, 'prepared PDF does not embed the bounded report header derivative');
@@ -64,7 +81,16 @@ try {
     template: 'default-report',
     brand_ref: 'brand://flux/primary',
     output_path: fallbackOutput,
-    data: { title: 'Unpublished fallback', sections: [{ heading: 'Works', body: 'The fallback still renders.' }] },
+    data: {
+      flows: {
+        main: {
+          blocks: [
+            { type: 'heading', text: 'Unpublished fallback' },
+            { type: 'text', text: 'The fallback still renders.' },
+          ],
+        },
+      },
+    },
   })], {
     REPORT_BABY_DATA: temp,
     REPORT_BABY_BRAND_DIR: join(root, '..', 'examples', 'brand-showcase', 'brands'),

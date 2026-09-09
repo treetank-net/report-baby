@@ -16,6 +16,19 @@ regions on subsequent page layouts. Typical flows are `main`, `intro`,
 template declares an `intro` flow, introductory content belongs to that flow;
 it is not a leading block of `main`.
 
+## Continuation policy (template-owned)
+
+A continuation policy describes whether one instance of a flow may cross from
+its current page arrangement to a later page. `forbidden` ends that instance
+when its current page route is exhausted; it does not forbid moving between
+slots on that same page, creating another page for a different flow, or
+creating a repeated instance of the same flow. The physical destination for a
+continuation and the alternate geometry of that destination are separate
+concepts from this permission. The policy is declared by the template because
+the same named flow can be page-local in one template and multi-page in
+another. The page schedule and compatible slots still have to provide the
+destination; the policy alone never creates one.
+
 ## Generated page metadata
 
 Generated page metadata are values supplied by the composition plan for the

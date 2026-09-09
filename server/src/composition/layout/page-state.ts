@@ -84,6 +84,8 @@ function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
       ...(definition.allowedRoles === undefined ? {} : { allowedRoles: [...definition.allowedRoles] }),
       ...(definition.allowedBlockIds === undefined ? {} : { allowedBlockIds: [...definition.allowedBlockIds] }),
       ...(definition.allowedBlockKinds === undefined ? {} : { allowedBlockKinds: [...definition.allowedBlockKinds] }),
+      ...(definition.fitContent === undefined ? {} : { fitContent: definition.fitContent }),
+      ...(definition.grow?.maxHeight === undefined ? {} : { growthMaxHeight: definition.grow.maxHeight }),
       box: { ...definition.box },
       state: 'open',
     });
@@ -155,7 +157,7 @@ export function validateGrowthPolicies(template: CompositionTemplate, plan: Comp
  * @planner-responsibility Keep the current isAtomicBlock implementation intact until its target seam is extracted.
  */
 export function isAtomicBlock(block: CompositionBlock): boolean {
-  return block.atomic === true || block.kind === 'metric' || block.kind === 'chart';
+  return block.atomic === true || block.kind === 'metric' || block.kind === 'chart' || block.kind === 'lockup';
 }
 
 /**

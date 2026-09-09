@@ -54,6 +54,8 @@ function normalizedPdfToken(value) {
 
 try {
   await cp(join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png'), join(contentRoot, 'assets/map.png'), { recursive: true });
+  await execFileAsync('ffmpeg', ['-v', 'error', '-i', join(contentRoot, 'assets/map.png'), '-frames:v', '1', join(contentRoot, 'assets/map.webp')]);
+  await execFileAsync('ffmpeg', ['-v', 'error', '-i', join(contentRoot, 'assets/map.png'), '-frames:v', '1', join(contentRoot, 'assets/map.avif')]);
   await writeFile(join(contentRoot, 'assets/float.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240"><rect width="400" height="240" fill="#d76b4c"/></svg>');
   const result = await runCli({
     content_root: contentRoot,
@@ -69,6 +71,22 @@ try {
   assert.ok((await readFile(output)).length > 0);
   assert.equal(structured.drawings.filter((drawing) => drawing.kind === 'image').length, 1);
   assert.equal(structured.warnings, undefined);
+  for (const extension of ['webp', 'avif']) {
+    const encodedOutput = join(temporary, `encoded-${extension}.pdf`);
+    const encodedResult = await runCli({
+      template: 'pages/editorial-two-column',
+      content_root: contentRoot,
+      output_path: encodedOutput,
+      diagnostics: 'full',
+      data: {
+        title: `${extension.toUpperCase()} image report`,
+        sections: [{ heading: 'Encoded image', content: [{ type: 'image', src: `assets/map.${extension}`, alt: `${extension} map`, width: '80%', fit: 'contain' }] }],
+      },
+    });
+    const encoded = JSON.parse(encodedResult.stdout.trim().split('\n')[0]);
+    assert.equal(encoded.drawings.filter((drawing) => drawing.kind === 'image').length, 1, `${extension} image must render through the composition backend`);
+    assert.equal(encoded.warnings, undefined, `${extension} image should not produce a fallback warning`);
+  }
   const introOutput = join(temporary, 'intro-image-report.pdf');
   const introResult = await runCli({
     template: 'pages/editorial-two-column',
@@ -207,10 +225,18 @@ try {
   assert.ok(fallbackText.y >= fallbackImage.y + fallbackImage.height - reportImageQa.report_image_geometry_tolerance, JSON.stringify({ fallbackImage, fallbackText }));
   const archivePath = join(temporary, 'brand-source.zip');
   const hero = await readFile(join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png'));
+  const zipWebpPath = join(temporary, 'zip-map.webp');
+  const zipAvifPath = join(temporary, 'zip-map.avif');
+  await execFileAsync('ffmpeg', ['-v', 'error', '-i', join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png'), '-frames:v', '1', zipWebpPath]);
+  await execFileAsync('ffmpeg', ['-v', 'error', '-i', join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png'), '-frames:v', '1', zipAvifPath]);
+  const zipWebp = await readFile(zipWebpPath);
+  const zipAvif = await readFile(zipAvifPath);
   await writeFile(archivePath, Buffer.from(zipSync({
     'brands/zip/_brand.yml': Buffer.from('schema_version: 1\nmeta:\n  name: ZIP\nlayout:\n  report_image_caption:\n    align: left\n    color: primary\n    padding_x: 4\n'),
     'brands/zip/profiles/primary.yml': Buffer.from('schema_version: 1\n'),
     'brands/zip/assets/map.png': hero,
+    'brands/zip/assets/map.webp': zipWebp,
+    'brands/zip/assets/map.avif': zipAvif,
   })));
   const zipOutput = join(temporary, 'zip-report.pdf');
   const zipResult = await runCli({
@@ -225,6 +251,19 @@ try {
   const zipCaption = zipContent.drawings.find((drawing) => drawing.kind === 'text' && drawing.text === 'ZIP caption');
   assert.equal(zipContent.drawings.filter((drawing) => drawing.kind === 'image').length, 1);
   assert.ok(zipImage && zipCaption && Math.abs(zipCaption.x - (zipImage.x + 4)) < 0.01, JSON.stringify(zipContent.drawings));
+  for (const extension of ['webp', 'avif']) {
+    const encodedZipOutput = join(temporary, `zip-${extension}-report.pdf`);
+    const encodedZipResult = await runCli({
+      brand_ref: 'brand://zip/profiles/primary',
+      brand_source: { zip_path: archivePath, brand_path: 'brands' },
+      output_path: encodedZipOutput,
+      diagnostics: 'full',
+      data: { title: `${extension.toUpperCase()} ZIP image report`, sections: [{ heading: 'Encoded map', body: `![ZIP ${extension} map](brand://zip/assets/map.${extension})` }] },
+    });
+    const encodedZip = JSON.parse(encodedZipResult.stdout.trim().split('\n')[0]);
+    assert.equal(encodedZip.drawings.filter((drawing) => drawing.kind === 'image').length, 1, `${extension} image from a brand ZIP must render through the composition backend`);
+    assert.equal(encodedZip.warnings, undefined, `${extension} image from a brand ZIP should not produce a fallback warning`);
+  }
   console.log('report images: Markdown image rendered with caption and diagnostics passed');
 } finally {
   await rm(temporary, { recursive: true, force: true });

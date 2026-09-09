@@ -3,7 +3,9 @@ import { readdir, readFile, stat, writeFile, mkdir } from 'node:fs/promises';
 import { join, relative, dirname, extname } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { readRenderConfig } from '../template/builtins.js';
-import { decodePng, type PngRaster } from '../rendering/image-raster.js';
+import { decodePng, decodePngDataUri, type PngRaster } from '../rendering/image-raster.js';
+import { resolveImageAsset } from '../rendering/image-resolver.js';
+import { createSourceContext } from '../source/context.js';
 
 export interface PreparedAssetSource {
   path: string;
@@ -151,7 +153,7 @@ async function rasterFiles(directory: string): Promise<string[]> {
   for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) result.push(...await rasterFiles(path));
-    else if (entry.isFile() && ['.png', '.jpg', '.jpeg', '.webp'].includes(extname(entry.name).toLowerCase())) result.push(path);
+    else if (entry.isFile() && ['.png', '.jpg', '.jpeg', '.webp', '.avif'].includes(extname(entry.name).toLowerCase())) result.push(path);
   }
   return result;
 }
@@ -163,13 +165,21 @@ function safeDerivativePath(relativeSource: string, role: string): string {
 export async function prepareBrandAssets(brandDir: string, toolVersion: string): Promise<PreparedAssetsManifest> {
   const entries: PreparedAssetEntry[] = [];
   const sourceRoot = join(brandDir, 'assets');
+  const sourceContext = createSourceContext({ contentRoot: brandDir, sourceRoot: brandDir, brandRoot: brandDir });
   for (const sourcePath of await rasterFiles(sourceRoot)) {
     const sourceBytes = await readFile(sourcePath);
     let decoded: PngImage;
     try {
       decoded = decodePng(sourceBytes);
     } catch {
-      continue;
+      try {
+        const resolved = await resolveImageAsset(relative(brandDir, sourcePath).replaceAll('\\', '/'), sourceContext);
+        const normalized = resolved.format === 'PNG' ? decodePngDataUri(resolved.data) : undefined;
+        if (!normalized) continue;
+        decoded = normalized;
+      } catch {
+        continue;
+      }
     }
     const sourceRelative = relative(brandDir, sourcePath).replaceAll('\\', '/');
     const source: PreparedAssetSource = {

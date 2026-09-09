@@ -63,7 +63,6 @@ rozszerzeniem kontraktu jest deklaracja placementu na poziomie requestu, obok
     "flows": {
       "main": { "blocks": [] },
       "quotes": {
-        "continuation": "forbidden",
         "blocks": [
           {
             "id": "quote-1",
@@ -88,6 +87,13 @@ rozszerzeniem kontraktu jest deklaracja placementu na poziomie requestu, obok
   }
 }
 ```
+
+Politykę `continuation` dla `quotes` bierze się z route'u template'u
+`pages/editorial-two-column`; request nie może jej ustawić ani nadpisać. Jeżeli
+ten route ma `continuation: forbidden`, pozostała treść quote-flowu kończy się
+residualem/błędem zamiast przejścia na kolejną stronę. Jeżeli template jawnie
+zezwala na kontynuację, musi także udostępnić kompatybilny slot na kolejnych
+layoutach.
 
 `placement_requests` nie tworzy zapisanego template'u ani nie mutuje
 globalnej konfiguracji. Adapter buduje wyłącznie dla tego przebiegu tymczasowy
@@ -198,6 +204,12 @@ Testujemy oba tryby, ponieważ mają różne kontrakty:
 W obu trybach obstacle musi mieć dokładnie ten sam końcowy prostokąt co
 placement insertionu. Stały slot nie może zostać przesunięty tylko dlatego, że
 planner chciałby „uratować” kompozycję.
+
+W tej sekcji `continuation` oznacza politykę template route'u insertionu.
+`placement_requests.insertion_flows` może wskazać sloty i strony, ale nie
+tworzy drugiej polityki flowu. Nie należy mylić tego z obecnym
+`data.flows[id].continuation`: to pole jest normalizowane do dokumentu, ale
+jest sprzeczną deklaracją inputu i powinno zostać usunięte.
 
 ### Macierz sytuacji nielegalnych
 

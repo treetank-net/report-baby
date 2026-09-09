@@ -160,7 +160,8 @@ export function checkEarlyRouteTransitions(document: CompositionDocument, plan: 
       const nextLineHeight = nextLines.find((line) => line.box.height > 0)?.box.height ?? previous.box.height;
       const usable = usableLinesAfter(previous, slot, plan.graphicPlacements, nextLineHeight);
       if (plannerFoundNoUsableLine(plan, nextLines[0].blockId, previous.slotId, minimum)) continue;
-      if (usable < minimum) continue;
+      const nextBlock = sourceBlocks.get(nextLines[0].blockId);
+      if (!nextBlock || usable <= minimumUsableLinesBefore(nextBlock, minimum)) continue;
       pushEvaluationError(diagnostics,
         'FLOW_FRAGMENT_UNDERFILLED',
         `Flow '${key.split(':')[0]}' advanced to route segment ${routeIndexes[index]} while ${usable} usable line(s) remained in '${previous.slotId}'.`,
@@ -191,9 +192,20 @@ export function blockMatchesSlot(block: CompositionDocument['flows'][string]['bl
   if (slot.allowedBlockIds && !slot.allowedBlockIds.some((id) => block.id === id || block.id.startsWith(`${id}:`))) return false;
   if (slot.kind === 'block' && !block.atomic && block.kind !== 'table') return false;
   if (block.kind === 'table' && slot.kind !== 'block') return false;
-  if ((block.kind === 'metric' || block.kind === 'chart') && slot.kind !== 'block') return false;
+  if ((block.kind === 'metric' || block.kind === 'chart' || block.kind === 'lockup') && slot.kind !== 'block') return false;
   if (slot.kind === 'graphic') return false;
   return true;
+}
+
+/**
+ * Return the raw line capacity that remains usable before the next authored
+ * block. A heading consumes one additional line for its keep-with-next
+ * cluster and inter-block gap, so capacity at that boundary is not an
+ * illegal hole in the preceding slot.
+ */
+function minimumUsableLinesBefore(block: CompositionBlock, minimum: number): number {
+  const isHeading = block.kind === 'heading' || block.role === 'heading' || block.role === 'title';
+  return minimum + (isHeading ? 1 : 0);
 }
 
 /**
@@ -266,7 +278,7 @@ export function validateEmptyFlowSlot(
   const nextLine = laterItems.find((item) => item.box.height > 0);
   const lineHeight = nextLine?.box.height ?? slot.box.height;
   const availableLines = Math.floor(slot.box.height / lineHeight);
-  if (availableLines < minimum) return;
+  if (availableLines <= minimumUsableLinesBefore(nextAuthoredBlock, minimum)) return;
   pushEvaluationError(diagnostics, 'EMPTY_FLOW_SLOT', 'Flow ' + flow.id + ' skips empty slot ' + slot.id + ' while later content is placed (next authored block: ' + (nextAuthoredBlock.id || 'unknown') + ').', {
     flowId: flow.id,
     page: page.page,
@@ -298,7 +310,8 @@ export function validateUnderfilledFlowSlot(
   if (last.flowId === undefined || last.startWord === undefined) return;
   const nextLineHeight = laterItems.find((item) => item.box.height > 0)?.box.height ?? last.box.height;
   const usable = usableLinesAfter(last as CompositionPlan['lines'][number], slot, plan.graphicPlacements, nextLineHeight);
-  if (plannerFoundNoUsableLine(plan, nextAuthoredBlock.id, slot.id, minimum) || usable < minimum) return;
+  if (plannerFoundNoUsableLine(plan, nextAuthoredBlock.id, slot.id, minimum)
+    || usable <= minimumUsableLinesBefore(nextAuthoredBlock, minimum)) return;
   pushEvaluationError(diagnostics, 'FLOW_SLOT_UNDERFILLED', 'Flow ' + flow.id + ' leaves ' + usable + ' usable line(s) in ' + slot.id + ' before later content.', {
     flowId: flow.id,
     page: slot.page,
@@ -339,6 +352,16 @@ export function validateFlowSlotContinuity(
   const slotItems = flowItems.filter((item) => item.slotId === slot.id);
   const nextAuthoredBlock = nextAuthoredBlockForSlot(flow, slot, flowItems, blockIndexes, slotItems);
   if (!nextAuthoredBlock || slotIsFullyCoveredByObstacle(slot, plan)) return;
+  const nextAuthoredIndex = blockIndexes.get(nextAuthoredBlock.id);
+  // A later route segment is not a skipped slot when an earlier authored
+  // block is still being placed on a continuation page. This is common for
+  // templates with atomic lead slots (metrics/chart) followed by generated
+  // text segments: the segment boxes exist on page one, but the text flow
+  // cannot reach them until the pending atomic block moves forward.
+  if (nextAuthoredIndex !== undefined && flowItems.some((item) => {
+    const index = blockIndexes.get(item.blockId);
+    return index !== undefined && index < nextAuthoredIndex && item.page > slot.page;
+  })) return;
   if (slotItems.length === 0) {
     validateEmptyFlowSlot(flow, slot, page, laterItems, nextAuthoredBlock, minimum, diagnostics);
     return;

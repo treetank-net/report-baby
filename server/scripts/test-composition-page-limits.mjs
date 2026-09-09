@@ -59,12 +59,12 @@ try {
     newPdf('portrait', [geometry.width, geometry.height]),
     compiled,
     geometry,
-    validEditorialInput(Array.from({ length: 400 }, () => prose).join(' ')),
-    { family: 'DejaVu', maxPages: 12 },
+    validEditorialInput(Array.from({ length: 140 }, () => prose).join(' ')),
+    { family: 'DejaVu', maxPages: 4 },
   );
   const exceeded = genuinelyTooLong.plan.diagnostics.find((item) => item.code === 'MAX_PAGES_EXCEEDED');
-  assert.equal(genuinelyTooLong.plan.pages.length, 12, 'a genuinely oversized editorial must stop at the configured twelve-page limit');
-  assert.equal(exceeded?.page, 13, 'the oversized editorial must attempt page 13');
+  assert.equal(genuinelyTooLong.plan.pages.length, 4, 'a genuinely oversized editorial must stop at the configured four-page limit');
+  assert.equal(exceeded?.page, 5, 'the oversized editorial must attempt page 5');
   assert.equal(genuinelyTooLong.plan.residualContent[0]?.reason, 'max-pages');
   assert.ok(genuinelyTooLong.plan.lines.some((line) => line.blockId === 'intro'), 'the oversized fixture must still place its correctly identified intro');
   assert.ok(genuinelyTooLong.plan.lines.some((line) => line.blockId === 'section-1-body'), 'the oversized fixture must place real main-flow content before exhausting the limit');

@@ -35,6 +35,7 @@ block.
 | `table` | `type: table`, header and body rows, optional caption | Table capability measures one row fragment at a time and returns `endRow`; header repetition is explicit | Table placement consumes a block slot or a text-slot remainder; continuation is only at row boundaries and its box participates in collision checks | Row coverage/order, source kind, bounds and overlap are hard; table height is never guessed by the planner | Table capability paints header and selected rows using the planned row range |
 | `metric` | `type: metric`, label/value and optional delta, trend and note | Metric capability validates usable width and returns configured atomic height | Atomic block placement in a compatible block slot; it does not enter ordinary text wrapping | Missing capability, invalid measurement, wrong slot/kind or incomplete placement are hard | Metric capability paints one metric block/card through the block renderer registry |
 | `chart` | `type: chart`, chart type, optional title/subtitle and ordered data | Chart capability validates data and measures its raster/block height in the available box | Atomic block placement in a compatible block slot; a chart does not become a text-flow obstacle unless its template exposes it as a graphic | Missing capability, invalid data/measurement, wrong slot/kind or incomplete placement are hard | Chart capability paints the chart asset and optional searchable invisible title layer |
+| `lockup` | `type: lockup`, optional `mark_asset_id` and/or `label` | Lockup capability measures the resolved mark, configured gap, label and available width | Atomic block placement in a compatible `kind: block` slot; it may grow a declared header slot and push `main` | Missing mark asset, empty content, invalid measurement, wrong slot/kind or incomplete placement are hard | Lockup capability paints the mark and label as one inline brand block |
 
 ## Roles, insertions and graphics
 
@@ -87,10 +88,40 @@ produced; the plan must also prove complete coverage and legal geometry.
 
 ## Current limits
 
-The current model supports the seven kinds listed above. Every listed kind can
+The current model supports the eight kinds listed above. Every listed kind can
 now be selected by a named non-main `insertionSlots` route when its slot
 declares a compatible role or `allowedBlockKinds` value. Text, tables, images,
 metrics and charts retain their own measurement and renderer capabilities; the
 insertion layer only coordinates them and reserves one obstacle for `main`.
 New kinds still need an explicit capability and slot mapping before they can be
 used as insertions.
+
+## Page-chrome block: `lockup`
+
+`lockup` is a normal atomic block rather than a reserved `graphic` slot. Its
+data shape is:
+
+```yaml
+type: lockup
+id: brand-lockup
+role: header
+lockup:
+  mark_asset_id: brand-mark
+  label: ACME Logistics
+```
+
+The input adapter would normalize this to a renderer-neutral
+`CompositionLockup` (`markAssetId`, optional `label`). The block capability
+would measure the actual mark bounds, label, configured gap and padding before
+placement. A missing mark or label removes that component and its gap; a
+request-owned block with both values missing is invalid, while a brand default
+with both values missing is not materialized. The planner must never reserve an
+invisible placeholder. The same block can be
+placed in a header, sidebar or another explicitly compatible slot. It is not a
+new `Header` entity and it cannot make `main` consume insertion slots.
+
+The full path is now present: input validation, normalized contract, slot
+compatibility, measurement, atomic placement, legality/evaluation, PDF/debug
+rendering and a dynamic-chrome regression fixture. Automatic materialization
+from a brand profile and removal of the legacy renderer fallback remain
+follow-up work in release 1.0 point 12.

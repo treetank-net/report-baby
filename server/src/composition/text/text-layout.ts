@@ -163,6 +163,7 @@ export function wrapText(
   flowBarrierBoxCandidates: CompositionFlowBarrierBoxCandidate[] = [],
   geometryTolerance = 0,
   inlineRuns?: CompositionInlineRun[],
+  maxLines = Number.POSITIVE_INFINITY,
 ): WrappedLine[] {
   if (!Number.isFinite(slot.width) || slot.width <= 0) return [];
   const words = wordsOf(text);
@@ -176,10 +177,11 @@ export function wrapText(
     : Number.POSITIVE_INFINITY;
   let index = startWord;
   let lineOffset = startLineOffset;
-  while (index < words.length) {
+  const lowerBoundTolerance = Math.max(geometryTolerance, Number.EPSILON * 1024);
+  while (index < words.length && lines.length < maxLines) {
     const lineY = slot.y + lineOffset * lineHeight;
     if (lineY + lineBounds.bottom > bottom) break;
-    if (lineY + lineBounds.top < slot.y - geometryTolerance) {
+    if (lineY + lineBounds.top < slot.y - lowerBoundTolerance) {
       lineOffset = (-lineBounds.top) / lineHeight;
       continue;
     }
@@ -361,6 +363,7 @@ export function wrapBlock(
   minimumWrapWidth = 0,
   flowBarrierBoxCandidates: CompositionFlowBarrierBoxCandidate[] = [],
   geometryTolerance = 0,
+  maxLines = Number.POSITIVE_INFINITY,
 ): WrappedLine[] {
   return wrapText(
     metrics,
@@ -376,6 +379,7 @@ export function wrapBlock(
     flowBarrierBoxCandidates,
     geometryTolerance,
     block.inlineRuns,
+    maxLines,
   );
 }
 

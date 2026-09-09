@@ -148,6 +148,15 @@ export interface JsPdfCompositionImageStyle {
   chart?: JsPdfCompositionChartStyle;
 }
 
+export interface JsPdfCompositionLockupStyle {
+  markWidth: number;
+  maxHeight: number;
+  gap: number;
+  nameSize: number;
+  textColor: [number, number, number];
+  verticalAlign: 'top' | 'middle' | 'bottom';
+}
+
 export type JsPdfCompositionBlockRenderer = (
   doc: jsPDF,
   block: CompositionBlock,

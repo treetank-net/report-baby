@@ -78,6 +78,8 @@ export interface CompositionSlotTemplate {
   allowedRoles?: CompositionBlockRole[];
   allowedBlockIds?: string[];
   allowedBlockKinds?: CompositionBlockKind[];
+  /** Higher values reserve this slot's geometry before lower-priority slots. */
+  priority?: number;
   grow?: {
     axis: 'y';
     maxHeight: number;
@@ -102,6 +104,8 @@ export interface CompositionFlowRoute {
    */
   insertionSlots?: string[];
   continuation: 'allowed' | 'forbidden';
+  /** Higher values reserve geometry before lower-priority flows. */
+  priority?: number;
   repeat?: 'each-page';
   /** First page on which this flow is allowed to place content. */
   startPage?: number;
@@ -123,7 +127,7 @@ export interface CompositionTemplate {
   headingKeepWithNextLines?: number;
 }
 
-export type CompositionBlockKind = 'heading' | 'paragraph' | 'list-item' | 'image' | 'table' | 'chart' | 'metric';
+export type CompositionBlockKind = 'heading' | 'paragraph' | 'list-item' | 'image' | 'table' | 'chart' | 'metric' | 'lockup';
 export type CompositionBlockRole = 'intro' | 'heading' | 'body' | 'table' | 'chart' | 'metric' | 'header' | 'sidebar' | 'quote' | 'footer' | 'title' | 'subtitle' | 'eyebrow';
 
 export type CompositionInlineMark = 'strong' | 'emphasis' | 'link';
@@ -165,6 +169,11 @@ export interface CompositionMetric {
   note?: string;
 }
 
+export interface CompositionLockup {
+  markAssetId?: string;
+  label?: string;
+}
+
 export interface CompositionImage {
   assetId: string;
   width: 'full' | `${number}%`;
@@ -190,6 +199,7 @@ export interface CompositionBlock {
   table?: CompositionTable;
   chart?: CompositionChart;
   metric?: CompositionMetric;
+  lockup?: CompositionLockup;
   image?: CompositionImage;
   atomic?: boolean;
   keepWithNextLines?: number;

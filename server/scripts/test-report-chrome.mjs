@@ -144,6 +144,37 @@ try {
   assert.equal(wordsContaining(mainPage, 'MAIN_CONTENT_ANCHOR').length, 1, 'main anchor must be rendered once');
   assert.equal(wordsContaining(rendered.pages[0], 'CHROME_HEADER_ANCHOR').length, 1, 'header anchor must not duplicate on first page');
 
+  const dynamicOutputPath = join(work, 'dynamic-chrome.pdf');
+  const dynamicRendered = await render({
+    template_ref: 'pages/editorial-dynamic-chrome',
+    brand_ref: 'brand://orbit/primary',
+    data: { flows: {
+      header: { continuation: 'forbidden', blocks: [
+        { type: 'lockup', id: 'dynamic-lockup', role: 'header', lockup: { mark_asset_id: 'header-mark', label: 'Orbit Logistics' } },
+        { type: 'text', role: 'header', text: 'DYNAMIC_HEADER_ANCHOR with a deliberately long title that wraps inside the fit-content header.' },
+      ] },
+      main: { continuation: 'allowed', blocks: [{ type: 'text', role: 'body', text: Array.from({ length: 260 }, (_, index) => `dynamic${index}`).join(' ') }] },
+      footer: { continuation: 'forbidden', blocks: [] },
+    }, assets: [{ id: 'header-mark', source: 'brand://orbit/releases/chrome-test/brand/assets/logos/logo-mark.svg' }] },
+  }, dynamicOutputPath, brandStore);
+  assert.equal(dynamicRendered.result.compositionEvaluation.status, 'accepted', JSON.stringify(dynamicRendered.result.compositionEvaluation));
+  const dynamicPlan = dynamicRendered.result.compositionPlan;
+  const dynamicLockup = dynamicPlan.blockPlacements.find((placement) => placement.kind === 'lockup' && placement.page === 1);
+  assert.ok(dynamicLockup, 'dynamic header lockup must be planned as a block placement');
+  const dynamicHeaderPlacement = dynamicPlan.flowPlacements.find((candidate) => candidate.flowId === 'header' && candidate.hasContent);
+  const dynamicHeaderSlot = dynamicPlan.slots.find((slot) => slot.id === '1:header');
+  assert.ok(dynamicHeaderPlacement && dynamicHeaderSlot && dynamicHeaderSlot.box.height > 0, 'dynamic header must be materialized with measured height');
+  assert.ok(dynamicPlan.pages[0].chrome.headerBand.height >= dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height - tolerance, 'dynamic chrome band must contain the measured header box');
+  const dynamicMainPlacement = dynamicPlan.flowPlacements.find((candidate) => candidate.flowId === 'main' && candidate.hasContent && candidate.page === 1);
+  assert.ok(dynamicMainPlacement && dynamicHeaderSlot && dynamicMainPlacement.box.y >= dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height - tolerance, 'main flow must start below dynamic header geometry');
+  for (const page of dynamicPlan.pages) {
+    const pageHeader = dynamicPlan.slots.find((slot) => slot.id === `${page.page}:header`);
+    const pageMain = dynamicPlan.flowPlacements.find((candidate) => candidate.flowId === 'main' && candidate.hasContent && candidate.page === page.page);
+    if (pageHeader && pageMain && pageHeader.box.height > 0) {
+      assert.ok(pageMain.box.y >= pageHeader.box.y + pageHeader.box.height - tolerance, `main flow must start below dynamic header on page ${page.page}`);
+    }
+  }
+
   console.log(JSON.stringify({ status: 'passed', pages: rendered.pages.length, footerRules: rendered.pages.length, logoDrawings: logoDrawings.length, planFlowPlacements: plan.flowPlacements.length }, null, 2));
 } finally {
   await rm(work, { recursive: true, force: true });

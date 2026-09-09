@@ -62,7 +62,7 @@ export function measureInsertionContent(
     if (!metrics.measureTable) return undefined;
     return { kind: 'table', table: metrics.measureTable(block, measurementBox, 0, { repeatHeader: false }) };
   }
-  if (block.atomic === true || block.kind === 'image' || block.kind === 'metric' || block.kind === 'chart') {
+  if (block.atomic === true || block.kind === 'image' || block.kind === 'metric' || block.kind === 'chart' || block.kind === 'lockup') {
     if (!metrics.measureBlock) return undefined;
     return { kind: 'block', block: metrics.measureBlock(block, measurementBox) };
   }

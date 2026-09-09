@@ -27,6 +27,17 @@ function run(args, input = '') {
   });
 }
 
+function compositionPlanForParity(result) {
+  const stripTiming = (value) => {
+    if (Array.isArray(value)) return value.map(stripTiming);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => key !== 'planningTimeMs')
+      .map(([key, entry]) => [key, stripTiming(entry)]));
+  };
+  return stripTiming(result.compositionPlan);
+}
+
 try {
   const listed = await run(['--list']);
   assert.equal(listed.code, 0, listed.stderr);
@@ -65,7 +76,7 @@ try {
   }));
   assert.equal(renderedForParity.code, 0, renderedForParity.stderr);
   const renderedParityResult = JSON.parse(renderedForParity.stdout);
-  assert.deepEqual(renderedParityResult.compositionPlan, planResult.compositionPlan, 'dry_run and render used different composition plans');
+  assert.deepEqual(compositionPlanForParity(renderedParityResult), compositionPlanForParity(planResult), 'dry_run and render used different composition plans');
 
   const debugPath = join(outputDir, 'plan-parity-debug-report.pdf');
   const renderedWithDebug = await run(['--json', 'render_report'], JSON.stringify({
@@ -77,7 +88,7 @@ try {
   }));
   assert.equal(renderedWithDebug.code, 0, renderedWithDebug.stderr);
   const debugResult = JSON.parse(renderedWithDebug.stdout);
-  assert.deepEqual(debugResult.compositionPlan, planResult.compositionPlan, 'debug overlay changed the composition plan');
+  assert.deepEqual(compositionPlanForParity(debugResult), compositionPlanForParity(planResult), 'debug overlay changed the composition plan');
 
   const brandedPath = join(outputDir, 'branded-report.pdf');
   const branded = await run([

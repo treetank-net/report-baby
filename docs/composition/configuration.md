@@ -23,6 +23,14 @@ They do not turn a visual preference into a hard evaluator rejection.
 | `quality.pptx_text_region_max_changed_pixel_ratio` | Maximum changed-pixel ratio allowed when checking a PPTX text region. It interacts with the PPTX visual-QA renderer and is independent of PDF composition score. |
 | `quality.composition_nonwhite_min_ratio` | Minimum non-white ink ratio required in a composition inspection region. It interacts with the selected region geometry and the PDF/raster inspection, not with candidate ranking. |
 
+### `quality.test_feedback`
+
+| Field | Meaning and interactions |
+|---|---|
+| `quality.test_feedback.smoke_budget_ms` | Maximum configured duration for the fast smoke gate, including its build and checks. The harness reports an over-budget result as a failed gate. |
+| `quality.test_feedback.release_budget_ms` | Maximum configured duration for a multi-suite or full release gate. It is a feedback policy, not a planner or evaluator threshold. |
+| `quality.test_feedback.check_warning_ms` | Duration after which one harness check is reported as slow. It does not fail the check by itself; it identifies candidates for fixture or bundle reuse. |
+
 ### `quality.layout_diff`
 
 | Field | Meaning and interactions |
@@ -77,6 +85,15 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.column_count` | Number of columns included in balance scoring. It interacts with the actual page slots and `column_balance_weight`. |
 | `composition_score.heading_following_line_bonus` | Bonus for keeping usable text after a heading in the same placement. It interacts with heading detection and fragmentation, but cannot rescue an illegal placement. |
 | `composition_score.paragraph_fragmentation_penalty` | Penalty per paragraph split across pages or slots. It interacts with the candidate’s reflow result and source block boundaries. |
+| `composition_score.list_item_fragmentation_penalty` | Penalty per list item split across pages or slots. It interacts with list-item source boundaries and the keep-together planner policy. |
+| `composition_score.list_split_penalty` | Penalty for a list run that continues onto another page. It interacts with list continuity detection and is separate from per-item fragmentation. |
+| `composition_score.list_column_split_penalty` | Penalty when one list run crosses columns on the same page. It interacts with column geometry and list continuity; it does not reject the plan. |
+| `composition_score.table_split_penalty` | Penalty when one table is fragmented across pages or slots. It interacts with table row placement and table continuity detection. |
+| `composition_score.table_column_split_penalty` | Penalty when a table crosses columns on one page. It interacts with table geometry and is distinct from a page split. |
+| `composition_score.table_widow_min_rows` | Minimum number of rows expected in a table fragment. It interacts with `table_widow_penalty` and marks smaller terminal fragments as a soft quality issue. |
+| `composition_score.table_widow_penalty` | Penalty for a table fragment below `table_widow_min_rows`. It changes ranking only; hard row/slot legality remains the planner’s responsibility. |
+| `composition_score.tiny_fragment_max_lines` | Maximum line count for a text fragment considered tiny. It interacts with `tiny_fragment_penalty` and source-order fragment detection. |
+| `composition_score.tiny_fragment_penalty` | Penalty for each tiny text fragment. It is a soft quality signal and cannot make an otherwise legal plan illegal. |
 | `composition_score.orphan_max_fragment_lines` | Largest fragment size considered an orphan by the soft-quality heuristic. It interacts with `orphan_min_gap_mm` and `orphan_penalty`; it is not a hard orphan rejection. |
 | `composition_score.orphan_min_gap_mm` | Minimum obstacle-separated gap that makes a small fragment count as an orphan for scoring. It interacts with measured geometry and `orphan_max_fragment_lines`. |
 | `composition_score.orphan_penalty` | Penalty for each scored orphan fragment. It interacts with the orphan thresholds and candidate reflow. |

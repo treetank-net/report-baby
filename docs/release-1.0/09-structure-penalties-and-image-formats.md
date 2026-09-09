@@ -1,7 +1,9 @@
 # Plan 09 — ciągłość struktur i formaty obrazów
 
-Status: nierozpoczęty; zaplanowany po domknięciu soft insertionów i kalibracji
-wyszukiwania kandydatów.
+Status: wykonany dla zakresu release’u. Scoring ciągłości list, tabel i małych
+fragmentów, ingest WebP/AVIF, pełna bramka kontraktu obrazów oraz rozdzielenie
+szybkiego i pełnego feedbacku są zaimplementowane. Kalibracja wag na hostach CI
+pozostaje optymalizacją release 1.1, a nie brakującym kontraktem 1.0.
 
 ## Cel
 
@@ -38,7 +40,12 @@ zachowania treści. Wartości muszą trafić do `composition_score` w
 `server/templates/render-config.yml`; kod nie może zawierać ich jako
 duplikowanych literałów.
 
-Do ustalenia podczas implementacji pozostają osobne wagi dla:
+W kodzie istnieją osobne składniki `list-continuity`, `table-continuity` oraz
+`tiny-fragments`. Każdy zwraca miękką karę i szczegóły użyte w trace/debug.
+Wagi są konfigurowane w `composition_score` (`list_*`, `table_*` oraz
+`tiny_fragment_*`) i nie zmieniają legalności planu.
+
+Do kalibracji na realnych editorialach pozostają osobne wagi dla:
 
 - podziału listy między kontenerami;
 - podziału tabeli między kontenerami;
@@ -53,7 +60,8 @@ niezestrojona, a nie uznana za sukces.
 
 ### Testy
 
-- jednostkowe: każda odmiana podziału daje oczekiwany składnik breakdownu;
+- jednostkowe: każda odmiana podziału daje oczekiwany składnik breakdownu
+  (zrealizowane w `scripts/test-structure-scoring.mjs`);
 - jednostkowe: legalny podział między elementami nie jest traktowany jak
   naruszenie twardej reguły;
 - integracyjne: dwa plany z tym samym tekstem różnią się tylko ciągłością
@@ -75,7 +83,10 @@ obrazy:
 - `brand://` z katalogu lub ZIP-a marki;
 - bezpośredni asset podany przez blok obrazu.
 
-Po rozpoznaniu formatu resolver dostarcza wspólny, zdekodowany raster. Dalsze
+Po rozpoznaniu formatu resolver dostarcza wspólny, zdekodowany raster. W tej
+wersji WebP i AVIF są transkodowane do PNG przez procesowy dekoder `ffmpeg`;
+obecność tej komendy jest wymaganiem środowiska uruchomieniowego bundla (nie
+jest to npm runtime dependency). Dalsze
 moduły nie powinny rozróżniać PNG, JPEG, WebP i AVIF: renderer używa obrazu,
 a sampler kontrastu próbuje kolory z tego samego rastra. Nie tworzymy osobnych
 ścieżek logiki kontrastu dla każdego formatu.
@@ -92,9 +103,10 @@ a sampler kontrastu próbuje kolory z tego samego rastra. Nie tworzymy osobnych
 - test błędu dla uszkodzonego lub nieobsługiwanego pliku z komunikatem
   wskazującym źródło i format.
 
-Wymagane jest sprawdzenie dostępności biblioteki dekodującej w środowisku
+Wymagane jest sprawdzenie dostępności dekodera `ffmpeg` w środowisku
 produkcyjnym, bundlu CLI i środowisku testowym. Sam fakt, że format otwiera się
-lokalnie przez narzędzie systemowe, nie wystarcza.
+lokalnie, nie wystarcza; brak dekodera musi kończyć się czytelnym błędem ze
+źródłem i formatem.
 
 ## 3. Czas feedbacku testów
 
@@ -119,6 +131,64 @@ Przed finalizacją release’u należy:
   szybkiego feedbacku oraz dla pełnego gate’u;
 - utrzymać jedną, czytelną komendę uruchamiającą szybki pipeline oraz jedną
   komendę uruchamiającą pełną weryfikację release’u.
+
+W repozytorium są teraz trzy jawne wejścia: `npm run test:smoke` (kontrakt
+composition, kontrakt przepływów i scoring struktur), `npm run test:release`
+(pełny zestaw bieżących suite’ów) oraz `npm run test:editorial-full` (pełna
+macierz 506 fixture’ów przepływu redakcyjnego, uruchamiana przed wydaniem lub
+nocą). Zwykły `editorial flow` w `test:release` sprawdza 26 reprezentatywnych
+fixture’ów; 480 wariantów plan-only nie blokuje codziennego feedbacku.
+Harness raportuje czas każdego
+checku i całej grupy, ostrzega po `quality.test_feedback.check_warning_ms`, a
+budżety `smoke_budget_ms` i `release_budget_ms` są czytane z
+`server/templates/render-config.yml`. Progi są początkową polityką release'u;
+ich kalibracja na hoście CI pozostaje osobnym zadaniem. Test limitów stron używa
+krótszego, nadal nadmiarowego dokumentu (4 strony limitu); nie koduje arbitralnie
+12 stron jako wymogu produktu.
+
+Szczegółowe czasy nie są już tylko komunikatem terminala. `npm run test:timings`
+uruchamia cały zakres i przyrostowo zapisuje `server/qa/test-timings.jsonl`;
+raport zawiera rekordy start/koniec każdego checku, status błędu oraz agregaty
+per suite. Dzięki temu można wskazać konkretny wąski gardło bez ponownego
+zgadywania na podstawie czasu całego release gate’u.
+
+Pomiar z 2026-09-09 (bez builda) dał 503,6 s dla 39 unikalnych checków:
+composition 92,9 s, artifacts 245,6 s, quality 162,9 s i smoke 2,1 s. Te
+wartości są punktem odniesienia dla zadania plan-only, a nie docelowym SLA.
+
+### Zadanie: plan-only przed artifact-required
+
+Następny przebieg audytu testów ma sklasyfikować każdą asercję, a nie tylko cały
+plik testowy. Jeżeli asercja pyta o wynik planera — na przykład o stronę,
+`flowId`, `slotId`, kolejność placementów, legalność albo residual — test ma
+zatrzymać się po zbudowaniu `CompositionPlan` i `Evaluation`. Nie powinien
+uruchamiać backendu PDF, rasteryzacji, `pdftotext` ani CLI/MCP jako procesu
+pośredniego. Ten sam input i ta sama asercja muszą być dostępne przez
+renderer-neutral seam.
+
+Render pozostaje wymagany tylko dla asercji, których przedmiotem jest artefakt
+lub backend: rzeczywista obecność glifów/obrazu, selekcja tekstu w PDF,
+ink-occupancy, kontrast po rasteryzacji, poprawność PDF/PNG/PPTX, zachowanie
+procesu CLI/MCP oraz porównanie deterministycznego artefaktu. W takich testach
+render powinien być wykonany raz na najmniejszym fixture’u, który dowodzi danej
+własności; pozostałe warianty powinny być plan-only.
+
+Kolejność realizacji:
+
+1. Na podstawie `qa/test-timings.jsonl` wskazać testy dłuższe niż próg z
+   `quality.test_feedback.check_warning_ms` i rozłożyć je na konkretne asercje.
+2. Oznaczyć każdą asercję jako `plan-only`, `artifact-required` albo
+   `process-contract` (uruchomienie CLI/MCP jest wtedy częścią kontraktu).
+3. Przenieść asercje planowe do bezpośredniego wejścia composition engine’u,
+   współdzieląc fixture i konfigurację, bez zmiany zakresu ochrony.
+4. Zostawić jeden mały test renderowy na własność backendu, a usunięte rendery
+   zastąpić asercjami planu lub evaluatorów.
+5. Ponownie zmierzyć cały gate i zapisać przed/po w raporcie JSONL.
+
+Kryterium ukończenia: żadna asercja dotycząca wyłącznie planu nie renderuje
+artefaktu, a każdy pozostawiony render ma w dokumentacji nazwany powód. Wynik
+plan-only musi być równoważny semantycznie z dotychczasową asercją; celem jest
+redukcja czasu i obciążenia, nie osłabienie pokrycia.
 
 Kryterium ukończenia: zmiana w plannerze daje szybki wynik lokalnie bez
 czekania na wszystkie niezależne rendery, a pełny gate nadal sprawdza te same

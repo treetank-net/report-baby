@@ -93,14 +93,50 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const showcaseTemplate = compositionTemplateFromPageGeometry(showcaseCompiled, showcaseGeometry, { maxPages: 3, includeHeaderFlow: true });
   const lockupSlot = showcaseTemplate.layouts[0].slots.find((slot) => slot.id === 'header-lockup');
   const headerSlot = showcaseTemplate.layouts[1].slots.find((slot) => slot.id === 'header');
-  assert.equal(lockupSlot?.kind, 'graphic', 'brand lockup must be a reserved composition box');
+  assert.equal(lockupSlot?.kind, 'block', 'brand lockup must be a normal block slot');
   assert.ok(headerSlot && lockupSlot && (
     headerSlot.box.x >= lockupSlot.box.x + lockupSlot.box.width
     || headerSlot.box.x + headerSlot.box.width <= lockupSlot.box.x
     || headerSlot.box.y >= lockupSlot.box.y + lockupSlot.box.height
     || headerSlot.box.y + headerSlot.box.height <= lockupSlot.box.y
   ), 'header text must not collide with the reserved brand lockup');
-  assert.ok(!showcaseTemplate.routes.header.slots.includes('header-lockup'), 'reserved lockup must not consume header flow content');
+  assert.ok(showcaseTemplate.routes.header.slots.includes('header-lockup'), 'lockup must be available to the header flow');
+  const dynamicSource = parse(await readFile(join(root, 'templates/pages/editorial-dynamic-chrome/template.yml'), 'utf8'));
+  const dynamicCompiled = compileTemplateSource(dynamicSource);
+  const dynamicGeometry = pageGeometryFromTemplate(dynamicCompiled);
+  const dynamicTemplate = compositionTemplateFromPageGeometry(dynamicCompiled, dynamicGeometry, { maxPages: 3, includeHeaderFlow: true });
+  const dynamicHeaderSlot = dynamicTemplate.layouts[0].slots.find((slot) => slot.id === 'header');
+  assert.equal(dynamicHeaderSlot?.fitContent, true, 'dynamic chrome header must opt into fit-content sizing');
+  assert.equal(dynamicHeaderSlot?.box.height, 0, 'dynamic chrome header must allow a zero-height empty state');
+  assert.equal(dynamicTemplate.routes.header.priority, 500, 'header geometry must carry its explicit priority');
+  assert.equal(dynamicTemplate.routes.main.priority, 200, 'main geometry must carry its explicit priority');
+  const dynamicDocument = compositionDocumentFromInput({
+    flows: {
+      header: { continuation: 'forbidden', blocks: [{ id: 'dynamic-header', type: 'text', role: 'header', text: 'A deliberately long repeated header that needs more than one line in the narrow dynamic chrome slot.' }] },
+      main: { continuation: 'allowed', blocks: [{ id: 'dynamic-main', type: 'text', role: 'body', text: Array.from({ length: 140 }, (_, index) => `main${index}`).join(' ') }] },
+      footer: { continuation: 'forbidden', blocks: [] },
+    },
+  });
+  const dynamicResult = createTextCompositionEngine(dynamicTemplate).plan(dynamicDocument, {
+    units: 'mm',
+    measureText(text) { return text.length * 1.2; },
+    lineHeight() { return 5; },
+  });
+  assert.equal(dynamicResult.evaluation.status, 'accepted', JSON.stringify(dynamicResult.evaluation));
+  const materializedDynamicHeader = dynamicResult.plan.slots.find((slot) => slot.id === '1:header');
+  const materializedDynamicContent = dynamicResult.plan.slots.find((slot) => slot.id === '1:first:segment-1');
+  const dynamicContentTemplateBox = dynamicTemplate.layouts[0].slots.find((slot) => slot.id === 'first:segment-1')?.box;
+  assert.ok(materializedDynamicHeader && materializedDynamicHeader.box.height > 0, 'dynamic header must grow to its measured content');
+  assert.equal(dynamicResult.plan.lines.find((line) => line.blockId === 'dynamic-header')?.priority, 500, 'header placements must carry geometry priority');
+  assert.equal(dynamicResult.plan.lines.find((line) => line.blockId === 'dynamic-main')?.priority, 200, 'main placements must carry geometry priority');
+  assert.ok(materializedDynamicContent && dynamicContentTemplateBox && materializedDynamicContent.box.y > dynamicContentTemplateBox.y, 'main content must move below the measured header');
+  const emptyDynamicResult = createTextCompositionEngine(dynamicTemplate).plan({ flows: { header: { id: 'header', continuation: 'forbidden', blocks: [] }, main: { id: 'main', continuation: 'allowed', blocks: [{ id: 'empty-header-main', kind: 'paragraph', role: 'body', text: 'main content' }] }, footer: { id: 'footer', continuation: 'forbidden', blocks: [] } } }, {
+    units: 'mm',
+    measureText(text) { return text.length * 1.2; },
+    lineHeight() { return 5; },
+  });
+  assert.equal(emptyDynamicResult.evaluation.status, 'accepted', JSON.stringify(emptyDynamicResult.evaluation));
+  assert.equal(emptyDynamicResult.plan.slots.find((slot) => slot.id === '1:header')?.box.height, 0, 'empty dynamic header must collapse instead of reserving its maximum height');
   const expandingIntroDocument = compositionDocumentFromInput({
     flows: {
       main: {

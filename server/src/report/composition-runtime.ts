@@ -1,6 +1,5 @@
 import type { jsPDF } from 'jspdf';
 import { createHash } from 'node:crypto';
-import { relative } from 'node:path';
 import type { RenderTheme } from '../contracts/render-theme.js';
 import type { CompositionInput, PlacementRequests } from '../contracts/input/schema.js';
 import { readRenderConfig } from '../template/builtins.js';
@@ -27,6 +26,7 @@ import { createJsPdfChartBlockCapabilities } from '../composition/adapters/pdf/c
 import { createJsPdfImageBlockCapabilities } from '../composition/adapters/pdf/image.js';
 import { createJsPdfMetricBlockCapabilities } from '../composition/adapters/pdf/metric.js';
 import { createJsPdfTableBlockCapabilities } from '../composition/adapters/pdf/table.js';
+import { createJsPdfLockupBlockCapabilities } from '../composition/adapters/pdf/lockup.js';
 import { fontCoverage } from '../composition/adapters/pdf/font-coverage.js';
 import type { CompositionBlockKind } from '../composition/contracts/model.js';
 import type { JsPdfCompositionBlockCapability } from '../composition/contracts/pdf.js';
@@ -152,6 +152,17 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
   const capabilities: Partial<Record<CompositionBlockKind, JsPdfCompositionBlockCapability>> = {};
   if (blocks.some((block) => block.kind === 'metric')) capabilities.metric = createJsPdfMetricBlockCapabilities(doc, family, compositionMetricStyleFromRenderConfig({ fillColor: rgb(theme.soft), drawColor: rgb(theme.line), labelColor: rgb(theme.muted), valueColor: rgb(theme.foreground), deltaColor: rgb(theme.primary), noteColor: rgb(theme.muted), trendUpColor: rgb(theme.success), trendDownColor: rgb(theme.danger), trendFlatColor: rgb(theme.muted) }), inlineFontCoverage);
   if (blocks.some((block) => block.kind === 'chart')) capabilities.chart = createJsPdfChartBlockCapabilities(doc, family, compositionChartStyle);
+  if (blocks.some((block) => block.kind === 'lockup')) {
+    const lockup = RENDER_CONFIG.chrome.reportLockup.standard;
+    capabilities.lockup = createJsPdfLockupBlockCapabilities(doc, family, resolvedImages, {
+      markWidth: lockup.markWidthMm,
+      maxHeight: lockup.maxHeightMm,
+      gap: lockup.gapMm,
+      nameSize: lockup.nameSizePt,
+      textColor: rgb(theme.primary),
+      verticalAlign: lockup.verticalAlign,
+    });
+  }
   const tableCapabilities = blocks.some((block) => block.kind === 'table') ? createJsPdfTableBlockCapabilities(doc, family, compositionTableStyleFromRenderConfig({ headerFillColor: rgb(theme.primary), headerTextColor: rgb(readableTextColor(theme.primary, theme, PDF_CONFIG.tableFontSize * PT_TO_PX, true)), rowFillColor: rgb(theme.background), alternateRowFillColor: rgb(theme.soft), textColor: rgb(theme.foreground), lineColor: rgb(theme.line) }), inlineFontCoverage) : undefined;
   if (imageCapabilities) capabilities.image = imageCapabilities;
   const combined = Object.keys(capabilities).length > 0 ? combineJsPdfCompositionBlockCapabilities(capabilities) : undefined;

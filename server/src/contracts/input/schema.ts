@@ -87,7 +87,7 @@ const placementSlotSchema = z.object({
   kind: z.enum(['text', 'block']).optional().default('text'),
   allowed_roles: z.array(compositionRoleSchema).optional(),
   allowed_block_ids: z.array(z.string().min(1)).optional(),
-  allowed_block_kinds: z.array(z.enum(['heading', 'paragraph', 'list-item', 'image', 'table', 'chart', 'metric'])).optional(),
+  allowed_block_kinds: z.array(z.enum(['heading', 'paragraph', 'list-item', 'image', 'table', 'chart', 'metric', 'lockup'])).optional(),
   sizing: placementSizingSchema.optional(),
 }).strict();
 
@@ -208,6 +208,16 @@ export const compositionInputBlockSchema = z.discriminatedUnion('type', [
     delta: z.string().optional(),
     trend: z.enum(['up', 'down', 'flat']).optional(),
     note: z.string().optional(),
+  }).strict(),
+  z.object({
+    type: z.literal('lockup'),
+    ...compositionBlockBase,
+    lockup: z.object({
+      mark_asset_id: z.string().min(1).optional(),
+      label: z.string().min(1).optional(),
+    }).strict().refine((value) => value.mark_asset_id !== undefined || value.label !== undefined, {
+      message: 'A lockup must provide mark_asset_id or label.',
+    }),
   }).strict(),
 ]);
 

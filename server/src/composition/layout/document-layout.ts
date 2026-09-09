@@ -35,6 +35,9 @@ import {
   movableGraphicFramesForPlan,
   movableInsertionFramesForPlan,
 } from './movable-placement-frames.js';
+import { readRenderConfig } from '../../template/builtins.js';
+
+const DEFAULT_GEOMETRY_PRIORITY = readRenderConfig().compositionPriority.default;
 
 /** Create an empty plan with all renderer-facing collections initialized. */
 /**
@@ -94,6 +97,7 @@ function flattenPages(pages: PageState[], plan: CompositionPlan, template: Compo
         if (!slot || slot.routeIndex !== undefined) return;
         slot.routeIndex = index;
         if (slot.flowId === undefined) slot.flowId = flowId;
+        if (slot.priority === undefined && route.priority !== undefined) slot.priority = route.priority;
       });
     }
   }
@@ -205,12 +209,24 @@ type DocumentFlowPlanningContext = {
  * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current planRepeatedFlow implementation intact until its target seam is extracted.
  */
-function planRepeatedFlow(context: DocumentFlowPlanningContext, flowId: string, route: CompositionFlowRoute): void {
-  context.plan.repeatFlowIds?.push(flowId);
-  const pageCount = Math.max(1, context.pages.length);
-  const firstPage = route.startPage ?? 1;
+function planRepeatedFlow(
+  context: DocumentFlowPlanningContext,
+  flowId: string,
+  route: CompositionFlowRoute,
+  fromPage = route.startPage ?? 1,
+  toPage = Math.max(1, context.pages.length),
+): void {
+  if (!context.plan.repeatFlowIds?.includes(flowId)) context.plan.repeatFlowIds?.push(flowId);
   const preplannedInsertionBlockIds = new Set(insertionBlocksForFlow(context.template, flowId, context.document.flows[flowId]?.blocks ?? []).map((block) => block.id));
-  for (let page = firstPage; page <= pageCount; page += 1) {
+  for (let page = fromPage; page <= toPage; page += 1) {
+    const blockIds = new Set((context.document.flows[flowId]?.blocks ?? []).map((block) => block.id));
+    const alreadyPlanned = [
+      ...context.plan.lines,
+      ...(context.plan.insertionLines ?? []),
+      ...context.plan.blockPlacements,
+      ...context.plan.tablePlacements,
+    ].some((item) => item.page === page && blockIds.has(item.blockId));
+    if (alreadyPlanned) continue;
     planFlow(context.document, context.metrics, context.template, context.policy, flowId, { ...route, continuation: 'forbidden' }, context.pages, context.plan, page, preplannedInsertionBlockIds);
   }
 }
@@ -262,11 +278,40 @@ function planDocumentFlows(
 ): void {
   const context: DocumentFlowPlanningContext = { document, metrics, template, policy, pages, plan };
   const flowEntries = Object.entries(document.flows);
-  const orderedFlowEntries = [
-    ...flowEntries.filter(([flowId]) => template.routes[flowId]?.repeat !== 'each-page'),
-    ...flowEntries.filter(([flowId]) => template.routes[flowId]?.repeat === 'each-page'),
-  ];
-  for (const [flowId, flow] of orderedFlowEntries) planDocumentFlow(context, flowId, flow);
+  const initialPageCount = Math.max(1, pages.length);
+  const repeatedEntries = flowEntries.filter(([flowId]) => template.routes[flowId]?.repeat === 'each-page');
+  const flowOrder = new Map(flowEntries.map(([flowId], index) => [flowId, index]));
+  const geometryPriority = (flowId: string): number => template.routes[flowId]?.priority ?? DEFAULT_GEOMETRY_PRIORITY;
+  const compareByGeometryPriority = ([left]: [string, CompositionDocument['flows'][string]], [right]: [string, CompositionDocument['flows'][string]]): number => {
+    const priorityDifference = geometryPriority(right) - geometryPriority(left);
+    return priorityDifference !== 0 ? priorityDifference : flowOrder.get(left)! - flowOrder.get(right)!;
+  };
+  const preMainRepeated = repeatedEntries
+    .filter(([flowId]) => flowId !== 'footer')
+    .sort(compareByGeometryPriority);
+  for (const [flowId] of preMainRepeated) {
+    const route = template.routes[flowId];
+    if (route) planRepeatedFlow(context, flowId, route, route.startPage ?? 1, initialPageCount);
+  }
+  const ordinaryEntries = flowEntries
+    .filter(([flowId]) => template.routes[flowId]?.repeat !== 'each-page')
+    .sort(([left], [right]) => {
+      const leftPriority = template.routes[left]?.priority;
+      const rightPriority = template.routes[right]?.priority;
+      if (leftPriority !== undefined || rightPriority !== undefined) {
+        const priorityDifference = (rightPriority ?? DEFAULT_GEOMETRY_PRIORITY) - (leftPriority ?? DEFAULT_GEOMETRY_PRIORITY);
+        if (priorityDifference !== 0) return priorityDifference;
+      }
+      const rank = (flowId: string): number => flowId === 'title' ? 0 : flowId === 'main' ? 2 : 1;
+      return rank(left) - rank(right);
+    });
+  for (const [flowId, flow] of ordinaryEntries) planDocumentFlow(context, flowId, flow);
+  for (const [flowId, flow] of repeatedEntries.sort(compareByGeometryPriority)) {
+    const route = template.routes[flowId];
+    if (!route) continue;
+    if (flowId === 'footer') planRepeatedFlow(context, flowId, route);
+    else planRepeatedFlow(context, flowId, route, initialPageCount + 1, Math.max(1, context.pages.length));
+  }
 }
 
 /** Finalize page, flow, barrier, glyph, and trace projections after flow planning. */

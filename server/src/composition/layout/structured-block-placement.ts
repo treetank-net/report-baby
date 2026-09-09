@@ -46,6 +46,7 @@ export function placeAtomicBlock(
     page: pageState.page,
     routeIndex,
     box: { x: slot.box.x, y: top, width: slot.box.width, height: measurement.height },
+    ...(definition.priority === undefined ? {} : { priority: definition.priority }),
   };
   if (block.kind === 'image' && measurement.image) {
     const imageX = block.image?.wrap === 'left'
@@ -82,8 +83,7 @@ export function placeAtomicBlock(
     }
   }
   blockPlacements.push(placement);
-  const canGrowFurther = definition.kind === 'text'
-    && definition.grow?.axis === 'y'
+  const canGrowFurther = definition.grow?.axis === 'y'
     && rectBottom(slot.box) < definition.box.y + definition.grow.maxHeight - Number.EPSILON;
   slot.state = top + measurement.height >= rectBottom(slot.box) && !canGrowFurther ? 'exhausted' : 'partial';
 }
@@ -115,6 +115,7 @@ export function placeTableFragment(
     startRow,
     endRow: measurement.endRow,
     repeatsHeader,
+    ...(definition.priority === undefined ? {} : { priority: definition.priority }),
   });
   slot.state = 'exhausted';
 }
@@ -231,7 +232,7 @@ export function placeStructuredBlock(
   const blockTop = definition.kind === 'text'
     ? contentStartBottom(pageState, plan, slot, document) + blockGap
     : slot.box.y;
-  const blockMeasureBottom = definition.kind === 'text' && definition.grow?.axis === 'y'
+  const blockMeasureBottom = definition.grow?.axis === 'y'
     ? definition.box.y + definition.grow.maxHeight
     : rectBottom(slot.box);
   const blockBox = { ...slot.box, y: blockTop, height: Math.max(0, blockMeasureBottom - blockTop) };
@@ -250,7 +251,7 @@ export function placeStructuredBlock(
     cursor.startWord = 0;
     return true;
   }
-  if (definition.kind === 'text' && definition.grow?.axis === 'y') growSlot(context, runtime, target, blockTop + measurement.height);
+  if (definition.grow?.axis === 'y') growSlot(context, runtime, target, blockTop + measurement.height);
   const availableBlockHeight = rectBottom(slot.box) - blockTop;
   if (measurement.height > availableBlockHeight + geometryTolerance) {
     recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'atomic-block-does-not-fit');

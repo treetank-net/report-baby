@@ -597,8 +597,13 @@ const workDir = await mkdtemp(join(tmpdir(), 'report-baby-editorial-'));
 const brandStore = join(workDir, 'brand-store');
 const failures = [];
 let selectedFixtureCount = 0;
+const exhaustive = process.env.EDITORIAL_FLOW_FULL === '1';
 try {
-  const fixtures = [...reproducers, ...matrixFixtures, ...seededFixtures];
+  // The named reproducers and seeded fixtures are the fast PR/release gate.
+  // The exhaustive 480-case matrix remains available for scheduled or
+  // pre-release validation without making every local run wait for hundreds
+  // of dry-run CLI processes.
+  const fixtures = [...reproducers, ...(exhaustive ? matrixFixtures : []), ...seededFixtures];
   const selectedFixtures = process.env.EDITORIAL_FLOW_FILTER
     ? fixtures.filter((fixture) => fixture.name.includes(process.env.EDITORIAL_FLOW_FILTER))
     : fixtures;
@@ -645,8 +650,11 @@ try {
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, pdfSelected.length) }, () => worker()));
 } finally {
-  await rm(workDir, { recursive: true, force: true });
+  // Parallel CLI batches can still release a file descriptor just after the
+  // last response is received. Let fs.rm retry transient ENOTEMPTY/EBUSY
+  // states instead of turning a successful fixture run into a cleanup failure.
+  await rm(workDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 if (failures.length > 0) assert.fail(failures.join('\n'));
-console.log(`Editorial dynamic flow: ${selectedFixtureCount} fixture(s) OK (${reproducers.length} reproducers, ${matrixFixtures.length} matrix variants, ${seededSeeds.length} seeds [${seededSeeds.map((seed) => `0x${seed.toString(16)}`).join(', ')}], ${seededFixtures.length} seeded fixtures available)`);
+console.log(`Editorial dynamic flow: ${selectedFixtureCount} fixture(s) OK (${reproducers.length} reproducers, ${exhaustive ? matrixFixtures.length : 0} matrix variants${exhaustive ? '' : ' in fast mode'}, ${seededSeeds.length} seeds [${seededSeeds.map((seed) => `0x${seed.toString(16)}`).join(', ')}], ${seededFixtures.length} seeded fixtures available)`);

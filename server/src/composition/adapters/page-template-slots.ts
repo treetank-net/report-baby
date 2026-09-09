@@ -153,9 +153,12 @@ export function declaredLockupSlotsForFlow(
       id: slotId,
       regionId: source.region ?? flowId,
       flowId,
-      kind: 'graphic' as const,
-      reserved: true,
+      kind: 'block' as const,
       box: normalizedBox(slotFrame(source, continuation), pageGeometry),
+      ...(source.role ? { allowedRoles: [source.role as CompositionBlockRole] } : {}),
+      allowedBlockKinds: ['lockup' as CompositionBlockKind],
+      ...(source.fitContent === undefined ? {} : { fitContent: source.fitContent }),
+      ...(slotGrowth(source, pageGeometry, continuation) === undefined ? {} : { grow: slotGrowth(source, pageGeometry, continuation) }),
     }];
   });
 }

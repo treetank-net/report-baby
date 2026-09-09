@@ -1592,6 +1592,46 @@
                             "value"
                           ],
                           "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "atomic": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
+                            },
+                            "id": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/id"
+                            },
+                            "keep_with_next_lines": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/keep_with_next_lines"
+                            },
+                            "lockup": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "label": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "mark_asset_id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            "role": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/role"
+                            },
+                            "type": {
+                              "const": "lockup",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "lockup"
+                          ],
+                          "type": "object"
                         }
                       ]
                     },
@@ -1977,7 +2017,8 @@
                               "image",
                               "table",
                               "chart",
-                              "metric"
+                              "metric",
+                              "lockup"
                             ],
                             "type": "string"
                           },
@@ -2884,6 +2925,46 @@
                                   "type",
                                   "label",
                                   "value"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "atomic": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
+                                  },
+                                  "id": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/id"
+                                  },
+                                  "keep_with_next_lines": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/keep_with_next_lines"
+                                  },
+                                  "lockup": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "label": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "mark_asset_id": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "role": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/role"
+                                  },
+                                  "type": {
+                                    "const": "lockup",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "lockup"
                                 ],
                                 "type": "object"
                               }
@@ -3816,6 +3897,46 @@
                                   "type",
                                   "label",
                                   "value"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "atomic": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
+                                  },
+                                  "id": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/id"
+                                  },
+                                  "keep_with_next_lines": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/keep_with_next_lines"
+                                  },
+                                  "lockup": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "label": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "mark_asset_id": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "role": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/role"
+                                  },
+                                  "type": {
+                                    "const": "lockup",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "lockup"
                                 ],
                                 "type": "object"
                               }
@@ -4756,6 +4877,46 @@
                                   "type",
                                   "label",
                                   "value"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "atomic": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
+                                  },
+                                  "id": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/id"
+                                  },
+                                  "keep_with_next_lines": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/keep_with_next_lines"
+                                  },
+                                  "lockup": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "label": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "mark_asset_id": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "role": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/role"
+                                  },
+                                  "type": {
+                                    "const": "lockup",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "lockup"
                                 ],
                                 "type": "object"
                               }

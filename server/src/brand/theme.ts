@@ -158,7 +158,10 @@ export function extractTheme(brandDir: string, document: RecordValue, surface: s
       logoWhiteMarkPath: assetPath(brandDir, document, 'logo_white_mark', brandSourceRoots),
       backgroundImagePath: backgroundPrepared.path,
       coverImagePath: coverPrepared.path,
-      reportHeaderImagePath: reportHeaderPrepared.path,
+      // A report may use the brand's general background image as its header
+      // band when no dedicated report_header_image was authored. Slide
+      // backgrounds stay separate because their aspect/target is different.
+      reportHeaderImagePath: reportHeaderPrepared.path ?? (!slideSurface ? backgroundPrepared.path : undefined),
       backgroundImageOpacity: Math.max(0, Math.min(1, backgroundImageOpacity)),
       imageTextColor,
       imageTextSafeArea,

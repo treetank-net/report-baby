@@ -256,7 +256,23 @@ function wrapTextPlacement(
   const { metrics, policy, geometryTolerance } = context;
   const { block } = target;
   const wrapped = wrapBlock(metrics, block, runtime.cursor.startWord, initialBox, startLineOffset + blockGap / leading, textBottom, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
-  const completeWrapped = wrapBlock(metrics, block, runtime.cursor.startWord, initialBox, startLineOffset + blockGap / leading, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance);
+  const isHeadingBlock = block.kind === 'heading' || block.role === 'heading' || block.role === 'title';
+  const keepLines = block.keepWithNextLines
+    ?? (isHeadingBlock ? policy.headingKeepWithNextLines ?? 0 : 0);
+  const minimumLinesAtEnd = policy.minimumLinesAtEnd ?? 0;
+  // Most text-placement decisions only need the lines visible in the current
+  // slot. A full re-wrap of a long block on every page is needlessly costly;
+  // only keep/heading rules require the exact total. For orphan control, a
+  // bounded probe is sufficient because anything beyond the probe cannot be a
+  // short remainder.
+  const completeLineLimit = isHeadingBlock || keepLines > 0
+    ? Number.POSITIVE_INFINITY
+    : minimumLinesAtEnd > 0
+      ? wrapped.length + minimumLinesAtEnd + 1
+      : wrapped.length;
+  const completeWrapped = completeLineLimit === wrapped.length
+    ? wrapped
+    : wrapBlock(metrics, block, runtime.cursor.startWord, initialBox, startLineOffset + blockGap / leading, Number.POSITIVE_INFINITY, pageGraphics, leading, policy.minimumWrapWidth, flowBarrierBoxCandidates, geometryTolerance, completeLineLimit);
   return { wrapped, completeWrapped };
 }
 

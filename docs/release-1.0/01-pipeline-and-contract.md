@@ -18,12 +18,71 @@ Z katalogu `server/`:
   editorial i kontrakt brandów;
 - `npm test -- --suite quality --no-build` uruchamia rozszerzone kontrole
   utrzymaniowe, poza podstawowym gate’em release;
+- `npm run test:editorial-full` uruchamia pełną macierz 506 fixture’ów
+  przepływu redakcyjnego; zwykły `test:release` korzysta z szybkiego zestawu
+  reprezentatywnego;
 - `npm run baseline:verify` pozostaje osobną kontrolą corpus, ponieważ
   porównuje zapisane artefakty i może wymagać świadomej aktualizacji baseline.
 
 Runner buduje bundla przed domyślnym testem, aby testy nie użyły przypadkiem
 starego `cli-bundle.cjs` lub `bundle.cjs`. `--no-build` służy tylko do szybkiego
 powtarzania wcześniej zbudowanego przebiegu.
+
+## Pomiar czasu suite’ów
+
+Sam komunikat na stdout nie jest wystarczającym pomiarem: znika po zakończeniu
+procesu i nie pokazuje, który check opóźnił cały przebieg. Do pełnego pomiaru
+służy:
+
+```sh
+npm run test:timings -- --no-build
+```
+
+Polecenie uruchamia `test-harness.mjs --suite all` i zapisuje raport JSONL do
+`server/qa/test-timings.jsonl`. Plik jest artefaktem QA i jest ignorowany przez
+Git. Każdy rekord jest dopisywany natychmiast po zdarzeniu, więc przerwany
+przebieg nadal zachowuje czasy ukończonych checków:
+
+- `run-start` zawiera suite’y, liczbę unikalnych checków i informację, czy
+  wykonano build;
+- `check-start` oraz `check-complete` zawierają nazwę, skrypt, suite i
+  `elapsedMs`; rekord końcowy ma również status `passed`/`failed`;
+- `run-complete` zawiera łączny czas, `suiteTotals` oraz liczby
+  `checkCount`/`plannedCheckCount`; gdy przebieg buduje bundla, build jest
+  raportowany jako osobny pseudo-suite `build`.
+
+Raport można zapisać poza repozytorium, np.:
+
+```sh
+TEST_TIMINGS_PATH=/tmp/report-baby-timings.jsonl npm run test:timings -- --no-build
+```
+
+Check współdzielony przez
+kilka suite’ów jest wykonywany tylko raz; `suiteTotals.<name>.skippedDuplicateChecks`
+opisuje pominięte kopie, aby sum suite’ów nie udawała czasu kolejnych uruchomień.
+
+Wcześniej czas był mierzony tylko doraźnie przez komunikaty harnessu. Ostatnie
+zapisane przebiegi dały orientacyjnie: smoke ~2,5 s, szybki editorial ~26,5 s,
+limity stron ~23,4 s, a quality ~188,4 s. Są to czasy konkretnego środowiska,
+nie kontrakt wydajnościowy; kanonicznym źródłem bieżących danych jest raport
+JSONL z `test:timings`.
+
+Snapshot pełnego `all` z 2026-09-09 (bez builda, 39 unikalnych checków) wyglądał
+następująco:
+
+| Suite | Czas sumy checków | Checki | Uwagi |
+|---|---:|---:|---|
+| smoke | 2,1 s | 3 | szybki kontrakt planera |
+| composition | 92,9 s | 13 | 3 checki współdzielone ze smoke |
+| artifacts | 245,6 s | 9 | wielokrotne renderowanie CLI/PDF/PNG/PPTX |
+| quality | 162,9 s | 14 | kontrakty utrzymaniowe i brandowe |
+| całość | 503,6 s | 39 | około 8 min 24 s, bez builda |
+
+Największe pojedyncze koszty tego przebiegu to: `brand contract` 128,9 s,
+`manifest consumers` 76,0 s, `configuration reach` 51,7 s, `report images`
+43,4 s oraz `public MCP behavior` 28,4 s. To są pierwsze kandydaty do audytu
+plan-only; sama nazwa checku nie przesądza jeszcze, które jego asercje można
+odłączyć od renderowania.
 
 ## Wykonane w pierwszym przebiegu
 

@@ -14,6 +14,7 @@ export type {
   CompositionFlowRoute,
   CompositionLayoutTemplate,
   CompositionMetric,
+  CompositionLockup,
   CompositionRect,
   CompositionSlotKind,
   CompositionSlotTemplate,
@@ -60,6 +61,7 @@ export type {
 } from './contracts/engine-contracts.js';
 export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './composition-engine.js';
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
+export { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './evaluation/structure-scoring.js';
 export { compositionDocumentFromInput } from './adapters/input.js';
 export { compositionTemplateFromPageGeometry, type PageTemplateCompositionOptions } from './adapters/page-template.js';
 export { applyDynamicInsertionRequests } from './adapters/request-insertion-slots.js';
@@ -67,6 +69,7 @@ export { createTextCompositionPlanner } from './layout/text-planner.js';
 export type { MovableGraphicPolicy, MovableInsertionBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 export { createTextCompositionEngine, type TextCompositionEngineOptions } from './adapters/text-engine.js';
 export { fitContainBox, imagePixelAtPoint } from './geometry/visual-geometry.js';
+export { resolvePagePlaceholders } from './text/page-placeholders.js';
 export {
   contrastRatio,
   createCompositionContrastProvider,
@@ -97,6 +100,7 @@ export { createJsPdfChartBlockCapabilities } from './adapters/pdf/chart.js';
 export { createJsPdfMetricBlockCapabilities } from './adapters/pdf/metric.js';
 export { createJsPdfTableBlockCapabilities } from './adapters/pdf/table.js';
 export { createJsPdfImageBlockCapabilities } from './adapters/pdf/image.js';
+export { createJsPdfLockupBlockCapabilities } from './adapters/pdf/lockup.js';
 export { createJsPdfTextMetrics } from './adapters/pdf/text.js';
 export type {
   JsPdfCompositionStyle,
@@ -112,4 +116,5 @@ export type {
   JsPdfCompositionImageRenderer,
   JsPdfCompositionImageStyle,
   JsPdfCompositionBlockCapability,
+  JsPdfCompositionLockupStyle,
 } from './contracts/pdf.js';

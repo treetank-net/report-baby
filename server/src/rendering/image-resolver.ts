@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
 import { renderSvgToPng } from './primitives.js';
 import { readRenderConfig } from '../template/builtins.js';
@@ -11,6 +12,8 @@ export interface ResolvedImageAsset {
   height: number;
   source: string;
 }
+
+type EncodedRasterFormat = 'WEBP' | 'AVIF';
 
 function dimensionsPng(bytes: Buffer): [number, number] | undefined {
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -34,6 +37,71 @@ function dimensionsJpeg(bytes: Buffer): [number, number] | undefined {
     offset += length;
   }
   return undefined;
+}
+
+function encodedRasterFormat(bytes: Buffer): EncodedRasterFormat | undefined {
+  if (bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') return 'WEBP';
+  if (bytes.length < 16 || bytes.toString('ascii', 4, 8) !== 'ftyp') return undefined;
+  const brands = [bytes.toString('ascii', 8, 12), ...Array.from({ length: Math.floor((bytes.length - 16) / 4) }, (_, index) => bytes.toString('ascii', 16 + index * 4, 20 + index * 4))];
+  return brands.some((brand) => brand === 'avif' || brand === 'avis') ? 'AVIF' : undefined;
+}
+
+async function transcodeRaster(bytes: Buffer, format: EncodedRasterFormat, source: string): Promise<Buffer> {
+  const limits = readRenderConfig().images;
+  return new Promise((resolve, reject) => {
+    const child = spawn('ffmpeg', [
+      '-v', 'error',
+      '-f', format === 'WEBP' ? 'webp_pipe' : 'mov',
+      '-i', 'pipe:0',
+      '-frames:v', '1',
+      '-f', 'image2pipe',
+      '-vcodec', 'png',
+      'pipe:1',
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const errors: Buffer[] = [];
+    let settled = false;
+    const timeout = setTimeout(() => {
+      child.kill('SIGKILL');
+      if (!settled) {
+        settled = true;
+        reject(new Error(`Image '${source}' ${format} decoding exceeded the configured timeout.`));
+      }
+    }, limits.decoderTimeoutMs);
+    child.stdout.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > limits.maxAssetBytes) {
+        child.kill('SIGKILL');
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          reject(new Error(`Decoded image '${source}' exceeds the ${limits.maxAssetBytes}-byte limit.`));
+        }
+        return;
+      }
+      chunks.push(chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(new Error(`Unable to decode ${format} image '${source}' with ffmpeg: ${error.message}`));
+    });
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (code !== 0) {
+        const message = Buffer.concat(errors).toString('utf8').trim();
+        reject(new Error(`Unable to decode ${format} image '${source}': ${message || `ffmpeg exited with code ${code}`}`));
+        return;
+      }
+      resolve(Buffer.concat(chunks));
+    });
+    child.stdin.end(bytes);
+  });
 }
 
 function svgDimensions(source: string): [number, number] | undefined {
@@ -102,6 +170,14 @@ export async function resolveImageAsset(source: string, context: SourceContext):
     enforceDimensions(...jpeg);
     return { data: `data:image/jpeg;base64,${bytes.toString('base64')}`, format: 'JPEG', width: jpeg[0], height: jpeg[1], source };
   }
+  const encodedFormat = encodedRasterFormat(bytes);
+  if (encodedFormat) {
+    const pngBuffer = await transcodeRaster(bytes, encodedFormat, source);
+    const rendered = dimensionsPng(pngBuffer);
+    if (!rendered) throw new Error(`${encodedFormat} image '${source}' could not be decoded into PNG.`);
+    enforceDimensions(...rendered);
+    return { data: `data:image/png;base64,${pngBuffer.toString('base64')}`, format: 'PNG', width: rendered[0], height: rendered[1], source };
+  }
   const svg = bytes.toString('utf8');
   const dimensions = svgDimensions(svg);
   if (dimensions) {
@@ -112,5 +188,5 @@ export async function resolveImageAsset(source: string, context: SourceContext):
     enforceDimensions(...rendered);
     return { data: `data:image/png;base64,${pngBuffer.toString('base64')}`, format: 'PNG', width: rendered[0], height: rendered[1], source };
   }
-  throw new Error(`Image source '${source}' is not a supported PNG, JPEG, or SVG image.`);
+  throw new Error(`Image source '${source}' is not a supported PNG, JPEG, WebP, AVIF, or SVG image.`);
 }

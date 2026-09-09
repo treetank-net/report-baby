@@ -1,0 +1,57 @@
+schema_version: 1
+id: pages/editorial-dynamic-chrome
+kind: page
+surface: pdf-a4
+archetype: columns
+canvas:
+  direction: ltr
+page:
+  width: 210
+  height: 297
+  margins: { top: 18, right: 17, bottom: 18, left: 17 }
+  columns:
+    count: 2
+    gutter: 6
+    widths: [85, 85]
+  reserved_bands:
+    footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
+  flow:
+    align: justify
+    hyphenate: true
+constraints:
+  inside_canvas: true
+  no_overlap: false
+slots:
+  header-lockup:
+    type: lockup
+    frame: { x: 0.081, y: 0.02, width: 0.34, height: 0 }
+    fit_content: true
+    grow: { axis: y, auto: true, pushes: [content] }
+    role: header
+  header:
+    type: text
+    frame: { x: 0.081, y: 0.06, width: 0.838, height: 0 }
+    fit_content: true
+    grow: { axis: y, max_height: 0.18, pushes: [content] }
+    role: header
+  content:
+    type: text
+    frame: { x: 0.081, y: 0.06, width: 0.838, height: 0.87 }
+  footer:
+    type: text
+    frame: { x: 0.081, y: 0.93, width: 0.838, height: 0.04 }
+flows:
+  header:
+    slots: [header-lockup, header]
+    priority: 500
+    continuation: forbidden
+    repeat: each-page
+  main:
+    slots: [content]
+    priority: 200
+    continuation: allowed
+  footer:
+    slots: [footer]
+    priority: 500
+    continuation: forbidden
+    repeat: each-page

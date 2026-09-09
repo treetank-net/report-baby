@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { build } from 'esbuild';
+import { runProcess } from './lib/process.mjs';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-image-resolver-'));
@@ -10,6 +11,8 @@ const output = join(temporary, 'image-resolver.cjs');
 const rasterOutput = join(temporary, 'image-raster.cjs');
 const compositionOutput = join(temporary, 'composition.cjs');
 const contentRoot = join(root, '..', 'examples/brand-showcase/brands/flux');
+const webpFixture = join(temporary, 'fixture.webp');
+const avifFixture = join(temporary, 'fixture.avif');
 
 try {
   await build({ entryPoints: [join(root, 'src/rendering/image-resolver.ts')], bundle: true, platform: 'node', target: 'node18', format: 'cjs', loader: { '.ttf': 'binary', '.wasm': 'binary' }, outfile: output });
@@ -48,8 +51,22 @@ try {
   assert.equal(findings.length, 1);
   assert.notEqual(findings[0].status, 'unknown', 'a resolved real PNG must produce a contrast result');
   assert.ok((findings[0].minimumRatio ?? 0) > 0);
+  const fixtureContext = contextFactory({ contentRoot: temporary, sourceRoot: temporary, brandRoot: temporary });
+  const webpBuild = runProcess('ffmpeg', ['-v', 'error', '-i', join(contentRoot, 'assets/backgrounds/hero.png'), '-frames:v', '1', webpFixture]);
+  if (webpBuild.status !== 0) throw new Error(`unable to create WebP fixture: ${webpBuild.stderr || webpBuild.stdout}`);
+  const avifBuild = runProcess('ffmpeg', ['-v', 'error', '-i', join(contentRoot, 'assets/backgrounds/hero.png'), '-frames:v', '1', avifFixture]);
+  if (avifBuild.status !== 0) throw new Error(`unable to create AVIF fixture: ${avifBuild.stderr || avifBuild.stdout}`);
+  const webp = await resolver('fixture.webp', fixtureContext);
+  const avif = await resolver('fixture.avif', fixtureContext);
+  for (const [format, converted] of [['WebP', webp], ['AVIF', avif]]) {
+    assert.equal(converted.format, 'PNG', `${format} must be normalized to the renderer-neutral PNG raster contract`);
+    assert.equal(converted.width, asset.width);
+    assert.equal(converted.height, asset.height);
+    const convertedRaster = decodePngDataUri(converted.data);
+    assert.ok(convertedRaster, `${format} output must be decodable for contrast screening`);
+  }
   await assert.rejects(() => resolver('../outside.png', context), /escapes|not found/);
-  console.log('image resolver: local PNG validation and root confinement passed');
+  console.log('image resolver: local PNG/WebP/AVIF validation, raster normalization and root confinement passed');
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

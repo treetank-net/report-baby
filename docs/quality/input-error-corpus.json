@@ -18,49 +18,38 @@
     {
       "id": "deck-invalid-discriminator",
       "kind": "deck",
-      "input": { "slides": [{ "type": "titel", "title": "Literówka" }] },
+      "input": { "slides": [{ "layout": "metrics", "flows": { "main": { "blocks": [{ "type": "metrc", "label": "Literówka", "value": 1 }] } } }] },
       "field": "type",
       "expected_pattern": "discriminator|Invalid"
     },
     {
       "id": "deck-title-wrong-type",
       "kind": "deck",
-      "input": { "slides": [{ "type": "title", "title": 42 }] },
-      "field": "title",
+      "input": { "slides": [{ "layout": "title", "flows": { "title": { "blocks": [{ "type": "heading", "text": 42 }] } } }] },
+      "field": "text",
       "expected_pattern": "string|Expected"
     },
     {
-      "id": "deck-metrics-empty",
+      "id": "deck-metric-label-missing",
       "kind": "deck",
-      "input": { "slides": [{ "type": "metrics", "title": "Puste KPI", "metrics": [] }] },
-      "field": "metrics",
-      "expected_pattern": "at least 1|too_small|Array"
+      "input": { "slides": [{ "layout": "metrics", "flows": { "main": { "blocks": [{ "type": "metric", "value": 42 }] } } }] },
+      "field": "label",
+      "expected_pattern": "Required|string|Expected"
     },
     {
-      "id": "deck-columns-three",
+      "id": "deck-flows-missing",
       "kind": "deck",
-      "input": {
-        "slides": [{
-          "type": "columns",
-          "title": "Za dużo kolumn",
-          "columns": [
-            { "body": "Lewa" },
-            { "body": "Środek" },
-            { "body": "Prawa" }
-          ]
-        }]
-      },
-      "field": "columns",
-      "expected_pattern": "exactly 2|length|Array"
+      "input": { "slides": [{ "layout": "columns" }] },
+      "field": "flows",
+      "expected_pattern": "Required|object|Expected"
     },
     {
       "id": "deck-metrics-value-object",
       "kind": "deck",
       "input": {
         "slides": [{
-          "type": "metrics",
-          "title": "Zagnieżdżona wartość",
-          "metrics": [{ "label": "KPI", "value": { "raw": 42 } }]
+          "layout": "metrics",
+          "flows": { "main": { "blocks": [{ "type": "metric", "label": "KPI", "value": { "raw": 42 } }] } }
         }]
       },
       "field": "value",

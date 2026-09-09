@@ -82,6 +82,9 @@ export interface CompositionSlot {
   allowedRoles?: CompositionBlockRole[];
   allowedBlockIds?: string[];
   allowedBlockKinds?: CompositionBlockKind[];
+  priority?: number;
+  fitContent?: boolean;
+  growthMaxHeight?: number;
   box: CompositionBox;
   state: 'open' | 'partial' | 'exhausted';
 }
@@ -96,6 +99,7 @@ export interface CompositionPlacement {
   startWord?: number;
   endWord?: number;
   layer?: 'flow' | 'insertion';
+  priority?: number;
 }
 
 export interface CompositionBlockPlacement {
@@ -109,6 +113,7 @@ export interface CompositionBlockPlacement {
   imageBox?: CompositionBox;
   captionBox?: CompositionBox;
   scale?: number;
+  priority?: number;
 }
 
 export interface CompositionTablePlacement {
@@ -121,6 +126,7 @@ export interface CompositionTablePlacement {
   startRow: number;
   endRow: number;
   repeatsHeader: boolean;
+  priority?: number;
 }
 
 export interface CompositionGraphicPlacement {
@@ -215,6 +221,7 @@ export interface CompositionLine {
   endWord: number;
   glyphSamplingBoxes?: CompositionGlyphSamplingBox[];
   layer?: 'flow' | 'insertion';
+  priority?: number;
 }
 
 export interface CompositionGlyphSamplingBox {

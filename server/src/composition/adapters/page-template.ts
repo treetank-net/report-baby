@@ -182,6 +182,7 @@ function routeForMain(
   firstLayoutId: string,
   continuationLayoutId: string,
   continuation: 'allowed' | 'forbidden',
+  priority?: number,
 ): CompositionFlowRoute {
   const firstSlotIds = orderedMainSlotIds(mainSlotIds, firstTextSlots, firstBlockSlots, firstSlots);
   const continuationSlotIds = orderedMainSlotIds(continuationSourceIds, continuationTextSlots, continuationBlockSlots, continuationSlots);
@@ -191,6 +192,7 @@ function routeForMain(
     layouts: [firstLayoutId, continuationLayoutId],
     slotsByLayout: { [continuationLayoutId]: continuationSlotIds },
     continuation,
+    ...(priority === undefined ? {} : { priority }),
   };
 }
 
@@ -295,14 +297,14 @@ export function compositionTemplateFromPageGeometry(
       } : {}),
     }
     : undefined;
-  const auxiliary: Array<{ flowId: string; first: CompositionSlotTemplate[]; continuation: CompositionSlotTemplate[]; reservedFirst: CompositionSlotTemplate[]; reservedContinuation: CompositionSlotTemplate[] }> = [];
+  const auxiliary: Array<{ flowId: string; first: CompositionSlotTemplate[]; continuation: CompositionSlotTemplate[] }> = [];
   const auxiliaryFlowIds = new Set(Object.keys(compiled.flows));
   if (options.includeHeaderFlow) auxiliaryFlowIds.add('header');
   for (const flowId of auxiliaryFlowIds) {
     if (flowId === mainFlowId) continue;
     if (flowId === 'title') continue;
-    const declaredFirst = expandGrowthTargets(declaredTextSlotsForFlow(compiled, flowId, geometry), firstSegments);
-    const declaredContinuation = expandGrowthTargets(declaredTextSlotsForFlow(compiled, flowId, continuationGeometry, true), continuationFlowSegments);
+    const declaredFirst = expandGrowthTargets([...declaredLockupSlotsForFlow(compiled, flowId, geometry), ...declaredTextSlotsForFlow(compiled, flowId, geometry)], firstSegments);
+    const declaredContinuation = expandGrowthTargets([...declaredLockupSlotsForFlow(compiled, flowId, continuationGeometry, true), ...declaredTextSlotsForFlow(compiled, flowId, continuationGeometry, true)], continuationFlowSegments);
     const declaredFirstBlocks = expandGrowthTargets(declaredBlockSlotsForFlow(compiled, flowId, geometry), firstSegments);
     const declaredContinuationBlocks = expandGrowthTargets(declaredBlockSlotsForFlow(compiled, flowId, continuationGeometry, undefined, true), continuationFlowSegments);
     const declaredFirstAll = [...declaredFirst, ...declaredFirstBlocks];
@@ -313,8 +315,6 @@ export function compositionTemplateFromPageGeometry(
       throw new Error(`Template flow '${flowId}' needs a named page band or block frame before it can be adapted.`);
     }
     const textWidth = options.auxiliaryTextWidths?.[flowId];
-    const reservedFirst = declaredLockupSlotsForFlow(compiled, flowId, geometry);
-    const reservedContinuation = declaredLockupSlotsForFlow(compiled, flowId, continuationGeometry, true);
     // A single legacy auxiliary slot historically meant "use the whole
     // named band". Preserve that behavior; multiple declared slots opt into
     // independently positioned boxes (for example header period + title).
@@ -330,14 +330,12 @@ export function compositionTemplateFromPageGeometry(
       flowId,
       first,
       continuation,
-      reservedFirst,
-      reservedContinuation,
     });
   }
   const firstTitleSlots = declaredTextSlotsForFlow(compiled, 'title', geometry);
   const continuationTitleSlots = declaredTextSlotsForFlow(compiled, 'title', continuationGeometry, true);
-  const firstLayout = layout(firstLayoutId, geometry, [...(leadSlot ? [leadSlot] : []), ...firstTitleSlots, ...declaredTextSlots, ...declaredBlockSlots, ...firstSegments, ...firstGraphicSlots, ...auxiliary.flatMap((item) => [...item.reservedFirst, ...item.first])]);
-  const continuationLayout = layout(continuationLayoutId, continuationGeometry, [...continuationTitleSlots, ...continuationTextSlots, ...continuationBlockSlots, ...continuationFlowSegments, ...continuationGraphicSlots, ...auxiliary.flatMap((item) => [...item.reservedContinuation, ...item.continuation])]);
+  const firstLayout = layout(firstLayoutId, geometry, [...(leadSlot ? [leadSlot] : []), ...firstTitleSlots, ...declaredTextSlots, ...declaredBlockSlots, ...firstSegments, ...firstGraphicSlots, ...auxiliary.flatMap((item) => item.first)]);
+  const continuationLayout = layout(continuationLayoutId, continuationGeometry, [...continuationTitleSlots, ...continuationTextSlots, ...continuationBlockSlots, ...continuationFlowSegments, ...continuationGraphicSlots, ...auxiliary.flatMap((item) => item.continuation)]);
   const titleLayout = options.includeTitlePage
     ? titleLayoutFor(compiled, geometry, titleLayoutId)
     : undefined;
@@ -355,6 +353,7 @@ export function compositionTemplateFromPageGeometry(
       firstLayoutId,
       continuationLayoutId,
       mainFlow.continuation,
+      mainFlow.priority,
     ),
   };
   if (!titleLayout && firstTitleSlots.length > 0) {
@@ -363,6 +362,7 @@ export function compositionTemplateFromPageGeometry(
       layouts: [firstLayoutId],
       slotsByLayout: { [firstLayoutId]: firstTitleSlots.map((slot) => slot.id) },
       continuation: 'forbidden',
+      ...(compiled.flows.title?.priority === undefined ? {} : { priority: compiled.flows.title.priority }),
     };
   }
   if (titleLayout) {
@@ -377,6 +377,7 @@ export function compositionTemplateFromPageGeometry(
       layouts: [titleLayoutId, firstLayoutId, continuationLayoutId],
       slotsByLayout: { [titleLayoutId]: ['title-page-content'], [firstLayoutId]: [], [continuationLayoutId]: [] },
       continuation: 'forbidden',
+      ...(compiled.flows.title?.priority === undefined ? {} : { priority: compiled.flows.title.priority }),
     };
   }
   for (const item of auxiliary) {
@@ -386,8 +387,9 @@ export function compositionTemplateFromPageGeometry(
       routes.title = {
         slots: item.first.map((slot) => slot.id),
         layouts: [firstLayoutId],
-        slotsByLayout: { [firstLayoutId]: item.first.map((slot) => slot.id) },
-        continuation: 'forbidden',
+      slotsByLayout: { [firstLayoutId]: item.first.map((slot) => slot.id) },
+      continuation: 'forbidden',
+        ...(compiled.flows.title?.priority === undefined ? {} : { priority: compiled.flows.title.priority }),
       };
       continue;
     }
@@ -396,6 +398,7 @@ export function compositionTemplateFromPageGeometry(
       layouts: [firstLayoutId, continuationLayoutId],
       slotsByLayout: { [firstLayoutId]: item.first.map((slot) => slot.id), [continuationLayoutId]: item.continuation.map((slot) => slot.id) },
       continuation: compiled.flows[item.flowId]?.continuation ?? 'forbidden',
+      ...(compiled.flows[item.flowId]?.priority === undefined ? {} : { priority: compiled.flows[item.flowId]?.priority }),
       ...(compiled.flows[item.flowId]?.insertionSlots === undefined ? {} : { insertionSlots: [...(compiled.flows[item.flowId]?.insertionSlots ?? [])] }),
       ...(compiled.flows[item.flowId]?.repeat === undefined ? {} : { repeat: compiled.flows[item.flowId].repeat }),
       ...(compiled.flows[item.flowId]?.startPage === undefined ? {} : { startPage: compiled.flows[item.flowId].startPage }),

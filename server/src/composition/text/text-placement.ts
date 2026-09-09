@@ -97,6 +97,7 @@ function appendPlacedLines(
       endWord: line.endWord,
       glyphSamplingBoxes: glyphSamplingBoxes(metrics, block, line.text, textX, lineY, line.naturalWidth, lineHeightValue),
       ...(layer === 'flow' ? {} : { layer }),
+      ...(definition.priority === undefined ? {} : { priority: definition.priority }),
     });
   });
 }
@@ -133,6 +134,7 @@ export function placeLines(
     startWord: lines[0].startWord,
     endWord: lines.at(-1)!.endWord,
     ...(layer === 'flow' ? {} : { layer }),
+    ...(definition.priority === undefined ? {} : { priority: definition.priority }),
   });
   appendPlacedLines(pageState, definition, block, metrics, flowId, routeIndex, lines, lineHeightValue, padding, geometry.verticalOffset, outputLines, layer);
   markLinePlacementOccupancy(slot, geometry.lastBottom);

@@ -400,13 +400,18 @@ strumień również widzi tę barierę. Gdy pozostawiona szerokość nie mieści
 pojedynczego słowa, planner przenosi linię pod slot zamiast produkować ukryty
 overflow; słów nie łamie.
 
-### TODO: logiczne grupy zaznaczania PDF
+### TODO: logiczne grupy zaznaczania PDF (poza release 1.0)
 
-Rozważyć w przyszłości rozdzielenie `paintOrder`, `readingOrder` i
-`selectionGroup`, ewentualnie przez tagowany PDF. Zwykłe warstwy PDF/OCG
-sterują przede wszystkim widocznością i nie dają wiarygodnej kontroli nad tym,
-co natywny viewer zaznaczy podczas przeciągania. To eksperyment o bardzo niskim
-priorytecie; nie jest wymaganiem jakościowym ani blokadą wymiany silnika.
+Starsza notatka sugerowała rozdzielenie `paintOrder`, `readingOrder` i
+`selectionGroup`, ewentualnie przez tagowany PDF. To nie jest jeszcze przyjęty
+kontrakt release 1.0: obecny backend ma stały paint order, a plan używa jednego
+`priority` do wcześniejszej materializacji geometrii. Jawna konfiguracja paint
+orderu jest możliwa, a nawet może być potrzebna przy kontrolowanym nakładaniu;
+przed implementacją trzeba jednak opisać jej kierunek, remisy i wpływ na
+wybieralny tekst. Zwykłe warstwy PDF/OCG sterują przede wszystkim widocznością i
+nie dają wiarygodnej kontroli nad tym, co natywny viewer zaznaczy podczas
+przeciągania. Temat pozostaje osobnym eksperymentem, a nie ukrytym polem w
+template'ach.
 
 Przypadki obejmujące ten kontrakt generuje:
 
