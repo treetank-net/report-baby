@@ -41,6 +41,9 @@ opakować obecne zachowanie innymi nazwami.
 6. Dokumentacja kanoniczna planera, evaluatora i uzasadnień decyzji jest
    aktualizowana w tym samym kroku co zmiana kontraktu lub reguły. Plan release
    nie jest jedynym miejscem opisu systemu.
+7. Header i footer są zwykłymi powtarzalnymi flowami. Ich wysokość wynika z
+   zawartości i paddingów, a istniejące placeholdery `{{page.number}}` oraz
+   `{{page.count}}` pozostają kanonicznym kontraktem numeracji stron.
 
 ## Plany wykonawcze
 
@@ -55,6 +58,9 @@ Szczegóły, zależności, testy i miejsca wymagające doprecyzowania są w:
 7. [Block kinds i miękkie insertiony](release-1.0/07-block-kinds-and-soft-insertions.md)
 8. [Głębokość wyszukiwania kandydatów](release-1.0/08-candidate-search-depth.md)
 9. [Kary za dzielenie struktur i obsługa formatów obrazów](release-1.0/09-structure-penalties-and-image-formats.md)
+10. [Kategorie i migracja modułów composition](release-1.0/10-composition-module-migration.md) — praca utrzymaniowa.
+11. [Domenowe uporządkowanie całego `server/src`](release-1.0/11-src-domain-organization.md) — praca utrzymaniowa.
+12. [Dynamiczny page chrome i powtarzalne flow](release-1.0/12-dynamic-page-chrome.md)
 
 Dokumentacja aktualnego systemu znajduje się osobno w katalogu
 [Composition](composition/README.md). Plany wykonawcze opisują kolejność prac,
@@ -98,6 +104,10 @@ obniżenie oczekiwań bez zmiany kontraktu renderer’a.
 08 głębokość wyszukiwania kandydatów
         ↓
 09 kary za dzielenie struktur i formaty obrazów
+        ↓
+10–11 organizacja modułów i domenowe uporządkowanie `server/src`
+        ↓
+12 dynamiczny page chrome i powtarzalne flow
 ```
 
 Plan 05 może być częściowo wykonywany wcześniej jako obserwacja obecnego

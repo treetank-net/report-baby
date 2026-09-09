@@ -3,7 +3,8 @@
 Status: punkty 01–05 są w większości wykonane w ograniczonym zakresie, punkt 06
 jest w większości wykonany, punkty 07–08 są wykonane dla zakresu release’u, a punkt 09 nie
 został rozpoczęty. Organizacja modułów 10–11 została wykonana jako praca
-utrzymaniowa bez zmiany kontraktu MCP/CLI.
+utrzymaniowa bez zmiany kontraktu MCP/CLI. Punkt 12 jest zaplanowany i nie został
+jeszcze rozpoczęty.
 
 Ten katalog rozbija [główny plan release 1.0](../release-1.0-flow-composition-plan.md)
 na osobne dokumenty wykonawcze. Dokumenty opisują istniejące pojęcia: input,
@@ -50,21 +51,27 @@ Chcemy mieć jeden deterministyczny przebieg, w którym:
 08 głębokość wyszukiwania kandydatów
         ↓
 09 ciągłość struktur, formaty obrazów i czas feedbacku testów
+        ↓
+10 kategorie i migracja modułów composition
+        ↓
+11 domenowe uporządkowanie całego server/src
+        ↓
+12 dynamiczny page chrome i powtarzalne flow
 ```
 
 Kroki 01–03 są fundamentem. Krok 04 daje pierwszą faktyczną optymalizację.
 Krok 06 nie powinien rozpoczynać się od mechanicznego dzielenia `planFlow`:
 najpierw muszą istnieć testy i działający seam dla pętli.
 
-## Stan wykonania — 2026-09-08
+## Stan wykonania — 2026-09-09
 
 | Punkt | Stan implementacji | Co pozostaje |
 |---|---|---|
 | 01 | w większości wykonany | audyt eksportów, aliasów i pozostałych legacy ścieżek |
-| 02 | w większości wykonany | pełne testy ram chrome i ich wpływu na flow |
+| 02 | wykonany | wspólna geometria ramek, placementów, obstacles i chrome |
 | 03 | wykonany funkcjonalnie | kalibracja wag i przypadki graniczne evaluatora |
 | 04 | wykonany w ograniczonym zakresie | tylko jawne, deterministyczne ruchy; bez globalnego solvera |
-| 05 | w większości wykonany | inline runs, gap-tightening i pełna własność chrome w planie |
+| 05 | w większości wykonany | inline runs, gap-tightening; pełna własność chrome jest w punkcie 12 |
 | 06 | w większości wykonany | utrzymanie publicznego gate’u; znany, wcześniejszy `EMPTY_FLOW_SLOT`; dalsze seam’y tylko z konkretnym kontraktem |
 | 07 | wykonany dla obecnych block kinds | nowe rodzaje bloków wymagają osobnego capability seam’u |
 | 08 | wykonany dla wyszukiwania composition | formaty JPEG/SVG/WebP/AVIF pozostają w zakresie punktu 09 |
@@ -101,6 +108,9 @@ historię decyzji i kryteria.
 11. [Domenowe uporządkowanie całego `server/src`](11-src-domain-organization.md) —
     mapa poza `composition/`, MCP-first, opcjonalne CLI, artefakty release i
     bezpieczna migracja szablonów.
+12. [Dynamiczny page chrome i powtarzalne flow](12-dynamic-page-chrome.md) —
+    content-driven header/footer, istniejące placeholdery numeracji stron,
+    kolejność względem insertionów i `main`, oraz pełna projekcja chrome z planu.
 
 ## Granica wykonalności
 

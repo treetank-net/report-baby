@@ -1,7 +1,8 @@
 # Plan 05 — render, dry_run i debug
 
 Status: w większości wykonany; wspólny plan render/dry_run/debug i parser PDF
-działają. Pozostają inline runs, gap-tightening oraz pełna własność chrome.
+działają. Pozostają inline runs i gap-tightening. Pełna, dynamiczna własność
+chrome jest wydzielona do [punktu 12](12-dynamic-page-chrome.md).
 
 ## Cel
 
@@ -23,6 +24,7 @@ wyliczania geometrii.
   render; `resolveReportPlanOnly()` pozostaje tylko legacy planem w odpowiedzi
   diagnostycznej;
 - część chrome jest rysowana w `report-renderer.ts` poza composition planem;
+  docelowe usunięcie tego rozdzielenia jest zakresem punktu 12;
 - `report-composition-entrypoint.ts` jest produkcyjnym punktem wejścia do
   composition, nie alternatywnym rendererem;
 - overlay pokazuje już m.in. placements, obstacles, flow barriers, padding i
@@ -100,8 +102,8 @@ wyliczania geometrii.
 
 - Pełna lista kolorów i typów ramek wymaga uzupełnienia po punkcie 2 planu 02,
   kiedy będzie znany ostateczny właściciel każdej geometrii.
-- Zakres chrome w CompositionPlan wymaga uzupełnienia po porównaniu
-  `drawReportChrome()` z rzeczywistymi ograniczeniami flow.
+- Zakres chrome w CompositionPlan oraz dynamiczna wysokość headera/footeru są
+  przeniesione do punktu 12; ten dokument zachowuje tylko parytet render/dry_run/debug.
 - Stabilna sygnatura planu wymaga uzupełnienia po planie 04, gdy plan może
   zawierać wiele prób i najlepszy wybrany wariant.
 

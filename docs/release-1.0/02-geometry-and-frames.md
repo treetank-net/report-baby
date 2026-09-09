@@ -1,7 +1,8 @@
 # Plan 02 — geometria i wspólne ramy
 
-Status: w większości wykonany; geometria chrome, placementów i kandydatów jest
-współdzielona i walidowana, a pozostały pełne testy wszystkich ram
+Status: wykonany; geometria chrome, placementów i kandydatów jest
+współdzielona i walidowana. Dynamiczne zachowanie page chrome jest osobnym
+zakresem punktu 12.
 
 ## Cel
 
@@ -70,17 +71,6 @@ a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
 - evaluator sprawdza także kandydatów barier: ich dodatnią geometrię, przynależność
   do placementu i referencje do istniejących obstacle’ów z `wrap: around`.
 
-### Przyjęty kontrakt dynamicznego headera — 2026-09-09
-
-Header jest zwykłym powtarzalnym flow (`repeat: each-page`), a nie osobną
-encją. Jego sloty są rozpatrywane przed `main` oraz przed niższymi priorytetami
-insertionów na każdej stronie. Wysokość wynika z rzeczywistej zawartości i
-konfigurowanych paddingów: pusty header może się zwinąć, a zawijający się
-tytuł powiększa obszar i przesuwa kolejne sloty. `pageChrome` pozostaje tylko
-projekcją renderera (tło, reguła, lockup, numer strony) i nie jest drugim
-źródłem geometrii headera. Implementacja tego kontraktu jest kolejnym krokiem;
-obecne stałe `reserved_bands.header` opisują jeszcze stan przejściowy.
-
 ## Kroki
 
 1. Narysować tabelę wejście → wyjście dla każdej funkcji geometrycznej:
@@ -124,13 +114,13 @@ obecne stałe `reserved_bands.header` opisują jeszcze stan przejściowy.
   segmentów przez obstacle; obecnie jest to
   [`test-page-template-adapter.mjs`](../../server/scripts/test-page-template-adapter.mjs).
 
-## Wymaga uzupełnienia po wykonaniu punktu X
+## Uwagi przeniesione do kolejnych punktów
 
 - Ostateczne miejsce reguły przesuwania `blockFrames` wymaga uzupełnienia po
   punkcie 1 i 2. Nie należy przenosić tej reguły wcześniej.
-- Zakres chrome, który musi ograniczać flow, wymaga uzupełnienia po planie 05,
-  gdy zostanie porównany z faktycznym renderem. Obecny krok opisuje i współdzieli
-  geometrię chrome, ale jeszcze nie dodaje jej jako obstacle dla flow.
+- Dynamiczna wysokość headera/footeru, kolejność planowania chrome oraz pełna
+  własność chrome w planie są zakresem punktu
+  [`12-dynamic-page-chrome.md`](12-dynamic-page-chrome.md).
 - Zakres użycia `flowBarrierBoxCandidates` w optymalizacji pozycji insertionów
   wymaga dalszych testów z planu 04. Są już wejściem do wyznaczania miejsc,
   w których może kontynuować zwykły flow; nie są jeszcze globalnym solverem
