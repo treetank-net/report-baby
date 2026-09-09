@@ -15,7 +15,9 @@ Z katalogu `server/`:
   composition oraz końcowych artefaktów;
 - `npm test -- --suite composition` uruchamia kontrakty planera;
 - `npm test -- --suite artifacts` uruchamia testy PDF/PNG/PPTX, chrome,
-  editorial i kontrakt brandów;
+  editorial i pozostałe kontrakty artefaktów;
+- `npm run test:brand` uruchamia osobny, ciężki kontrakt profili, template’ów i
+  mutacji brandowych;
 - `npm test -- --suite quality --no-build` uruchamia rozszerzone kontrole
   utrzymaniowe, poza podstawowym gate’em release;
 - `npm run test:editorial-full` uruchamia pełną macierz 506 fixture’ów
@@ -45,7 +47,8 @@ przebieg nadal zachowuje czasy ukończonych checków:
 
 - `run-start` zawiera suite’y, liczbę unikalnych checków i informację, czy
   wykonano build;
-- `check-start` oraz `check-complete` zawierają nazwę, skrypt, suite i
+- `check-start` oraz `check-complete` zawierają nazwę, skrypt, suite i decyzję
+  artefaktową (`not-generated`, `remove`, `retain` albo `split`) oraz
   `elapsedMs`; rekord końcowy ma również status `passed`/`failed`;
 - `run-complete` zawiera łączny czas, `suiteTotals` oraz liczby
   `checkCount`/`plannedCheckCount`; gdy przebieg buduje bundla, build jest
@@ -74,15 +77,18 @@ następująco:
 |---|---:|---:|---|
 | smoke | 2,1 s | 3 | szybki kontrakt planera |
 | composition | 92,9 s | 13 | 3 checki współdzielone ze smoke |
-| artifacts | 245,6 s | 9 | wielokrotne renderowanie CLI/PDF/PNG/PPTX |
-| quality | 162,9 s | 14 | kontrakty utrzymaniowe i brandowe |
+| artifacts | 116,7 s | 8 | wielokrotne renderowanie CLI/PDF/PNG/PPTX |
+| brand | 128,9 s | 1 | osobny, ciężki kontrakt profili i mutacji brandowych |
+| quality | 162,9 s | 14 | kontrakty utrzymaniowe i wejściowe |
 | całość | 503,6 s | 39 | około 8 min 24 s, bez builda |
 
 Największe pojedyncze koszty tego przebiegu to: `brand contract` 128,9 s,
 `manifest consumers` 76,0 s, `configuration reach` 51,7 s, `report images`
-43,4 s oraz `public MCP behavior` 28,4 s. To są pierwsze kandydaty do audytu
-plan-only; sama nazwa checku nie przesądza jeszcze, które jego asercje można
-odłączyć od renderowania.
+43,4 s oraz `public MCP behavior` 28,4 s. To są pierwsze kandydaty do decyzji
+o usunięciu albo ograniczeniu artefaktu; sama nazwa checku nie przesądza
+jeszcze, które jego asercje można odłączyć od renderowania. Decyzja artefaktowa
+jest zapisana osobno, ponieważ opisuje możliwość usunięcia renderu, a nie
+aktualny sposób uruchamiania testu.
 
 ## Wykonane w pierwszym przebiegu
 

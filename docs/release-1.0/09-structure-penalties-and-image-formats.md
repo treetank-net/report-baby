@@ -113,8 +113,11 @@ lokalnie, nie wystarcza; brak dekodera musi kończyć się czytelnym błędem ze
 Obecny `test:brand` / `brand contract` wykonuje wiele pełnych renderów przez
 CLI i brand tool, osobno dla mutacji slotów, regionów, metryk, szablonów oraz
 formatów PNG/PPTX/PDF. Jest wartościowym kontraktem integracyjnym, ale jego
-czas wykonania nie może blokować całego cyklu developmentu za każdym razem,
-gdy zmieniamy planner lub renderer.
+czas wykonania nie powinien blokować całego cyklu developmentu za każdym razem,
+gdy zmieniamy planner lub renderer. Dlatego `brand` jest osobnym suite’em
+harnessu: `npm test` obejmuje composition i artifacts, a `npm run test:brand`
+pozostaje jawnie uruchamianym gate’em brandowym; `npm run test:release` nadal
+obejmuje wszystko.
 
 Przed finalizacją release’u należy:
 
@@ -137,7 +140,8 @@ composition, kontrakt przepływów i scoring struktur), `npm run test:release`
 (pełny zestaw bieżących suite’ów) oraz `npm run test:editorial-full` (pełna
 macierz 506 fixture’ów przepływu redakcyjnego, uruchamiana przed wydaniem lub
 nocą). Zwykły `editorial flow` w `test:release` sprawdza 26 reprezentatywnych
-fixture’ów; 480 wariantów plan-only nie blokuje codziennego feedbacku.
+fixture’ów; pełny `test:editorial-full` sprawdza 506 fixture’ów (480 wariantów
+bez artefaktu i 26 przypadków PDF) i nie blokuje codziennego feedbacku.
 Harness raportuje czas każdego
 checku i całej grupy, ostrzega po `quality.test_feedback.check_warning_ms`, a
 budżety `smoke_budget_ms` i `release_budget_ms` są czytane z
@@ -152,34 +156,43 @@ raport zawiera rekordy start/koniec każdego checku, status błędu oraz agregat
 per suite. Dzięki temu można wskazać konkretny wąski gardło bez ponownego
 zgadywania na podstawie czasu całego release gate’u.
 
-Pomiar z 2026-09-09 (bez builda) dał 503,6 s dla 39 unikalnych checków:
-composition 92,9 s, artifacts 245,6 s, quality 162,9 s i smoke 2,1 s. Te
-wartości są punktem odniesienia dla zadania plan-only, a nie docelowym SLA.
+Pomiar z 2026-09-09 (bez builda) dał 503,6 s dla 39 unikalnych checków
+harnessu. Osobny pomiar pełnej macierzy editorial 506 fixture’ów dał 242,32 s:
+wszystkie przypadki przeszły. Nie sumujemy tych czasów, bo szybki check
+editorial (26 fixture’ów) jest częścią obu przebiegów.
+Wynik harnessu to: composition 92,9 s, artifacts 116,7 s, brand 128,9 s,
+quality 162,9 s i smoke
+2,1 s. Brand jest osobnym suite’em, więc lokalne `npm test` nie uruchamia go
+automatycznie, ale `test:release` nadal go obejmuje. Te
+wartości są punktem odniesienia dla decyzji o kosztownym artefakcie, a nie
+docelowym SLA.
 
-### Zadanie: plan-only przed artifact-required
+### Zadanie: decyzja, czy artefakt jest potrzebny
 
-Następny przebieg audytu testów ma sklasyfikować każdą asercję, a nie tylko cały
-plik testowy. Jeżeli asercja pyta o wynik planera — na przykład o stronę,
-`flowId`, `slotId`, kolejność placementów, legalność albo residual — test ma
-zatrzymać się po zbudowaniu `CompositionPlan` i `Evaluation`. Nie powinien
-uruchamiać backendu PDF, rasteryzacji, `pdftotext` ani CLI/MCP jako procesu
-pośredniego. Ten sam input i ta sama asercja muszą być dostępne przez
-renderer-neutral seam.
+Audyt ma odpowiedzieć dla każdej asercji, czy artefakt jest koniecznym dowodem,
+a nie tylko opisać, co test uruchamia dzisiaj. Jeżeli asercja pyta o wynik
+planera — na przykład o stronę, `flowId`, `slotId`, kolejność placementów,
+legalność albo residual — artefakt jest `not-generated`; test powinien użyć
+`CompositionPlan` i `Evaluation`. Nie powinien uruchamiać backendu PDF,
+rasteryzacji ani `pdftotext`. Ten sam input i ta sama asercja muszą być
+dostępne przez renderer-neutral seam.
 
-Render pozostaje wymagany tylko dla asercji, których przedmiotem jest artefakt
+Render oznaczamy `retain` tylko dla asercji, których przedmiotem jest artefakt
 lub backend: rzeczywista obecność glifów/obrazu, selekcja tekstu w PDF,
-ink-occupancy, kontrast po rasteryzacji, poprawność PDF/PNG/PPTX, zachowanie
-procesu CLI/MCP oraz porównanie deterministycznego artefaktu. W takich testach
-render powinien być wykonany raz na najmniejszym fixture’u, który dowodzi danej
-własności; pozostałe warianty powinny być plan-only.
+ink-occupancy, kontrast po rasteryzacji, poprawność PDF/PNG/PPTX albo
+porównanie deterministycznego artefaktu. Gdy plik miesza takie asercje z
+asercjami planu/procesu, decyzja brzmi `split`: zostaje jeden najmniejszy
+fixture artefaktowy, a reszta przechodzi na plan/proces. Kontrakt CLI/MCP nie
+uzasadnia artefaktu sam przez się — jeśli sprawdzamy tylko odpowiedź procesu,
+artefakt pozostaje `not-generated`.
 
 Kolejność realizacji:
 
 1. Na podstawie `qa/test-timings.jsonl` wskazać testy dłuższe niż próg z
    `quality.test_feedback.check_warning_ms` i rozłożyć je na konkretne asercje.
-2. Oznaczyć każdą asercję jako `plan-only`, `artifact-required` albo
-   `process-contract` (uruchomienie CLI/MCP jest wtedy częścią kontraktu).
-3. Przenieść asercje planowe do bezpośredniego wejścia composition engine’u,
+2. Oznaczyć każdy check decyzją `not-generated`, `remove`, `retain` albo
+   `split`, zależnie od tego, czy artefakt można usunąć, zachować lub ograniczyć.
+3. Przenieść asercje bez artefaktu do bezpośredniego wejścia composition engine’u,
    współdzieląc fixture i konfigurację, bez zmiany zakresu ochrony.
 4. Zostawić jeden mały test renderowy na własność backendu, a usunięte rendery
    zastąpić asercjami planu lub evaluatorów.
@@ -187,8 +200,8 @@ Kolejność realizacji:
 
 Kryterium ukończenia: żadna asercja dotycząca wyłącznie planu nie renderuje
 artefaktu, a każdy pozostawiony render ma w dokumentacji nazwany powód. Wynik
-plan-only musi być równoważny semantycznie z dotychczasową asercją; celem jest
-redukcja czasu i obciążenia, nie osłabienie pokrycia.
+bez artefaktu musi być równoważny semantycznie z dotychczasową asercją; celem
+jest redukcja czasu i obciążenia, nie osłabienie pokrycia.
 
 Kryterium ukończenia: zmiana w plannerze daje szybki wynik lokalnie bez
 czekania na wszystkie niezależne rendery, a pełny gate nadal sprawdza te same

@@ -4,6 +4,11 @@ Status: punkty 01–05 są w większości wykonane w ograniczonym zakresie, punk
 jest w większości wykonany, punkty 07–08 są wykonane dla zakresu release’u.
 Punkt 09 i punkt 12 są wykonane w przyjętym zakresie release’u: odpowiednio
 scoring/formaty/test feedbacku oraz dynamiczny chrome z jawnym lockupem.
+Punkt 13 — audyt kosztu testów i wybór tańszych asercji — jest wykonany na
+poziomie harnessu i ma pierwszą migrację implementacyjną: 39 checków oraz
+osobna macierz 506 fixture’ów editorial są rozróżnione, a domyślne ścieżki
+zapisują 34 zamiast 84 tymczasowych PDF-ów. Pozostałe migracje testów mieszanych
+są osobnym zadaniem implementacyjnym bez zmiany kontraktu.
 Pozostałe migracje legacy są jawnie odłożone do kolejnych wersji. Organizacja
 modułów 10–11 została wykonana jako praca
 utrzymaniowa bez zmiany kontraktu MCP/CLI.
@@ -59,6 +64,8 @@ Chcemy mieć jeden deterministyczny przebieg, w którym:
 11 domenowe uporządkowanie całego server/src
         ↓
 12 dynamiczny page chrome i powtarzalne flow
+        ↓
+13 audyt konieczności artefaktów w testach
 ```
 
 Kroki 01–03 są fundamentem. Krok 04 daje pierwszą faktyczną optymalizację.
@@ -77,8 +84,9 @@ najpierw muszą istnieć testy i działający seam dla pętli.
 | 06 | w większości wykonany | utrzymanie publicznego gate’u; znany, wcześniejszy `EMPTY_FLOW_SLOT`; dalsze seam’y tylko z konkretnym kontraktem |
 | 07 | wykonany dla obecnych block kinds | nowe rodzaje bloków wymagają osobnego capability seam’u |
 | 08 | wykonany dla wyszukiwania composition | formaty JPEG/SVG/WebP/AVIF pozostają w zakresie punktu 09 |
-| 09 | wykonany dla zakresu release’u | scoring ciągłości list/tabel i małych fragmentów, resolver WebP/AVIF, pełna bramka obrazów oraz rozdzielenie szybkich i pełnych testów są gotowe; audyt asercji plan-only vs artifact-required i kalibracja wag pozostają zadaniami optymalizacyjnymi |
+| 09 | wykonany dla zakresu release’u | scoring ciągłości list/tabel i małych fragmentów, resolver WebP/AVIF, pełna bramka obrazów oraz rozdzielenie szybkich i pełnych testów są gotowe; audyt konieczności artefaktu i kalibracja wag pozostają zadaniami optymalizacyjnymi |
 | 12 | wykonany dla zakresu release’u | dynamiczny header z zerową ramą, fit-content, jawnym lockupem, powtarzalnym footerem i kolejnością przed main są gotowe; automatyczny brand lockup i usunięcie legacy fallbacku są świadomie odłożone |
+| 13 | audyt + pierwsza redukcja wykonane | 39 unikalnych checków sklasyfikowano decyzją `not-generated`, `remove`, `retain` albo `split`; osobno zmierzono 506 fixture’ów editorial; 84→34 zapisane PDF-y ograniczono plan-only lub reprezentantami, a pozostałe redukcje checków mieszanych są osobnym zadaniem bez zmiany kontraktu |
 
 Ta tabela jest nadrzędnym skrótem statusu. Szczegółowe dokumenty zachowują
 historię decyzji i kryteria.
@@ -114,6 +122,9 @@ historię decyzji i kryteria.
 12. [Dynamiczny page chrome i powtarzalne flow](12-dynamic-page-chrome.md) —
     content-driven header/footer, istniejące placeholdery numeracji stron,
     kolejność względem insertionów i `main`, oraz pełna projekcja chrome z planu.
+13. [Audyt kosztu testów](13-test-cost-audit.md) — inwentaryzacja każdego
+    checku, decyzja czy artefakt można usunąć albo ograniczyć oraz pomiar
+    suite’ów.
 
 ## Granica wykonalności
 
