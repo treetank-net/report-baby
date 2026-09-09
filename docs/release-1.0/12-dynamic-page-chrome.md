@@ -45,6 +45,30 @@ jest polityka cyklu życia, a nie osobny mechanizm layoutu lub pomiaru.
 - `reserved_bands.header` pozostaje przejściowym źródłem geometrii, dopóki
   planowanie headera nie przejmie jego odpowiedzialności.
 
+### Chrome a „zgniatanie” `main` w obecnej implementacji
+
+Obecne zachowanie nie jest negocjacją chrome z flow:
+
+- `reserved_bands.header` i `reserved_bands.footer` są od początku odejmowane
+  od segmentów dostępnych dla tekstu; działają jako twarde granice, a nie jako
+  placementy przesuwane przez planner;
+- insertiony są natomiast materializowane przed zwykłym flow i stają się
+  rzeczywistymi obstacle'ami, które mogą zmniejszyć dostępne miejsce dla
+  `main`;
+- powtarzany `header` jest obecnie planowany po zwykłych flowach, a
+  `pageChrome` jest dołączany po planowaniu, więc zmiana jego wysokości nie
+  powoduje ponownego ułożenia `main`;
+- system nie ma ogólnego mechanizmu zmniejszania fontu, line-height ani
+  dowolnego ściskania `main` w celu dopasowania chrome. Istniejące lokalne
+  skracanie odstępu headingu dotyczy wyłącznie decyzji wewnątrz tekstowego
+  flowu.
+
+W punkcie 12 „wpływ chrome na `main`” oznacza zatem zmianę granicy dostępnej
+  geometrii: większy header przesuwa lub ogranicza `main`, mniejszy header
+  zwalnia miejsce. Nie oznacza kompresowania treści. Gdy twarde wymagania lub
+  limity strony nie mogą być spełnione, kandydat ma zostać odrzucony albo
+  `ensurePage` ma utworzyć kolejną legalną stronę zgodnie z polityką flow.
+
 ## Przyjęty kontrakt
 
 ### Header i footer
