@@ -16,6 +16,14 @@ regions on subsequent page layouts. Typical flows are `main`, `intro`,
 template declares an `intro` flow, introductory content belongs to that flow;
 it is not a leading block of `main`.
 
+## Generated page metadata
+
+Generated page metadata are values supplied by the composition plan for the
+current page, such as its number and the final number of accepted pages. They
+are variables inside a text block, not separate content blocks or placements.
+A footer such as “2 / 5” is therefore one text block whose template text uses
+two generated values.
+
 ## Content block
 
 A content block is one semantic unit in a flow. A block may be ordinary text,

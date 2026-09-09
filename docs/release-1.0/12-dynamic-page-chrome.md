@@ -411,6 +411,11 @@ Obie zmienne są dostępne w każdym tekstowym slocie, także w headerze,
 footerze i innych powtarzalnych flowach. Nie wprowadzamy aliasów `{page}` ani
 `{numberOfPages}`. `pageCount` pozostaje lokalną nazwą implementacyjną.
 
+Nie są to dwa osobne bloki ani dwa placementy. Template deklaruje jeden slot
+tekstowy, na przykład `footer-page-number`, którego treść brzmi
+`"{{page.number}} / {{page.count}}"`; resolver podstawia obie wartości w tym
+samym tekście, a planner mierzy cały wynikowy napis jako jeden blok.
+
 `{{page.number}}` i `{{page.count}}` są podstawiane po ustaleniu finalnego
 zaakceptowanego planu, ale ich box jest mierzony wcześniej z szerokością
 rezerwowaną dla największej dozwolonej liczby stron (`maxPages`). Dzięki temu
