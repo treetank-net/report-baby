@@ -1,191 +1,154 @@
-# Plan 11 — domenowe uporządkowanie `server/src`
+# Plan 11 — domain organization of `server/src`
 
-Status: pierwszy etap organizacji i pierwszy przebieg optymalizacji wykonane;
-pozostały jawnie wybrane seam’y composition. Zmiana nie może usuwać
-funkcjonalności MCP ani opcjonalnego CLI.
+Status: the first organization stage and first optimization pass are complete;
+the remaining items are explicit `composition` seams and legacy audits. The
+change must not remove MCP functionality or the optional CLI.
 
-## Stan migracji — 2026-09-08
+## Migration state — 2026-09-09
 
-Pierwszy etap organizacji został wykonany bez zmiany publicznego flow:
+The first organization stage was completed without changing the public flow:
 
-- źródła content, brand, source, template, rendering, report, artifacts,
-  contracts oraz interfejsy MCP/CLI mają własne katalogi;
-- ścieżki bundlowania zostały przełączone na nowe entrypointy;
-- strażnik architektury poprawnie rozwiązuje importy `.js` do źródeł `.ts` i
-  potwierdza brak zakazanych cykli;
-- `update_plugin` kopiuje wszystkie cztery bundle runtime, oba manifesty
-  pluginów oraz pełny `server/templates/**` z rejestru generowanych builtinów;
-- `npm run build` i pełny `npm run test:composition` przechodzą na hoście z
-  procesami potomnymi. W ograniczonym sandboxie testy PDF mogą kończyć się
-  `spawnSync ... EPERM`, co jest problemem środowiska, nie regresją kodu.
+- `content`, `brand`, `source`, `template`, `rendering`, `report`, `artifacts`,
+  `contracts`, and MCP/CLI interfaces have their own directories;
+- bundle entrypoints have been switched to the new locations;
+- the architecture guard resolves `.js` imports to `.ts` sources and confirms
+  that forbidden cycles are absent;
+- `update_plugin` copies all four runtime bundles, both plugin manifests, and
+  the complete `server/templates/**` tree from the generated-builtin registry;
+- `npm run build` and the full `npm run test:composition` pass on a host that
+  permits child processes. In a restricted sandbox, PDF checks may report
+  `spawnSync ... EPERM`; that is an environment issue, not a code regression.
 
-To jest checkpoint organizacyjny. Dopiero po nim zaczyna się optymalizacja
-wnętrza dużych modułów; każda taka zmiana ma zachować te same bundle i kontrakty
-narzędzi MCP/CLI.
+This is the organizational checkpoint. Optimization of large modules follows
+it; every such change must preserve the same bundles and MCP/CLI tool
+contracts.
 
-## Stan optymalizacji — 2026-09-08
+## Optimization state — 2026-09-09
 
-Pierwszy przebieg optymalizacji nie zmienia przepływu danych ani publicznych
-eksportów. Usunięto dwa worki odpowiedzialności:
+The first optimization pass did not change data flow or public exports. It
+removed two responsibility bags:
 
-| Moduł | Odpowiedzialność po podziale | LOC |
+| Module | Responsibility after the split | LOC |
 | --- | --- | ---: |
-| `presentation/svg-renderer.ts` | SVG pojedynczego slajdu | 285 |
-| `presentation/pptx-renderer.ts` | PPTX i deduplikacja mediów | 327 |
-| `presentation/pdf-renderer.ts` | PDF/PNG przez rasteryzację | 127 |
-| `presentation/slide-layout.ts` | geometria, RTL i dopasowanie tekstu | 286 |
-| `presentation/slide-validation.ts` | walidacja zawartości slajdu | 18 |
-| `presentation/contracts.ts` | kontrakty decku | 25 |
-| `presentation/slides.ts` | stabilna fasada eksportów | 11 |
-| `brand/context.ts` | odczyt źródeł i orkiestracja brandu | 456 |
-| `brand/discovery.ts` | rekurencyjne odkrywanie template’ów i profili | 34 |
-| `brand/theme.ts` | rozwiązywanie theme/composition | 174 |
-| `brand/assets.ts` | ścieżki, cache i ostrzeżenia assetów | 124 |
-| `brand/color.ts` | palette i kontrast | 80 |
-| `brand/value.ts` | bezpieczne wartości dokumentu | 38 |
-| `brand/paths.ts` | bezpieczne ścieżki względne | 12 |
+| `presentation/svg-renderer.ts` | SVG for one slide | 285 |
+| `presentation/pptx-renderer.ts` | PPTX and media deduplication | 327 |
+| `presentation/pdf-renderer.ts` | PDF/PNG through rasterization | 127 |
+| `presentation/slide-layout.ts` | geometry, RTL, and text fitting | 286 |
+| `presentation/slide-validation.ts` | slide-content validation | 18 |
+| `presentation/contracts.ts` | deck contracts | 25 |
+| `presentation/slides.ts` | stable export facade | 11 |
+| `brand/context.ts` | source reading and brand orchestration | 456 |
+| `brand/discovery.ts` | recursive template and profile discovery | 34 |
+| `brand/theme.ts` | theme/composition resolution | 174 |
+| `brand/assets.ts` | asset paths, cache, and warnings | 124 |
+| `brand/color.ts` | palette and contrast | 80 |
+| `brand/value.ts` | safe document values | 38 |
+| `brand/paths.ts` | safe relative paths | 12 |
 | `brand/contracts.ts` | `BrandOverrides`, `RenderComposition` | 28 |
-| `contracts/render-theme.ts` | wspólny kontrakt motywu renderowania | 65 |
-| `contracts/resolved-slide-plan.ts` | wynikowy plan slajdu | 33 |
-| `contracts/resolved-report-plan.ts` | wynikowy plan raportu | 27 |
+| `contracts/render-theme.ts` | shared render-theme contract | 65 |
+| `contracts/resolved-slide-plan.ts` | resolved slide plan | 33 |
+| `contracts/resolved-report-plan.ts` | resolved report plan | 27 |
 
-Wcześniejsze `slides.ts` (ponad 1000 LOC) i `brand-context.ts` (ponad 900 LOC)
-nie są już miejscami, w których miesza się renderer, layout, assety i
-orkiestracja. `slides.ts` pozostał kompatybilną fasadą, więc MCP i CLI nie
-muszą znać nowego podziału. `brand/context.ts` zachowuje istniejące operacje
-publiczne (`resolveBrandContext`, `inspectBrand`, `listBrandbooks`), a
-`brand/discovery.ts` przejmuje rekurencyjne przechodzenie katalogów. Oba moduły
-mają jawne, wewnętrzne seam’y.
+The former `slides.ts` (more than 1,000 LOC) and `brand-context.ts` (more than
+900 LOC) are no longer places where renderer, layout, assets, and orchestration
+are mixed. `slides.ts` remains a compatibility facade, so MCP and CLI do not
+need to know the new split. `brand/context.ts` keeps the existing public
+operations (`resolveBrandContext`, `inspectBrand`, `listBrandbooks`), while
+`brand/discovery.ts` owns recursive directory traversal. Both modules expose
+explicit internal seams.
 
-Po tym przebiegu `server/src` ma 18 680 linii TypeScript. Jest to metryka
-orientacyjna: kolejnym krokiem będzie usuwanie powtórzeń i ręcznych obliczeń w
-modułach composition, a nie mechaniczne dalsze rozcinanie każdego pliku.
+The current `server/src` size is 18,680 TypeScript lines. This is an
+orientation metric: the next step is removing duplicate and hand-written
+calculations in `composition`, not mechanically splitting every file again.
 
-Weryfikacja tego przebiegu:
+Verification of this pass:
 
-- `npx tsc --noEmit` — przechodzi;
-- `node scripts/architecture-check.mjs` — 110 modułów, brak zakazanych cykli;
-- `npm run build` — cztery bundle oraz 19 wbudowanych szablonów;
-- `npm run test:composition` na hoście — 13/13 testów przechodzi, w tym oracle,
-  obrazy, kontrast, flow redakcyjny i limity stron.
+- `npx tsc --noEmit` — passes;
+- `node scripts/architecture-check.mjs` — 110 modules, no forbidden cycles;
+- `npm run build` — four bundles and 19 built-in templates;
+- `npm run test:composition` on the host — all 13/13 checks pass, including
+  oracle, images, contrast, editorial flow, and page limits.
 
-Pełny `npm test` dochodzi do bramki `public MCP behavior`, ale istniejący
-checkpoint `957f957` odtwarza ten sam błąd dla `pages/editorial-metrics-two-column`:
-`EMPTY_FLOW_SLOT` na `1:first:segment-1` i `1:first:segment-2`. Porównanie z
-czystym checkoutem checkpointu potwierdziło, że nie jest to regresja podziału
-`presentation`/`brand`; pozostaje osobnym zadaniem testowo-planistycznym.
+The release gate `npm run test:release` passed **39/39 checks on 2026-09-09**.
+The default `npm test` passed **23/23 checks in approximately 122 seconds**.
+The separate `npm run test:editorial-full` gate passed **506/506 fixtures in
+242.32 seconds on 2026-09-09**; it is not part of the 39-check release gate and
+must be reported separately for later snapshots.
 
-Następny seam adaptera template’u został wydzielony w
-`composition/adapters/page-template-slots.ts` (192 LOC). Zawiera wspólne
-mapowanie deklaracji tekstowych, blokowych, lockupów i grafik, wzrost slotów oraz
-rozwijanie celów `content`. Dzięki temu `page-template.ts` (422 LOC) jest
-orkiestratorem geometrii, layoutów, routingu i polityki title/auxiliary; nie
-definiuje już funkcji wewnątrz `compositionTemplateFromPageGeometry` ani nie
-duplikuje mapowania text/block slots. Test adaptera zachowuje dotychczasowe dwa
-layouty i 142 linie planu.
+The former `public MCP behavior` monolith has been replaced by
+`test-public-mcp-contract.mjs`. Its public MCP smoke is now covered by the
+current harness; historical references to the old filename describe the prior
+state only.
 
-W kolejnym kroku `composition/text/text-placement.ts` (138 LOC) przejął
-materializację linii, obliczenie boxu placementu i aktualizację stanu slotu.
-`text-layout.ts` ma teraz 369 LOC i odpowiada za wrapping, przeszkody, metryki
-tekstu oraz liczbę dostępnych linii; `text-layout-contracts.ts` (10 LOC) jest
-wspólnym kontraktem `WrappedLine`. Fasada eksportowa zachowuje dotychczasowe
-importy `placeLines` i `WrappedLine`, bez cyklu zależności.
+## Product context
 
-`composition/layout/insertion-layout.ts` jest teraz cienką fasadą. Konkretne
-odpowiedzialności są rozdzielone na `insertion-planning.ts` (propozycje,
-reflow i kolejność), `insertion-measurement.ts` (jedna kalkulacja tekstu
-wstawki) oraz `insertion-placement.ts` (rezerwacja przeszkód, fit-content i
-materializacja). To usuwa powtórzenie pomiaru między planowaniem a placementem,
-bez zmiany kontraktu `insertion-layout.ts` dla `text-planner` i
-`flow-text-decision`.
-
-Kontrakty `RenderTheme`, `ResolvedSlidePlan` i `ResolvedReportPlan` zostały
-przeniesione z technicznego `core/model/` do `contracts/`. Są to struktury
-przenoszone pomiędzy domenami (brand, presentation, report i rendering), a nie
-moduły wykonawcze. Dzięki temu żaden z tych obszarów nie musi importować
-nieistniejącej warstwy `core`, a kontrola architektury nie zawiera już reguł
-odnoszących się do usuniętego katalogu.
-
-W `composition/layout/flow-space.ts` usunięto ostatnią lokalną funkcję
-`addContent`; rejestracja zawartości slotu korzysta z nazwanej funkcji
-`addFlowContent`. Moduł nadal pozostaje właścicielem zajętości, kolizji i barier
-przepływu, ale nie tworzy funkcji pomocniczych wewnątrz funkcji orkiestrującej.
-
-W adapterze `interfaces/mcp/update-tools.ts` konstrukcja sekcji changeloga jest
-również nazwaną funkcją `appendChangelogSection`, a nie lokalnym `flush`. Dzięki
-temu updater ma rozdzielone: semver, wybór sekcji i pobieranie plików, przy
-zachowaniu tej samej odpowiedzi narzędzia `update_plugin`.
-
-## Kontekst produktu
-
-`report-baby` jest przede wszystkim bundlowanym serwerem MCP. CLI jest drugim
-frontem do tych samych operacji, a nie osobną implementacją renderera.
+`report-baby` is primarily a bundled MCP server. The CLI is a second frontend
+to the same operations, not a separate renderer implementation.
 
 ```text
-MCP:  index.ts → rejestratory narzędzi → wspólne operacje
-CLI:  cli.ts / example.ts / brand-tool.ts → wspólne operacje
+MCP:  index.ts → tool registrars → shared operations
+CLI:  cli.ts / example.ts / brand-tool.ts → shared operations
 ```
 
-Wzorcem są `meta-ads-baby` i `google-ads-baby`: `index.ts` uruchamia długowieczny
-serwer stdio, a publiczne narzędzia pozostają dostępne przez nazwę i stabilny
-schemat. W `report-baby` dodatkowo budowane są `cli-bundle.cjs`,
-`example-bundle.cjs` i `brand-tool-bundle.cjs`.
+The model is the same as `meta-ads-baby` and `google-ads-baby`: `index.ts`
+starts a long-lived stdio server, while public tools remain available through
+stable names and schemas. `report-baby` additionally builds
+`cli-bundle.cjs`, `example-bundle.cjs`, and `brand-tool-bundle.cjs`.
 
-Niezmienny kontrakt release:
+Unchanged release contract:
 
-- `server/bundle.cjs` pozostaje bundlem MCP;
-- `scripts/start-mcp.js` pobiera bundle tylko wtedy, gdy nie ma go na dysku;
-- `update_plugin` pozostaje publicznym narzędziem MCP;
-- aktualizator rozróżnia wersję na dysku i wersję działającego procesu;
-- aktualizacja jest atomowa i nie może nadpisać nowszej lokalnej instalacji;
-- aktualizator kopiuje wszystkie bundle MCP/CLI, oba manifesty pluginów,
-  `package.json`, launcher, `CHANGELOG.md` oraz źródła szablonów
-  `server/templates/**`;
-- MCP i CLI używają tych samych kontraktów oraz operacji domenowych.
+- `server/bundle.cjs` remains the MCP bundle;
+- `scripts/start-mcp.js` downloads/builds the bundle only when it is absent;
+- `update_plugin` remains a public MCP tool;
+- the updater distinguishes the on-disk version from the running process;
+- updating is atomic and cannot overwrite a newer local installation;
+- the updater copies all MCP/CLI bundles, both plugin manifests, `package.json`,
+  the launcher, `CHANGELOG.md`, and `server/templates/**`;
+- MCP and CLI use the same contracts and domain operations.
 
-## Zasady organizacji
+## Organization rules
 
-1. Katalog domenowy grupuje wiedzę, nie przypadkowy typ pliku.
-2. Kontrakty danych nie importują implementacji ani MCP/CLI.
-3. Rejestrator MCP jest adapterem interfejsu; nie jest domeną renderowania.
-4. CLI nie importuje `McpServer` ani nie zależy od sposobu rejestracji MCP.
-5. Nie wprowadzamy nowych encji tylko po to, aby zmniejszyć plik. Istniejące
-   modele (`CompositionPlan`, `SlideInput`, `RenderTheme`, `Template`) pozostają
-   kontraktami lub wartościami domenowymi.
-6. Nie tworzymy worków `helpers`, `utils` ani ogólnego `types`.
-7. `composition/` pozostaje właścicielem planowania, placementów i evaluatora.
-8. `rendering/` zna format wyjściowy, ale nie podejmuje decyzji planera.
-9. Wartości liczbowe pozostają w `server/templates/render-config.yml`.
-10. Każdy ruch pliku zachowuje bezpośrednie importy; wewnętrzne barrel exportery
-    nie są potrzebne.
+1. A domain directory groups knowledge, not an accidental file type.
+2. Data contracts do not import implementations or MCP/CLI.
+3. The MCP registrar is an interface adapter, not the rendering domain.
+4. CLI does not import `McpServer` or depend on MCP registration.
+5. We do not introduce entities solely to make a file smaller. Existing models
+   (`CompositionPlan`, `SlideInput`, `RenderTheme`, `Template`) remain contracts
+   or domain values.
+6. We do not create `helpers`, `utils`, or generic `types` bags.
+7. `composition/` owns planning, placements, and evaluation.
+8. `rendering/` knows output formats but does not make planner decisions.
+9. Numeric values remain in `server/templates/render-config.yml`.
+10. Every file move preserves direct imports; internal barrel exporters are not
+    needed.
 
-## Obecny podział odpowiedzialności
+## Current responsibility split
 
-| Obszar | Obecne pliki | Główne ryzyko |
+| Area | Current files | Main risk |
 | --- | --- | --- |
-| Composition | `composition/**` | najbliżej docelowego układu; nie przenosić ponownie bez seam’u |
-| Input/content | `contracts/input/schema.ts`, `content/**` | schema i normalizacja są rozdzielone od composition |
-| Template/config | `template/**` | kontrakty, builtin loader, kierunek i geometria mają wspólny kontekst |
-| Brand | `brand/context.ts`, `brand/theme.ts`, `brand/assets.ts`, `brand/asset-preparation.ts` | dalszy seam to rozdzielenie template’ów/showcase od orkiestracji |
-| Source | `source/**` | materializacja i kontekst źródeł mają osobny kontrakt |
-| Presentation | `presentation/**` | layout, SVG, PDF/PNG, PPTX i walidacja są rozdzielone |
-| Report | `report/**`, `composition/report-composition-entrypoint.ts` | renderer raportu i legacy plan są rozdzielone od composition |
-| Rendering | `rendering/**` | prymitywy i rozwiązywanie obrazów nie należą do planerów |
-| Interfaces | `interfaces/mcp/**`, `interfaces/cli/**` | rejestracja MCP i CLI są osobnymi adapterami |
+| Composition | `composition/**` | closest to the target layout; do not move again without a seam |
+| Input/content | `contracts/input/schema.ts`, `content/**` | schema and normalization are separate from composition |
+| Template/config | `template/**` | contracts, built-in loading, direction, and geometry share context |
+| Brand | `brand/context.ts`, `brand/theme.ts`, `brand/assets.ts`, `brand/asset-preparation.ts` | next seam is template/showcase versus orchestration |
+| Source | `source/**` | materialization and source context have a separate contract |
+| Presentation | `presentation/**` | layout, SVG, PDF/PNG, PPTX, and validation are split |
+| Report | `report/**`, `composition/report-composition-entrypoint.ts` | report renderer and legacy plan are separate from composition |
+| Rendering | `rendering/**` | primitives and image resolution do not belong to planners |
+| Interfaces | `interfaces/mcp/**`, `interfaces/cli/**` | MCP and CLI registration are separate adapters |
 
-`server/src` ma obecnie 18 680 linii TypeScript. Największe pozostałe moduły to
-`composition/evaluation/legality.ts` (659 LOC),
-`composition/layout/flow-text-decision.ts` (588 LOC),
-`brand/context.ts` (456 LOC), `composition/evaluation/scoring.ts` (441 LOC),
+`server/src` currently contains 18,680 TypeScript lines. The largest remaining
+modules are `composition/evaluation/legality.ts` (659 LOC),
+`composition/layout/flow-text-decision.ts` (588 LOC), `brand/context.ts`
+(456 LOC), `composition/evaluation/scoring.ts` (441 LOC),
 `composition/adapters/page-template.ts` (422 LOC),
 `composition/layout/document-layout.ts` (310 LOC),
-`composition/layout/flow-space.ts` (417 LOC) oraz
-`composition/layout/flow-planner.ts` (408 LOC). `text-planner.ts` i
-`insertion-layout.ts` są fasadami o odpowiednio 154 i 17 LOC.
-Rozmiar nie jest samodzielnym kryterium podziału; ważniejsze jest to, czy moduł
-ma jeden kierunek wiedzy i głęboki interfejs.
+`composition/layout/flow-space.ts` (417 LOC), and
+`composition/layout/flow-planner.ts` (408 LOC). `text-planner.ts` and
+`insertion-layout.ts` are facades at 154 and 17 LOC respectively. Size is not
+an independent split criterion; a module's single direction of knowledge and
+deep interface matter more.
 
-## Docelowa mapa katalogów
+## Target directory map
 
 ```text
 src/
@@ -226,7 +189,7 @@ src/
 │   ├── zip-policy.ts
 │   └── transports/
 ├── composition/
-│   └── ... istniejąca mapa z planu 10 ...
+│   └── ... existing map from Plan 10 ...
 ├── presentation/
 │   ├── contracts/
 │   ├── planning/
@@ -285,77 +248,80 @@ src/
     └── version.ts
 ```
 
-`application/` nie jest nową domeną. To miejsce dla operacji wywoływanych przez
-więcej niż jeden front. MCP i CLI zależą od niego, ale nie od siebie nawzajem.
+`application/` is not a new domain. It is the home for operations called by
+more than one frontend. MCP and CLI depend on it, but not on each other.
 
-## Właściciele funkcji
+## Function owners
 
 ### Presentation
 
-Z `slides.ts` przenosimy według osi odpowiedzialności:
+Move from `slides.ts` by responsibility:
 
-- `SlideDeck` i model renderowania → `presentation/contracts`;
-- `slideLayout`, `lockupGeometry`, RTL, boxy i fit tekstu → `presentation/layout`;
-- `frame`, SVG text helpers i `renderSlideSvg` → `rendering/slide-svg`;
-- `renderSlidesPdf` i `PdfImage` → `rendering/slide-pdf`;
+- `SlideDeck` and the render model → `presentation/contracts`;
+- `slideLayout`, `lockupGeometry`, RTL, boxes, and text fit →
+  `presentation/layout`;
+- `frame`, SVG text helpers, and `renderSlideSvg` → `rendering/slide-svg`;
+- `renderSlidesPdf` and `PdfImage` → `rendering/slide-pdf`;
 - `renderSlidesPng` → `rendering/slide-png`;
-- `renderSlidesPptx`, nagłówek i footer → `rendering/slide-pptx`;
+- `renderSlidesPptx`, header, and footer → `rendering/slide-pptx`;
 - `deduplicatePptxMedia` → `rendering/media`;
-- `validateSlideContent` → walidacja prezentacji, nie renderer.
+- `validateSlideContent` → presentation validation, not the renderer.
 
-`SlideInput` (flow-based) i stary archetypowy `Slide` muszą mieć różne nazwy.
-Adapter w `slide-context.ts` pozostaje tymczasowym, jawnym seamem do czasu
-usunięcia starego modelu.
+`SlideInput` (flow-based) and the old archetype-based `Slide` must have
+different names. The adapter in `slide-context.ts` remains an explicit,
+temporary seam until the old model is removed.
 
 ### Brand
 
-`brand-context.ts` dzielimy na dokumenty/profile, referencje, theme/kolory,
-asset paths, template’y brandowe, showcase oraz cienką orkiestrację `context.ts`.
-`asset-preparation.ts` pozostaje procesorem assetów; kodeki PNG nie należą do
+Split `brand-context.ts` into documents/profiles, references, theme/colors,
+asset paths, brand templates, showcase, and thin `context.ts` orchestration.
+`asset-preparation.ts` remains an asset processor; PNG codecs do not belong to
 brand context.
 
 ### Template
 
-`template-contract.ts` dzielimy na kontrakty, compiler, loader i geometrię.
-`builtin-template-source.ts` staje się loaderem builtinów i konfiguracji, a nie
-właścicielem wszystkich kontraktów template’u.
+Split `template-contract.ts` into contracts, compiler, loader, and geometry.
+`builtin-template-source.ts` becomes the loader for built-ins and configuration,
+not the owner of every template contract.
 
 ### Report
 
-`report-renderer.ts` dzielimy na katalog i rozwiązywanie template’u, chrome,
-debug overlay oraz orkiestrację PDF. `report-plan.ts` pozostaje jawnie pod
-`legacy-plan.ts`, dopóki odpowiedź publiczna nie przejdzie całkowicie na
+Split `report-renderer.ts` into catalog and template resolution, chrome, debug
+overlay, and PDF orchestration. `report-plan.ts` remains explicitly under
+`legacy-plan.ts` until the public response moves completely to
 `CompositionPlan`.
 
-### Tools i entrypointy
+### Tools and entrypoints
 
-Rejestratory w `interfaces/mcp` deklarują schemat MCP i tłumaczą wynik na
-response. Operacja renderowania, brand managementu lub aktualizacji znajduje
-się w `application/` i nie zna `McpServer`.
+Registrars in `interfaces/mcp` declare MCP schemas and translate results into
+responses. Render, brand-management, and update operations belong in
+`application/` and do not know `McpServer`.
 
-`update_plugin` otrzymuje własny rejestrator MCP, ale jego semver, download,
-atomic rename i komunikat o restarcie są wspólną operacją. Nie przenosimy go do
-renderowania ani do domeny brandu.
+`update_plugin` has its own MCP registrar, but semver, download, atomic rename,
+and restart messaging are shared operations. It does not move into rendering
+or the brand domain.
 
-## Artefakty release i szablony
+## Release artifacts and templates
 
-Builtin template’y są osadzane w `server/src/generated/builtin-template-files.ts`
-podczas `npm run build:templates`, więc bundle może działać bez katalogu
-`server/templates`. Katalog źródłowy nadal jest ważny dla:
+Built-in templates are embedded in
+`server/src/generated/builtin-template-files.ts` during
+`npm run build:templates`, so a bundle can run without `server/templates`. The
+source directory remains important for:
 
-- budowania i regenerowania embedded template’ów;
-- lokalnych override’ów przez `REPORT_BABY_TEMPLATE_DIR`;
-- diagnostyki i pracy developerskiej;
-- kompatybilności instalacji pobieranych jako checkout.
+- building and regenerating embedded templates;
+- local overrides through `REPORT_BABY_TEMPLATE_DIR`;
+- diagnostics and development work;
+- installations obtained as a checkout.
 
-Dlatego lista aktualizatora musi kopiować `server/templates/**` wraz z bundle’ami,
-a test release powinien sprawdzać obecność co najmniej `render-config.yml`,
-`slides/standard/template.yml` i wszystkich `pages/*/template.yml`.
+Therefore the updater must copy `server/templates/**` together with the
+bundles, and the release test must check at least `render-config.yml`,
+`slides/standard/template.yml`, and every `pages/*/template.yml`.
 
-Przenoszenie źródeł w `src` nie może zmienić nazw ani lokalizacji artefaktów:
-`bundle.cjs`, `cli-bundle.cjs`, `example-bundle.cjs` i `brand-tool-bundle.cjs`.
+Moving `src` sources must not change the names or locations of
+`bundle.cjs`, `cli-bundle.cjs`, `example-bundle.cjs`, or
+`brand-tool-bundle.cjs`.
 
-## Kierunek zależności
+## Dependency direction
 
 ```text
 interfaces/mcp, interfaces/cli
@@ -369,24 +335,33 @@ interfaces/mcp, interfaces/cli
         infrastructure and files
 ```
 
-`composition` nie importuje MCP, CLI ani rendererów slajdów. `rendering` może
-korzystać z kontraktu theme i planu, ale nie z orkiestratora brandu. `contracts`
-nie importują żadnych implementacji.
+`composition` does not import MCP, CLI, or slide renderers. `rendering` may use
+the theme and plan contracts, but not brand orchestration. `contracts` import
+no implementations.
 
-## Kolejność dalszej pracy
+## Further-work order
 
-Pierwsze dziewięć kroków organizacyjnych zostało wykonanych: katalogi domenowe,
-kontrakty, brand, presentation, template, rendering oraz adaptery MCP/CLI mają
-już jawne granice. Dalsza praca nie powinna być mechanicznym dzieleniem plików:
+The first nine organizational steps are complete: domain directories,
+contracts, brand, presentation, template, rendering, and MCP/CLI adapters now
+have explicit boundaries. Further work must not be mechanical file splitting:
 
-1. potwierdzić zachowanie aktualnych publicznych testów MCP/CLI i osobno
-   rozstrzygnąć istniejący przypadek `EMPTY_FLOW_SLOT`;
-2. audytować `flow-text-decision.ts` oraz `document-layout.ts` pod kątem
-   wspólnych kalkulatorów, bez zmiany kolejności decyzji planera;
-3. audytować `legality.ts` i `scoring.ts` jako dwa różne konteksty evaluatora,
-   wydzielając tylko seam'y, które mają własny kontrakt wejścia/wyjścia;
-4. usuwać wyłącznie potwierdzone martwe ścieżki (parser `text-runs.ts` został
-   już usunięty; pozostałe stare modele i legacy plan wymagają osobnego audytu)
-   po pomiarze pokrycia i aktualizacji testów;
-5. przy każdym seamie uruchamiać `tsc --noEmit`, architecture check, build,
-   `npm run test:composition` oraz właściwe testy MCP/CLI/brand i artefaktów.
+1. confirm current public MCP/CLI behavior and resolve the former
+   `EMPTY_FLOW_SLOT` case separately;
+2. audit `flow-text-decision.ts` and `document-layout.ts` for shared
+   calculators, without changing planner decision order;
+3. audit `legality.ts` and `scoring.ts` as two different evaluator contexts,
+   extracting only seams with their own input/output contracts;
+4. remove only confirmed dead paths (the `text-runs.ts` parser has already been
+   removed; remaining old models and the legacy plan require a separate audit)
+   after measuring coverage and updating tests;
+5. at every seam run `tsc --noEmit`, architecture checks, build,
+   `npm run test:composition`, and the relevant MCP/CLI/brand/artifact tests.
+
+## Completion boundary
+
+Release 1.0 includes the domain organization and preservation of MCP/CLI
+functionality. Documentation and legacy audits are recorded separately.
+Optimization follow-ups may reduce duplicate calculations or test cost, but
+must preserve the current public flow. Automatic brand lockup materialization,
+removal of the legacy fallback, and explicit `paintOrder` remain release 1.1
+deferrals and are not implied by this plan.

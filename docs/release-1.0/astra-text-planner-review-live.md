@@ -1,12 +1,12 @@
 # Astra review: text planner and flow planner
 
-> Uwaga: wcześniejsze obserwacje w tym dokumencie opisują stan sprzed migracji
-> i zachowują historyczne nazwy plików. Aktualne ścieżki oraz przyjęty model
-> odpowiedzialności znajdują się w
+> Note: earlier observations in this document describe the pre-migration state
+> and retain historical file names. Current paths and the accepted
+> responsibility model are documented in
 > [`10-composition-module-migration.md`](10-composition-module-migration.md)
-> i w bieżącym [inventory funkcji](planner-function-dependency-inventory.md).
-> W szczególności `composition/engine.ts` został usunięty po migracji fasady,
-> a renderer-neutralny model znajduje się w `composition/contracts/model.ts`.
+> and in the current [function inventory](planner-function-dependency-inventory.md).
+> In particular, `composition/engine.ts` was removed after the facade migration,
+> and the renderer-neutral model is in `composition/contracts/model.ts`.
 
 Status: delegated review started.
 

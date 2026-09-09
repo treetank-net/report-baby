@@ -158,7 +158,13 @@ export function checkEarlyRouteTransitions(document: CompositionDocument, plan: 
       const previousBlock = sourceBlocks.get(previous.blockId);
       if (previousBlock?.role === 'intro' || previousBlock?.role === 'title' || previousBlock?.role === 'subtitle') continue;
       const nextLineHeight = nextLines.find((line) => line.box.height > 0)?.box.height ?? previous.box.height;
-      const usable = usableLinesAfter(previous, slot, plan.graphicPlacements, nextLineHeight);
+      const usable = usableLinesAfter(
+        previous,
+        slot,
+        plan.graphicPlacements,
+        [...plan.blockPlacements, ...plan.tablePlacements],
+        nextLineHeight,
+      );
       if (plannerFoundNoUsableLine(plan, nextLines[0].blockId, previous.slotId, minimum)) continue;
       const nextBlock = sourceBlocks.get(nextLines[0].blockId);
       if (!nextBlock || usable <= minimumUsableLinesBefore(nextBlock, minimum)) continue;
@@ -309,7 +315,13 @@ export function validateUnderfilledFlowSlot(
 ): void {
   if (last.flowId === undefined || last.startWord === undefined) return;
   const nextLineHeight = laterItems.find((item) => item.box.height > 0)?.box.height ?? last.box.height;
-  const usable = usableLinesAfter(last as CompositionPlan['lines'][number], slot, plan.graphicPlacements, nextLineHeight);
+  const usable = usableLinesAfter(
+    last as CompositionPlan['lines'][number],
+    slot,
+    plan.graphicPlacements,
+    [...plan.blockPlacements, ...plan.tablePlacements],
+    nextLineHeight,
+  );
   if (plannerFoundNoUsableLine(plan, nextAuthoredBlock.id, slot.id, minimum)
     || usable <= minimumUsableLinesBefore(nextAuthoredBlock, minimum)) return;
   pushEvaluationError(diagnostics, 'FLOW_SLOT_UNDERFILLED', 'Flow ' + flow.id + ' leaves ' + usable + ' usable line(s) in ' + slot.id + ' before later content.', {

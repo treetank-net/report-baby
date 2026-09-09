@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0
+
+- Finalized the renderer-neutral composition pipeline, domain module layout,
+  dynamic chrome contract, and explicit non-main insertion flows.
+- Added plan/evaluator parity for structured table and block occupancy, with a
+  regression contract preventing false `FLOW_FRAGMENT_UNDERFILLED` rejections.
+- Consolidated release coverage into plan-only, transport, backend, and visual
+  checks; `npm run test:release` passes 39/39 checks and
+  `npm run test:editorial-full` passes 506/506 fixtures.
+- Documented the Release 1.0 contracts and test-cost decisions in English.
+
 ## v0.9.5
 
 - Added report-plan coverage checks and fixed the unused lead band when an

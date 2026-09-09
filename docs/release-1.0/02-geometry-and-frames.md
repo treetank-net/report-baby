@@ -1,131 +1,139 @@
-# Plan 02 — geometria i wspólne ramy
+# Plan 02 — geometry and shared frames
 
-Status: wykonany; geometria chrome, placementów i kandydatów jest
-współdzielona i walidowana. Dynamiczne zachowanie page chrome jest osobnym
-zakresem punktu 12.
+Status: functionally complete for the current 1.0 scope; chrome, placement and
+candidate geometry is shared and validated. Dynamic page-chrome behavior is a
+separate scope under point 12. Release evidence: the release harness passes
+39/39 checks and the default `npm test` passes 23/23 checks (2026-09-09).
 
-## Cel
+## Goal
 
-Planner, evaluator, debug i backend mają odnosić się do tych samych obliczonych
-ram: slotów, segmentów, placements, obstacles, flow barriers, block frames,
-grafik i chrome.
+The planner, evaluator, debug output and backend must refer to the same computed
+frames: slots, segments, placements, obstacles, flow barriers, block frames,
+graphics and chrome.
 
-Nie dodajemy kolejnego modelu geometrii. Ustalamy odpowiedzialność istniejących
-reprezentacji i usuwamy powtórne interpretacje.
+We do not add another geometry model. We define ownership of the existing
+representations and remove repeated reinterpretations.
 
-## Stan obecny
+## Current state
 
-Geometria przechodzi przez kilka etapów:
+Geometry passes through several stages:
 
-1. `template/contracts.ts` waliduje i normalizuje template;
-2. `template/geometry.ts` wylicza fizyczną geometrię stron, segmenty, bands,
-   obstacles i continuation;
-3. `composition/adapters/page-template.ts` buduje z niej `CompositionTemplate`, slots,
-   routes i część reguł insertionów;
-4. planner tworzy faktyczne `flowPlacements` oraz wynikające z kolizji
+1. `template/contracts.ts` validates and normalizes the template;
+2. `template/geometry.ts` calculates physical page geometry, segments, bands,
+   obstacles and continuation;
+3. `composition/adapters/page-template.ts` builds `CompositionTemplate` from it:
+   slots, routes and part of the insertion rules;
+4. the planner creates actual `flowPlacements` and the collision-derived
    `flowBarrierBoxCandidates`;
-5. renderer i debug rysują wynik w osobnych miejscach.
+5. the renderer and debug output draw the result in separate locations.
 
-Źródła: [`template/contracts.ts`](../../server/src/template/contracts.ts),
+Sources: [`template/contracts.ts`](../../server/src/template/contracts.ts),
 [`template/geometry.ts`](../../server/src/template/geometry.ts),
 [`page-template.ts`](../../server/src/composition/adapters/page-template.ts).
 
-## Mapa odpowiedzialności
+## Responsibility map
 
-| Etap | Właściciel | Wejście | Wynik używany dalej |
+| Stage | Owner | Input | Result used downstream |
 |---|---|---|---|
-| kompilacja template’u | `compileTemplateSource` w `template/contracts.ts` | YAML/obiekt template’u | zwalidowany `CompiledTemplate` z normalnymi ramami, flow i slotami |
-| fizyczna geometria strony | `pageGeometryFromTemplate` w `template/geometry.ts` | `CompiledTemplate.page` | `PageGeometry`: margins, content, bands, obstacles, segments i block frames |
-| adaptacja do composition | `compositionTemplateFromPageGeometry` w `composition/adapters/page-template.ts` | `CompiledTemplate` + `PageGeometry` | layouts, slots i routes dla pierwszej oraz kolejnych stron |
-| rezerwacja insertionów | `placeInsertionLayer` w `composition/layout/insertion-layout.ts` | flows, propozycje, slots i pomiary | placements insertionów oraz grafiki będące obstacle dla zwykłego flow |
-| układanie flow | `planFlow` w `composition/layout/flow-planner.ts` | route, slots, obstacle i metryki tekstu | linie tekstu, placements i decyzje planera |
-| rejestr miejsc flow | `registerFlowPlacements` w `composition/layout/flow-space.ts` | slots i faktyczne placements | uporządkowany rejestr także pustych miejsc |
-| rozcięcie przy kolizjach | `registerFlowBarrierBoxCandidates` w `composition/layout/flow-space.ts` | flow placements + graphic placements | kandydaci segmentów pomiędzy krawędziami flow i obstacle |
-| legalność | `evaluateCompositionPlan` w `composition/evaluation/evaluator.ts` | kompletny plan | accepted/rejected i diagnostyka |
-| obserwacja PDF | `drawCompositionDebugOverlay` oraz `renderReportPdfDetailed` w `report/renderer.ts` | wynik planu | zwykły PDF, debug overlay i artefakt do QA |
+| template compilation | `compileTemplateSource` in `template/contracts.ts` | template YAML/object | validated `CompiledTemplate` with normalized frames, flows and slots |
+| physical page geometry | `pageGeometryFromTemplate` in `template/geometry.ts` | `CompiledTemplate.page` | `PageGeometry`: margins, content, bands, obstacles, segments and block frames |
+| composition adaptation | `compositionTemplateFromPageGeometry` in `composition/adapters/page-template.ts` | `CompiledTemplate` + `PageGeometry` | layouts, slots and routes for first and subsequent pages |
+| insertion reservation | `placeInsertionLayer` in `composition/layout/insertion-layout.ts` | flows, proposals, slots and measurements | insertion placements and graphics that act as obstacles for ordinary flow |
+| flow layout | `planFlow` in `composition/layout/flow-planner.ts` | route, slots, obstacles and text metrics | text lines, placements and planner decisions |
+| flow-place registry | `registerFlowPlacements` in `composition/layout/flow-space.ts` | slots and actual placements | ordered registry including empty places |
+| collision split | `registerFlowBarrierBoxCandidates` in `composition/layout/flow-space.ts` | flow placements + graphic placements | segment candidates between flow and obstacle edges |
+| legality | `evaluateCompositionPlan` in `composition/evaluation/evaluator.ts` | complete plan | accepted/rejected status and diagnostics |
+| PDF observation | `drawCompositionDebugOverlay` and `renderReportPdfDetailed` in `report/renderer.ts` | plan result | ordinary PDF, debug overlay and QA artifact |
 
-Ta mapa opisuje istniejące funkcje, nie wprowadza nowych encji. Jeżeli kolejny
-etap potrzebuje tej samej informacji, powinien rozszerzyć wynik właściciela,
-a nie odtwarzać geometrię w evaluatorze, debug albo backendzie.
+This map describes existing functions; it does not introduce new entities. If a
+later stage needs the same information, it should extend the owner’s result
+instead of reconstructing geometry in the evaluator, debug overlay or backend.
 
-## Wykonane w tym przebiegu
+## Completed in this pass
 
-- CLI raportu zapisuje `compositionPlan` i `compositionEvaluation` użyte przy
-  renderowaniu w manifeście.
-- `page-layout-editorial-two-column` pobiera `main` `flowPlacements` z tego
-  planu; nie czyta już osobno `editorial-two-column/template.yml`.
-- Gate przelicza jednostki planu (mm) na jednostki odczytu PDF (pt) dopiero na
-  granicy pomiaru artefaktu. Sam plan pozostaje w jednostkach geometrii
-  composition.
-- Test adaptera geometrii oraz pełny composition gate przechodzą.
-- `CompositionPagePlan.chrome` zawiera obliczone ramy header band, opcjonalnej
-  reguły nagłówka, reguły footera, numeru strony i lockupu.
-- zwykły renderer oraz debug overlay używają tych samych ramek chrome; test
-  `test-report-chrome` sprawdza ich zgodność z narysowanym PDF-em.
-- trace przechowuje tę samą listę `flowBarrierBoxCandidates` co wykonywalny
-  plan; planner używa ich do wyznaczania dostępnego miejsca dla zwykłego flow,
-  a test editorial parity sprawdza identyfikatory i kolejność.
-- evaluator sprawdza rejestr `flowPlacements` niezależnie od deklarowanego
-  `hasContent`: porównuje metadane z faktycznymi liniami oraz odrzuca placement
-  poza jego slotem; regresja jest w `test-editorial-numbered-flow`.
-- evaluator sprawdza także kandydatów barier: ich dodatnią geometrię, przynależność
-  do placementu i referencje do istniejących obstacle’ów z `wrap: around`.
+- The report CLI stores the `compositionPlan` and `compositionEvaluation` used
+  for rendering in the manifest.
+- `page-layout-editorial-two-column` reads `main` `flowPlacements` from that
+  plan; it no longer reads `editorial-two-column/template.yml` separately.
+- The artifact gate converts plan units (mm) to PDF-reading units (pt) only at
+  the measurement boundary. The plan itself remains in composition geometry
+  units.
+- The geometry adapter test and the complete composition gate pass. Together
+  with the release evidence above, this confirms the current 1.0 geometry
+  contract.
+- `CompositionPagePlan.chrome` contains computed frames for the header band, the
+  optional header rule, the footer rule, the page number and the lockup.
+- The ordinary renderer and the debug overlay use the same chrome frames; the
+  `test-report-chrome` test checks their agreement with the drawn PDF.
+- The trace stores the same `flowBarrierBoxCandidates` list as the executable
+  plan. The planner uses them to determine space available to ordinary flow,
+  and the editorial parity test checks their identifiers and order.
+- The evaluator checks the `flowPlacements` registry independently of the
+  declared `hasContent`: it compares metadata with actual lines and rejects a
+  placement outside its slot; the regression is in
+  `test-editorial-numbered-flow`.
+- The evaluator also checks barrier candidates: positive geometry, membership in
+  a placement and references to existing obstacles with `wrap: around`.
 
-## Kroki
+## Follow-up verification (not a 1.0 scope expansion)
 
-1. Narysować tabelę wejście → wyjście dla każdej funkcji geometrycznej:
-   template, strona, flow, slot, segment, obstacle, placement.
-2. Ustalić, w którym miejscu powstają:
-   - granice całego flow;
-   - kolizje wewnątrz flow;
-   - faktyczne miejsca z treścią;
-   - puste miejsca niedostępne dla treści;
-   - kandydaci wynikający z punktu styku z obstacle.
-3. Dla każdego wyliczenia wskazać właściciela i zakazać jego rekonstrukcji w
-   evaluatorze, debug overlayu albo backendzie.
-4. Sprawdzić szczególnie przesuwanie `blockFrames`, rozcinanie segmentów,
-   insertion routes, growth i chrome.
-5. Dodać testy geometrii dla grafik prostokątnych, elips, poligonów, wielu
-   obstacles i przejścia między stronami.
-6. Dodać test porównujący ramę kandydata z faktycznym pierwszym i ostatnim
-   `flowPlacement` po obu stronach obstacle.
-7. Ujawnić w trace, z jakiej geometrii powstał dany placement i kandydat.
-8. Ustalić źródło geometrii dla pomiarów visual QA. Gate strony nie może
-   rekonstruować kolumn z osobnego YAML-a, jeśli CompositionPlan ma już
-   rozstrzygnięte flow i placements. Test `page-layout-editorial-two-column`
-   ma porównać rzeczywiste początki przebiegów tekstu z tym planem.
-9. Dla `page-fill-table` rozdzielić w pomiarze obszar treści od headera,
-   footera i innych elementów chrome. Następnie zapisać, które placementy
-   tabeli trafiły na każdą stronę, aby rozróżnić prawidłowy podział od zbyt
-   rzadkiej strony końcowej.
+1. Draw an input-to-output table for every geometry function: template, page,
+   flow, slot, segment, obstacle and placement.
+2. Establish where the following are created:
+   - boundaries of the complete flow;
+   - collisions inside a flow;
+   - actual places containing content;
+   - empty places unavailable to content;
+   - candidates resulting from contact with an obstacle.
+3. For every calculation, identify its owner and prohibit reconstruction in the
+   evaluator, debug overlay or backend.
+4. Pay particular attention to moving `blockFrames`, splitting segments,
+   insertion routes, growth and chrome.
+5. Add geometry tests for rectangular graphics, ellipses, polygons, multiple
+   obstacles and page transitions. These are coverage follow-ups, not new 1.0
+   behavior.
+6. Add a test comparing a candidate frame with the actual first and last
+   `flowPlacement` on both sides of an obstacle.
+7. Expose in the trace which geometry produced a given placement and candidate.
+8. Establish the geometry source for visual-QA measurements. A page gate must
+   not reconstruct columns from a separate YAML file when `CompositionPlan`
+   already resolves flows and placements. The
+   `page-layout-editorial-two-column` test must compare actual text-flow starts
+   with this plan.
+9. For `page-fill-table`, separate the content area from the header, footer and
+   other chrome elements during measurement. Then record which table placements
+   reached each page so a valid split can be distinguished from an excessively
+   sparse final page.
 
-## Kryteria ukończenia
+## 1.0 completion criteria
 
-- zmiana w template przechodzi przez geometry, planner, evaluator, debug i
-  backend bez zmiany znaczenia;
-- evaluator może wykryć placement poza ramą niezależnie od tego, co placement
-  sam deklaruje jako swój slot;
-- box kandydata jest wizualizowany jako geometria diagnostyczna, ale nie staje
-  się obstacle dla tekstu tylko dlatego, że został narysowany; faktyczną
-  barierą jest wyłącznie placement obstacle’u użyty przez planner;
-- debug pokazuje rozróżnienie: flow, obstacle, faktyczny placement i kandydat;
-- test potwierdza zgodność obliczonych i narysowanych współrzędnych.
-- test adaptera potwierdza przejście template → `PageGeometry` oraz rozcięcie
-  segmentów przez obstacle; obecnie jest to
-  [`test-page-template-adapter.mjs`](../../server/scripts/test-page-template-adapter.mjs).
+- a template change passes through geometry, planner, evaluator, debug and
+  backend without changing its meaning;
+- the evaluator can detect a placement outside its frame independently of what
+  the placement declares as its slot;
+- a candidate box is visualized as diagnostic geometry, but does not become an
+  obstacle for text merely because it was drawn; the actual barrier is only the
+  obstacle placement used by the planner;
+- debug output distinguishes flow, obstacle, actual placement and candidate;
+- a test confirms agreement between computed and drawn coordinates;
+- the adapter test confirms the template → `PageGeometry` transition and
+  obstacle-based segment splitting; currently this is
+  [`test-page-template-adapter.mjs`](../../server/scripts/test-page-template-adapter.mjs);
+- the release harness passes 39/39 checks and default `npm test` passes 23/23
+  checks.
 
-## Uwagi przeniesione do kolejnych punktów
+## Notes deferred to later points
 
-- Ostateczne miejsce reguły przesuwania `blockFrames` wymaga uzupełnienia po
-  punkcie 1 i 2. Nie należy przenosić tej reguły wcześniej.
-- Dynamiczna wysokość headera/footeru, kolejność planowania chrome oraz pełna
-  własność chrome w planie są zakresem punktu
+- The final owner of the `blockFrames` moving rule requires completion after
+  points 1 and 2. Do not move this rule earlier.
+- Dynamic header/footer height, chrome planning order and complete chrome
+  ownership in the plan are covered by
   [`12-dynamic-page-chrome.md`](12-dynamic-page-chrome.md).
-- Zakres użycia `flowBarrierBoxCandidates` w optymalizacji pozycji insertionów
-  wymaga dalszych testów z planu 04. Są już wejściem do wyznaczania miejsc,
-  w których może kontynuować zwykły flow; nie są jeszcze globalnym solverem
-  pozycji wszystkich elementów.
+- The use of `flowBarrierBoxCandidates` for insertion-position optimization
+  requires further tests under plan 04. They already feed the selection of
+  places where ordinary flow may continue; a global solver for all element
+  positions is explicitly deferred to a follow-up/1.1 scope.
 
-## Poza zakresem
+## Out of scope
 
-Nie budujemy ogólnego solvera geometrii ani pełnej semantyki CSS floatów.
+We do not build a general geometry solver or full CSS-float semantics.

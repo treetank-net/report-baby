@@ -1,109 +1,107 @@
-# Plan 12 — dynamiczny page chrome i powtarzalne flow
+# Plan 12 — dynamic page chrome and repeating flows
 
-Status: wykonany dla zakresu release’u. Dynamiczne sloty tekstowego headera,
-powtarzalny footer oraz jawny blok `lockup` mają zerową ramę startową,
-`fit_content`, wspólny pomiar i przesuwanie slotów `main`. Legacy rendererowy
-fallback logo pozostaje świadomie dla niemigrowanych, stałych template'ów;
-automatyczna materializacja lockupu z profilu marki jest osobnym zakresem 1.1.
+Status: complete for the release 1.0 scope. Dynamic text-header slots,
+repeating footers, and the explicit `lockup` block have zero starting frames,
+`fit_content`, shared measurement, and `main`-slot displacement. The legacy
+renderer logo fallback remains deliberately for unmigrated fixed templates;
+automatic lockup materialization from a brand profile is a separate 1.1 scope.
 
-Ten punkt wyciąga z wcześniejszych dokumentów pozostałą pracę dotyczącą
-headera, footera, numeracji stron i innych elementów page chrome. Punkt 02
-pozostaje zamkniętym punktem dotyczącym wspólnej geometrii ramek. Ten dokument
-opisuje nowy kontrakt zachowania chrome opartego na rzeczywistej zawartości.
+This plan extracts the remaining work on headers, footers, page numbering, and
+other page-chrome elements from earlier documents. Plan 02 remains closed and
+covers shared frame geometry. This document describes the new contract for
+chrome based on actual content.
 
-## Granica przyjęta dla release 1.0
+## Boundary adopted for release 1.0
 
-W 1.0 dynamiczny chrome jest dostępny tam, gdzie template deklaruje jawne
-flowy `header`/`footer` i ich sloty. Niemigrowane template'y zachowują swój
-stały, rendererowy fallback logo jako świadomie zachowaną kompatybilność
-wizualną; nie jest on drugim plannerem ani źródłem geometrii dynamicznego
-template'u. Automatyczne tworzenie bloku `brand-lockup` z samego profilu marki,
-usunięcie tego fallbacku ze wszystkich stałych template'ów oraz pełna
-kalibracja wizualna należą do release 1.1/1.2. Dzięki temu 1.0 ma jeden nowy
-kontrakt dynamiczny i nie zmienia bez potrzeby istniejących artefaktów.
+In 1.0, dynamic chrome is available where a template declares explicit
+`header`/`footer` flows and their slots. Unmigrated templates retain their
+fixed renderer logo fallback as deliberate visual compatibility; it is neither
+a second planner nor a source of dynamic-template geometry. Automatic creation
+of a `brand-lockup` block from the brand profile, removal of the fallback from
+all fixed templates, and full visual calibration belong to release 1.1/1.2.
+This gives 1.0 one new dynamic contract without unnecessarily changing existing
+artifacts.
 
-## Cel
+## Objective
 
-Elementy u góry i dołu strony mają być planowane tak samo jak pozostałe sloty,
-ale z jawną polityką powtarzania i jawnym trybem wysokości. Stały box jest
-dozwolonym wyborem template'u; problemem jest tylko ukryty, stały pas, który
-ogranicza `main`, mimo że template nie zadeklarował takiego chrome. Tryb
-`fit_content` ma wyliczać geometrię z zawartości zamiast z pustej ramy.
+Elements at the top and bottom of a page must be planned like other slots, but
+with explicit repeat policy and an explicit height mode. A fixed box is a valid
+template choice; the problem is only a hidden fixed band that limits `main`
+when the template did not declare that chrome. `fit_content` must derive
+geometry from content instead of an empty frame.
 
-Docelowy przepływ dla każdej strony:
+Target flow for every page:
 
 ```text
 layoutForPage(page)
-  → utworzenie slotów layoutu
-  → powtarzalny header
-  → wymagane insertiony i inne flow o wyższym priorytecie
-  → walidacja kolizji i twardych wymagań
-  → flow main w pozostałej przestrzeni
-  → powtarzalny footer i elementy zależne od finalnej strony
-  → projekcja page chrome do renderera
+  → create layout slots
+  → repeating header
+  → required insertions and other higher-priority flows
+  → validate collisions and hard requirements
+  → main flow in the remaining space
+  → repeating footer and final-page-dependent elements
+  → project page chrome to the renderer
 ```
 
-„Header” nie jest nową encją. Jest zwykłym flow z `repeat: each-page`. Różnicą
-jest polityka cyklu życia, a nie osobny mechanizm layoutu lub pomiaru.
+“Header” is not a new entity. It is an ordinary flow with `repeat: each-page`.
+The difference is lifecycle policy, not a separate layout or measurement
+mechanism.
 
-## Stan obecny
+## Current implementation
 
-- `CompositionPagePlan.chrome` zawiera `headerBand`, opcjonalny
-  `headerRule`, `footerRule`, `pageNumber` i `lockup`;
-- `pageChrome()` w `server/src/report/renderer.ts` wylicza wysokość header band
-  z `reserved_bands.header` i buduje numer strony poza tekstowym flow;
-- template'y `showcase-report` i `showcase-report-band` mają osobny flow
-  `header`, ale jego slot tytułu jest obecnie stałą ramą;
-- większość template'ów `pages/editorial-*` oraz `default-report` deklaruje
-  tylko `reserved_bands.header` i `reserved_bands.footer`, bez tekstowego
-  flowu `header`; brand/logo pojawia się wtedy wyłącznie z rendererowego
-  chrome;
-- `document-layout.ts` planuje zwykłe flow przed powtarzanymi flowami, więc
-  dynamiczny header nie może jeszcze przesuwać wcześniej ułożonego `main`;
-- backend obsługuje istniejące placeholdery `{{page.number}}` i
-  `{{page.count}}`, ale numeracja w `pageChrome` jest nadal drugim skrótem
-  implementacyjnym;
-- `reserved_bands.header` pozostaje przejściowym źródłem geometrii, dopóki
-  planowanie headera nie przejmie jego odpowiedzialności.
+- `CompositionPagePlan.chrome` contains `headerBand`, optional `headerRule`,
+  `footerRule`, `pageNumber`, and `lockup`;
+- `pageChrome()` in `server/src/report/renderer.ts` derives header-band height
+  from `reserved_bands.header` and builds the page number outside the text flow;
+- `showcase-report` and `showcase-report-band` templates have a separate
+  `header` flow, but its title slot is currently a fixed frame;
+- most `pages/editorial-*` templates and `default-report` declare only
+  `reserved_bands.header` and `reserved_bands.footer`, without a text `header`
+  flow; brand/logo then appears only through renderer chrome;
+- `document-layout.ts` currently plans ordinary flows before repeated flows, so
+  a dynamic header cannot yet displace an already laid-out `main`;
+- the backend supports `{{page.number}}` and `{{page.count}}`, but numbering in
+  `pageChrome` is still a second implementation shortcut;
+- `reserved_bands.header` remains a transitional geometry source until header
+  planning owns this responsibility.
 
-## Czy mamy już jednoznaczną definicję template'u i danych?
+## Do we have one unambiguous template and data definition?
 
-Nie. Mamy już wszystkie ważne klocki parsera (`slots`, `flows`, `repeat`,
-`fit_content`, `overflow`), ale obecny kod nie składa ich jeszcze w jeden
-kontrakt chrome:
+Not yet in every runtime path. The parser already has the important building
+blocks (`slots`, `flows`, `repeat`, `fit_content`, `overflow`), but the current
+code does not yet compose them into one complete chrome contract:
 
-- template deklaruje ramy i kolejność slotów, ale nie przechowuje ich treści;
-- treść przychodzi w `CompositionInput.flows` i jest dopasowywana do slotów;
-- `lockup` jest zwykłym atomowym blokiem composition; slot `type: lockup` jest
-  adaptowany do kompatybilnego slotu `kind: block`;
-- numer strony jest obecnie rysowany równolegle przez renderer i tylko częściowo
-  opisany przez flow `footer`;
-- `frame.height` jest obecnie wymagane i dodatnie. `fit_content: true` istnieje
-  w parserze, ale pełne zwinięcie pustego slotu do zera wymaga zmiany
-  materializacji layoutu.
+- the template declares frames and slot order, but does not store their content;
+- content arrives in `CompositionInput.flows` and is matched to slots;
+- `lockup` is an ordinary atomic composition block; a `type: lockup` slot is
+  adapted to a compatible `kind: block` slot;
+- the page number is currently drawn in parallel by the renderer and is only
+  partly described by the `footer` flow;
+- `frame.height` is currently required and positive. `fit_content: true` exists
+  in the parser, but fully collapsing an empty slot to zero requires layout
+  materialization changes.
 
-Poniższy kontrakt jest kontraktem punktu 12. Przykład rozdziela
-źródło danych od geometrii template'u, żeby nie powstał drugi, ukryty format
-chrome.
+The following is the Plan 12 contract. It separates data sources from template
+geometry so that no second hidden chrome format is introduced.
 
-### Źródło prawdy dla poszczególnych danych
+### Source of truth for each value
 
-| Artefakt | Odpowiada za | Nie odpowiada za |
+| Artifact | Owns | Does not own |
 |---|---|---|
-| `CompositionInput.flows` | tekst i bloki do pokazania oraz kolejność w obrębie flowu | politykę kontynuacji, pozycję, rozmiar i powtarzanie na stronach |
-| `PlacementRequests.insertion_flows` | jednorazowe lub request-owned sloty, ich `start_page` i `repeat` | politykę kontynuacji; tę definiuje route template'u, a dynamiczna deklaracja może korzystać tylko z już dozwolonego route'u |
-| `CompositionInput.assets` / profil marki | źródło logo/mark oraz domyślną nazwę marki | wybór strony i boxa |
-| template `slots` | rodzaj slotu, frame, `fit_content`, `grow`, `overflow`, dopuszczalne role/rodzaje | treść bloku |
-| template `flows` | kolejność slotów, `repeat: each-page`, `start_page` i layoutowy harmonogram route'u | pomiar tekstu i rysowanie |
-| `CompositionPlan` | zaakceptowane placementy, boxy, obstacles i diagnostykę | wymyślanie brakującej treści |
-| `CompositionPagePlan.chrome` | projekcję wynikowych boxów/dekoracji dla backendu | drugi pomiar lub drugi kontrakt numeracji |
+| `CompositionInput.flows` | text and blocks to display, and order within a flow | continuation policy, position, size, or page repetition |
+| `PlacementRequests.insertion_flows` | one-off/request-owned slots, `start_page`, and `repeat` | continuation policy; the template route defines it, and a dynamic declaration may use only an already permitted route |
+| `CompositionInput.assets` / brand profile | logo/mark source and default brand name | page and box selection |
+| template `slots` | slot kind, frame, `fit_content`, `grow`, `overflow`, and allowed roles/kinds | block content |
+| template `flows` | slot order, `repeat: each-page`, `start_page`, and the route's layout schedule | text measurement and drawing |
+| `CompositionPlan` | accepted placements, boxes, obstacles, and diagnostics | inventing missing content |
+| `CompositionPagePlan.chrome` | projection of result boxes/decorations for the backend | a second measurement or numbering contract |
 
-### Kanoniczny przykład danych wejściowych
+### Canonical input example
 
-W docelowym kontrakcie header i footer są zwykłymi nazwanymi flowami. Lockup
-jest blokiem treści, tak jak tabela lub wykres; nie jest klasą `Header` ani
-rendererowym wyjątkiem. Publiczne pola są snake_case, a adapter normalizuje je
-do camelCase w `CompositionBlock`.
+In the target contract, header and footer are ordinary named flows. Lockup is a
+content block like a table or chart; it is not a `Header` class or renderer
+exception. Public fields are snake_case, and the adapter normalizes them to
+camelCase in `CompositionBlock`.
 
 ```yaml
 flows:
@@ -148,27 +146,27 @@ assets:
     alt: ACME Logistics
 ```
 
-`lockup.mark_asset_id` i `lockup.label` są jedynymi danymi składowymi lockupu.
-Brak jednego z nich usuwa tylko brakujący element i jego odstęp; jawny blok bez
-obu wartości jest odrzucany jako pusty, a brak obu wartości z domyślnego
-profilu marki oznacza, że adapter w ogóle nie materializuje bloku.
-Profil marki może dostarczyć te same wartości jako domyślne; adapter
-materializuje wtedy blok `brand-lockup` przed planowaniem. Gdy request dostarcza
-blok jawnie, wygrywa on z wartością domyślną. Nie utrzymujemy równoległych pól
-`name`, `asset`, `description` ani osobnego obiektu `Header`.
+`lockup.mark_asset_id` and `lockup.label` are the only lockup component data.
+Missing one removes only that component and its gap; an explicit block with
+both values missing is rejected as empty, and missing both values from the
+brand profile means the adapter does not materialize the block at all. The
+brand profile may provide the same values as defaults; the adapter then
+materializes `brand-lockup` before planning. An explicit request block wins
+over the default. We do not keep parallel `name`, `asset`, or `description`
+fields, nor a separate `Header` object.
 
-Dotychczasowe pola `title`, `subtitle`, `period`, `brand`, `header` i `footer`
-pozostają wejściem migracyjnym. Adapter mapuje je do powyższych flowów i bloków;
-nie są one drugim właścicielem geometrii. Opcjonalna projekcja
-`{{flow.title.blocks[0].text}}` może pozostać ograniczonym, tylko do odczytu
-seamem migracyjnym, ale nie jest wymagana w kanonicznym przykładzie i nie może
-oznaczać dowolnego dostępu do obiektu.
+Existing `title`, `subtitle`, `period`, `brand`, `header`, and `footer` fields
+remain migration input. The adapter maps them to the flows and blocks above;
+they are not a second owner of geometry. An optional projection such as
+`{{flow.title.blocks[0].text}}` may remain as a restricted read-only migration
+seam, but it is not required by the canonical example and must not mean
+arbitrary object access.
 
-### Kanoniczny przykład template'u
+### Canonical template example
 
-Template opisuje tylko *gdzie* i *jak* ułożyć te bloki. Treść nie może być
-wpisana w `slots.footer-page` ani `slots.header-title`; pochodzi z flowu.
-Poniższy fragment używa istniejących nazw kluczy YAML (`type`, `frame`,
+The template describes only *where* and *how* to place these blocks. Content
+must not be written into `slots.footer-page` or `slots.header-title`; it comes
+from a flow. The fragment uses existing YAML keys (`type`, `frame`,
 `continuation_frame`, `fit_content`, `overflow`, `gap`, `role`):
 
 ```yaml
@@ -219,208 +217,208 @@ flows:
     repeat: each-page
 ```
 
-Pole `continuation` występuje tu wyłącznie przy flowach template'u. Nie ma go
-w `CompositionInput`, ponieważ input dostarcza treść, a nie politykę route'u.
-Obecny parser może jeszcze przyjąć stare pole inputu jako metadane migracyjne,
-ale nie może ono konkurować z polityką skompilowanego template'u.
+The `continuation` field appears here only on template flows. It is not in
+`CompositionInput`, because input provides content, not route policy. The
+current parser may still accept the old input field as migration metadata, but
+it must not compete with compiled-template policy.
 
-W tym przykładzie `frame.height` jest minimalną/stałą ramą wybraną przez
-template, natomiast `fit_content: true` pozwala rosnąć do pomierzonej treści.
-W pełnej migracji parser i materializer layoutu muszą dodatkowo dopuścić
-`height: 0` dla pustego dynamicznego slotu albo wyliczać wysokość grupy po
-pomiarze, bez fałszywego minimum z ramy. `overflow: reject` jest tu jawne:
-przekroczenie wysokości lub kolizja odrzuca kandydata.
+In this example `frame.height` is the template-selected minimum/fixed frame,
+while `fit_content: true` permits growth to measured content. A full migration
+must additionally allow `height: 0` for an empty dynamic slot, or calculate
+group height after measurement without a false frame minimum. `overflow:
+reject` is explicit: exceeding the height or colliding rejects the candidate.
 
-Kolejność w `flows.header.slots` jest kolejnością rozpatrywania bloków, nie
-deklaracją trzech konkurujących headerów. Pozycje poziome wynikają z ramek:
-lockup i okres zajmują pierwszy wiersz, a tytuł leży niżej. Jeśli potrzebujemy
-innej relacji, zmieniamy ramy template'u, nie dodajemy warunku w rendererze.
+The order in `flows.header.slots` is block consideration order, not a
+declaration of three competing headers. Horizontal positions come from frames:
+lockup and period occupy the first row, while the title is below. If a
+different relationship is needed, change template frames instead of adding a
+renderer condition.
 
-### Jedna strona — przebieg i własność danych
+### One page — flow and data ownership
 
 ```text
-1. template_ref → wybór first/continuation/title layoutu
-2. route.layouts + slotsByLayout → sprawdzenie, czy header/footer działa na tej stronie
-3. CompositionInput → normalizacja bloków header/footer/main i assetów marki
-4. pomiar lockupu, tytułu, okresu i footer-page (placeholdery mają wspólny resolver)
-5. placement headera i wymaganych insertionów → obstacles i wynikowa granica main
-6. placement main w pozostałej przestrzeni
-7. placement footeru po ustaleniu legalnej strony
-8. CompositionPlan → evaluator → pageChrome jako projekcja do PDF/debug/CLI
+1. template_ref → choose first/continuation/title layout
+2. route.layouts + slotsByLayout → check whether header/footer is active on this page
+3. CompositionInput → normalize header/footer/main blocks and brand assets
+4. measure lockup, title, period, and footer-page (placeholders share one resolver)
+5. place header and required insertions → obstacles and resulting main boundary
+6. place main in the remaining space
+7. place footer after the page is known to be legal
+8. CompositionPlan → evaluator → pageChrome as a projection to PDF/debug/CLI
 ```
 
-Header i footer nie konkurują o tę samą treść. Konkurują wyłącznie ich boxy i
-obstacles; legalność wynika z geometrii, pokrycia bloków, polityki overflowu i
-limitów strony. `CompositionPlan.decisions` służy obserwowalności, nie jest
-źródłem prawdy legalności.
+Header and footer do not compete for the same content. Only their boxes and
+obstacles compete; legality comes from geometry, block coverage, overflow
+policy, and page limits. `CompositionPlan.decisions` is for observability, not
+the source of legality.
 
-### Uwaga o `intro`, metrykach i wykresie
+### Note on `intro`, metrics, and charts
 
-W bieżących template'ach `showcase-report*` lista `main.slots` zawiera
-`intro`, `metric-1…metric-3`, `chart` i `content`. To jest historyczny skrót
-adaptera, a nie docelowa własność tych treści. Docelowo `intro` powinno mieć
-własny flow, metryki mogą być grupą bloków w flow `metrics`, a wykres własnym
-flowem `chart`; `main` powinien prowadzić główny tekst przez `content`.
-Nie tworzymy osobnego flowu dla każdego slotu metryki. Jeżeli wykres jest
-rzeczywiście elementem liniowego artykułu, może pozostać blokiem `chart` w
-`main`; jeżeli template rezerwuje dla niego osobny obszar otwarcia, należy go
-przenieść do flowu `chart`. O przynależności decyduje cykl życia i route, nie
-sam `block kind`.
+In current `showcase-report*` templates, `main.slots` contains `intro`,
+`metric-1…metric-3`, `chart`, and `content`. This is a historical adapter
+shortcut, not the target ownership of that content. In the target, `intro`
+should have its own flow, metrics may be a block group in a `metrics` flow, and
+the chart may have its own `chart` flow; `main` should carry the primary text
+through `content`. We do not create a separate flow for every metric slot. If a
+chart is genuinely part of a linear article, it may remain a `chart` block in
+`main`; if the template reserves a separate opening area, move it to `chart`.
+Lifecycle and route, not the block kind alone, decide ownership.
 
-### Co dokładnie znaczy `continuation`?
+### What exactly does `continuation` mean?
 
-W repozytorium występuje kilka podobnie nazwanych pól. Nie są one zamienne i
-nie wprowadzamy nowej encji ani pola `continuation_block`:
+The repository contains several similarly named fields. They are not
+interchangeable, and we do not introduce a new entity or a
+`continuation_block` field:
 
-| Pole | Znaczenie | Status |
+| Field | Meaning | Status |
 |---|---|---|
-| `CompiledTemplateFlow.continuation` → `CompositionFlowRoute.continuation` | twarda polityka przekroczenia granicy strony przez bieżącą instancję flowu; przejście między kolejnymi slotami tej samej strony nadal jest dozwolone | obecnie używane przez planner; template jest twardym ograniczeniem |
-| `CompositionInput.flows[id].continuation` → `CompositionFlow.continuation` | historyczna deklaracja inputu o możliwości kontynuacji | sprzeczna z własnością template'u; usuwamy z publicznego inputu i modelu |
-| `PlacementRequests.insertion_flows[*].continuation` | historyczna próba ustawiania polityki request-owned flowu | nie jest docelowym override'em; request może wskazać sloty, ale politykę dostaje z template route'u |
-| `continuation_slots` → `continuationSlots` | historyczna lista slotów używana po przejściu z pierwszej strony/layoutu | pole zostanie usunięte; docelowo legalne sloty wynikają z `layoutForPage(page)` i `slotsByLayout` |
-| `continuation_frame` → `continuationFrame` | alternatywna rama tego samego slotu na continuation layout | obecnie używana przy materializacji slotu; nie decyduje o zgodzie na przejście |
-| `page.continuation` → `PageGeometry.continuation` | alternatywna geometria strony (marginesy, bandy, segmenty) | obecnie używana przez adapter; to geometria, nie polityka flowu |
-| `repeat: each-page` | utworzenie osobnej instancji tego samego flowu na każdej już materializowanej stronie | obecnie planowane po zwykłych flowach; każda instancja jest wymuszana z `continuation: forbidden` |
+| `CompiledTemplateFlow.continuation` → `CompositionFlowRoute.continuation` | hard policy for crossing the page boundary for the current flow instance; moving between slots on the same page remains allowed | currently used by the planner; the template is the hard constraint |
+| `CompositionInput.flows[id].continuation` → `CompositionFlow.continuation` | historical input declaration of whether a flow may continue | conflicts with template ownership; remove from public input and model |
+| `PlacementRequests.insertion_flows[*].continuation` | historical attempt to set policy for a request-owned flow | not a target override; a request may point to slots, while policy comes from the template route |
+| `continuation_slots` → `continuationSlots` | historical slot list used after moving from the first page/layout | remove; legal slots come from `layoutForPage(page)` and `slotsByLayout` |
+| `continuation_frame` → `continuationFrame` | alternate frame for the same slot on a continuation layout | currently used during slot materialization; it does not decide permission to continue |
+| `page.continuation` → `PageGeometry.continuation` | alternate page geometry (margins, bands, segments) | currently used by the adapter; geometry, not flow policy |
+| `repeat: each-page` | creates an instance of the same flow on every already materialized page | currently planned after ordinary flows; each instance is forced to `continuation: forbidden` |
 
-`continuation` pozostaje metadanym template route'u. Opisuje, czy dany flow w
-tym konkretnym szablonie jest przeznaczony do kontynuowania po wyczerpaniu
-bieżącej strony. Przykładowo bottom bar z przypisami może mieć
-`continuation: allowed`, a jego slot `grow.max_height: 0.5` (50% wysokości
-strony); page-local sidebar z ciekawostkami ma `continuation: forbidden`. Flaga
-nie tworzy jednak miejsca sama z siebie: harmonogram layoutów musi jeszcze
-udostępnić kompatybilny slot na następnej stronie.
+`continuation` remains template-route metadata. It says whether a flow in this
+specific template is intended to continue after the current page is exhausted.
+For example, a bottom bar with footnotes may use `continuation: allowed` and a
+slot with `grow.max_height: 0.5` (50% of page height); a page-local sidebar of
+facts uses `continuation: forbidden`. The flag does not create space by itself:
+the layout schedule must still expose a compatible slot on the next page.
 
-`continuation` nie oznacza „nie używaj continuation layoutu”, „nie przechodź do
-następnego slotu na tej samej stronie” ani „nie twórz następnej strony dla
-całego dokumentu”. Dokument input dostarcza wyłącznie treść; nie może zmienić
-tej właściwości template'u.
+`continuation` does not mean “do not use a continuation layout”, “do not move
+to the next slot on the same page”, or “do not create a next page for the
+whole document”. Document input provides content only and cannot change this
+template property.
 
-Przykłady rozróżniające te przypadki:
+Examples:
 
-| Flow i route | Co może zrobić jedna instancja |
+| Flow and route | What one instance may do |
 |---|---|
-| `main`, route ma `content` na layoutach kolejnych stron | zapełnić slot strony 1, przejść do `content` na stronie 2 i dalej |
-| `main`, route ma `continuation: allowed`, a layout strony 2 ma `content` | przejść na stronę 2, o ile `content` ma legalną pojemność |
-| `sidebar`, route ma `continuation: forbidden`, a treść nie mieści się na stronie 1 | pozostała treść daje błąd/residual zamiast strony 2 |
-| `footer`, `repeat: each-page`, `continuation: forbidden` | zostać zaplanowany osobno na każdej już utworzonej stronie; nie przenieść jednego placementu na kolejną |
-| `quotes`, `continuation: allowed`, `insertion_slots` na stronach 2–5 | przypisywać kolejne quote'y do puli slotów kolejnych stron zgodnie z route'em |
-| `quotes`, `continuation: forbidden` | wymagać, aby cała instancja quote-flow zmieściła się w dozwolonych slotach bieżącej strony/route'u |
+| `main`, route has `content` on subsequent layouts | fill page-1 slot, move to `content` on page 2, and continue |
+| `main`, route has `continuation: allowed`, page-2 layout has `content` | move to page 2 if `content` has legal capacity |
+| `sidebar`, route has `continuation: forbidden`, content does not fit page 1 | leave a diagnostic/residual instead of page 2 |
+| `footer`, `repeat: each-page`, `continuation: forbidden` | plan separately on every already materialized page; do not move one placement to the next |
+| `quotes`, `continuation: allowed`, `insertion_slots` on pages 2–5 | assign later quotes to the next pages' slot pool according to the route |
+| `quotes`, `continuation: forbidden` | require the whole quote-flow instance to fit the allowed slots of the current page/route |
 
-Docelowo utrzymujemy jedną flagę polityki `continuation` i tylko w template
-route. Legalność przejścia jest przecięciem tej polityki z harmonogramem
-layoutów: `allowed` bez kompatybilnego slotu nadal kończy się błędem, a
-`forbidden` blokuje przejście nawet wtedy, gdy taki slot istnieje.
+The target keeps one `continuation` policy flag, only on the template route.
+Legal continuation is the intersection of that policy with the layout schedule:
+`allowed` without a compatible slot still fails, and `forbidden` blocks the
+move even when such a slot exists.
 
-`continuation_slots` jest oznaczone do usunięcia w refaktoryzacji. Nie będziemy
-przenosić go do auxiliary/insertion flowów. `continuation_frame` nadal opisuje
-wyłącznie geometrię; podczas migracji może zostać zachowane, dopóki sloty nie
-będą w pełni wybierane przez layoutowy harmonogram.
+`continuation_slots` is marked for removal during refactoring. It will not be
+moved into auxiliary/insertion flows. `continuation_frame` describes geometry
+only and may remain during migration until slots are fully selected by the
+layout schedule.
 
-### Zgodność z dotychczasową dokumentacją
+### Consistency with existing documentation
 
-Po porównaniu z [kanonicznym opisem Composition](../composition/README.md),
-planem 01, 02, 07 oraz audytem Astra wynik jest następujący:
+Comparison with the [canonical Composition description](../composition/README.md),
+Plans 01, 02, and 07, and the Astra audit gives this result:
 
-| Obszar | Zgodność | Wniosek |
+| Area | Consistency | Conclusion |
 |---|---|---|
-| `main` nie przyjmuje insertion slots ani quote'ów | zgodne | plan 12 tego nie zmienia; chrome i insertiony pozostają poza głównym strumieniem |
-| template jest właścicielem geometrii, planner placementów, evaluator legalności, renderer wykonania | zgodne | `pageChrome` pozostaje projekcją, a nie drugim plannerem |
-| `{{page.number}}` i `{{page.count}}` jako jeden tekstowy placement | zgodne | zachowujemy istniejącą składnię i nie dodajemy aliasów |
-| `reserved_bands` jako obecne źródło geometrii | zgodne po rozdzieleniu czasu | dziś jest aktywne; dopiero migracja 12 może zastąpić je granicą z aktywnych slotów |
-| repeated flow planowany po zwykłym flowie | zgodne z obecnym stanem, nie z celem 12 | dokumentacja Astra opisuje fakt; punkt 12 jawnie proponuje zmianę kolejności i wymaga osobnych regresji |
-| `CompositionInput.flows[*].continuation` jako właściciel reguły | niespójne z docelową własnością | input ma dostarczać treść; pole usuwamy, aby nie konkurowało z template route'em |
-| `PlacementRequests.insertion_flows[*].continuation` jako override template'u | niespójne z docelową własnością | request nie może ustawiać polityki; dynamiczny flow musi korzystać z route'u o właściwej polityce |
-| `continuation_slots` dla każdego flowu | świadomie usuwane | obecny parser i adapter mają to pole, ale docelowo legalne sloty wynikają z harmonogramu layoutów; nie rozszerzamy tej ścieżki |
-| `overflow`, `gap`, `fit_content` dla każdego slotu | częściowo zgodne | parser je kompiluje, lecz adapter composition gubi `overflow` i `gap`, a block slots nie przenoszą `fit_content`; plan 12 opisuje pracę przyszłą, nie aktualną gwarancję |
-| `route.layouts` jako biała lista | wymaga korekty nazwy | to pozycyjny harmonogram layoutów; `slotsByLayout` jest mapą slotów, a nie globalnym allowlistem |
-| `start_page` zawsze walidowane | luka | ordinary flow jest walidowany, repeated flow może dziś nie wykonać się w ogóle, gdy start wypada za liczbą już utworzonych stron |
-| `lockup` jako block kind | zgodne | input, adapter, slot, capability PDF i test dynamic-chrome traktują lockup jak zwykły blok atomowy |
+| `main` does not accept insertion slots or quotes | consistent | Plan 12 does not change this; chrome and insertions remain outside the main stream |
+| template owns geometry, planner owns placements, evaluator owns legality, renderer executes | consistent | `pageChrome` remains a projection, not a second planner |
+| `{{page.number}}` and `{{page.count}}` as one text placement | consistent | retain existing syntax and add no aliases |
+| `reserved_bands` as current geometry source | consistent after temporal separation | active today; Plan 12 may replace it with the boundary from active slots |
+| repeated flow planned after ordinary flow | consistent with current state, not with Plan 12 target | Astra documentation records the fact; Plan 12 explicitly proposes a new order and requires regressions |
+| `CompositionInput.flows[*].continuation` owns the rule | inconsistent with target ownership | input supplies content; remove the field so it cannot compete with the template route |
+| `PlacementRequests.insertion_flows[*].continuation` overrides template | inconsistent with target ownership | request cannot set policy; dynamic flow must use a route with the proper policy |
+| `continuation_slots` for every flow | deliberately removed | current parser/adapter still has the field, but target legal slots come from layout scheduling |
+| `overflow`, `gap`, `fit_content` for every slot | partially consistent | parser compiles them, but the composition adapter currently drops `overflow`/`gap`, and block slots do not carry `fit_content`; Plan 12 describes future work, not a current guarantee |
+| `route.layouts` as allowlist | name needs correction | it is a positional layout schedule; `slotsByLayout` maps slots, not a global allowlist |
+| `start_page` always validated | gap | ordinary flow is validated; a repeated flow may currently do nothing when its start is beyond already-created pages |
+| `lockup` as a block kind | consistent | input, adapter, slot, PDF capability, and dynamic-chrome test treat lockup as an ordinary atomic block |
 
-W konsekwencji nie ma sprzeczności w samym kierunku architektury, ale byłyby
-sprzeczności, gdyby fragmenty planu 12 były czytane jako opis aktualnego
-runtime. W tym dokumencie każda taka różnica jest teraz oznaczona jako
-`obecnie`, `docelowo` albo `luka do migracji`.
+There is no contradiction in the architectural direction, but there would be a
+contradiction if Plan 12 were read as a description of today's runtime. Each
+such difference is marked as `current`, `target`, or a `migration gap` in this
+document.
 
-## Audyt aktualnych definicji chrome
+## Audit of current chrome definitions
 
-Ta migracja nie ma zachowywać backward compatibility wewnętrznych funkcji ani
-starych ścieżek kodu. Ma zachować dotychczasowy wygląd i znaczenie dokumentu,
-o ile nie zmieniamy tego świadomie w nowym kontrakcie. Obecne źródła chrome są
-rozproszone:
+This migration does not preserve backward compatibility of internal functions
+or old code paths. It preserves the existing document's appearance and
+meaning unless the new contract deliberately changes them. Current chrome
+sources are distributed:
 
-| Źródło | Co definiuje obecnie | Rola docelowa |
+| Source | What it currently defines | Target role |
 |---|---|---|
-| `page.reserved_bands.header/footer` | stały obszar odejmowany od segmentów flow | wynikowa granica geometrii, wyliczana z aktywnych slotów headera/footera |
-| `slots.header`, `header-period` | tekstowe ramy nagłówka w `showcase-report*` | zwykłe sloty powtarzalnego flow, mierzone przed `main` |
-| `slots.header-lockup` | slot typu `block` z `allowedBlockKinds: [lockup]` | grupa logo + nazwa marki, której geometria jest widoczna w planie |
-| `flows.header` | powtarzanie headera od zadeklarowanej strony | jedyna reguła specjalna: `repeat: each-page` |
-| `slots.footer` + `flows.footer` | stały slot i powtarzany footer | zwykły powtarzalny flow z wygenerowanymi placeholderami |
-| `CompositionPagePlan.chrome` | ramy header band, reguły, footer, numer strony i lockup | projekcja wynikowej geometrii do rendererów |
-| `pageChrome()` / `drawReportChrome()` | stałe bandy, logo, brand name, reguły i `${page} / ${pageCount}` | renderer dekoracji; bez osobnego właściciela geometrii treści |
-| `pdf.header_*` | mieszanka aktywnych wartości i historycznych fallbacków | tylko wartości używane przez nowy seam; reszta do usunięcia po testach |
-| `chrome.report_lockup.*` | rozmiar logo, rozmiar nazwy, wyrównanie i `gap_mm` | domyślny styl wewnętrznego layoutu lockupu |
+| `page.reserved_bands.header/footer` | fixed area subtracted from flow segments | resulting geometry boundary derived from active header/footer slots |
+| `slots.header`, `header-period` | text frames in `showcase-report*` | ordinary slots of a repeating flow measured before `main` |
+| `slots.header-lockup` | `block` slot with `allowedBlockKinds: [lockup]` | logo + brand-name group whose geometry is visible in the plan |
+| `flows.header` | header repetition from the declared page | only special rule: `repeat: each-page` |
+| `slots.footer` + `flows.footer` | fixed slot and repeating footer | ordinary repeating flow with generated placeholders |
+| `CompositionPagePlan.chrome` | header-band frame, rules, footer, page number, and lockup | projection of resulting geometry to renderers |
+| `pageChrome()` / `drawReportChrome()` | fixed bands, logo, brand name, rules, and `${page} / ${pageCount}` | decoration renderer; no separate owner of content geometry |
+| `pdf.header_*` | mixture of active values and historical fallbacks | only values used by the new seam; remove the rest after tests |
+| `chrome.report_lockup.*` | logo size, name size, alignment, and `gap_mm` | default internal lockup layout style |
 
-`chrome.lockup.*` w tym samym `render-config.yml` dotyczy slajdów (PPTX/SVG),
-nie raportowego page chrome. Nie należy mieszać tych dwóch układów w jednym
-module; można jedynie zachować zgodną semantykę odstępu.
+`chrome.lockup.*` in the same `render-config.yml` concerns slides (PPTX/SVG),
+not report page chrome. Do not mix the two layouts in one module; only retain
+compatible gap semantics.
 
-### Co jest aktywne, a co przejściowe
+### Active and transitional pieces
 
-- Aktywnym kontraktem composition są named flows, sloty, `repeat`,
-  `fit_content`, `grow`, reserved bands i wynikowe placementy.
-- Aktywnym źródłem wizualnego odstępu raportowego lockupu jest obecnie
-  `chrome.report_lockup.standard.gap_mm` lub wariant `continuation`, używany
-  bezpośrednio przez `drawReportChrome()`.
-- `CompiledTemplateSlot.gap` jest parsowany wyłącznie dla slotu `lockup`, ale
-  adapter composition nie przekazuje go do `CompositionSlotTemplate`, a
-  raportowy renderer go nie odczytuje. Nie wolno udawać, że template już
-  kontroluje ten odstęp.
+- The active composition contract consists of named flows, slots, `repeat`,
+  `fit_content`, `grow`, reserved bands, and resulting placements.
+- The active source for report lockup visual spacing is currently
+  `chrome.report_lockup.standard.gap_mm` or the `continuation` variant, used
+  directly by `drawReportChrome()`.
+- `CompiledTemplateSlot.gap` is parsed only for a `lockup` slot, but the
+  composition adapter does not pass it to `CompositionSlotTemplate`, and the
+  report renderer does not read it. Do not claim the template controls this gap
+  yet.
 - `PDF_CONFIG.headerBandHeight`, `headerRepeatBandHeight`, `headerTitleTop`,
-  `headerBandTitleTop`, `headerRepeatTopLineY` i `headerRepeatTitleY` są
-  kandydatami do usunięcia lub scalenia po dodaniu nowego kalkulatora. Ich
-  obecność w YAML nie oznacza, że każdy wpływa na raportowy composition.
-- `pageChrome()` ma fallback do `PDF_CONFIG.headerBandHeight`, nawet gdy dany
-  layout nie deklaruje bandu headera. To jest źródło pustej przestrzeni, a nie
-  wymaganie nowego modelu.
+  `headerBandTitleTop`, `headerRepeatTopLineY`, and `headerRepeatTitleY` are
+  candidates for removal or merging after adding the new calculator. Their
+  presence in YAML does not mean that each affects report composition.
+- `pageChrome()` falls back to `PDF_CONFIG.headerBandHeight` even when a layout
+  declares no header band. This causes empty space; it is not a requirement of
+  the new model.
 
-## Lockup: logo, nazwa marki i odstęp
+## Lockup: logo, brand name, and gap
 
-### Zachowanie obecne
+### Current behavior
 
-Raportowy renderer wybiera wariant `standard` albo `continuation` z
-`chrome.report_lockup`. Logo jest dopasowywane przez `drawContainedImage()` do
-`mark_width_mm` albo `full_logo_width_mm` i `max_height_mm`. Nazwa marki jest
-rysowana obok rzeczywiście wyrenderowanej szerokości logo z odstępem
-`gap_mm`, a jej baseline jest wyrównywany względem wysokości logo.
+The report renderer selects the `standard` or `continuation` variant from
+`chrome.report_lockup`. The logo is fitted by `drawContainedImage()` to
+`mark_width_mm` or `full_logo_width_mm` and `max_height_mm`. The brand name is
+drawn beside the actually rendered logo width with `gap_mm`, and its baseline
+is aligned to the logo height.
 
-Warto zachować ten wygląd jako punkt odniesienia:
+Retain this appearance as the reference point:
 
-- wariant standardowy i continuation mogą mieć różne wymiary oraz font;
-- wyrównanie domyślne pozostaje `middle`;
-- odstęp jest poziomy i liczony od faktycznego bounds logo, nie od pustej ramy;
-- nazwa marki jest uppercase, tak jak obecnie;
-- jeżeli asset logo nie istnieje, obecny renderer nadal rezerwuje jego
-  domyślne wymiary. W nowym kontrakcie ten przypadek powinien zwijać brakujący
-  element zamiast tworzyć niewidoczny odstęp.
+- standard and continuation variants may have different dimensions and fonts;
+- the default alignment remains `middle`;
+- the gap is horizontal and measured from the actual logo bounds, not an empty
+  frame;
+- the brand name is uppercase as it is today;
+- if the logo asset is missing, the current renderer still reserves its default
+  dimensions. Under the new contract the missing element should collapse
+  instead of creating invisible space.
 
-### Kontrakt po migracji
+### Contract after migration
 
-Lockup jest jednym złożonym slotem/grupą headera, a nie dwoma niezależnymi
-flowami. Jego kanoniczny model ma dwa opcjonalne content bounds:
+Lockup is one composite header slot/group, not two independent flows. Its
+canonical model has two optional content bounds:
 
 ```text
 lockup group
-  → mark (asset, opcjonalny)
-  → gap_mm (tylko gdy mark i label istnieją)
-  → label (tekst marki/opis marki, opcjonalny)
+  → mark (asset, optional)
+  → gap_mm (only when mark and label both exist)
+  → label (brand text/description, optional)
 ```
 
-`mark` oznacza referencję do assetu, a `label` oznacza tekst obok znaku.
-Nie wprowadzamy równoległych pól `name`, `asset` ani `description` na tym
-samym poziomie. Obecna nazwa marki jest mapowana na `label`; obecny uppercase
-pozostaje stylem wariantu, a nie ograniczeniem semantycznym pola.
+`mark` is an asset reference and `label` is text beside the mark. Do not add
+parallel `name`, `asset`, or `description` fields at the same level. The
+current brand name maps to `label`; current uppercase behavior remains a
+variant style, not a semantic restriction on the field.
 
-Jego rozmiar wylicza jeden kalkulator:
+One calculator derives its size:
 
 ```text
 group.width  = mark.width + gap + label.width
@@ -428,24 +426,24 @@ group.height = max(mark.height, label.height)
                + padding_top + padding_bottom
 ```
 
-W trybie stałym grupa respektuje box template'u i overflow policy. W trybie
-`fit_content` box rośnie do pomierzonego contentu, ale nigdy poza `max_width`
-i `max_height` z konfiguracji. Brak jednego z elementów nie pozostawia jego
-fikcyjnych wymiarów ani odstępu.
+In fixed mode the group respects the template box and overflow policy. In
+`fit_content` mode the box grows to measured content, but never beyond
+configured `max_width` and `max_height`. Missing components leave neither
+fictional dimensions nor a gap.
 
-Opis marki, okres i tytuł headera pozostają osobnymi slotami tylko wtedy, gdy
-template chce je niezależnie pozycjonować. Ich kolizja z rozrastającym się
-lockupem jest błędem geometrii, a nie powodem do cichego zmniejszania tekstu.
+Brand description, period, and header title remain separate slots only when the
+template wants independent positioning. Collision with a growing lockup is a
+geometry error, not a reason to silently shrink text.
 
-### Co znaczy „inline” w tym zadaniu
+### What “inline” means here
 
-„Inline” opisuje tutaj relację lockupu do pozostałych elementów chrome, a nie
-`CompositionInlineRun` wewnątrz jednej linii tekstu. Lockup nie jest jedynym
-blokiem w definicji headera: może współistnieć z tytułem artykułu, okresem,
-regułą albo innym slotem metadanych. Każdy z tych elementów ma własny pomiar i
-box, a layout układa je w zadanej kolejności i z zadanymi odstępami.
+“Inline” describes lockup's relationship to other chrome elements, not a
+`CompositionInlineRun` inside one text line. Lockup is not the only block in a
+header definition: it may coexist with an article title, period, rule, or other
+metadata slot. Each element has its own measurement and box; layout arranges
+them in the declared order and with declared gaps.
 
-Przykładowy header z lockupem, tytułem i okresem może wyglądać tak:
+Example header with lockup, title, and period:
 
 ```yaml
 flows:
@@ -468,22 +466,22 @@ slots:
     fit_content: true
 ```
 
-Wynikowa kompozycja jednej strony nie oznacza trzech konkurujących headerów,
-tylko jeden powtarzalny flow z trzema układanymi elementami:
+The result is not three competing headers but one repeating flow with three
+arranged elements:
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
-│ [lockup: znak + nazwa marki]       [okres publikacji]    │
-│ Tytuł artykułu, który może zająć jedną lub kilka linii    │
+│ [lockup: mark + brand name]       [publication period]   │
+│ Article title, which may occupy one or several lines     │
 │ ───────────────────────────────────────────────────────── │
 └──────────────────────────────────────────────────────────┘
-                         ↓ zmierzona granica headera
-                    [flow main / insertiony]
+                         ↓ measured header boundary
+                    [main flow / insertions]
 ```
 
-Sama kolejność slotów nie przesądza jeszcze o kierunku ułożenia. Template musi
-opisać relację geometryczną, na przykład pierwszy wiersz poziomy oraz tytuł
-złożony pod nim:
+Slot order alone does not decide the direction of layout. The template must
+describe the geometric relationship, for example a horizontal first row and a
+title stacked below it:
 
 ```yaml
 header_layout:
@@ -491,20 +489,20 @@ header_layout:
   - stack: [header-title]
 ```
 
-To jest zapis poglądowy, a nie drugi format konfiguracji. Jedyną kanoniczną
-deklaracją pozostają `flows.header.slots` oraz ramy i kolejność slotów w
-template'cie; poziome ułożenie wynika z ich relacji geometrycznej. Nie dodajemy
-na tym etapie osobnego pola parsera `header_layout`. Nadal jest to jeden
-`header` flow, a kalkulator mierzy sloty zgodnie z istniejącymi ramami i zwraca
-jedną granicę headera dla `main`.
+This is illustrative notation, not a second configuration format. The only
+canonical declaration remains `flows.header.slots` plus slot frames and order
+in the template; horizontal arrangement follows their geometric relationship.
+Do not add a `header_layout` parser field at this stage. It remains one
+`header` flow, and the calculator measures slots using existing frames and
+returns one header boundary for `main`.
 
-Jeżeli tytuł urośnie do dwóch linii, rośnie tylko jego slot oraz wynikowa
-wysokość grupy headera; lockup zachowuje swoje wymiary, a `main` zaczyna się
-poniżej nowej granicy. Jeżeli lockup nie ma ani znaku, ani nazwy, jego slot
-znika w trybie `fit_content`, ale pozostałe sloty nadal są układane.
+If the title grows to two lines, only its slot and the resulting header-group
+height grow; the lockup keeps its dimensions and `main` starts below the new
+boundary. If lockup has neither mark nor label, its slot disappears in
+`fit_content` mode while other slots are still arranged.
 
-Numer strony jest analogicznym slotem metadanych, jednak domyślnie należy go
-umieścić w footerze. Przykład pełnego powtarzalnego chrome:
+Page number is an analogous metadata slot, but should normally live in the
+footer. Complete repeating chrome:
 
 ```yaml
 flows:
@@ -521,9 +519,8 @@ slots:
     fit_content: true
 ```
 
-Lockup może też być użyty poza headerem, o ile wybrany slot dopuszcza jego
-rodzaj. Wtedy pozostaje tym samym mierzonym blokiem, a zmienia się tylko
-miejsce i polityka powtarzania:
+Lockup may also be used outside the header when the selected slot allows its
+kind. It remains the same measured block; only place and repeat policy change:
 
 ```yaml
 flows:
@@ -539,483 +536,467 @@ slots:
     fit_content: true
 ```
 
-Powyższe przykłady są docelowym kontraktem planera; nie oznaczają jeszcze
-istniejącej składni parsera. Wartości odstępów, paddingów i limitów pozostają
-w `server/templates/render-config.yml`, a nie w literalach TypeScriptu.
+These examples are the target planner contract, not necessarily current parser
+syntax. Gap, padding, and limit values remain in
+`server/templates/render-config.yml`, not as TypeScript literals.
 
-### Źródło zawartości i stare struktury danych
+### Content source and old data structures
 
-Nie tworzymy osobnego modelu danych tylko dla chrome. Dotychczasowe pola
-`title`, `header`, `footer`, `brand`, `subtitle` i `period` pozostają źródłem
-treści. Adapter normalizuje je do nazwanych flowów (`title`, `header`,
-`footer`), a template decyduje, które sloty i layouty przyjmują te flowy.
-W ten sposób stare dane nadal opisują *co* ma zostać pokazane, natomiast flow
-template'u opisuje *gdzie i w jakiej kolejności* ma to zostać ułożone.
+We do not create a separate data model only for chrome. Existing `title`,
+`header`, `footer`, `brand`, `subtitle`, and `period` fields remain content
+sources. The adapter normalizes them into named flows (`title`, `header`, and
+`footer`), and the template decides which slots and layouts accept those flows.
+Old data therefore still describes *what* is shown, while the template flow
+describes *where and in what order* it is arranged.
 
-W slotach tekstowych dopuszczamy ograniczone, tylko do odczytu zmienne ścieżki
-do znormalizowanych flowów, na przykład:
+Text slots may accept restricted, read-only variable paths into normalized
+flows, for example:
 
 ```text
 {{flow.title.blocks[0].text}}
 ```
 
-Taka ścieżka jest projekcją treści do wskazanego slotu, a nie drugim przebiegiem
-tego flowu. Nie pozwalamy na dowolne wywołania ani dowolny dostęp do obiektu.
-Brak opcjonalnego źródła zwija slot; brak źródła wymaganego przez template
-kończy się diagnostyką i odrzuceniem kandydata. Ten sam blok nie może być
-jednocześnie wyświetlany przez projekcję i przez zwykły slot na tej samej
-stronie.
+This path projects content into the selected slot; it is not a second run of
+that flow. Arbitrary calls and arbitrary object access are forbidden. Missing
+optional source collapses the slot; missing source required by the template
+produces a diagnostic and rejects the candidate. The same block cannot be
+displayed by both a projection and a normal slot on the same page.
 
-Domyślne `gap_mm` raportowego lockupu zachowujemy bez zmiany wizualnej.
-Pierwszy przebieg migracji nie dodaje drugiego, niezależnego źródła odstępu.
-Jeżeli później template ma świadomie nadpisywać gap, istniejące pole `gap`
-trzeba jawnie przeprowadzić przez adapter i opisać jego priorytet względem
-`chrome.report_lockup`; nie wolno pozostawić pozornie działającej, ignorowanej
-definicji.
+The current report lockup `gap_mm` default is retained without visual change.
+The first migration pass adds no second independent gap source. If a template
+later needs to override the gap, existing `gap` must be passed explicitly
+through the adapter and its precedence relative to `chrome.report_lockup` must
+be documented; a seemingly active but ignored definition is not acceptable.
 
-### Chrome a „zgniatanie” `main` w obecnej implementacji
+## Chrome and `main` compression in the current implementation
 
-Obecne zachowanie nie jest negocjacją chrome z flow:
+Current behavior is not chrome negotiation with the flow:
 
-- `reserved_bands.header` i `reserved_bands.footer` są od początku odejmowane
-  od segmentów dostępnych dla tekstu; działają jako twarde granice, a nie jako
-  placementy przesuwane przez planner;
-- insertiony są natomiast materializowane przed zwykłym flow i stają się
-  rzeczywistymi obstacle'ami, które mogą zmniejszyć dostępne miejsce dla
-  `main`;
-- powtarzany `header` jest obecnie planowany po zwykłych flowach, a
-  `pageChrome` jest dołączany po planowaniu, więc zmiana jego wysokości nie
-  powoduje ponownego ułożenia `main`;
-- system nie ma ogólnego mechanizmu zmniejszania fontu, line-height ani
-  dowolnego ściskania `main` w celu dopasowania chrome. Istniejące lokalne
-  skracanie odstępu headingu dotyczy wyłącznie decyzji wewnątrz tekstowego
-  flowu.
+- `reserved_bands.header` and `reserved_bands.footer` are subtracted from flow
+  segments from the start; they are hard boundaries, not placements moved by
+  the planner;
+- insertions are materialized before ordinary flow and become real obstacles
+  that can reduce space available to `main`;
+- repeating `header` is currently planned after ordinary flows and `pageChrome`
+  is appended after planning, so changing its height does not re-layout `main`;
+- there is no general mechanism that shrinks `main`'s font, line height, or
+  arbitrary content to fit chrome. Existing local heading-gap reduction applies
+  only to decisions inside a text flow.
 
-W punkcie 12 „wpływ chrome na `main`” oznacza zatem zmianę granicy dostępnej
-  geometrii: większy header przesuwa lub ogranicza `main`, mniejszy header
-  zwalnia miejsce. Nie oznacza kompresowania treści. Gdy twarde wymagania lub
-  limity strony nie mogą być spełnione, kandydat ma zostać odrzucony albo
-  `ensurePage` ma utworzyć kolejną legalną stronę zgodnie z polityką flow.
+In Plan 12, “chrome affects `main`” therefore means changing the available
+geometry boundary: a larger header displaces or limits `main`, while a smaller
+header releases space. It does not mean compressing content. When hard
+requirements or page limits cannot be met, the candidate is rejected or
+`ensurePage` creates another legal page according to flow policy.
 
-## Przyjęty kontrakt
+## Adopted contract
 
-### Header i footer
+### Header and footer
 
-- header i footer są zwykłymi flowami z `repeat: each-page`;
-- docelowo `repeat: each-page` jest oceniane po wyborze layoutu strony.
-  `CompositionFlowRoute.layouts` jest wtedy pozycyjnym harmonogramem layoutów,
-  a `slotsByLayout` wybiera sloty dla konkretnego layoutu; razem ograniczają
-  strony, na których flow ma instancję. Nie jest to globalna biała lista nazw
-  template'ów;
-- sloty powtarzalnego flow są rozpatrywane przed `main` na każdej stronie;
-- wymagane elementy mają pierwszeństwo przed soft insertionami, a soft
-  insertiony przed `main` tylko w zakresie zadeklarowanej polityki strony;
-- `start_page`, `continuation` i różnice layoutu pierwszej/kolejnych stron
-  pozostają właściwościami flow/template'u, nie wyjątkami w rendererze;
-- powtarzalny flow nie tworzy samowolnie nowych stron tylko dlatego, że jest
-  powtarzany; `ensurePage` stosuje zwykłe reguły legalności i limitów.
+- header and footer are ordinary flows with `repeat: each-page`;
+- target `repeat: each-page` is evaluated after page-layout selection.
+  `CompositionFlowRoute.layouts` is a positional layout schedule, and
+  `slotsByLayout` selects slots for a particular layout; together they limit
+  pages on which the flow has an instance. This is not a global allowlist of
+  template names;
+- repeating-flow slots are considered before `main` on every page;
+- required elements take precedence over soft insertions, and soft insertions
+  precede `main` only within the declared page policy;
+- `start_page`, `continuation`, and first/subsequent layout differences remain
+  flow/template properties, not renderer exceptions;
+- a repeating flow does not create pages merely because it repeats;
+  `ensurePage` applies ordinary legality and limit rules.
 
-### Kanoniczne fazy alokacji miejsca i kolejność paint
+### Canonical space-allocation phases and paint order
 
-Nie opisujemy jednej listy „co rysuje się pierwsze”. Każdy blok ma dwa
-niezależne aspekty:
+We do not describe one list of “what is drawn first”. Each block has two
+independent aspects:
 
-- **fazę rezerwacji** — kiedy planner musi znać jego box, aby wyliczyć legalną
-  przestrzeń dla innych bloków;
-- **warstwę paint** — kiedy backend technicznie maluje go w PDF.
+- **reservation phase** — when the planner must know its box to calculate legal
+  space for other blocks;
+- **paint layer** — when the backend technically draws it into the PDF.
 
-Faza rezerwacji musi najpierw znać wszystkie elementy, które ograniczają
-miejsce dla `main`:
+The reservation phase must first know all elements that constrain `main`:
 
 ```text
-1. geometria strony i tło/dekoracje
-2. stały chrome: header, lockup, tytuł, inne stałe bloki oraz footer
-3. wymagane pomocnicze flowy: intro, metrics, chart i podobne bloki
-4. wymagane insertiony oraz page-local/sidebar/quote flowy
-5. soft insertiony (w ramach konkretnego kandydata)
-6. main — główny tekst w pozostałych legalnych slotach
-7. finalizacja planu
+1. page geometry and background/decorations
+2. fixed chrome: header, lockup, title, other fixed blocks, and footer
+3. required auxiliary flows: intro, metrics, chart, and similar blocks
+4. required insertions and page-local/sidebar/quote flows
+5. soft insertions (within the particular candidate)
+6. main — primary text in the remaining legal slots
+7. plan finalization
 ```
 
-Punkty 2–5 są rozpatrywane przed `main`, ponieważ ich końcowe boxy stają się
-obstacle'ami albo zmieniają granicę dostępnej geometrii. `footer` jest więc
-rezerwowany przed `main`, nawet jeśli jego warstwa paint znajduje się po tekście
-`main` albo jest po prostu niżej na stronie. Nie oznacza to, że footer ma
-„pierwszeństwo wizualne” przed tekstem.
+Items 2–5 are considered before `main` because their final boxes become
+obstacles or change the available geometry boundary. Footer is therefore
+reserved before `main`, even if its paint layer is after `main` text or is
+simply lower on the page. This does not give footer visual precedence.
 
-`priority` oznacza siłę roszczenia do zachowania geometrii, a nie
-samą fazę planowania, kolejność malowania ani ważność redakcyjną treści.
-Wyższa liczba ma wyższy priorytet; poziomy `500`, `400`, ... zostawiają miejsce
-na przyszłe podfazy bez renumerowania całej konfiguracji. Używamy numerowanych
-klas roszczenia:
+`priority` means the strength of a claim to preserve geometry, not the planning
+phase itself, paint order, or editorial importance. Higher numbers have higher
+priority; levels `500`, `400`, ... leave room for future subphases without
+renumbering the whole configuration. The release-1.0 classes are:
 
-W kodzie release 1.0 jest to opcjonalne pole route’u template’u. Parser akceptuje
-nieujemną liczbę całkowitą, adapter przenosi ją do `CompositionFlowRoute`, a
-planner sortuje flowy malejąco przed materializacją zależnej geometrii (remis
-zachowuje kolejność wejściową). Placementy i linie mogą nieść tę samą wartość
-do debugowania. Brak pola ma jawnie migracyjne znaczenie wartości
-`composition_priority.default` z `server/templates/render-config.yml` (obecnie
-`100`), czyli najsłabsze roszczenie geometryczne; nie ma cichego odczytu
-`priority` z inputu dokumentu.
+The release-1.0 code treats this as an optional template-route field. The
+parser accepts a non-negative integer, the adapter carries it into
+`CompositionFlowRoute`, and the planner sorts flows descending before
+materializing dependent geometry (ties preserve input order). Placements and
+lines may carry the value for debugging. Missing value has the explicit
+migration meaning `composition_priority.default` from
+`server/templates/render-config.yml` (currently `100`), the weakest geometry
+claim; input documents cannot silently provide `priority`.
 
-| `priority` | Klasa | Przykłady | Skutek konfliktu |
+| `priority` | Class | Examples | Conflict effect |
 |---|---|---|---|
-| `500 template-chrome` | stały chrome | header, lockup, footer, stały sidebar | musi zostać spełniony; brak legalnego miejsca odrzuca plan lub uruchamia dozwoloną politykę strony |
-| `400 required-auxiliary` | wymagane flowy pomocnicze | intro, metrics, chart | rezerwują miejsce przed `main`; nie mogą zostać cicho przeniesione do innego flowu |
-| `300 required-insertion` | wymagany insertion | wymagany quote, sidebar page-local lub inny twardy insertion | rezerwuje obstacle przed `main`; jeśli nie ma legalnego miejsca, cały kandydat jest nielegalny |
-| `200 primary-flow` | główny flow | `main` | podstawowa treść dokumentu; jest planowana po rezerwacji ograniczeń geometrycznych, ale jej brak nadal czyni plan nielegalnym |
-| `100 optional-insertion` | opcjonalny insertion | opcjonalny quote, sidebar lub inny soft insertion | może zostać odrzucony w konkretnym kandydacie; nie wypycha wymaganych bloków ani kompletnego `main` |
+| `500 template-chrome` | fixed chrome | header, lockup, footer, fixed sidebar | must be satisfied; no legal space rejects the plan or invokes permitted page policy |
+| `400 required-auxiliary` | required auxiliary flows | intro, metrics, chart | reserve space before `main`; cannot be silently moved to another flow |
+| `300 required-insertion` | required insertion | required quote, page-local sidebar, or other hard insertion | reserve an obstacle before `main`; no legal space makes the candidate illegal |
+| `200 primary-flow` | primary flow | `main` | core document content; planned after geometry constraints, but missing content still makes the plan illegal |
+| `100 optional-insertion` | optional insertion | optional quote, sidebar, or other soft insertion | may be rejected for a candidate; does not displace required blocks or complete `main` |
 
-`priority` nie jest osobnym polem paint-order template'u. Adapter może je
-wyznaczyć lub przekazać z wejściowego route'u, planner niesie je razem z
-placementem i używa do kolejności materializacji oraz rozstrzygania roszczeń, a
-evaluator sprawdza wynikową legalność. Input dostarcza treść; nie może samowolnie
-podnosić roszczenia flowu. Faza rezerwacji nadal wynika z zależności
-geometrycznej: planner najpierw mierzy i umieszcza tymczasowo element o wyższym
-roszczeniu, rejestruje jego box/obstacle, a dopiero potem wylicza geometrię
-elementów zależnych. To jest materializacja planu, nie fizyczne rysowanie PDF-u.
+`priority` is not a separate template paint-order field. The adapter may derive
+or pass it from the route, the planner carries it with the placement and uses it
+for materialization order and space claims, and the evaluator checks resulting
+legality. Input supplies content and cannot raise a flow's claim. Reservation
+still follows geometry dependency: the planner first measures and tentatively
+places a higher-claim element, records its box/obstacle, and only then computes
+dependent geometry. This is plan materialization, not physical PDF drawing.
 
-Jeśli dwa elementy tej samej klasy konkurują o miejsce, kolejność ich slotów i
-ewentualny tie-breaker definiuje template. Nazwy flowów nie tworzą ukrytego
-wyjątku w plannerze. Sidebar stały należy do `500 template-chrome`, a
-page-local ciekawostki do `300 required-insertion` albo `100 optional-insertion`,
-zależnie od wymogu.
+When two same-class elements compete for space, their slot order and any
+tie-breaker are defined by the template. Flow names do not create a hidden
+planner exception. A fixed sidebar belongs to `500 template-chrome`, while
+page-local facts belong to `300 required-insertion` or `100 optional-insertion`
+depending on the requirement.
 
-Ta liczba nie rozstrzyga sama konfliktu obowiązkowych bloków: dwa wymagane
-bloki muszą zmieścić się jednocześnie albo nie powstaje plan. Dla bloku
-`100 optional-insertion` liczba oznacza słabsze roszczenie i możliwość odrzucenia
-kandydata, jeśli pozostawi `main` z nielegalnym residualem. Nie oznacza to, że
-`main` jest mniej ważny — jest planowany później z powodu zależności
-geometrycznej, a nie dlatego, że można go poświęcić.
+The number alone does not resolve two mandatory blocks: both must fit
+simultaneously or no plan is created. For `100 optional-insertion`, the number
+means a weaker claim and permission to reject the candidate if it would leave
+an illegal `main` residual. It does not mean `main` is less important; `main`
+is planned later because of geometry dependency, not because it may be
+sacrificed.
 
-Kierunek „wyższa liczba = wyższy `priority`” i rozdział tego pola od
-fazy oraz paint wynikają z badania [praktyk priorytetów](../research/block-priority-practices.md).
-Sama skala `500`–`100` jest konwencją tego repozytorium, nie standardem
-narzuconym przez CSS, Kubernetes ani inny zewnętrzny system.
+The direction “higher number = higher `priority`” and separation of the field
+from phase and paint follow the study of [priority practices](../research/block-priority-practices.md).
+The `500`–`100` scale is this repository's convention, not a standard imposed
+by CSS, Kubernetes, or another external system.
 
-W samym PDF rozróżniamy dwa pojęcia:
+In the PDF, distinguish:
 
-- **paint order** — kolejność, w której backend wykonuje operacje rysowania;
-- **`z-index`/stack level** — warstwa głębokości decydująca, co jest wizualnie
-  nad czym, jeśli boxy mogą się nakładać.
+- **paint order** — the order in which the backend performs drawing operations;
+- **`z-index`/stack level** — depth layer deciding what is visually above what
+  when boxes may overlap.
 
-`priority` nie wyznacza żadnego z nich w obecnym backendzie. Przy zwykłych,
-niekolidujących boxach paint order nie zmienia legalności. Jeśli kiedyś pojawi
-się świadome nakładanie wymagające `z-index`, będzie to osobna decyzja
-kontraktu/backendu; nie używamy do tego `priority` i nie wprowadzamy takiego
-pola w tej migracji. Jest to zgodne
-z rozdzieleniem layoutu i stacking/painting w CSS ([W3C CSS 2.2, layered
-presentation](https://www.w3.org/TR/CSS22/visuren.html#layers)).
+`priority` does not currently define either. With ordinary non-overlapping
+boxes, paint order does not change legality. If deliberate overlap requiring
+`z-index` appears later, it is a separate backend contract decision; this
+migration does not use `priority` for it. This matches the separation of layout
+and stacking/painting in CSS ([W3C CSS 2.2, layered presentation](https://www.w3.org/TR/CSS22/visuren.html#layers)).
 
-Obecny paint order backendu pozostaje stały i niezależny od `priority`:
+Current backend paint order remains fixed and independent of `priority`:
 
 ```text
-tabele
-→ grafiki
-→ block placements (ramy i inne renderowane bloki)
-→ zwykłe linie tekstu
-→ linie insertionów
-→ glyphy
+tables
+→ graphics
+→ block placements (frames and other rendered blocks)
+→ ordinary text lines
+→ insertion lines
+→ glyphs
 ```
 
-Footer może więc być namalowany po tekście `main`, mimo że jego box został
-zarezerwowany wcześniej. To nie oznacza automatycznie wyższego `z-index` — przy
-braku dozwolonego nakładania oba boxy po prostu nie mogą się przeciąć. Dynamiczny
-header/footer nie może być jednak malowany poza planem jako drugi, niezależny
-mechanizm.
+Footer may therefore be painted after `main` text even though its box was
+reserved earlier. That does not automatically mean a higher `z-index`; without
+allowed overlap, the boxes simply cannot intersect. Dynamic header/footer must
+not be painted outside the plan as a second independent mechanism.
 
-### Słownik istniejących pojęć `order` i `layer`
+### Existing `order` and `layer` vocabulary
 
-W dokumentacji występują już nazwy opisujące różne porządki. Nie są one
-alternatywami dla `priority` i nie powinny zostać połączone w jedną liczbę:
+Documentation already contains names for different orders. They are not
+alternatives to `priority` and must not be collapsed into one number:
 
-| Pojęcie | Właściciel | Znaczenie | Relacja z `priority` |
+| Concept | Owner | Meaning | Relation to `priority` |
 |---|---|---|---|
-| `flow`/route order | route i sloty template'u | kolejność, w której treść danego flowu przechodzi przez sloty i strony | ogranicza legalne miejsca; `priority` może ustalić, który route rezerwuje geometrię wcześniej |
-| source/visual order | evaluator (`CONTENT_ORDER_VIOLATION`, `QUOTE_ORDER_VIOLATION`) | kolejność authored blocks/fragmentów po materializacji | jest twardą kontrolą legalności, nie paint order |
-| `layer: flow \| insertion` | `CompositionLine` i backend | rozróżnienie zwykłego tekstu od tekstu insertionu; backend obecnie maluje insertion lines po zwykłych lines | nie jest warstwą głębokości i nie jest `priority` |
-| `paint: boolean` | `CompositionGraphicPlacement` i backend | czy dana grafika ma zostać fizycznie narysowana; `paint: false` może pozostawić samą geometrię obstacle'u | przełącznik widoczności, nie kolejność rysowania |
-| `reserved` | `CompositionSlotTemplate` | slot/box zajęty przez chrome lub inną geometrię bez zwykłego flowu | rezerwacja przestrzeni, nie warstwa paint |
-| `flowBarrierBoxCandidates` / obstacles | planner i evaluator | geometryczne bariery, wokół których wolno kontynuować tekst | wpływają na obliczenia miejsca; nie są obiektami paint |
-| `z_order` w prototypach occlusion | prototypowy raster/QA dla nakładających się grafik | test, który kolor/kształt jest widoczny w fizycznym przecięciu | dotyczy paint-only graphics, poza kontraktem flow/chrome |
-| `paintOrder`, `readingOrder`, `selectionGroup` | stary TODO badawczy | możliwe przyszłe tagowanie/warstwy PDF | paint order został odłożony do [release 1.1](../release-1.1/01-paint-order-contract.md); reading/selection pozostają poza zakresem |
+| `flow`/route order | template route and slots | order in which a flow's content moves through slots and pages | limits legal places; `priority` may decide which route reserves geometry first |
+| source/visual order | evaluator (`CONTENT_ORDER_VIOLATION`, `QUOTE_ORDER_VIOLATION`) | order of authored blocks/fragments after materialization | hard legality check, not paint order |
+| `layer: flow \| insertion` | `CompositionLine` and backend | ordinary text versus insertion text; backend currently paints insertion lines after ordinary lines | not depth and not `priority` |
+| `paint: boolean` | `CompositionGraphicPlacement` and backend | whether a graphic is physically drawn; `paint: false` may leave only an obstacle geometry | visibility switch, not drawing order |
+| `reserved` | `CompositionSlotTemplate` | slot/box occupied by chrome or other geometry without an ordinary flow | space reservation, not paint layer |
+| `flowBarrierBoxCandidates` / obstacles | planner and evaluator | geometric barriers around which text may continue | affects space calculations; not paint objects |
+| `z_order` in occlusion prototypes | prototype raster/QA for overlapping graphics | which color/shape is visible in a physical overlap | paint-only graphics, outside flow/chrome contract |
+| `paintOrder`, `readingOrder`, `selectionGroup` | old research TODO | possible future PDF tags/layers | paint order deferred to [release 1.1](../release-1.1/01-paint-order-contract.md); reading/selection out of scope |
 
-W praktyce `priority` jest nowym metadanym roszczenia do wcześniejszej
-materializacji geometrii. `order` w route'ach i evaluatorze zachowuje swoje
-dotychczasowe znaczenia, a `layer` pozostaje technicznym rozróżnieniem danych
-renderowanych. Obecny backendowy porządek jest tylko baseline'em migracji;
-możemy go później uczynić jawną polityką i powiązać z `priority`, jeśli
-zdefiniujemy kierunek sortowania oraz remisy.
+In practice, `priority` is metadata for a claim to earlier geometry
+materialization. `order` in routes and evaluators keeps its existing meaning,
+and `layer` remains a technical distinction in rendered data. Current backend
+order is only a migration baseline; it may later become explicit policy if the
+sort direction and tie behavior are defined.
 
-### Właściciel `priority` i kolejności rysowania
+### Owner of `priority` and drawing order
 
-W release 1.0 `priority` służy wyłącznie do kolejności materializacji i
-rezerwacji geometrii. Jawny paint order nie jest częścią tego kontraktu; jego
-osobna propozycja znajduje się w [release 1.1](../release-1.1/01-paint-order-contract.md).
-Jedno pojęcie `priority` może kiedyś zasilać również politykę malowania, ale
-byłoby to jawne mapowanie backendu, a nie przypadkowy efekt kolejności tablic:
+In release 1.0, `priority` is used only for geometry reservation and
+materialization order. Explicit paint order is not part of this contract; its
+proposal is in [release 1.1](../release-1.1/01-paint-order-contract.md). One
+`priority` concept could later also feed paint policy, but that would be an
+explicit backend mapping, not an accidental array order:
 
-1. adapter może wyznaczyć/przekazać `priority` dla flowu lub placementu;
-2. planner przenosi je razem z geometrią i używa do kolejności materializacji
-   oraz rozstrzygania roszczeń do miejsca;
-3. evaluator sprawdza legalność boxów, coverage i dozwolone kolizje;
-4. backend w 1.0 zachowuje dotychczasową, stałą kolejność operacji; w 1.1 może
-   stosować jawną politykę faz renderowania.
+1. the adapter may derive/pass `priority` for a flow or placement;
+2. the planner carries it with geometry and uses it for materialization order
+   and space claims;
+3. the evaluator checks box legality, coverage, and allowed collisions;
+4. the 1.0 backend preserves the fixed operation order; 1.1 may apply explicit
+   rendering-phase policy.
 
-`priority` odpowiada więc na pytanie „czyją geometrię i obstacle musimy
-rozstrzygnąć wcześniej?”. Nie jest drugim kontraktem określającym stacking.
-Footer może mieć wysokie `priority`, aby jego box był znany przed `main`, a
-backend nadal może narysować go w dotychczasowym miejscu/porządku. Jeśli kiedyś
-pojawi się świadome nakładanie wymagające z-indexu, będzie to osobne rozszerzenie
-backendu. Jeżeli powiążemy paint z `priority`, trzeba jawnie ustalić, czy
-większa liczba oznacza późniejsze malowanie (element wyżej), czy tylko
-wcześniejszą rezerwację. Nie może to pozostać nieudokumentowanym skutkiem
-kolejności tablic.
+`priority` answers “whose geometry and obstacle must be resolved first?”. It is
+not a second stacking contract. Footer may have high `priority` so its box is
+known before `main`, while the backend still paints it in the current location
+and order. If intentional overlap requiring z-index appears, it is a separate
+backend extension. If paint is ever linked to `priority`, the contract must
+state whether a larger number means later paint (higher layer) or only earlier
+reservation; it cannot remain an undocumented array-order effect.
 
-`template_ref` wybiera obecnie jeden skompilowany template dla całego
-przebiegu composition, więc repeat nie może przypadkiem przejść do innego
-template'u. Harmonogram layoutów w route jest wystarczającym mechanizmem
-wyjątków dla stron tytułowych i continuation; nie udajemy, że jest walidowaną
-listą nazw. Dopiero gdy dokument będzie mógł łączyć różne `template_ref` na
-poszczególnych stronach, dodamy analogiczną, obowiązkową białą listę
-template'ów; nie wprowadzamy globalnego wyjątku po stronie renderer'a.
+`template_ref` currently selects one compiled template for the whole
+composition run, so repeat cannot accidentally switch templates. The route's
+layout schedule is sufficient for title and continuation page exceptions; it
+is not misrepresented as a validated name list. Only when a document may mix
+different `template_ref` values per page should a corresponding mandatory
+template allowlist be added; no global renderer exception is introduced.
 
-Do czasu migracji obowiązuje jednak stan obecny opisany w audycie Astra:
-`planDocumentOnce()` najpierw materializuje stronę i planuje zwykłe flowy oraz
-insertiony, a dopiero potem wykonuje każdy powtarzalny flow dla już istniejących
-stron. Repeat nie wywołuje dziś `ensurePage`; przeniesienie go przed `main` jest
-świadomą zmianą punktu 12, a nie zachowaniem już dostępnym w runtime.
+Until migration is complete, the Astra-audited current behavior applies:
+`planDocumentOnce()` first materializes a page and plans ordinary flows and
+insertions, then runs each repeating flow over already-created pages. Repeat
+does not currently call `ensurePage`; moving it before `main` is a deliberate
+Plan 12 change, not behavior already available at runtime.
 
-Przykład zakresu powtarzania dla obecnego modelu:
+Current-model repetition example:
 
-| `template_ref` | layout strony | instancja `header` |
+| `template_ref` | Page layout | `header` instance |
 |---|---|---|
-| `pages/showcase-report` | `pages/showcase-report:title` | nie, route headera nie obejmuje strony tytułowej |
-| `pages/showcase-report` | `pages/showcase-report:first` | tylko jeśli route jawnie ma ten layout |
-| `pages/showcase-report` | `pages/showcase-report:continuation` | tak, jeśli ten layout występuje w pozycji route'u dla danej strony |
-| inny `template_ref` | dowolny jego layout | nie dziedziczy headera z `pages/showcase-report` |
+| `pages/showcase-report` | `pages/showcase-report:title` | no; header route does not include the title page |
+| `pages/showcase-report` | `pages/showcase-report:first` | only if the route explicitly contains this layout |
+| `pages/showcase-report` | `pages/showcase-report:continuation` | yes, if this layout occurs at the page's route position |
+| another `template_ref` | any of its layouts | does not inherit the header from `pages/showcase-report` |
 
-### Wysokość zależna od treści
+### Content-dependent height
 
-- Domyślny tryb pozostaje stały: pominięte `fit_content` oznacza, że slot
-  respektuje ramę template'u. Zmienny tryb jest jawnym `fit_content: true` i
-  nie może zostać włączony samym pojawieniem się dłuższego tekstu.
-- pusty header nie zajmuje miejsca, chyba że template jawnie deklaruje
-  niezerowe minimum, np. dla lockupu marki, albo działa w stałym trybie;
-- niepusty header otrzymuje wysokość zmierzonej zawartości plus wspólny
-  `padding-top` i `padding-bottom` z konfiguracji renderowania;
-- zawinięty tytuł zwiększa wysokość headera, a następne sloty są przesuwane
-  bez zmiany ich kolejności;
-- `fit_content`, wzrost i maksymalna wysokość są właściwościami slotu/layoutu,
-  a nie specjalnym kodem `pageChrome`;
-- `overflow` zawsze pochodzi z definicji slotu template'u. `fit_content`
-  określa, czy box może rosnąć, a `overflow` określa reakcję po przekroczeniu
-  ramy lub limitu; brak deklaracji normalizujemy do `reject`. `shrink-to-fit`
-  działa wyłącznie wtedy, gdy template jawnie go wybierze, i nie jest
-  fallbackiem kodu planera;
-- przekroczenie maksymalnej wysokości, dolnej granicy strony albo twardego
-  obstacle'u odrzuca kandydat jako nielegalny; nie wolno ściskać `main`, aby
-  ukryć naruszenie;
-- paddingi i limity są konfigurowalne w YAML render-config, nie jako literały
-  w TypeScript.
+- Default mode remains fixed: omitted `fit_content` means the slot respects the
+  template frame. Variable mode is explicit `fit_content: true` and cannot be
+  enabled merely by longer text.
+- An empty header occupies no space unless the template declares a non-zero
+  minimum, for example for brand lockup, or uses fixed mode.
+- A non-empty header receives measured-content height plus shared
+  `padding-top` and `padding-bottom` from render configuration.
+- A wrapped title increases header height, and subsequent slots move down
+  without changing order.
+- `fit_content`, growth, and maximum height belong to slot/layout, not special
+  `pageChrome` code.
+- `overflow` always comes from the template slot. `fit_content` says whether a
+  box may grow; `overflow` says what happens after frame or limit overflow. An
+  omitted value normalizes to `reject`. `shrink-to-fit` works only when the
+  template explicitly chooses it and is not a planner fallback.
+- Exceeding maximum height, page bottom, or a hard obstacle rejects the
+  candidate; do not squeeze `main` to hide a violation.
+- Padding and limits are configurable in YAML render-config, not TypeScript
+  literals.
 
-### Page chrome jako projekcja
+### Page chrome as a projection
 
-`pageChrome` pozostaje strukturą wyjściową dla backendu renderującego, ale nie
-jest właścicielem treści ani geometrii headera. Renderer może z niej korzystać
-do narysowania:
+`pageChrome` remains an output structure for the rendering backend, but it does
+not own header content or geometry. The renderer may use it to draw:
 
-- tła lub pasma nagłówka;
-- reguły pod headerem;
-- lockupu/logo;
-- reguły footera;
-- numeru strony i innych metadanych zależnych od finalnego planu.
+- header background or band;
+- rule below the header;
+- lockup/logo;
+- footer rule;
+- page number and other final-plan-dependent metadata.
 
-Każdy z tych elementów musi mieć wskazane źródło geometrii: slot flowu,
-wyliczoną grupę headera albo jawnie zdefiniowaną dekorację template'u. Nie
-utrzymujemy drugiego, ukrytego prostokąta, który niezależnie ogranicza `main`.
+Every element must identify its geometry source: a flow slot, measured header
+group, or explicitly defined template decoration. No second hidden rectangle
+may independently restrict `main`.
 
-## Zmiany konieczne i ich konsekwencje
+## Required changes and consequences
 
-Poniższa lista jest granicą implementacji. Sama zmiana YAML nie wystarczy,
-ponieważ obecny pipeline zatrzymuje lockup i numer strony poza zwykłą ścieżką
-bloku.
+This is the implementation boundary. YAML alone is insufficient because the
+current pipeline keeps lockup and page number outside the ordinary block path.
 
-| Miejsce | Zmiana | Konsekwencja / ryzyko |
+| Location | Change | Consequence / risk |
 |---|---|---|
-| `server/src/contracts/input/schema.ts` | **wykonane:** `type: lockup` z `lockup.mark_asset_id` i `lockup.label`; rozszerzone `allowed_block_kinds` | publiczny `CompositionInput` ma addytywny rodzaj bloku; walidacja odrzuca brak obu elementów |
-| `server/src/composition/contracts/model.ts` | **wykonane:** renderer-neutral `CompositionLockup` i `CompositionBlockKind = ... | 'lockup'` | capability i dispatch są jawnie keyed by `lockup` |
-| `server/src/composition/adapters/input.ts` + adapter marki | normalizować lockup oraz materializować domyślny blok z profilu marki tylko wtedy, gdy route ma slot lockupu | stary raport bez `flows.header` może stracić logo, jeśli template nie dostanie jawnego slotu; to jest zamierzona, wykrywalna zmiana kontraktu, nie fallback renderer'a |
-| `server/src/composition/adapters/page-template-slots.ts` | **wykonane:** `declaredLockupSlotsForFlow()` zwraca zwykły slot `kind: block` z `allowedBlockKinds: ['lockup']` | lockup jest mierzony, pokrywany i oceniany jak tabela/wykres; nie ma niewidocznej rezerwacji pustego logo |
-| `server/src/composition/adapters/page-template.ts` | przekazać `fit_content`, `grow`, `gap`, `overflow` i `continuation_frame`; zastąpić band-only `auxiliaryFrame` dla dynamicznego headera | `reserved_bands.header` przestaje być drugim źródłem granicy; stare template'y bez flowu headera trzeba jawnie sklasyfikować jako fixed albo dopisać do nich flow |
-| `server/src/composition/layout/document-layout.ts` | materializować powtarzalny header przed insertionami i `main`, footer po stronie; wyliczać nową granicę przed planowaniem main | zmieni się kolejność placementów i kolejność wpisów debug/decisions; nie wolno reużywać starej kolejności tylko dlatego, że test oczekuje historycznego offsetu |
-| capability pomiaru bloków | **wykonane:** pomiar znaku + labelu + gapu z faktycznymi bounds assetu | brak logo nie rezerwuje szerokości; długi label podlega geometrii slotu |
-| `server/src/composition/layout/structured-block-placement.ts`, `page-state.ts`, evaluator | **wykonane:** lockup jest blokiem atomowym, z kompatybilnością i wzrostem slotu | lockup w `main` jest możliwy tylko przy jawnym dopuszczeniu rodzaju |
-| placeholder resolver + PDF backend | jeden resolver `{{page.number}}`/`{{page.count}}` dla pomiaru, debug i renderu; footer-page jest jednym tekstowym placementem | usuwa się rozjazd między szerokością mierzoną a napisem `${page} / ${pageCount}`; finalny count musi być znany przed renderem, bez drugiego planowania |
-| `server/src/report/renderer.ts` | usunąć bezpośrednie malowanie logo, brand name i numeru strony z `drawReportChrome()`; zachować tam tylko dekoracje, których template nie modeluje jako bloków | PDF przestanie “naprawiać” niepełny plan po cichu; template bez footer flow nie pokaże numeru strony, dopóki nie dostanie jawnej migracji |
-| `server/src/composition/contracts/engine-contracts.ts` | zachować `CompositionPagePlan.chrome` jako projekcję, ale wskazywać źródłowe placementy/boxy zamiast drugich wymiarów treści | istniejące API debug/CLI może wymagać aktualizacji pól, ale nie zmienia się transport MCP ani nazwy narzędzi |
-| `server/templates/pages/*` + `server/src/generated/builtin-template-files.ts` | dodać jawne sloty/flowy header/footer w template'ach, które mają renderować chrome; przebudować wygenerowane pliki | template bez migracji zachowuje tylko świadomie wybrany fixed band albo traci stary rendererowy chrome; `npm run build:templates` jest częścią migracji |
-| testy composition/PDF/visual QA | rozdzielić fixture'y fixed i dynamic; dodać brakujące elementy lockupu, długi tytuł, kolizje, 1/10+ stron i title layout | część asercji opartych na `headerBandHeight` musi przejść na wynikowe `slotBoxes`; testy badające konkretny fixed band pozostają bez zmian |
+| `server/src/contracts/input/schema.ts` | **done:** `type: lockup` with `lockup.mark_asset_id` and `lockup.label`; extended `allowed_block_kinds` | public `CompositionInput` has an additive block kind; validation rejects both components missing |
+| `server/src/composition/contracts/model.ts` | **done:** renderer-neutral `CompositionLockup` and `CompositionBlockKind = ... | 'lockup'` | capability and dispatch are explicitly keyed by `lockup` |
+| `server/src/composition/adapters/input.ts` + mark adapter | normalize lockup and materialize the default block from brand profile only when route has a lockup slot | old report without `flows.header` may lose the logo if template receives no explicit slot; intended detectable contract change, not renderer fallback |
+| `server/src/composition/adapters/page-template-slots.ts` | **done:** `declaredLockupSlotsForFlow()` returns ordinary `kind: block` slot with `allowedBlockKinds: ['lockup']` | lockup is measured, covered, and evaluated like table/chart; no invisible empty-logo reservation |
+| `server/src/composition/adapters/page-template.ts` | pass `fit_content`, `grow`, `gap`, `overflow`, and `continuation_frame`; replace band-only `auxiliaryFrame` for dynamic header | `reserved_bands.header` stops being a second boundary source; old templates without header flow must be classified fixed or receive a flow |
+| `server/src/composition/layout/document-layout.ts` | materialize repeating header before insertions and `main`, footer after page; compute new boundary before planning `main` | placement and debug/decision order changes; do not preserve old order only because a test expects a historical offset |
+| block measurement capability | **done:** measure mark + label + gap from actual asset bounds | missing logo reserves no width; long label follows slot geometry |
+| `server/src/composition/layout/structured-block-placement.ts`, `page-state.ts`, evaluator | **done:** lockup is atomic block with compatibility and slot growth | lockup in `main` is possible only when block kind is explicitly allowed |
+| placeholder resolver + PDF backend | one `{{page.number}}`/`{{page.count}}` resolver for measurement, debug, render; footer-page is one text placement | removes mismatch between measured width and `${page} / ${pageCount}`; final count must be known before render, without second planning |
+| `server/src/report/renderer.ts` | remove direct logo, brand-name, and page-number drawing from `drawReportChrome()`; keep only decorations not modeled as blocks | PDF no longer silently repairs an incomplete plan; template without footer flow shows no number until explicitly migrated |
+| `server/src/composition/contracts/engine-contracts.ts` | retain `CompositionPagePlan.chrome` as projection, but point to source placements/boxes instead of duplicate content dimensions | debug/CLI API may need field updates, but MCP tools and transport names do not change |
+| `server/templates/pages/*` + `server/src/generated/builtin-template-files.ts` | add explicit header/footer slots/flows to templates that render chrome; rebuild generated files | unmigrated template keeps only consciously selected fixed band or loses old renderer chrome; `npm run build:templates` is part of migration |
+| composition/PDF/visual-QA tests | split fixed and dynamic fixtures; add missing lockup, long title, collision, 1/10+ page, and title-layout cases | assertions based on `headerBandHeight` must move to result `slotBoxes`; tests of a specific fixed band remain unchanged |
 
-### Skutki dla istniejących template'ów
+### Effects on existing templates
 
-1. `showcase-report*` ma flow `header` i slot `header-lockup`; dynamiczny
-   template ma teraz ten sam slot jako zwykły blok. Trzeba jeszcze dostarczyć
-   `brand-lockup` automatycznie z profilu marki, jeśli input go nie podaje.
-2. `default-report` oraz template'y `editorial-*` mają obecnie głównie
-   `reserved_bands`. Należy wybrać dla każdego z nich jedną opcję: pozostawić
-   świadomy fixed chrome jako fixture/regresję albo przepisać go na jawny flow
-   header/footer. Nie wolno utrzymywać obu źródeł z różnymi wysokościami.
-3. Title layout może mieć footer, ale header nie powinien pojawić się tam przez
-   dziedziczenie. `route.layouts` i `slotsByLayout` pozostają białą listą stron,
-   na których repeat jest legalny.
-4. Jeżeli template ma tylko `reserved_bands.footer` i nie ma footer flowu,
-   numer strony nie jest po migracji automatycznie generowany. To jest celowe:
-   każde widoczne chrome ma mieć właściciela w template'cie albo być jawnie
-   oznaczoną dekoracją.
+1. `showcase-report*` has a `header` flow and `header-lockup` slot; the dynamic
+   template now treats that slot as an ordinary block. Automatic `brand-lockup`
+   from the brand profile is still needed when input does not supply it.
+2. `default-report` and `editorial-*` currently rely mainly on
+   `reserved_bands`. Each must be explicitly kept as a fixed chrome fixture or
+   rewritten to an explicit header/footer flow. Two sources with different
+   heights must not coexist.
+3. A title layout may have a footer, but a header must not appear there by
+   inheritance. `route.layouts` and `slotsByLayout` remain the allowlist of
+   pages on which repeat is legal.
+4. If a template has only `reserved_bands.footer` and no footer flow, page
+   numbering is not generated automatically after migration. This is
+   intentional: every visible chrome element must have a template owner or be
+   explicitly marked decoration.
 
-### Skutki dla publicznego MCP/CLI
+### Effects on public MCP/CLI
 
-Zmiana nie wymaga nowego narzędzia ani nowego trybu wywołania. `render_report`,
-`dry_run`, `composition_debug` i ścieżka CLI nadal przyjmują ten sam request;
-zmienia się jedynie addytywna unia bloków i wynikowa geometria. Odpowiedź może
-zawierać placement lockupu tak jak inne bloki. Kontrakt należy uznać za
-niekompatybilny wizualnie dla template'u, który wcześniej polegał na
-rendererowym fallbacku logo/numeru strony, dlatego migracja template'ów i
-artefaktów wygenerowanych jest obowiązkowa przed usunięciem fallbacku.
+No new tool or invocation mode is required. `render_report`, `dry_run`,
+`composition_debug`, and the CLI path keep the same request; only the
+additive block union and resulting geometry change. The response may contain a
+lockup placement like any other block. A template that previously relied on
+renderer logo/page-number fallback has a visual compatibility change, so
+template and generated-artifact migration is required before the fallback is
+removed.
 
-## Strategia migracji testów
+## Test migration strategy
 
-Istniejące testy często sprawdzają wysokość stałego headera. Nie usuwamy tego
-założenia mechanicznie. Każdy fixture otrzymuje jedną z dwóch jawnych
-klasyfikacji:
+Existing tests often assert a fixed header height. Do not remove that assumption
+mechanically. Give every fixture one explicit classification:
 
-| Rodzaj fixture'u | Ustawienie | Asercja |
+| Fixture type | Setting | Assertion |
 |---|---|---|
-| testuje geometrię zależną od zawartości | `fit_content: true` | początek `main` i kolejne sloty wynikają z boxa zmierzonego headera |
-| testuje konkretny stały band/template | `fit_content` pominięte, stała rama | zachowana wysokość i granica zadeklarowana przez template |
+| tests content-dependent geometry | `fit_content: true` | `main` start and subsequent slots derive from the measured header box |
+| tests a specific fixed band/template | omit `fit_content`, fixed frame | preserve the template-declared height and boundary |
 
-Test nie może przypadkiem sprawdzać stałej wysokości tylko dlatego, że zna
-historyczny offset renderera. Oczekiwany offset należy wyprowadzać z planu
-(`slotBoxes`, obstacle albo wynikowej granicy chrome). Stała rama pozostaje
-tam, gdzie jej zachowanie jest istotą testu, np. regresja konkretnego
-template'u, a nie jako domyślne założenie wszystkich testów.
+A test must not accidentally check fixed height merely because it knows a
+historical renderer offset. Derive expected offset from the plan (`slotBoxes`,
+obstacle, or resulting chrome boundary). Keep a fixed frame where its behavior
+is the test's point, such as a specific-template regression, not as the default
+assumption for every test.
 
-## Zmienne generowane stron
+## Generated page variables
 
-Zachowujemy istniejącą składnię placeholderów:
+Retain existing placeholder syntax:
 
 ```text
-{{page.number}}  — numer strony od 1
-{{page.count}}   — liczba stron zaakceptowanego planu
+{{page.number}}  — page number starting at 1
+{{page.count}}   — page count of the accepted plan
 ```
 
-Obie zmienne są dostępne w każdym tekstowym slocie, także w headerze,
-footerze i innych powtarzalnych flowach. Nie wprowadzamy aliasów `{page}` ani
-`{numberOfPages}`. `pageCount` pozostaje lokalną nazwą implementacyjną.
+Both variables are available in every text slot, including header, footer, and
+other repeating flows. Do not introduce `{page}` or `{numberOfPages}` aliases.
+`pageCount` remains a local implementation name.
 
-Nie są to dwa osobne bloki ani dwa placementy. Template deklaruje jeden slot
-tekstowy, na przykład `footer-page-number`, którego treść brzmi
-`"{{page.number}} / {{page.count}}"`; resolver podstawia obie wartości w tym
-samym tekście, a planner mierzy cały wynikowy napis jako jeden blok.
+These are not two separate blocks or placements. The template declares one text
+slot, for example `footer-page-number`, whose content is
+`"{{page.number}} / {{page.count}}"`; the resolver substitutes both values in
+that text, and the planner measures the resulting string as one block.
 
-`{{page.number}}` i `{{page.count}}` są podstawiane po ustaleniu finalnego
-zaakceptowanego planu, ale ich box jest mierzony wcześniej z szerokością
-rezerwowaną dla największej dozwolonej liczby stron (`maxPages`). Dzięki temu
-nie wprowadzamy drugiej iteracji planera tylko dlatego, że `9` zmieniło się na
-`10`. Pomiar i render korzystają z tego samego kalkulatora szerokości; jeżeli
-plan przekroczyłby skonfigurowany limit stron, jest odrzucany jak każdy inny
-plan poza limitem.
+`{{page.number}}` and `{{page.count}}` are substituted after the final accepted
+plan is known, but their box is measured earlier with width reserved for the
+largest permitted page number (`maxPages`). This avoids a second planner
+iteration merely because `9` became `10`. Measurement and rendering use the
+same width calculator; a plan beyond the configured page limit is rejected like
+any other out-of-limit plan.
 
-Przykładowe deklaracje:
+Examples:
 
 ```text
 footer text: "{{page.number}} / {{page.count}}"
 header title source: "{{flow.title.blocks[0].text}}"
 ```
 
-Numer strony nie powinien być dodatkowo składany jako `${page} / ${pageCount}`
-w rendererze, jeżeli template deklaruje go jako slot tekstowy.
+Do not additionally assemble `${page} / ${pageCount}` in the renderer when the
+template declares page number as a text slot.
 
-## Przypadki, które muszą mieć jawny wynik
+## Cases requiring explicit outcomes
 
-| Przypadek | Oczekiwane zachowanie |
+| Case | Expected behavior |
 |---|---|
-| brak tytułu, brak lockupu, tryb zmienny | header zwija się do zera; `main` zaczyna się od zwykłej pozycji contentu |
-| brak tytułu, tryb stały | zostaje zadeklarowana pusta rama; jest to świadomy wybór template'u |
-| brak tytułu, lockup marki | pozostaje tylko zadeklarowane minimum lockupu i jego paddingi |
-| krótki tytuł | jedna linia, wspólne paddingi, brak pustej nadmiarowej wysokości |
-| długi tytuł | zawinięcie i wzrost slotu; kolejne insertiony oraz `main` przesuwają się w dół |
-| tytuł przekracza maksymalną wysokość | kandydat odrzucony z diagnostyką, bez kompresowania treści |
-| `{{page.number}}` zmienia szerokość z `9` na `10` | box był mierzony z rezerwą `maxPages`; render używa tego samego kalkulatora |
-| `{{page.count}}` nie jest jeszcze znane | box ma zarezerwowaną szerokość `maxPages`, a finalna liczba jest podstawiana po akceptacji planu |
-| footer bez treści | footer nie tworzy pustej ramy, chyba że template wymaga minimum |
-| footer z numerem strony | zwykły powtarzalny slot tekstowy z istniejącymi placeholderami |
-| pierwsza strona bez headera | wynika z `start_page`/layoutu, a nie z warunku w rendererze |
-| kolejne strony z innym headerem | każdy layout strony mierzy własny zestaw slotów |
-| header koliduje z twardym insertionem | kandydat nielegalny; nie wolno przykrywać insertionu |
-| header wypycha `main` poza stronę | kandydat nielegalny albo tworzona jest następna strona według zwykłych reguł |
-| strona zawiera wyłącznie chrome | nie tworzymy pustej strony kontynuacyjnej bez wymaganej treści |
-| debug PDF i zwykły PDF | obie ścieżki korzystają z tych samych boxów wynikowego planu |
-| logo + nazwa marki | lockup zachowuje wariantowy `gap_mm` i pionowe wyrównanie względem rzeczywistego logo |
-| logo bez nazwy marki | grupa zawiera tylko logo; nie ma pustego końcowego gapu |
-| nazwa marki bez logo | grupa zawiera tylko tekst; nie rezerwuje niewidocznej szerokości logo |
-| długi opis/nazwa marki | szerokość jest mierzona; przekroczenie limitu kończy się `shrink-to-fit` albo odrzuceniem zgodnie z polityką slotu |
-| standard vs continuation | każdy wariant zachowuje własny rozmiar logo, font, wysokość maksymalną i gap |
-| lockup koliduje z `header-period` | kandydat jest nielegalny; nie przesuwamy tekstu poza zadeklarowany slot bez reguły layoutu |
+| no title, no lockup, variable mode | header collapses to zero; `main` starts at normal content position |
+| no title, fixed mode | declared empty frame remains; deliberate template choice |
+| no title, brand lockup | only declared lockup minimum and padding remain |
+| short title | one line, shared padding, no empty excess height |
+| long title | wrap and slot growth; later insertions and `main` move down |
+| title exceeds maximum height | candidate rejected with diagnostics; no content compression |
+| `{{page.number}}` changes width from `9` to `10` | box measured with `maxPages` reservation; render uses same calculator |
+| `{{page.count}}` is not yet known | box reserves `maxPages` width; final number substituted after plan acceptance |
+| footer without content | no empty footer frame unless template requires a minimum |
+| footer with page number | ordinary repeating text slot using existing placeholders |
+| first page without header | determined by `start_page`/layout, not renderer condition |
+| subsequent pages with different header | each page layout measures its own slot set |
+| header collides with hard insertion | candidate illegal; insertion must not be covered |
+| header pushes `main` beyond page | candidate illegal or next page created by ordinary rules |
+| page contains only chrome | do not create an empty continuation page without required content |
+| debug PDF and ordinary PDF | both use the same result-plan boxes |
+| logo + brand name | lockup keeps variant `gap_mm` and vertical alignment to actual logo |
+| logo without brand name | group contains only logo; no trailing gap |
+| brand name without logo | group contains only text; no invisible logo width |
+| long brand description/name | measure width; exceedance becomes `shrink-to-fit` or rejection according to slot policy |
+| standard versus continuation | each variant keeps its own logo size, font, maximum height, and gap |
+| lockup collides with `header-period` | candidate illegal; do not move text outside the declared slot without a layout rule |
 
-## Kolejność implementacji
+## Implementation order
 
-1. Ustalić w kontraktach template'u grupę headera/footeru oraz konfigurację
-   paddingów, minimum i maksimum wysokości.
-2. Wydzielić wspólny resolver istniejących placeholderów i użyć go zarówno w
-   pomiarze, jak i w backendzie PDF.
-3. Zmienić kolejność planowania strony tak, aby header i wymagane insertiony
-   były rozstrzygnięte przed `main`. **Wykonane dla powtarzalnego headera:**
-   header jest materializowany przed zwykłym flow, a nowo utworzone strony
-   dostają go w drugim przebiegu bez duplikowania pierwszej strony.
-4. Dodać kalkulator dynamicznej geometrii grupy headera i footeru. **Wykonane
-   dla headera tekstowego:**
-   ma zwracać boxy oraz informację o powodach wzrostu lub zwinięcia.
-5. Włączyć wynik kalkulatora do obstacle'ów/ram dostępnych dla `main` i
-   insertionów. **Wykonane:** `grow.pushes` przesuwa sloty main podczas
-   materializacji headera.
-6. Zmienić `pageChrome()` w projekcję wynikowych slotów oraz dekoracji, bez
-   niezależnego wyliczania wysokości header band. **Częściowo wykonane:**
-   dynamiczny band bierze granicę z aktywnych slotów headera; jawny lockup jest
-   już renderowany z planu, a fallback pozostaje tylko dla dokumentów bez bloku.
-7. Usunąć hard-coded składanie numeru strony tam, gdzie numer jest już
-   zadeklarowanym slotem tekstowym.
-8. Dodać walidację legalności dla minimum, maksimum, kolizji, overflowu i
-   pustych stron.
-9. Uzupełnić debug, `dry_run`, manifest i PDF o tę samą geometrię.
-10. Przepisać testy chrome na fixture'y krótkiego, długiego, pustego i
-    wielostronicowego headera oraz zmiany liczby cyfr numeracji. **Wykonane dla
-    zakresu 1.0:** parser, planner i PDF mają fixture długiego oraz pustego
-    dynamicznego headera, jawnego lockupu i powtarzalnego footera; migracja
-    automatycznego lockupu z profilu marki pozostaje zakresem 1.1.
+1. Define the header/footer group and minimum/maximum/padding configuration in
+   template contracts.
+2. Extract one resolver for existing placeholders and use it in measurement
+   and the PDF backend.
+3. Change page planning so header and required insertions resolve before
+   `main`. **Done for repeating header:** header is materialized before the
+   ordinary flow, and new pages receive it in a second pass without duplicating
+   the first page.
+4. Add a dynamic header/footer group-geometry calculator. **Done for text
+   header:** it returns boxes and reasons for growth or collapse.
+5. Feed calculator results into obstacles/frames available to `main` and
+   insertions. **Done:** `grow.pushes` moves main slots during header
+   materialization.
+6. Change `pageChrome()` to project result slots and decorations without
+   independently calculating header-band height. **Partly done:** dynamic band
+   takes its boundary from active header slots; explicit lockup renders from
+   the plan, while fallback remains only for documents without the block.
+7. Remove hard-coded page-number assembly where the number is already a text
+   slot.
+8. Add legality validation for minimum, maximum, collision, overflow, and empty
+   pages.
+9. Give debug, `dry_run`, manifest, and PDF the same geometry.
+10. Rewrite chrome tests for short, long, empty, and multi-page header fixtures
+    and number-digit changes. **Done for 1.0 scope:** parser, planner, and PDF
+    have long and empty dynamic-header fixtures, explicit lockup, and repeating
+    footer; automatic lockup from brand profile remains 1.1.
 
-## Kryteria ukończenia
+## Completion criteria
 
-- zmiana wysokości tytułu zmienia box headera i początek `main` bez ręcznej
-  korekty innego template'u;
-- pusty header nie zostawia nieuzasadnionej pustej przestrzeni;
-- header i footer są powtarzalnymi flowami, a nie alternatywną ścieżką
-  renderera;
-- `{{page.number}}` i `{{page.count}}` mają jeden resolver oraz jeden kontrakt;
-- plan, debug i PDF korzystają z tych samych ramek chrome;
-- finalna liczba stron jest ustalona przed rozwiązaniem `{{page.count}}`;
-- każda nielegalna kolizja lub overflow kończy się odrzuceniem planu z
-  diagnostyką, a nie cichym przycięciem;
-- testy obejmują brak treści, lockup bez tytułu, tytuł wieloliniowy, limity,
-  pierwszą stronę, continuation, footer i numerację 1–9 oraz 10+;
-- test visual QA potwierdza spójne paddingi i brak pustego pasa po zwinięciu
-  headera;
-- MCP, CLI, `dry_run` i zwykły PDF zachowują dotychczasowy kontrakt poza
-  zamierzoną zmianą dynamicznej geometrii chrome.
+- changing title height changes the header box and `main` start without manual
+  correction in another template;
+- an empty header leaves no unjustified empty space;
+- header and footer are repeating flows, not an alternative renderer path;
+- `{{page.number}}` and `{{page.count}}` have one resolver and one contract;
+- plan, debug, and PDF use the same chrome frames;
+- final page count is known before resolving `{{page.count}}`;
+- every illegal collision or overflow rejects the plan with diagnostics, rather
+  than silently clipping;
+- tests cover no content, lockup without title, multi-line title, limits, first
+  page, continuation, footer, and numbering 1–9 and 10+;
+- visual QA confirms shared padding and no empty band after header collapse;
+- MCP, CLI, `dry_run`, and ordinary PDF retain the existing contract except for
+  the intended dynamic chrome geometry change.
 
-## Poza zakresem
+## Out of scope
 
-Nie budujemy globalnego solvera CSS ani nowej encji `Header`. Nie zmieniamy
-istniejącej składni placeholderów i nie przenosimy treści `main` do
+We do not build a global CSS solver or a new `Header` entity. Existing
+placeholder syntax is unchanged, and `main` content is not moved into
 `insertionSlots`.
+
+## Release boundary and deferred 1.1 work
+
+The release-1.0 implementation and its documentation are complete for dynamic
+template-declared chrome. Documentation/legacy audits may still identify old
+fields and fixed templates, but those audits do not change the 1.0 contract.
+Optimization follow-ups may remove duplicated measurements or expensive test
+paths while preserving the current flow. Automatic brand lockup creation from
+the profile, removal of the legacy renderer fallback, and explicit `paintOrder`
+remain deferred to release 1.1.

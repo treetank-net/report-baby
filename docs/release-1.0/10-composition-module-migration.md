@@ -1,22 +1,22 @@
-# Plan 10 — kategorie i migracja modułów composition
+# Plan 10 — `composition` module categories and migration
 
-Status: w większości wykonany; docelowa mapa `composition/` i migracja
-adapterów zostały przeprowadzone. Pozostaje audyt zachowania i świadome
-usunięcia legacy.
+Status: mostly complete. The target `composition/` map and adapter migration
+are in place. Remaining work is a behavior audit and deliberate removal of
+legacy paths.
 
-## Cel
+## Objective
 
-Uporządkować `server/src/composition` według odpowiedzialności i kierunku
-zależności, bez wprowadzania nowych encji domenowych i bez zmiany zachowania
-planera. Katalog `runtime/` nie jest tworzony: publiczny runtime pozostaje
-bezpośrednio w `composition/`.
+Organize `server/src/composition` by responsibility and dependency direction,
+without introducing new domain entities or changing planner behavior. The
+`runtime/` directory is not created: the public runtime remains directly under
+`composition/`.
 
-Migracja ma łączyć funkcje, które posiadają tę samą wiedzę domenową, nawet gdy
-obecnie znajdują się w kilku plikach i są wywoływane z różnych miejsc. Nie
-dzielimy plików wyłącznie według liczby linii i nie tworzymy modułów
-`helpers`, `utils` ani `types` jako worków bez właściciela.
+The migration joins functions that share the same domain knowledge even when
+they currently live in several files and are called from different places. We
+do not split files solely by line count, and we do not create ownerless
+`helpers`, `utils`, or `types` bags.
 
-## Docelowa mapa katalogów
+## Target directory map
 
 ```text
 server/src/composition/
@@ -76,127 +76,130 @@ server/src/composition/
 └── index.ts
 ```
 
-Wewnątrz katalogów nie dodajemy `index.ts`. Bezpośrednie importy mają ujawniać
-rzeczywistą zależność. Istniejący `composition/index.ts` pozostaje jedyną
-publiczną fasadą, jeśli wymagają tego konsumenci pakietu.
+No `index.ts` files are added inside the subdirectories. Direct imports must
+expose the real dependency. Existing `composition/index.ts` remains the only
+public facade when package consumers require one.
 
-## Właściciele odpowiedzialności
+## Responsibility owners
 
 ### `contracts/`
 
-Wyłącznie deklaracje typów i interfejsów. Nie może importować runtime, adapterów
-ani evaluatora.
+Types and interface declarations only. This directory must not import runtime,
+adapters, or the evaluator.
 
-- `model.ts` — bloki, strony, sloty, layouty, plan i placementy;
-- `engine-contracts.ts` — interfejsy silnika, evaluatora, planera i backendu;
-- `flow-planning.ts` — `FlowPlanningContext`, `FlowRuntime`, `FlowTarget` oraz
-  powiązane rekordy stanu przebiegu;
-- `planner-policy.ts` — typy i polityka wejściowa planera.
-- `pdf.ts` — kontrakty stylów, assetów, rendererów i capability adaptera PDF;
-  implementacja jsPDF nie może być właścicielem tych typów.
+- `model.ts` — blocks, pages, slots, layouts, plans, and placements;
+- `engine-contracts.ts` — engine, evaluator, planner, and backend interfaces;
+- `flow-planning.ts` — `FlowPlanningContext`, `FlowRuntime`, `FlowTarget`, and
+  related flow-state records;
+- `planner-policy.ts` — planner input types and policy;
+- `pdf.ts` — style, asset, renderer, and PDF capability adapter contracts;
+  the jsPDF implementation must not own these types.
 
-Kontrakty engine znajdują się w `contracts/engine-contracts.ts`, a
-orkiestracja w `composition-engine.ts`. Usunięto cienką ścieżkę
-kompatybilności `engine.ts`; nowe moduły importują kontrakty bezpośrednio z
-`contracts/` albo implementację z jej właściwego seamu.
+Engine contracts live in `contracts/engine-contracts.ts`, while orchestration
+lives in `composition-engine.ts`. The thin compatibility path `engine.ts` has
+been removed; new modules import contracts directly from `contracts/` or the
+implementation from its proper seam.
 
 ### `geometry/`
 
-Tylko czyste obliczenia przestrzenne i wizualne. Funkcje nie mutują planu,
-strony ani slotów.
+Pure spatial and visual calculations only. Functions do not mutate the plan,
+page, or slots.
 
-- `rectangles.ts` — `rectBottom`, przecięcia, nakładanie, containment;
-- `visual-geometry.ts` — geometria obrazu i grafiki (`graphic-geometry` oraz
+- `rectangles.ts` — `rectBottom`, intersections, overlap, and containment;
+- `visual-geometry.ts` — image and graphic geometry (`graphic-geometry` and
   `image-geometry`);
-- `glyph-geometry.ts` — czyste boxy próbkowania glifów (`glyph-sampling`).
+- `glyph-geometry.ts` — pure glyph-sampling boxes (`glyph-sampling`).
 
-Jeżeli funkcja zna `CompositionPlan`, `PageState` albo flow, nie należy do tego
-katalogu, nawet jeśli zwraca prostokąt.
+If a function knows `CompositionPlan`, `PageState`, or a flow, it does not
+belong in this directory, even if it returns a rectangle.
 
 ### `text/`
 
-Wiedza o tekście: tokenizacja, metryki, wrapping i wyznaczanie placementów.
+Text knowledge: tokenization, metrics, wrapping, and placement calculations.
 
-- `tokenization.ts` — jeden właściciel `wordsOf` i pochodnych tokenów;
-- `text-layout.ts` — połączenie `text-measurement`, `text-wrapping`,
-  `text-placement` oraz `line-capacity`;
-- `style-name.ts` — mapowanie rodzaju bloku na nazwę stylu.
+- `tokenization.ts` — the single owner of `wordsOf` and derived tokens;
+- `text-layout.ts` — the combination of `text-measurement`, `text-wrapping`,
+  `text-placement`, and `line-capacity`;
+- `style-name.ts` — mapping a block kind to a style name.
 
-`text-layout.ts` może pozostać większym modułem, ale jego funkcje muszą mieć
-pojedynczą odpowiedzialność: pomiar, wrapping, capacity albo materializacja.
+`text-layout.ts` may remain a larger module, but its functions must each have
+one responsibility: measurement, wrapping, capacity, or materialization.
 
 ### `layout/`
 
-Stan i reguły układania dokumentu.
+Document-layout state and rules.
 
-- `page-state.ts` — połączenie `page-management`, `route-slots`,
-  `flow-cursor` i `slot-growth`;
-- `flow-space.ts` — połączenie `flow-occupancy` i `flow-barriers`;
-- `insertion-layout.ts` — połączenie `insertion-planning` i `insertion-order`;
-- `flow-planner.ts` — orkiestracja jednego flow;
-- `flow-text-decision.ts` — reguły decyzji dla tekstu;
-- `document-layout.ts` — pełny cykl planowania dokumentu;
-- `text-planner.ts` — publiczna orkiestracja kandydatów i wyboru planu;
-- `planner-candidates.ts` — tworzenie i doprecyzowanie wariantów;
-- `movable-placement-validation.ts` — wspólna walidacja ram i liczby kandydatów
-  dla ruchomych insertionów i autorskich grafik; nie generuje wariantów.
-- `movable-placement-frames.ts` — materializacja ramek wynikowych z polityk i
-  zmierzonych propozycji; nie podejmuje decyzji o legalności ani nie wybiera
-  pozycji.
-- `graphic-planning.ts` — planowanie grafik;
-- `structured-block-placement.ts` — placement tabel, KPI i innych bloków
-  atomowych.
-- `glyph-objects.ts` — materializacja authored/generated glyph placements;
-  pozostaje w layout, bo zna `CompositionPlan` i mutuje jego wynik.
+- `page-state.ts` — the combination of `page-management`, `route-slots`,
+  `flow-cursor`, and `slot-growth`;
+- `flow-space.ts` — the combination of `flow-occupancy` and `flow-barriers`;
+- `insertion-layout.ts` — the combination of `insertion-planning` and
+  `insertion-order`;
+- `flow-planner.ts` — orchestration of one flow;
+- `flow-text-decision.ts` — text decision rules;
+- `document-layout.ts` — the complete document-planning cycle;
+- `text-planner.ts` — public orchestration of candidate generation and plan
+  selection;
+- `planner-candidates.ts` — creation and refinement of variants;
+- `movable-placement-validation.ts` — shared frame and candidate-count
+  validation for movable insertions and authored graphics; it does not generate
+  variants;
+- `movable-placement-frames.ts` — materialization of result frames from policy
+  and measured proposals; it does not decide legality or choose positions;
+- `graphic-planning.ts` — graphic planning;
+- `structured-block-placement.ts` — placement of tables, KPIs, and other
+  atomic blocks;
+- `glyph-objects.ts` — materialization of authored/generated glyph placements;
+  it remains in layout because it knows `CompositionPlan` and mutates its
+  result.
 
-Nie łączymy całych `flow-planner.ts` i `flow-text-decision.ts`: pierwszy
-koordynuje przebieg, drugi implementuje politykę decyzji. Nie łączymy też
-`document-layout.ts` z `text-planner.ts`, bo odtworzyłoby to poprzedni god
-moduł.
+We do not merge all of `flow-planner.ts` and `flow-text-decision.ts`: the first
+coordinates a flow, while the second implements decision policy. We also do
+not merge `document-layout.ts` with `text-planner.ts`, because that would
+recreate the former god module.
 
 ### `evaluation/`
 
-Evaluator pozostaje tylko do odczytu planu.
+The evaluator remains read-only with respect to the plan.
 
-- `content.ts` — kompletność i ciągłość treści;
-- `legality.ts` — twarde wymagania i legalność;
-- `scoring.ts` — jakość legalnego planu;
-- `contrast.ts` — pomiar kontrastu i raster sampling;
-- `diagnostics.ts` — konstrukcja diagnostyk;
-- `plan-queries.ts` — nazwane zapytania do artefaktu planu;
-- `evaluator.ts` — orkiestracja.
+- `content.ts` — content completeness and continuity;
+- `legality.ts` — hard requirements and legality;
+- `scoring.ts` — quality of a legal plan;
+- `contrast.ts` — contrast measurement and raster sampling;
+- `diagnostics.ts` — diagnostic construction;
+- `plan-queries.ts` — named queries against the plan artifact;
+- `evaluator.ts` — orchestration.
 
-`evaluation-support.ts` nie jest docelowym modułem. Każda funkcja z tego pliku
-trafia do właściwego właściciela, zamiast do nowego worka pomocniczego.
+`evaluation-support.ts` is not a target module. Every function from that file
+belongs in its proper owner instead of another generic helper bag.
 
 ### `observability/`
 
-`planning-records` i `planning-trace` tworzą jeden moduł obserwowalności. Zapis
-decyzji odbywa się przez `recordFlowDecision`; wywołujący przekazuje istniejący
-kontekst, a nie syntetyczny obiekt decyzji.
+`planning-records` and `planning-trace` form one observability module. Decisions
+are recorded through `recordFlowDecision`; callers pass the existing context,
+not a synthetic decision object.
 
 ### `adapters/`
 
-Adaptery tłumaczą zewnętrzne dane na kontrakty composition i nie zawierają reguł
-wyboru layoutu.
+Adapters translate external data into composition contracts and do not contain
+layout-selection rules.
 
-Implementacja adaptera PDF była największym workiem. Dzielimy ją według
-capability backendu na `pdf/backend`, `pdf/text`, `pdf/image`, `pdf/metric`,
-`pdf/chart` i `pdf/table`. Każdy adapter implementuje istniejący kontrakt;
-planner nie importuje jsPDF.
+The PDF adapter implementation was the largest bag. It is divided by backend
+capability into `pdf/backend`, `pdf/text`, `pdf/image`, `pdf/metric`,
+`pdf/chart`, and `pdf/table`. Each adapter implements the existing contract;
+the planner does not import jsPDF.
 
-Kontrakt tych capability znajduje się w `contracts/pdf.ts`. Implementacja jest
-rozdzielona na moduły capability; funkcja składania capability pozostaje w
-`adapters/pdf/backend.ts`, ponieważ jest częścią orkiestracji backendu, a nie
-kontraktem typu.
+These capability contracts live in `contracts/pdf.ts`. The implementation is
+split into capability modules; the capability assembly function remains in
+`adapters/pdf/backend.ts` because it is backend orchestration, not a type
+contract.
 
-### Runtime w `composition/`
+### Runtime in `composition/`
 
-`composition-engine.ts` i `report-composition-entrypoint.ts` pozostają
-bezpośrednio w katalogu `composition/`. Są punktami składania systemu, a nie
-osobną domeną katalogową. `index.ts` eksportuje tylko publiczny kontrakt.
+`composition-engine.ts` and `report-composition-entrypoint.ts` remain directly
+under `composition/`. They are composition points, not a separate directory
+domain. `index.ts` exports only the public contract.
 
-## Reguły zależności
+## Dependency rules
 
 ```text
 contracts
@@ -212,187 +215,203 @@ composition-engine
 adapters
 ```
 
-- kontrakty nie zależą od implementacji;
-- geometria i tokenizacja są czyste;
-- layout może mutować stan planowania;
-- evaluator czyta plan, ale go nie zmienia;
-- obserwowalność zapisuje decyzje i diagnostykę przez jawny seam;
-- adaptery zależą do środka, nigdy odwrotnie;
-- importy są bezpośrednie, bez wewnętrznych barrel exporterów.
+- contracts do not depend on implementations;
+- geometry and tokenization are pure;
+- layout may mutate planning state;
+- the evaluator reads the plan but does not change it;
+- observability records decisions and diagnostics through an explicit seam;
+- adapters depend inward, never the reverse;
+- imports are direct, without internal barrel exporters.
 
-## Kolejność migracji
+## Migration order
 
-### Etap 0 — zabezpieczenie
+### Stage 0 — protection
 
-1. Zachować bieżący commit jako punkt odniesienia.
-2. Wygenerować inventory importów i publicznych eksportów.
-3. Uruchomić testy composition przed pierwszym ruchem.
+1. Preserve the current commit as a reference point.
+2. Generate an inventory of imports and public exports.
+3. Run composition tests before the first move.
 
-### Etap 1 — kontrakty
+### Stage 1 — contracts
 
-1. Utworzyć `contracts/`.
-2. Przenieść typy z `flow-planning-types.ts` do `contracts/flow-planning.ts`.
-3. Oddzielić typy engine od implementacji; usunąć tymczasową fasadę
-   `engine.ts` po przełączeniu importerów.
-4. Zaktualizować importy bez zmiany nazw publicznych.
+1. Create `contracts/`.
+2. Move types from `flow-planning-types.ts` to `contracts/flow-planning.ts`.
+3. Separate engine types from implementation; remove the temporary `engine.ts`
+   facade after switching importers.
+4. Update imports without changing public names.
 
-### Etap 2 — czyste obliczenia
+### Stage 2 — pure calculations
 
-1. Ujednolicić `wordsOf` w `text/tokenization.ts`.
-2. Przenieść wspólną geometrię prostokątów do `geometry/rectangles.ts`.
-3. Połączyć geometrię wizualną i glifów.
-4. Uruchomić testy po każdym logicznym seamie.
+1. Standardize `wordsOf` in `text/tokenization.ts`.
+2. Move shared rectangle geometry to `geometry/rectangles.ts`.
+3. Join visual and glyph geometry.
+4. Run tests after every logical seam.
 
-### Etap 3 — text i layout
+### Stage 3 — text and layout
 
-1. Połączyć moduły tekstowe w `text/text-layout.ts`.
-2. Połączyć stan strony w `layout/page-state.ts`.
-3. Połączyć zajętość i bariery w `layout/flow-space.ts`.
-4. Połączyć insertion planning i ordering w `layout/insertion-layout.ts`.
-5. Dopiero potem przenosić funkcje pozostające w `flow-planner.ts`.
+1. Join text modules in `text/text-layout.ts`.
+2. Join page state in `layout/page-state.ts`.
+3. Join occupancy and barriers in `layout/flow-space.ts`.
+4. Join insertion planning and ordering in `layout/insertion-layout.ts`.
+5. Only then move functions that remain in `flow-planner.ts`.
 
-### Etap 4 — evaluator i obserwowalność
+### Stage 4 — evaluator and observability
 
-1. Usunąć `evaluation-support.ts` przez rozdzielenie jego funkcji.
-2. Przenieść trace i records do `observability/`.
-3. Utrzymać evaluator jako read-only wobec planu.
+1. Remove `evaluation-support.ts` by distributing its functions.
+2. Move trace and records to `observability/`.
+3. Keep the evaluator read-only with respect to the plan.
 
-### Etap 5 — adaptery i runtime
+### Stage 5 — adapters and runtime
 
-1. Rozdzielić `js-pdf-adapter.ts` według capability.
-2. Wydzielić kontrakt i implementację z dawnej fasady engine.
-3. Przenieść adaptery do `adapters/`, a runtime bezpośrednio do
-   `composition/`.
+1. Split `js-pdf-adapter.ts` by capability.
+2. Separate contract and implementation from the former engine facade.
+3. Move adapters to `adapters/` and keep runtime directly in `composition/`.
 
-## Kryteria każdego kroku
+## Criteria for every step
 
-- brak zmiany publicznego zachowania planera;
-- brak nowych encji domenowych;
-- brak importu z adaptera do czystej geometrii lub kontraktu;
-- brak duplikatu `wordsOf` i podstawowych operacji geometrycznych;
-- brak obiektów decyzji konstruowanych w wywołujących funkcjach;
-- przechodzą testy TypeScript, testy composition i test architektury;
-- zmiana jest osobnym, małym commitem możliwym do odtworzenia.
+- no change to public planner behavior;
+- no new domain entities;
+- no adapter import into pure geometry or contracts;
+- no duplicate `wordsOf` or basic geometry operations;
+- no decision objects constructed in caller functions;
+- TypeScript, composition, and architecture tests pass;
+- each change is a small, reproducible commit.
 
-## Zrealizowane etapy
+## Completed stages
 
-- `bf7a31c` — zapisanie tego planu i korekta: runtime pozostaje bezpośrednio w
-  `composition/`;
-- `33ba4f9` — przeniesienie `flow-planning-types.ts` do
+- `bf7a31c` — recorded this plan and corrected the target: runtime remains
+  directly in `composition/`;
+- `33ba4f9` — moved `flow-planning-types.ts` to
   `contracts/flow-planning.ts`;
-- `73019a0` — przeniesienie obecnych modułów evaluatora do `evaluation/`;
-- `74671e7` i `ca753e0` — przeniesienie modułów tekstowych do `text/`,
-  utworzenie wspólnej tokenizacji, połączenie geometrii obrazu i grafiki w
-  `geometry/visual-geometry.ts` oraz usunięcie starych ścieżek;
-- `4b4f65d` — przeniesienie modułów stanu stron, flow-space i insertionów do
-  `layout/` oraz wydzielenie `contracts/layout-state.ts`.
-- `182056a` — połączenie zarządzania stroną, route slots, kursora i wzrostu
-  slotów w `layout/page-state.ts`.
-- `22e4664` — połączenie zajętości flow i barier w `layout/flow-space.ts`.
-- `24eb756` — połączenie planowania insertionów i ich kolejności w
-  `layout/insertion-layout.ts`.
-- `9fa1f70` — rozdzielenie funkcji dawnego worka `evaluation-support.ts` na
-  diagnostykę, zapytania planu i geometrię legalności.
-- `e3cd97a` — przeniesienie implementacji jsPDF do `adapters/pdf/`.
-- `3f0ff4b` — wydzielenie kontraktów adaptera PDF do `contracts/pdf.ts` i
-  odpięcie typów od implementacji jsPDF.
-- `7b0c43d` — rozcięcie implementacji PDF według capability na `backend.ts`,
-  `text.ts`, `image.ts`, `metric.ts`, `chart.ts` i `table.ts`; usunięcie
-  monolitycznego `js-pdf-adapter.ts` i aktualizacja importów do konkretnych
-  właścicieli.
-- `64a65c9` — rozdzielenie kontraktów engine od implementacji: typy trafiły do
-  `contracts/engine-contracts.ts`, orkiestracja do `composition-engine.ts`.
-- `7f29533` — połączenie pomiaru, wrappingu, capacity i materializacji linii w
-  `text/text-layout.ts`; `tokenization.ts` i `style-name.ts` pozostały
-  niezależnymi, czystymi modułami, a zależności przeszły na jawny typ
-  `WrappedLine[]`.
-- `ae7df91` — przeniesienie polityki planera i typów ruchomych ramek do
-  `contracts/planner-policy.ts`; implementacje kandydatów nie są już
-  właścicielem kontraktu polityki.
-- `033883c` — ułożenie pozostałych modułów według docelowej domeny: flow,
-  document, graphic, structured-block, planner-candidates i text-planner
-  trafiły do `layout/`, evaluator otrzymał nazwy `content.ts`, `legality.ts`
-  i `scoring.ts`, a records i trace połączono w
-  `observability/planning-observability.ts`.
-- `ea333ea` — rozdzielenie próbkowania glifów od materializacji obiektów:
-  czyste obliczenia trafiły do `geometry/glyph-geometry.ts`, a funkcje
-  mutujące plan do `layout/glyph-objects.ts`.
-- `67e3e3c` — udokumentowanie właścicieli modułu glifów i reguły, że funkcje
-  znające `CompositionPlan` nie trafiają do czystej geometrii.
-- `1ab6867` — odświeżenie skryptu inventory tak, aby rekurencyjnie skanował
-  aktualne `composition/**/*.ts`, ignorował nieistniejące historyczne cele i
-  poprawnie raportował aktualne ścieżki evaluatora.
-- `bbcddf8` — adaptery wejścia, geometrii szablonu, konfiguracji renderera
-  i składania text engine trafiły do `composition/adapters/`: odpowiednio
-  `input.ts`, `page-template.ts`, `render-config.ts` i `text-engine.ts`.
-- `adc11c8` — usunięcie starych ścieżek adapterów po przełączeniu wszystkich
-  importów; `6116673` — aktualizacja kanonicznej mapy modułów i dokumentacji
-  konfiguracji oraz block-kinds.
-- Bieżący seam cleanup — wspólna projekcja linii planu trafiła do
-  `layout/plan-lines.ts`, odczyt tekstu bloku jest współdzielony przez text i
-  observability, `pdfNumber` ma jednego właściciela w adapterze konfiguracji,
-  a `insertionKey` jest współdzielony przez planowanie insertionów i kandydatów.
-  Decyzje przepływów i faz planera są zapisywane przez
-  `recordFlowDecision`/`recordPlanDecision`; funkcje wywołujące nie konstruują
-  już obiektów decyzji.
-- Bieżące domknięcie kontraktów — renderer-neutralny model dokumentu został
-  przeniesiony do `contracts/model.ts`, a usunięta została nieużywana fasada
-  kompatybilności `engine.ts`.
+- `73019a0` — moved the existing evaluator modules to `evaluation/`;
+- `74671e7` and `ca753e0` — moved text modules to `text/`, created shared
+  tokenization, joined image and graphic geometry in
+  `geometry/visual-geometry.ts`, and removed old paths;
+- `4b4f65d` — moved page-state, flow-space, and insertion modules to `layout/`
+  and extracted `contracts/layout-state.ts`;
+- `182056a` — joined page management, route slots, cursor, and slot growth in
+  `layout/page-state.ts`;
+- `22e4664` — joined flow occupancy and barriers in `layout/flow-space.ts`;
+- `24eb756` — joined insertion planning and ordering in
+  `layout/insertion-layout.ts`;
+- `9fa1f70` — distributed the former `evaluation-support.ts` bag into
+  diagnostics, plan queries, and legality geometry;
+- `e3cd97a` — moved the jsPDF implementation to `adapters/pdf/`;
+- `3f0ff4b` — extracted PDF adapter contracts to `contracts/pdf.ts` and
+  detached types from the jsPDF implementation;
+- `7b0c43d` — split PDF implementation by capability into `backend.ts`,
+  `text.ts`, `image.ts`, `metric.ts`, `chart.ts`, and `table.ts`; removed the
+  monolithic `js-pdf-adapter.ts` and updated imports to the concrete owners;
+- `64a65c9` — separated engine contracts from implementation: types moved to
+  `contracts/engine-contracts.ts`, orchestration to `composition-engine.ts`;
+- `7f29533` — joined measurement, wrapping, capacity, and line materialization
+  in `text/text-layout.ts`; `tokenization.ts` and `style-name.ts` remained
+  independent pure modules, with dependencies expressed through
+  `WrappedLine[]`;
+- `ae7df91` — moved planner policy and movable-frame types to
+  `contracts/planner-policy.ts`; candidate implementations no longer own the
+  policy contract;
+- `033883c` — organized remaining modules by target domain: flow, document,
+  graphic, structured-block, planner-candidates, and text-planner moved to
+  `layout/`; the evaluator received `content.ts`, `legality.ts`, and
+  `scoring.ts`, and records and trace were joined in
+  `observability/planning-observability.ts`;
+- `ea333ea` — separated glyph sampling from object materialization: pure
+  calculations moved to `geometry/glyph-geometry.ts`, while plan-mutating
+  functions moved to `layout/glyph-objects.ts`;
+- `67e3e3c` — documented glyph-module ownership and the rule that functions
+  knowing `CompositionPlan` do not belong in pure geometry;
+- `1ab6867` — refreshed inventory so it recursively scans current
+  `composition/**/*.ts`, ignores nonexistent historical targets, and reports
+  current evaluator paths correctly;
+- `bbcddf8` — moved input, template-geometry, renderer-configuration, and text
+  engine assembly adapters into `composition/adapters/`: `input.ts`,
+  `page-template.ts`, `render-config.ts`, and `text-engine.ts`;
+- `adc11c8` — removed old adapter paths after switching all imports;
+  `6116673` — updated the canonical module map and configuration/block-kind
+  documentation;
+- Current seam cleanup — shared plan-line projection moved to
+  `layout/plan-lines.ts`, block-text reading is shared by text and
+  observability, `pdfNumber` has one owner in the configuration adapter, and
+  `insertionKey` is shared by insertion planning and candidates. Flow and
+  planner-phase decisions are recorded through
+  `recordFlowDecision`/`recordPlanDecision`; callers no longer construct
+  decision objects;
+- Current contract closure — the renderer-neutral document model moved to
+  `contracts/model.ts`, and the unused compatibility facade `engine.ts` was
+  removed.
 
-Po każdym etapie `npx tsc --noEmit` i `node server/scripts/architecture-check.mjs`
-przechodziły pomyślnie. Pełny suite `npm run test:composition` przeszedł na
-hoście wszystkie 13 kontroli, włącznie z oracle PDF, obrazami, kontrastem,
-przepływem numerowanym i limitami stron. W sandboxie oracle nadal może kończyć
-się `spawnSync pdftotext EPERM`; nie jest to błąd migracji.
+## Release status and verification
 
-## Domknięcie migracji i świadomie pozostawione seamy
+The composition module migration is complete for release 1.0. Documentation
+and legacy-path audits remain separate follow-up work; they do not reopen the
+completed module move. Optimization follow-ups may reduce duplicated work or
+test cost, but must preserve the established public flow.
 
-Analiza wspólnych obliczeń `flow-planner.ts` i `flow-text-decision.ts` nie
-wykazała bezpiecznej funkcji, którą można połączyć bez mieszania stanu kursora,
-wyboru slotu i reguł tekstowych. Wspólne operacje są już za seamami
-`page-state.ts`, `flow-space.ts`, `text/text-layout.ts` i
-`observability/planning-observability.ts`; oba planery pozostają osobnymi
-modułami orkiestrującymi.
+The release gate `npm run test:release` passed **39/39 checks on 2026-09-09**.
+The default `npm test` passed **23/23 checks in approximately 122 seconds**.
+The separate `npm run test:editorial-full` gate passed **506/506 fixtures in
+242.32 seconds on 2026-09-09**; it is not included in the 39-check release
+gate and must be reported separately for later snapshots.
 
-Kolejka siedmiu funkcji powyżej 80 linii została przejrzana. Każda z nich ma
-jedną spójną odpowiedzialność za własnym interfejsem (adapter szablonu,
-placement structured block, adapter stylów/PDF albo algorytm wrappingu), więc
-nie jest dzielona mechanicznie. Pozostawienie ich jako głębokich modułów jest
-celowe; dalszy podział wymagałby nowego wariantu interfejsu lub drugiego
-adaptera, którego obecnie nie ma.
+`npx tsc --noEmit` and `node server/scripts/architecture-check.mjs` passed
+during the migration. The release test includes the current composition,
+transport, and artifact contracts. In a restricted sandbox, PDF tests may
+still report `spawnSync ... EPERM`; that is an environment limitation and must
+be distinguished from a code regression.
 
-Publiczne eksporty nadal przechodzą przez jedyną fasadę `composition/index.ts`.
-Po każdym seamie sprawdzamy kompilację, architekturę i suite composition.
+## Migration closure and deliberate seams
 
-Pełny `npm test` uruchomiony po migracji zatrzymuje się poza suite composition
-na istniejącym scenariuszu `public MCP behavior` dla
-`pages/editorial-metrics-two-column` (`EMPTY_FLOW_SLOT`). Zmiany tej migracji
-nie dotykają evaluatora ani logiki przepływu odpowiedzialnej za ten komunikat;
-przypadek pozostaje osobnym zadaniem zachowania publicznego.
+Analysis of shared calculations in `flow-planner.ts` and
+`flow-text-decision.ts` found no safe function that could be joined without
+mixing cursor state, slot selection, and text rules. Shared operations already
+live behind `page-state.ts`, `flow-space.ts`, `text/text-layout.ts`, and
+`observability/planning-observability.ts`; the two planners remain separate
+orchestration modules.
 
-### Aktualny inventory
+The queue of seven functions above 80 lines was reviewed. Each has one coherent
+responsibility behind its own interface (template adapter, structured-block
+placement, style/PDF adapter, or wrapping algorithm), so it is not split
+mechanically. Keeping these as deep modules is deliberate; further splitting
+would require a new interface variant or a second adapter that does not exist.
 
-`server/scripts/planner-function-dependency-report.mjs` skanuje cały bieżący
-podkatalog `composition/`, zbiera sygnatury, wartości zwracane, wywołania
-lokalnych funkcji i importy, a następnie pokazuje końcowy fan-out względem
-docelowych modułów. Raport jest zapisany w
-`planner-function-dependency-inventory.md`; przed kolejnym ruchem należy go
-regenerować poleceniem:
+Public exports still pass through the single facade `composition/index.ts`.
+After each seam we check compilation, architecture, and the relevant
+composition suite.
+
+The former full-test failure note for `public MCP behavior` is historical. The
+monolithic test was replaced by `test-public-mcp-contract.mjs`; its MCP smoke
+is now covered by the current release gate. Any future failure must be recorded
+against the current named test rather than the removed file.
+
+### Current inventory
+
+`server/scripts/planner-function-dependency-report.mjs` scans the current
+`composition/` subtree, collects signatures, return values, local-function
+calls, and imports, and shows final fan-out against target modules. The report
+is stored in `planner-function-dependency-inventory.md`; regenerate it before
+the next move with:
 
 ```sh
 node server/scripts/planner-function-dependency-report.mjs \
   --write-report docs/release-1.0/planner-function-dependency-inventory.md
 ```
 
-Obecny snapshot obejmuje 406 nazwanych funkcji w 39 plikach. Tabela rozmiarów
-jest dolną granicą kodu funkcji, a nie obietnicą redukcji LOC: o przeniesieniu
-decyduje wspólna wiedza domenowa i kształt zależności. Fizycznie, razem z
-adnotacjami katalogowymi, największe aktualne moduły to
-`evaluation/legality.ts` (659 LOC), `adapters/page-template.ts` (422 LOC),
-`flow-text-decision.ts` (588 LOC), `text/text-layout.ts` (525 LOC),
-`insertion-layout.ts` (455 LOC), `flow-space.ts` (415 LOC) i
-`flow-planner.ts` (408 LOC). Dalsza praca ma badać duplikaty obliczeń,
-nie ciąć funkcji mechanicznie tylko po to, aby zmniejszyć liczbę linii. Po
-usunięciu powtórzonych projekcji i wrapperów inventory wykazuje jedną grupę
-potencjalnego duplikatu (dwa typowane wrappery kandydatów), siedem funkcji
-powyżej 80 linii oraz zero funkcji bez adnotacji właściciela.
+The current snapshot contains 406 named functions in 39 files. The function
+size table is a lower bound, not a promise of LOC reduction: relocation is
+decided by shared domain knowledge and dependency shape. Including directory
+annotations, the largest current modules are `evaluation/legality.ts`
+(659 LOC), `adapters/page-template.ts` (422 LOC), `flow-text-decision.ts`
+(588 LOC), `text/text-layout.ts` (525 LOC), `insertion-layout.ts` (455 LOC),
+`flow-space.ts` (415 LOC), and `flow-planner.ts` (408 LOC). Further work should
+look for duplicate calculations, not mechanically cut functions merely to
+reduce line count. After removing repeated projections and inventory wrappers,
+the inventory shows one potential duplicate group (two typed candidate
+wrappers), seven functions above 80 lines, and zero functions without an owner
+annotation.
+
+## Deferred to release 1.1
+
+Automatic brand lockup materialization from a brand profile, removal of the
+legacy renderer fallback, and an explicit `paintOrder` contract are not release
+1.0 work. They require separate contracts and visual compatibility decisions;
+they must not be smuggled into the completed composition-module migration.

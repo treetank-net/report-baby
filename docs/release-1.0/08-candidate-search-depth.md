@@ -1,257 +1,163 @@
-# Plan 08 — głębokość wyszukiwania kandydatów
+# Plan 08 — candidate-search depth
 
-Status: wykonany dla zakresu wyszukiwania composition. Renderer-neutralny
-sampler, próbkowanie komórek glifów, integracja PNG z asset adapterem i
-evaluatorem, deterministyczna kolejność kandydatów, trace liczników kosztu oraz
-kalibracja na długim editorialu działają. Trace zawiera obserwowany czas
-planowania, który nie jest metryką deterministyczną. Obsługa dodatkowych
-formatów obrazów pozostaje osobnym zakresem punktu 09.
+Status: implemented for the composition-search scope. The renderer-neutral
+contrast sampler, glyph-cell sampling, PNG asset-adapter integration,
+deterministic candidate order, cost trace, and long-editorial calibration are
+implemented. Trace records observed planning time as diagnostic data, not as a
+deterministic metric. Additional image formats remain in Plan 09.
 
-## Cel
+## Goal
 
-Sprawdzić, czy sposób szukania pozycji elementu znajduje wystarczająco dobry
-układ, a nie tylko pierwszy sensowny wariant. Pięć pozycji jest dobrym
-startem, ale nie traktujemy tej liczby jako prawdy. Po pierwszym przybliżonym
-wyszukiwaniu chcemy móc sprawdzić kilka dokładniejszych pozycji w pobliżu
-najlepszego wyniku.
+Candidate search must find a sufficiently good legal layout rather than merely
+the first plausible position. A bounded coarse search is followed by local
+refinement around the best result. Every attempt is deterministic, bounded by
+configuration, and visible in the trace; this is not permission to scan an
+entire page without limits.
 
-To nie jest pozwolenie na przeszukiwanie całej strony bez limitu. Każda próba
-ma być deterministyczna, ograniczona i widoczna w trace.
+## Work sequence
 
-## Kolejność prac
+1. Measure the cost of one movable element: candidate count, planning time,
+   text recalculations, and rejected variants.
+2. Compare coarse search, local refinement, and bounded additional rounds.
+3. Check whether additional variants improve score, paragraph breaks, orphan
+   count, and spacing uniformity.
+4. Include a case where the best position lies between coarse coordinates.
+5. Include a case where another round produces no improvement and stops early.
+6. Only then choose limits and configuration values for real editorial.
 
-1. Zmierzyć koszt obecnego wyszukiwania jednego ruchomego elementu: liczba
-   kandydatów, czas planowania, liczba przeliczeń tekstu i liczba wariantów
-   odrzuconych.
-2. Dla tego samego zakresu porównać wyszukiwanie zgrubne, lokalne doprecyzowanie
-   i kilka kolejnych rund doprecyzowania.
-3. Sprawdzić, czy dodatkowe warianty faktycznie poprawiają score, łamanie
-   akapitów, liczbę orphanów i równomierność odstępów.
-4. Sprawdzić przypadek, w którym najlepsza pozycja leży pomiędzy pierwszymi
-   kandydatami, a nie dokładnie na ich współrzędnej.
-5. Sprawdzić przypadek, w którym dodatkowe szukanie nic nie poprawia i powinno
-   zakończyć się wcześniej.
-6. Dopiero po tym dobrać limity i wartości konfiguracyjne dla realnych
-   editoriali.
+## Recorded measures
 
-## Miary wyniku
+For every round, record generated and unique candidates, full text recalculations,
+candidate reflows, planning time, rejected plans, legal-plan scores and their
+breakdowns, fragmentation/orphan/spacing changes, contrast results against the
+candidate background, and the difference between the round winner and the best
+known result. A higher score alone is not enough; the improvement must be
+visible in the resulting PDF.
 
-Dla każdej rundy zapisujemy:
+## Search variants
 
-- liczbę wygenerowanych i unikalnych kandydatów;
-- liczbę pełnych przeliczeń tekstu;
-- liczbę reflowów każdego kandydata;
-- czas planowania;
-- liczbę planów nielegalnych;
-- score każdego legalnego planu i jego breakdown;
-- zmianę liczby fragmentacji, orphanów i nierównych odstępów;
-- wynik sprawdzenia kontrastu tekstu względem rzeczywistego tła kandydata,
-  wraz z minimum ratio, znormalizowaną jakością, punktami i kosztem pomiaru;
-- różnicę pomiędzy zwycięzcą danej rundy a najlepszym znanym wynikiem.
+The first bounded experiment compares evenly distributed positions across the
+allowed range, local positions around the best candidate, and a further round
+only when the previous round improved the winner or the winner is on the range
+boundary. Results are measured on long editorial with short paragraphs and on a
+small fixture with easy-to-inspect fragments.
 
-Nie wystarczy, że score wzrósł. Musimy zobaczyć, czy wzrost odpowiada
-rzeczywistej poprawie na PDF-ie.
+## Completion criteria
 
-## Warianty wyszukiwania do porównania
+- A test proves that refinement can find a better position than coarse search.
+- Rounds stop at their configured limit or after no improvement.
+- Candidate and recalculation counts are configuration-bounded.
+- Candidate order and winner selection are deterministic.
+- PDF, debug output, and trace show the same winning position.
+- Extra candidates improve a measurable property without violating hard rules
+  or creating unacceptable cost.
+- A score-only improvement remains a score-calibration question, not evidence
+  that deeper search is required.
 
-Pierwszy eksperyment powinien porównać trzy ograniczone sposoby:
+## Contrast as a candidate metric
 
-- kilka równomiernie rozłożonych pozycji w całym dozwolonym zakresie;
-- lokalne pozycje wokół najlepszego kandydata z mniejszym odstępem;
-- kolejną rundę tylko wtedy, gdy poprzednia runda poprawiła wynik albo gdy
-  najlepszy wynik leży przy granicy badanego zakresu.
+Moving text or a graphic can change the background below glyphs. Contrast is
+therefore sampled after candidate geometry is known but before evaluator
+selection; it is not part of line wrapping. Decode an image once and sample a
+small crop for each candidate. Do not rely on only a global average or blur:
+bright and dark regions can hide a severe local contrast failure. Keep the worst
+or lower-tail samples and expose their regions in the trace.
 
-Nie wybieramy z góry, że najlepsza będzie konkretna metoda. Wynik ma wynikać
-z realnego editorialu z długim tekstem i małymi akapitami oraz z małego
-fixture’u, gdzie łatwo sprawdzić pojedyncze fragmenty.
+Perform detailed, bounded rendering only for the winner, near-ties, or a
+calibration point. It validates screening order; it does not reject a plan.
+`unknown` remains visible in the breakdown and is currently score-neutral.
 
-## Kryteria ukończenia
+WCAG 2.2 ratios 4.5:1 for normal text and 3:1 for large text are reference
+points, not planner hard gates. Mean glyph contrast feeds distributed quality,
+the worst glyph sample feeds a local visibility signal, and the share below
+`contrast_severe_ratio` feeds a saturating breadth signal. Each signal uses
+`x / (x + response)` normalization and `composition_score` weights. The
+`contrast.body_minimum` value is a configurable scoring target, not automatic
+rejection. Decorative glyphs and logos may receive separate quality weights.
 
-- test potwierdza, że dodatkowa runda potrafi znaleźć lepszą pozycję niż samo
-  wyszukiwanie zgrubne;
-- test potwierdza, że dodatkowe rundy kończą się po osiągnięciu limitu lub po
-  braku poprawy;
-- liczba kandydatów i liczba przeliczeń są ograniczone konfiguracją;
-- kolejność kandydatów i wybór zwycięzcy są deterministyczne;
-- PDF/debug/trace pokazują tę samą pozycję zwycięzcy;
-- dodatkowe kandydaty poprawiają przynajmniej jedną mierzalną właściwość bez
-  pogorszenia twardych zasad i bez nieakceptowalnego kosztu;
-- jeśli dodatkowe wyszukiwanie poprawia tylko liczbę punktów, ale nie poprawia
-  obrazu dokumentu, pozostawiamy to jako otwartą kwestię kalibracji score, a
-  nie jako dowód, że trzeba szukać głębiej.
+The initial benchmark measures decode/sample time, cache hits, screening versus
+detailed-result divergence, and a position where the same text changes contrast
+over an image. Tune weights only after comparison with PDFs and human visual
+review.
 
-## Kontrast jako dodatkowa miara kandydata
+### First experiment
 
-Przesunięcie grafiki albo tekstu może zmienić tło znajdujące się bezpośrednio
-pod literami. Dlatego kontrast powinien być liczony po ustaleniu geometrii
-kandydata, ale przed jego wyborem przez ewaluatora. Nie powinien być częścią
-algorytmu łamania linii.
-
-Wszystkie kandydaty mogą dostać tani screening: obraz dekodujemy i
-downsample'ujemy raz, a dla kolejnych pozycji tylko pobieramy próbki z
-odpowiedniego cropu. Nie używamy samej średniej ani samego rozmycia, ponieważ
-jasne i ciemne fragmenty obrazu mogą dać średnią, która wygląda bezpiecznie,
-choć część tekstu leży na tle o złym kontraście. Zachowujemy najgorszą lub
-dolną część wyników próbek i pokazujemy obszar próbki w debug trace.
-
-Dokładniejsze, ograniczone renderowanie wykonujemy dopiero dla zwycięzcy i
-kandydatów bliskich remisu albo punktu kalibracyjnego. Nie służy ono do
-odrzucania planu, tylko do sprawdzenia, czy przybliżony pomiar dobrze porządkuje
-rozwiązania. `unknown` nie udaje pomiaru: pozostaje widoczny w breakdownie i
-jest obecnie neutralny punktowo.
-
-Progi 4.5:1 dla zwykłego tekstu i 3:1 dla dużego tekstu są punktami odniesienia
-z WCAG 2.2, a nie twardymi bramkami planera. Aktualny evaluator nie używa już
-prostego clampowania minimum. Dla każdego glifu średni kontrast zasila rozproszoną
-ocenę jakości, natomiast najgorszy punkt próbkowania glifu zasila lokalny sygnał
-widoczności, a liczba glifów z najgorszym punktem poniżej
-`contrast_severe_ratio` zasila osobny, wysycający się sygnał szerokości problemu.
-Każdy sygnał jest normalizowany asymptotycznie funkcją
-`x / (x + response)`, a ich wpływ kontrolują wagi w `composition_score`.
-Wartość `contrast.body_minimum` jest konfigurowalnym celem punktacji, nie
-automatycznym odrzuceniem. Ozdobne glyphy i logo mogą w przyszłości dostać
-osobne wagi, ale nadal jako jakość, nie legalność.
-
-Pierwszy benchmark powinien mierzyć: czas dekodowania i czas próbkowania,
-trafienia cache, rozbieżność między screeningiem a wynikiem dokładnym oraz
-przypadek, w którym przesunięcie tego samego tekstu nad obrazem zmienia
-znormalizowane punkty kontrastu. Wagi można dostrajać dopiero po porównaniu z
-PDF-ami i ręczną oceną wizualną.
-
-### Wynik pierwszego eksperymentu
-
-Prototyp w
 [`server/scripts/test-contrast-evaluation-prototype.mjs`](../../server/scripts/test-contrast-evaluation-prototype.mjs)
-przeszedł jako element composition gate. Na kontrolowanym obrazie z lokalnym
-ciemnym pasem przetestowano 8 pozycji tekstu:
+passes as part of the composition gate. On a controlled image with a dark band,
+eight text positions were tested: one prepared image served seven cached
+candidates; 6×6 screening used 288 samples versus 1,920 for a full scan; a
+global average falsely reported 5.28:1 where a local region was 1:1; local
+screening found both bad candidates; and a transparent PNG produced a result
+only when its background was known, otherwise `unknown`.
 
-- obraz został przygotowany raz, a 7 kolejnych kandydatów skorzystało z cache;
-- screening `6x6` zużył 288 próbek, podczas gdy referencyjne przejście po
-  wszystkich pikselach zużyło 1920 próbek;
-- globalna średnia dała fałszywie bezpieczny wynik `5.28:1` dla pozycji, która
-  zawierała czarny fragment o rzeczywistym kontraście `1:1`;
-- lokalny screening wykrył oba kandydaty z czarnym fragmentem i zgodził się z
-  referencyjnym minimum dla wszystkich pozycji;
-- znane tło pod przezroczystym PNG dało wynik, a brak koloru pod spodem dał
-  `unknown`.
+The experiment supports cheap screening but does not prove every input format
+or final PDF-raster parity. The fixture is synthetic and uses rectangular
+regions rather than an exact glyph mask. A real asset must be checked with its
+actual contain/crop geometry and a case where detailed measurement changes the
+ranking.
 
-To potwierdza kierunek taniego screeningu, ale jeszcze nie dowodzi poprawności
-dla wszystkich formatów wejściowych ani zgodności z finalnym rasterem PDF-a.
-Fixture jest syntetyczny, a referencja skanuje region prostokątny, nie dokładną
-maskę glifów. Przed produkcyjnym podłączeniem trzeba sprawdzić realny asset po
-rzeczywistym `contain`/cropie oraz przypadek, w którym dokładniejszy pomiar
-zmienia ranking punktowy.
+The experiment also aligned the sRGB boundary in `brand-context.ts` and
+`visual-qa.mjs` from 0.03928 to the current WCAG 0.04045 definition, with a
+contract test so evaluator, visual QA, and screening agree.
 
-Eksperyment ujawnił rozbieżność, którą usunięto: istniejące funkcje kontrastu
-w `brand-context.ts` i `visual-qa.mjs` używały granicy sRGB `0.03928`, podczas
-gdy aktualna definicja WCAG podaje `0.04045`. Wzór został ujednolicony i objęty
-testem kontraktu, aby evaluator, visual QA i screening nie wydawały różnych
-werdyktów dla tego samego koloru.
+## Implementation evidence
 
-## Stan implementacji po eksperymencie
+`trace.candidateSearch` records coarse and refinement rounds: generated,
+unique, and evaluated plans; legal candidates; best score; reflows; whether a
+round improved the winner; planning time; and full-plan recalculations.
+Candidates are not removed before evaluation, preserving existing order and
+tie-break behavior; uniqueness is reported separately. Limits are controlled
+by `candidateCount`, `refinementRounds`, and `refinementCandidateCount`.
 
-Silnik composition zapisuje teraz `trace.candidateSearch`. Dla rundy zgrubnej
-i każdej rundy doprecyzowania trace pokazuje liczbę wygenerowanych,
-unikalnych i ewaluowanych planów, liczbę legalnych kandydatów, wynik najlepszego
-wariantu, liczbę reflowów i informację, czy runda poprawiła zwycięzcę. Trace
-agreguje także czas planowania oraz liczbę pełnych przeliczeń planu. Kandydaci
-nie są usuwani przed ewaluacją, więc istniejąca kolejność i tie-break pozostają
-kompatybilne; unikalność jest raportowana osobno. Runda kończy się wcześniej,
-gdy nie poprawia zwycięzcy, a limit pozostaje kontrolowany przez konfigurację
-`candidateCount`, `refinementRounds` i `refinementCandidateCount`.
+The engine contract includes a refinement-better-than-coarse case and an
+explicit `no-improvement` stop. The movable-quote fixture checks positions,
+score, and reflows; a current local tie is not treated as visual calibration
+evidence.
 
-Kontrakt silnika ma test, w którym doprecyzowanie znajduje lepszy wariant niż
-wyszukiwanie zgrubne, a następna runda kończy się z jawnym powodem
-`no-improvement`. Fixture ruchomego cytatu nadal sprawdza rzeczywiste pozycje,
-score i reflowy, ale jego najlepsza lokalna pozycja jest obecnie remisem z
-wariantem zgrubnym; nie traktujemy tego jako dowodu kalibracji wizualnej.
+`test-editorial-numbered-flow.mjs` covers a long editorial: five coarse
+positions and local refinement are legal, ranking changes orphan count, the
+winner matches trace, and the final PDF passes text, geometry, and raster
+occupancy checks. This gate requires `pdftotext` and `pdftoppm`.
 
-Test `test-editorial-numbered-flow.mjs` domyka kalibrację na rzeczywistym,
-długim fixture editorialu: pięć pozycji zgrubnych i lokalne doprecyzowanie są
-legalne, ranking zmienia liczbę orphanów, zwycięzca jest zgodny z trace, a
-końcowy PDF przechodzi sprawdzenie tekstu, geometrii i zajętości rastra. Ten
-test jest częścią composition gate; jego uruchomienie wymaga dostępu do
-`pdftotext` i `pdftoppm`.
-
-Renderer-neutralny sampler został dodany w
+The renderer-neutral sampler in
 [`server/src/composition/contrast.ts`](../../server/src/composition/contrast.ts)
-i sprawdzony na publicznym composition seam. Nie dekoduje on obrazów i nie
-zna PDF-a — przyjmuje przygotowany raster oraz region w jego współrzędnych.
+accepts a prepared raster and region; it does not decode images or know about
+PDFs. The asset adapter decodes PNG once, maps the real contain rectangle, and
+the evaluator records status, worst sample, glyph cells, sample regions, and
+warnings without adding contrast to line wrapping. JPEG and unknown rasters
+return `unknown`; SVG is supported only when the resolver supplies a raster.
+The planner remains pixel-decoder-free.
 
-Sampler jest podłączony do istniejącego seam-u asset adapter → evaluator.
-Adapter dekoduje PNG raz, mapuje rzeczywisty prostokąt obrazu po `contain`, a
-evaluator zapisuje status, najgorszy pomiar, komórki glifów, najgorszy punkt,
-regiony próbek i ostrzeżenia bez dodawania kontrastu do łamania linii. JPEG oraz nieznane rastry zwracają
-`unknown`; SVG jest obsługiwane tylko wtedy, gdy resolver dostarczy raster.
-Planer pozostaje wolny od dekodowania pikseli.
+## Benchmark evidence
 
-Granica sRGB w istniejących implementacjach kontrastu została ujednolicona do
-`0.04045` i objęta testem kontraktu zgodności z granicą WCAG. Kontrast jest
-sprawdzany względem koloru tła całej strony oraz obrazów znajdujących się pod
-komórkami glifów; nie ogranicza się do glifów przecinających grafikę.
+The one-time benchmark used a 1,620×1,080 RGB editorial PNG (1,200,915 bytes):
 
-### Pomiar kosztu na rzeczywistym obrazie
+| Operation | Scope | Median |
+| --- | ---: | ---: |
+| full PNG decode | one image | 95.5 ms |
+| thumbnail reduction to 320×213 | one image | 1.53 ms |
+| thumbnail reduction per 20 candidates | 20 preparations | 25.1 ms |
+| 6×6 screening on decoded image | 20 candidates | 0.92 ms |
+| 6×6 screening on one cached thumbnail | 20 candidates | 0.91 ms |
+| full-pixel scan | 20 regions | 2,079 ms |
 
-Wykonano osobny, jednorazowy benchmark na rzeczywistym obrazie PNG z artefaktu
-editorialu: 1620×1080 px, RGB, 1 200 915 bajtów. Benchmark używał
-produkcyjnego `sampleCompositionContrast`; przygotowanie obrazu i pełny skan
-były osobnymi operacjami pomiarowymi. Mediany lokalnego uruchomienia były
-następujące:
+Prepare an image once and sample locally for each candidate. If the full raster
+is already needed for rendering, sampling it is cheaper and more accurate than
+creating a blurred copy. Do not decode or create a thumbnail per candidate.
+The benchmark did not measure JPEG, SVG, or partial PDF rendering; their
+decoder and cache policy must be explicit before integration.
 
-| Operacja | Zakres | Mediana |
-|---|---:|---:|
-| Dekodowanie pełnego PNG | 1 obraz | 95,5 ms |
-| Zmniejszenie do thumbnaila 320×213 | 1 obraz | 1,53 ms |
-| Zmniejszenie do thumbnaila osobno dla 20 kandydatów | 20 przygotowań | 25,1 ms |
-| Screening 20 kandydatów na pełnym, zdekodowanym obrazie | 20 × 6×6 próbek | 0,92 ms |
-| Screening 20 kandydatów na jednym cached thumbnailu | 20 × 6×6 próbek | 0,91 ms |
-| Skan wszystkich pikseli w 20 regionach | 20 regionów | 2079 ms |
+Contrast is mandatory to inspect over graphics, transparent images, overlays,
+or custom palettes, but a known low ratio lowers score rather than automatically
+rejecting. `unknown` remains visible and neutral pending calibration. A uniform
+background can use direct color contrast without image decoding.
 
-Wniosek praktyczny jest ważniejszy niż dokładne milisekundy z jednej maszyny:
-obraz należy przygotować raz, a potem próbkować lokalnie dla każdego kandydata.
-Jeżeli pełny raster jest już potrzebny do późniejszego renderingu, użycie jego
-próbek jest tańsze i dokładniejsze niż tworzenie rozmytej kopii. Thumbnail ma
-sens jako ograniczenie pamięci albo drugi, przybliżony etap, ale nie jako
-warunek screeningu. Generowanie thumbnaila osobno dla każdego kandydata jest
-niepotrzebnym mnożeniem kosztu.
+## Dependencies and follow-up
 
-Benchmark nie mierzył JPEG-a, SVG ani częściowego renderowania PDF. Obecny
-`image-resolver` zachowuje JPEG jako JPEG, a renderer-neutralny sampler
-otrzymuje już raster; dlatego integracja musi najpierw jawnie określić decoder
-JPEG/SVG i cache. Nie wolno przenosić tego kosztu do każdego kandydata.
+Plan 08 does not replace Plan 04: legal bounds, size policies, flow relations,
+and text reflow must be defined first. Start with one movable element, then a
+graphic and quote with different constraints, and only later multiple elements.
 
-Kontrast powinien być obowiązkowo sprawdzany, gdy tekst leży na grafice,
-przezroczystym obrazie, nakładce albo tle z niestandardowej palety. „Obowiązkowo
-sprawdzany” nie oznacza automatycznie „twardo odrzucany”: znany poniżej-progowy
-wynik obniża ogólny score kandydata, a wynik `unknown` pozostaje widoczny i
-neutralny do czasu kalibracji. Dla jednolitego koloru nie ma powodu dekodować
-obrazu — można policzyć dokładny kontrast z koloru tła.
-
-Benchmark dla 20 kandydatów na prawdziwym obrazie został wykonany. Test ścieżki
-adaptera, mapowania `contain`, komórek glifów i deterministycznego strumienia
-losowego również istnieje. Pozostaje test porównujący screening z finalnym
-renderem PDF-a oraz kalibracja wpływu `composition_score.contrast_penalty`.
-Waga pozostaje robocza do czasu porównania wyników z ręczną oceną PDF-ów.
-
-## Zależność od wcześniejszych planów
-
-Plan 08 nie może zastąpić planu 04. Najpierw musimy znać legalne bounds,
-dozwolone zmiany rozmiaru, relacje do flow i sposób ponownego układania
-tekstu. Nie można oceniać głębokości wyszukiwania, jeśli kandydat nie opisuje
-pełnego i poprawnego planu.
-
-Nie zaczynamy też od optymalizacji wielu insertionów naraz. Najpierw jeden
-element, potem grafika i cytat z różnymi ograniczeniami, a dopiero później
-kilka elementów.
-
-## Wymaga uzupełnienia po wykonaniu punktu X
-
-- konkretna metoda przeszukiwania wymaga uzupełnienia po benchmarku planu 04
-  i pierwszej wersji miękkich insertionów;
-- koszt dekodowania JPEG/SVG oraz częściowego renderowania PDF wymaga osobnego
-  pomiaru przed dopuszczeniem tych ścieżek do screeningu; to jest zakres
-  punktu 09, nie wyszukiwania kandydatów;
-- decyzja, jak wycenić brak pomiaru (`unknown`) dla określonych typów tekstu,
-  wymaga osobnego ustalenia produktu; nie jest to obecnie twarda bramka;
-- nowe formaty obrazów (WebP/AVIF) wymagają osobnego adaptera i testów w punkcie
-  09.
+Remaining work is limited to benchmarking JPEG/SVG and partial-PDF decoding,
+calibrating `unknown` and `composition_score.contrast_penalty`, and adding
+WebP/AVIF adapters in Plan 09.

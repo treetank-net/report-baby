@@ -62,6 +62,54 @@ try {
   assert.equal(result.plan, plan);
   assert.equal(result.evaluation.status, 'accepted');
   assert.equal(evaluationCalls, 1, 'the composition engine must evaluate one plan exactly once');
+
+  const structuredFlowDocument = {
+    flows: {
+      main: {
+        id: 'main',
+        continuation: 'allowed',
+        blocks: [
+          { id: 'table', kind: 'table', role: 'table', table: { head: ['H'], body: [['value']] } },
+          { id: 'next', kind: 'paragraph', role: 'body', text: 'next' },
+        ],
+      },
+    },
+  };
+  const structuredFlowPlan = {
+    pages: [{ page: 1, layoutId: 'layout', width: 100, height: 100 }],
+    slots: [
+      { id: 'previous', page: 1, regionId: 'content', flowId: 'main', kind: 'text', routeIndex: 0, box: { x: 0, y: 0, width: 100, height: 100 }, state: 'partial' },
+      { id: 'next', page: 1, regionId: 'content', flowId: 'main', kind: 'text', routeIndex: 1, box: { x: 0, y: 0, width: 100, height: 100 }, state: 'partial' },
+    ],
+    placements: [],
+    blockPlacements: [],
+    tablePlacements: [{
+      id: 'table-placement',
+      blockId: 'table',
+      slotId: 'previous',
+      page: 1,
+      routeIndex: 0,
+      box: { x: 0, y: 10, width: 100, height: 80 },
+      startRow: 0,
+      endRow: 1,
+      repeatsHeader: false,
+    }],
+    graphicPlacements: [],
+    lines: [
+      { blockId: 'table', flowId: 'main', slotId: 'previous', page: 1, routeIndex: 0, text: 'heading', box: { x: 0, y: 0, width: 100, height: 5 }, naturalWidth: 20, startWord: 0, endWord: 1 },
+      { blockId: 'next', flowId: 'main', slotId: 'next', page: 1, routeIndex: 1, text: 'next', box: { x: 0, y: 0, width: 100, height: 5 }, naturalWidth: 20, startWord: 0, endWord: 1 },
+    ],
+    decisions: [],
+    diagnostics: [],
+    residualContent: [],
+    minimumFragmentLines: 3,
+  };
+  const structuredFlowEvaluation = evaluateCompositionPlan(structuredFlowDocument, structuredFlowPlan);
+  assert.equal(
+    structuredFlowEvaluation.diagnostics.some((item) => item.code === 'FLOW_FRAGMENT_UNDERFILLED'),
+    false,
+    'a table occupying the remaining area of a route slot must not be counted as free flow capacity',
+  );
   const candidatePlans = [
     { ...plan, trace: { phases: [] } },
     { ...plan, trace: { phases: [] } },

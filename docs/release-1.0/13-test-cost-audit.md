@@ -1,581 +1,315 @@
-# Plan 13 — audyt kosztu testów przed release 1.0
+# Plan 13 — test-cost audit before release 1.0
 
-Status: audyt poziomu harnessu wykonany; pierwsza redukcja artefaktów została
-wdrożona i zmierzona. Liczba checków nie jest liczbą przypadków testowych:
-pełna macierz editorial zawiera dodatkowo 506 fixture’ów. Pozostałe checki
-oznaczone jako `split` wymagają następnych, osobnych migracji.
+Status: the harness-level audit is complete, the first artifact reduction was
+implemented and measured, and the release gate is green. Check count is not
+test-case count: the full editorial matrix contains an additional 506
+fixtures. Any remaining `split` entries are follow-up migrations, not release
+1.0 blockers.
 
-Aktualny follow-up jest podzielony na trzy niezależne paczki: kontrakty planu
-composition, macierz editorial oraz kontrakty public/backend. Każda paczka ma
-scalać fixture’y i procesy zgodnie z decyzjami poniżej, zachowując asercje i
-mierząc czas wyłącznie bezpośrednich skryptów testowych (bez `test-harness`).
-Po scaleniu wyników wymagane są: przegląd diffu, `node --check` oraz ponowny
-pomiar właściwych skryptów; pełny `npm run test` pozostaje poza zakresem tej
-iteracji, dopóki nie potwierdzimy, że nie ma zmian kontraktu.
+The follow-up was divided into three independent packages: composition-plan
+contracts, the editorial matrix, and public/backend contracts. Each package
+must merge fixtures and processes according to the decisions below, preserve
+assertions, and measure only direct test scripts (not `test-harness`). After
+merging, review the diff, run `node --check`, and remeasure the relevant
+scripts. The full release gate is the final verification, not a substitute for
+these focused measurements.
 
-## Cel i granice
+## Objective and boundaries
 
-Nie każdy test, który używa słowa „render”, potrzebuje artefaktu jako dowodu.
-W tym audycie klasyfikujemy decyzję projektową, a nie aktualny sposób
-uruchomienia testu:
+Not every test that uses the word “render” needs an artifact as evidence. This
+audit classifies the design decision, not just the way a test currently runs:
 
-- `not-generated` — test nie tworzy artefaktu wyjściowego albo już sprawdza
-  kontrakt na planie/procesie; nie ma czego usuwać;
-- `remove` — cały obecny artefakt jest zbędny dla asercji i może zostać
-  zastąpiony planem lub odpowiedzią procesu;
-- `retain` — artefakt jest właściwym dowodem (np. PDF, raster, PPTX, glify,
-  selekcja tekstu albo deterministyczny hash) i musi pozostać;
-- `split` — plik miesza asercje, z których część można przenieść do planu lub
-  procesu, ale trzeba zachować mniejszy test artefaktowy.
+- `not-generated` — the test creates no output artifact, or already checks the
+  contract at plan/process level; nothing needs to be removed;
+- `remove` — the entire current artifact is unnecessary for the assertion and
+  can be replaced by a plan or process response;
+- `retain` — the artifact is the appropriate evidence (for example PDF, raster,
+  PPTX, glyphs, selectable text, or deterministic hash) and must remain;
+- `split` — the file mixes assertions: some can move to plan/process level, but
+  a smaller artifact test must remain.
 
-Kontrakt CLI/MCP jest niezależną osią: może mieć decyzję `not-generated`, gdy
-sprawdzamy wyłącznie odpowiedź procesu, albo `split`, gdy ten sam check ma
-również dowód PDF/PNG/PPTX.
+CLI/MCP contract is an independent axis. It can be `not-generated` when only a
+process response is checked, or `split` when the same check also proves PDF,
+PNG, or PPTX output.
 
-Stan inwentaryzacji: 21 checków ma `not-generated`, 10 ma `retain`, 8 ma
-`split`, a 0 ma obecnie `remove`. To nie znaczy, że nie ma oszczędności — osiem
-checków `split` może stracić większość swoich renderów — tylko że nie
-potwierdziliśmy jeszcze przypadku, w którym cały istniejący artefakt można
-usunąć bez pozostawienia choć jednego dowodu backendu.
+The inventory records 21 `not-generated`, 10 `retain`, 8 `split`, and 0
+`remove` decisions. This does not mean there are no savings: the eight `split`
+checks can lose most of their renders. It means we have not yet confirmed a
+case where an entire existing artifact can be removed without leaving at least
+one backend proof.
 
-### Checki a przypadki testowe
+### Checks versus test cases
 
-`check` oznacza jeden skrypt uruchamiany przez `test-harness`; może zawierać
-wiele asercji albo przypadków. `fixture` oznacza konkretny scenariusz wejściowy
-w macierzy. W szczególności:
+`check` means one script run by `test-harness`; it may contain many assertions
+or cases. `fixture` means one concrete input scenario in a matrix. In
+particular:
 
-- `npm run test:timings -- --no-build` obejmuje 39 unikalnych checków harnessu;
-- `npm run test:editorial-full` obejmuje 506 fixture’ów: 480 wariantów
-  macierzy, 7 reproducerów i 19 seeded fixtures; pomiar poza sandboxem dał
-  242,32 s, a wszystkie 506 przypadków przeszły;
-- szybki `editorial flow` w harnessie uruchamia tylko 26 z tych 506 fixture’ów
-  i jest już uwzględniony w pomiarze 39 checków.
+- `npm run test:timings -- --no-build` covers 39 unique harness checks;
+- `npm run test:editorial-full` covers 506 fixtures: 480 matrix variants, 7
+  reproducers, and 19 seeded fixtures. It is a separate gate and is reported
+  separately from the harness checks;
+- the fast `editorial flow` harness check runs only 26 of those 506 fixtures and
+  is already included in the 39-check release gate.
 
-W obecnym planie liczba 519 wynika najpewniej z 506 fixture’ów editorial plus
-13 unikalnych checków composition. To jednak mieszanka dwóch poziomów, a nie
-kanoniczna liczba wszystkich testów repozytorium. Nie wolno sumować jej z 39
-checkami bez wskazania poziomu, który liczymy.
-Na poziomie przypadków pełna macierz editorial ma decyzję `not-generated` dla
-480 wariantów (dry-run) i `retain` dla 26 fixture’ów PDF; poziom pozostałych
-checków wymaga takiego samego rozpisania, jeśli mają być raportowane jako
-pojedyncze przypadki zamiast skryptów.
+The number 519 previously arose from mixing 506 editorial fixtures with 13
+unique composition checks. These are two levels, not the canonical count of all
+repository tests, and must not be added to the 39 harness checks without naming
+the counted level.
 
-### Rzeczywisty `npm run test`
+### Current release evidence
 
-Domyślne `npm run test` nie uruchamia pełnej macierzy editorial, suite’u
-`quality` ani osobnego suite’u `brand`. Wykonuje 24 checki: 16 composition i 8
-artifacts. Pomiar z buildem z 2026-09-09 zakończył się sukcesem w 229,06 s,
-w tym 4,74 s zajęło budowanie bundli. Ten przebieg nie tworzy 300 PDF-ów.
-Największy zbiór przypadków w tej komendzie to szybki `editorial flow` z 26
-fixture’ami, ale po redukcji tylko dwa z nich zapisują PDF; pozostałe przechodzą
-dry-runem planera. Pełne 506 fixture’ów jest osobnym poleceniem i z jego 480
-wariantów żaden nie tworzy PDF.
+The release gate `npm run test:release` passed **39/39 checks on 2026-09-09**.
+The default `npm test` passed **23/23 checks in approximately 122 seconds**.
+The separate `npm run test:editorial-full` gate passed **506/506 fixtures in
+242.32 seconds on 2026-09-09**. The full gate exposed and then covered an
+evaluator regression in which occupied table/block placements were counted as
+free flow capacity.
 
-Statyczny przegląd ścieżek zapisu przed redukcją dawał co najmniej 84 zapisane
-PDF-y: editorial flow 26, report images 11, public MCP behavior 13, jsPDF
-adapter 9, composition oracle 7, public CLI 6, composition adapter 4, report
-chrome 2, editorial numbered flow 2 oraz po jednym w text composition engine,
-composition image, editorial parity i slide artifacts. To były ścieżki zapisu,
-nie liczba stron ani liczba asercji.
+## Full path: plan first, renderer last
 
-Pierwsza redukcja została wdrożona i zweryfikowana w domyślnym gate'cie:
+The earlier `retain` classification said that an artifact was useful evidence
+of some property. It did not answer whether the property belonged to the
+planner or backend. For release 1.0 we use this split:
 
-| Check | Przed | Po | Zmiana | Zasada |
-|---|---:|---:|---:|---|
-| editorial flow | 26 | 2 | -24 | dwa PDF-y reprezentują geometrię kolumn i tabel; pozostałe 24 fixture’y nadal przechodzą przez CLI jako plan-only |
-| report images | 11 | 2 | -9 | jeden wieloobrazowy PDF oraz jeden PDF ze źródłem ZIP; intro, float, caption i WebP/AVIF są asercjami tego samego planu/artefaktu |
-| public MCP behavior | 13 | 7 | -6 | trasy planner/metric/chart/overflow/template-ref są dry-run; ostrzeżenie notatek jest sprawdzane na istniejącym PDF-ie slajdów |
-| public CLI | 6 | 2 | -4 | jeden zwykły i jeden brand-resolver PDF; parity/debug/warning są dry-run |
-| jsPDF adapter | 9 | 6 | -3 | bar/line/pie są jednym wieloblokowym PDF-em; eliptyczny boundary pozostaje asercją planu |
-| composition adapter | 4 | 1 | -3 | metric/chart/table pozostają testami planu i capability mappingu; jeden PDF dowodzi ścieżki tekstowej/graficznej |
-| report chrome | 2 | 1 | -1 | dynamiczny chrome jest sprawdzany z planu, bez drugiego renderu |
-| pozostałe retain (oracle, text engine, image, numbered flow, parity, slides) | 13 | 13 | 0 | te artefakty dowodzą odrębnych backendów, warstwy tekstowej, rasteru albo zgodności PDF |
-| **łącznie** | **84** | **34** | **-50** | żadna własność planowania nie została usunięta; kosztowny dowód przeniesiono na plan tam, gdzie był wystarczający |
+1. `P — plan-only`: the scenario ends at `planReportComposition` or
+   `createTextCompositionEngine(...).plan`. Check `accepted`/`rejected`, hard
+   diagnostics, pages, slots, lines, block placements, and box relations. This
+   is the correct test for legality, order, overflow, continuation, dynamic
+   height, and element position.
+2. `T — transport/dry-run`: through public CLI or MCP, check that input reaches
+   the same planner and the response has the correct contract. Do not pass
+   `output_path`; the renderer is not invoked.
+3. `B — backend smoke`: one minimal artifact for each distinct output contract
+   (PDF, PNG, PPTX, or image in PDF). Check that the backend writes a valid
+   format, preserves minimal text/image, and does not reject a legal plan. Do
+   not repeat coordinate assertions here; those belong to `P`.
+4. `V — visual/compatibility`: rasterization, ink occupancy, hashes, or oracle
+   comparison. This is a slow regression test, not the primary proof that “X
+   can be generated”; run it as a manual, nightly, or extended
+   `test:release:visual` gate.
 
-Po zmianie pełny domyślny `npm run test -- --no-build` nadal przechodzi 24
-checki. Najnowszy pomiar poza sandboxem z `--timings` to 205,15 s wobec
-229,06 s przed redukcją (około 10,4% krócej); wcześniejszy pomiar 182,01 s
-pokazuje, że koszt zależy też od obciążenia hosta. Liczba 34 oznacza zapisane
-tymczasowe PDF-y w kodzie harnessów; część testów tworzy jeszcze obiekty PDF w
-pamięci albo raster/PNG/PPTX, więc nie należy utożsamiać jej z liczbą procesów
-renderujących.
+The plan is the source of truth for geometry. Assertions that do not require a
+PDF include: every line stays in its slot, flow placement stays inside the
+page, chrome displaces `main`, insertion belongs to the correct flow, a block
+has a legal slot, every hard requirement has a placement or the plan is
+rejected, and residual describes exactly the content that could not be placed.
+The backend only proves that an accepted plan can be materialized.
 
-To ważne rozróżnienie dla optymalizacji: jeden PDF nie zastąpi testu PNG,
-PPTX, warstwy tekstowej, dekodowania WebP/AVIF ani różnych ścieżek błędów, ale
-większość powtórzeń w jednym checku można zastąpić planem i jednym minimalnym
-artefaktem reprezentującym daną własność.
+### Target decision for current checks
 
-### Docelowy minimalny zestaw artefaktów
-
-Nie ustalamy globalnej reguły „jeden PDF na cały release”, tylko jedną próbę
-na własność backendu. W praktyce oznacza to:
-
-- jeden wieloblokowy PDF dla podstawowego adaptera composition; metric/chart/table
-  są sprawdzane renderer-neutralnie, a osobne PDF-y zostają tylko wtedy, gdy
-  różnią się kontraktem backendu albo ścieżką błędu;
-- jeden PDF obrazu z wariantami PNG/WebP/AVIF oraz osobny minimalny przypadek
-  dla ZIP/resolvera, jeżeli sam plan nie dowodzi źródła assetu;
-- jeden PDF chrome i jeden PDF editorial parity;
-- jeden reprezentatywny zestaw PDF/PNG/PPTX dla publicznego procesu slajdów,
-  zamiast powtarzania tej samej treści dla wielu fixture’ów;
-- w macierzy editorial 480 przypadków pozostaje bez artefaktu, a z 26 fixture’ów
-  tylko dwa zapisują reprezentatywny PDF; pozostałe przechodzą plan-only.
-
-Kandydatem do usunięcia jest render, nie asercja. Przed usunięciem renderu
-  musimy wskazać, jaka własność pozostaje dowiedziona przez plan, odpowiedź
-  procesu albo zachowany minimalny artefakt.
-
-### Przydatność pełnej ścieżki: plan najpierw, renderer na końcu
-
-Dotychczasowa klasyfikacja `retain` mówiła, że artefakt jest dobrym dowodem
-jakiejś własności. Nie odpowiadała jednak na ważniejsze pytanie: czy ta
-własność jest częścią kontraktu planera, czy backendu. Dla release 1.0
-przyjmujemy następujący podział:
-
-1. `P — plan-only`: scenariusz kończy się na `planReportComposition` albo
-   `createTextCompositionEngine(...).plan`. Sprawdzamy `accepted`/`rejected`,
-   twarde diagnostyki, strony, sloty, linie, placementy bloków i relacje pudeł.
-   To jest właściwy test legalności, kolejności, overflowu, continuation,
-   dynamicznej wysokości i pozycji elementów.
-2. `T — transport/dry-run`: przez publiczne CLI albo MCP sprawdzamy, czy wejście
-   dochodzi do tego samego planera i czy odpowiedź ma właściwy kontrakt. Nie
-   przekazujemy `output_path`, więc nie uruchamiamy renderera.
-3. `B — backend smoke`: jeden minimalny artefakt na odrębny kontrakt wyjścia
-   (PDF, PNG, PPTX, obraz w PDF). Sprawdzamy, że backend umie zapisać poprawny
-   format, zachować minimalny tekst/obraz i nie odrzuca legalnego planu. Nie
-   powtarzamy tu asercji współrzędnych, bo te należą do `P`.
-4. `V — visual/compatibility`: rasteryzacja, ink-occupancy, hash albo porównanie
-   z oracle. To jest wolny test regresyjny, a nie podstawowy dowód „da się
-   wygenerować X”; powinien być osobnym gate'em manualnym, nightly albo
-   rozszerzonym `test:release:visual`.
-
-Plan jest źródłem prawdy dla geometrii. Przykładowe asercje, które nie wymagają
-PDF-a, to: każda linia mieści się w slocie, placement flow nie wychodzi poza
-stronę, chrome wypycha main, insertion należy do właściwego flow, blok ma
-legalny slot, twarde wymaganie ma placement albo plan jest odrzucony, a
-residual opisuje dokładnie treść, której nie udało się umieścić. Backend ma
-jedynie dowieść, że taki zaakceptowany plan można zmaterializować.
-
-#### Decyzja dla obecnych checków
-
-| Grupa | Checki | Docelowy sposób | Czy pełna ścieżka jest potrzebna? |
+| Group | Checks | Target method | Is the full path needed? |
 |---|---|---|---|
-| Czysty plan | `composition engine contract`, `composition input adapter`, `template flow contract`, `report plan contract`, `text composition engine`, `generic soft insertions`, `dynamic insertion slots`, `page template adapter`, `contrast evaluation prototype`, `composition page limits`, `structure scoring` | Bezpośredni planner/evaluator, ewentualnie syntetyczny backend w pamięci | Nie. Te checki badają legalność i geometrię planu. |
-| Granica publiczna | `dynamic insertion public contract`, `input errors`, `MCP schema`, `architecture`, `script duplication`, `source context`, `source materialization`, `Markdown normalizer`, `composition documentation`, `brand release template` | Walidacja danych, dry-run, inspekcja plików i odpowiedzi | Nie. Renderowanie nie wnosi dowodu do tych kontraktów. |
-| Plan + mały backend smoke | `jsPDF adapter`, `composition adapter`, `composition image`, `editorial numbered flow`, `report chrome`, `report images`, `public CLI behavior`, `public MCP behavior`, `editorial flow`, `brand contract`, `manifest contract`, `manifest consumers`, `brand assets` | Wszystkie warianty i pozycje w planie; jeden minimalny render na właściwy backend/format | Nie w obecnej skali. Tak, ale tylko jako pojedynczy reprezentant kontraktu backendu. |
-| Konfiguracja | `configuration reach` | Warianty geometrii porównują znormalizowany plan; jeden render sprawdza, że konfiguracja dociera do backendu, a zmiana score nie zmienia artefaktu | Nie. Dziewięć pełnych renderów nie jest potrzebnych. |
-| Sam plan zamiast obecnego PDF parity | `composition oracle` | Porównanie planów, tokenów, stron i placementów; jeden smoke PDF w adapterze | Nie jako pełny oracle PDF. |
-| Wolny regresyjny gate | `editorial parity`, raster/ink części `editorial numbered flow`, raster części `report images` | Osobny test visual-QA uruchamiany jawnie lub nightly | Nie w szybkim `test:release`; zachować poza nim, jeśli nadal chcemy ochrony wizualnej. |
-| Niezależny format | `slide artifacts` | Jeden mały deck sprawdzający PDF, PNG i PPTX oraz tekst edytowalny | Tak, ale tylko jeden wspólny fixture; nie wiele pełnych decków. |
-| Dekoder wejściowy | `image resolver` | Bez PDF: rzeczywiste dekodowanie PNG/WebP/AVIF, rozmiar i root confinement | Nie. To test resolvera, nie renderera. |
+| Pure plan | `composition engine contract`, `composition input adapter`, `template flow contract`, `report plan contract`, `text composition engine`, `generic soft insertions`, `dynamic insertion slots`, `page template adapter`, `contrast evaluation prototype`, `composition page limits`, `structure scoring` | Direct planner/evaluator, optionally an in-memory backend double | No. These checks legality and plan geometry. |
+| Public boundary | `dynamic insertion public contract`, `input errors`, `MCP schema`, `architecture`, `script duplication`, `source context`, `source materialization`, `Markdown normalizer`, `composition documentation`, `brand release template` | Validate data, dry-run, file inspection, and responses | No. Rendering adds no evidence for these contracts. |
+| Plan + small backend smoke | `jsPDF adapter`, `composition adapter`, `composition image`, `editorial plan contract`, `report chrome`, `public CLI behavior`, `public MCP contract`, `editorial flow`, `brand contract`, `manifest contract`, `manifest consumers`, `brand assets` | All relevant positions in the plan; one minimal render per backend/format | Not at the current scale. Yes, only as one backend representative. |
+| Configuration | `configuration reach` | Compare normalized plans for geometry variants; one render proves configuration reaches backend, while score changes do not alter the artifact | No. Nine full renders are unnecessary. |
+| Plan instead of PDF parity | `composition oracle` | Compare plans, tokens, pages, and placements; one adapter PDF smoke | Not as a full PDF oracle. |
+| Slow regression gate | `editorial parity`, raster/ink parts of numbered editorial, any remaining raster image checks | Separate visual-QA test, explicit or nightly | Not in fast `test:release`; retain outside it if visual protection is wanted. |
+| Independent formats | `slide artifacts` | One small deck checking PDF, PNG, PPTX, and editable text | Yes, but one shared fixture only. |
+| Input decoder | `image resolver` | No PDF: real PNG/WebP/AVIF decoding, dimensions, and root confinement | No. This tests the resolver, not the renderer. |
 
-`configuration reach` jest przypadkiem granicznym. Warianty zmieniające
-geometrię powinny sprawdzać różnicę w znormalizowanym planie, a nie generować
-dziewięć PDF-ów. Zostaje jeden smoke dowodzący, że konfiguracja dochodzi do
-backendu; wariant score pozostaje testem planu/evaluatora.
+`configuration reach` is a boundary case. Geometry-changing variants should
+check the normalized-plan difference rather than create nine PDFs. Keep one
+smoke proving that configuration reaches the backend; score variants remain
+planner/evaluator tests.
 
-`composition oracle` i `editorial parity` nie odpowiadają na pytanie „czy da
-się wygenerować legalny dokument”. Odpowiadają na pytanie „czy wynik jest
-zgodny z poprzednim rendererem albo obrazem referencyjnym”. Zachowujemy je
-jako ochronę kompatybilności, ale nie mogą wymuszać pełnego renderu dla każdej
-ścieżki planera.
+`composition oracle` and `editorial parity` answer “is the result compatible
+with the old renderer or reference image?”, not “can a legal document be
+generated?”. Retain them as compatibility protection, but do not make every
+planner path render fully.
 
-#### Tańsze techniki wykonania
+### Cheaper execution techniques
 
-- Wszystkie scenariusze pozycji, overflowu, priorytetu, chrome i insertionów
-  uruchamiać w jednym procesie planera i asercjami relacji między boxami;
-  `newPdf()` może pozostać obiektem w pamięci, ale nie wolno wywoływać
-  `output()`, `pdftotext` ani `pdftoppm` bez backendowej własności do sprawdzenia.
-- Dla CLI/MCP używać `dry_run` dla każdego wariantu, a jedną legalną ścieżkę
-  każdego publicznego narzędzia przepuścić do backendu. Błędy wejścia i twarde
-  odrzucenia nie powinny tworzyć artefaktów.
-- Połączyć warianty w jeden fixture, gdy dowodzą tego samego backendu: jeden
-  PDF może zawierać tekst, tabelę, chart i grafikę; jeden deck może zawierać
-  tytuł, metryki, tabelę i narrację.
-- Nie uruchamiać osobno `pdftoppm`, ImageMagick, FFmpeg ani LibreOffice dla
-  asercji, które plan już rozstrzyga. Zostawić je wyłącznie przy testach
-  formatu, dekodowania lub visual-QA.
-- Nie powtarzać bundlowania i startu procesów dla każdego wariantu. Plannerowe
-  macierze powinny importować wspólny bundle/test fixture, a publiczne testy
-  mogą używać jednego procesu w trybie batch.
-- Rozdzielić szybki release gate od pełnego visual-QA. Każdy pozostawiony
-  artefakt musi mieć nazwany kontrakt backendu; sam fakt, że test historycznie
-  wykonywał pełny render, nie jest wystarczającym powodem.
+- Run all position, overflow, priority, chrome, and insertion scenarios in one
+  planner process with box-relation assertions. `newPdf()` may remain an
+  in-memory object, but do not call `output()`, `pdftotext`, or `pdftoppm` unless
+  the backend itself is the property under test.
+- Use `dry_run` for every CLI/MCP variant, and send one legal path per public
+  tool to the backend. Input errors and hard rejections must not create
+  artifacts.
+- Combine variants into one fixture when they prove the same backend: one PDF
+  can contain text, table, chart, and image; one deck can contain title,
+  metrics, table, and narrative.
+- Do not invoke `pdftoppm`, ImageMagick, FFmpeg, or LibreOffice for assertions
+  already decided by the plan. Keep them for format, decoding, or visual QA.
+- Do not bundle or start a process for every variant. Planner matrices should
+  share a bundle/fixture, and public tests may use one process in batch mode.
+- Separate the fast release gate from full visual QA. Every retained artifact
+  must have a named backend contract; historical full rendering alone is not a
+  sufficient reason.
 
-Przybliżony potencjał oszczędności wynika z aktualnego pomiaru: `brand
-contract`, `manifest consumers` i `configuration reach` to razem około 256 s.
-Przeniesienie ich wariantów do planu i pozostawienie pojedynczych smoke
-renderów powinno usunąć większość tego kosztu. Nie zakładamy konkretnego czasu
-docelowego przed ponownym pomiarem, ponieważ część opóźnienia pochodzi z
-zewnętrznych procesów i obciążenia hosta.
+## Brand showcase as the visual smoke
 
-### Brand showcase jako jedyny test wizualny
+`examples/brand-showcase` is a demonstration set and is sufficient as one
+visual product smoke. Generate it once after renderer or template changes and
+keep the result as a demonstration artifact. Do not compare every brand pixel
+by pixel against a separate baseline in every `test:release` run.
 
-`examples/brand-showcase` jest zestawem demonstracyjnym i wystarcza jako jeden
-wizualny smoke test produktu. Generujemy go raz po zmianie rendererów albo
-szablonów i zostawiamy wynik jako artefakt demonstracyjny. Nie porównujemy
-piksel po pikselu każdego brandu z osobnym baseline'em w każdym przebiegu
-`test:release`.
+Consequences:
 
-W konsekwencji:
+- `brand contract` checks plan, manifest, and rejections rather than performing
+  dozens of full mutation renders; one shared showcase proves PDF/PNG/PPTX
+  materialization;
+- `manifest consumers` consume the prepared showcase tree and audit/inspect it,
+  without regenerating every brand;
+- `editorial parity`, ink occupancy, and oracle comparisons are optional
+  visual/compatibility gates, not part of the fast legal-plan proof;
+- Poppler, ImageMagick, FFmpeg, and LibreOffice are unnecessary for position
+  assertions. They may remain one-off visual-QA tools, but must not decide the
+  planning release gate.
 
-- `brand contract` ma sprawdzać plan, manifest i odrzucenia, a nie wykonywać
-  kilkadziesiąt pełnych renderów mutacji; jeden wspólny showcase potwierdza
-  materializację PDF/PNG/PPTX;
-- `manifest consumers` mają konsumować przygotowane drzewo showcase i badać
-  audyt/inspekcję, bez ponownego generowania wszystkich brandów;
-- `editorial parity`, ink-occupancy oraz porównania oracle są opcjonalnym
-  visual/compatibility gate'em, nie częścią szybkiego dowodu legalnego planu;
-- Poppler, ImageMagick, FFmpeg i LibreOffice nie są potrzebne do asercji
-  pozycji. Mogą pozostać narzędziami jednorazowego visual-QA, ale nie mogą
-  decydować o przejściu planistycznego release gate'u.
+Generated `examples/*/generated/` is currently ignored by Git. If generated
+PDF/PNG/PPTX should actually remain in the repository as a demo, remove that
+ignore entry in a separate change, reduce the set to one showcase, and document
+it as a demonstration artifact rather than a test baseline.
 
-Obecnie `examples/*/generated/` jest ignorowane przez Git. Jeżeli wygenerowane
-PDF/PNG/PPTX mają być faktycznie zostawione w repo jako demo, trzeba w osobnej
-zmianie usunąć ten wpis z `.gitignore`, ograniczyć zestaw do jednego showcase i
-opisać go jako artefakt demonstracyjny, a nie baseline testowy.
+## Historical timing inventory and per-check decisions
 
-### Pełne dane ostatniego przebiegu i decyzja dla każdego checka
+The following timings are historical measurements from the full release run
+before the final suite consolidation. They are retained for cost comparison and
+must not be read as the current pass/fail evidence. `P` means plan, `T` transport
+or `dry_run`, `B` one backend smoke, and `V` separate visual QA.
 
-Poniższe czasy są przybliżeniem z ostatniego `npm run test:release` po
-minutowym odczekaniu, zakończonego wynikiem 486,381 ms / 39 checków. To log
-jednego hosta, więc wartości mogą się wahać. `P` oznacza plan, `T` transport
-lub `dry_run`, `B` pojedynczy smoke backendu, a `V` osobny visual-QA.
-
-| Check | ~s | Tryb docelowy | Co skrócić, scalić albo usunąć |
+| Check | ~s | Target mode | What to shorten, merge, or remove |
 |---|---:|---|---|
-| composition engine contract | 1,4 | P | Zachować; bez renderera. |
-| template flow contract | 0,4 | P | Zachować; bez renderera. |
-| structure scoring | 0,3 | P | Zachować; czyste funkcje. |
-| composition input adapter | 0,5 | P | Zachować; normalizacja i schema. |
-| report plan contract | 0,7 | P | Zachować do czasu usunięcia legacy planu; potem przenieść asercje do adaptera i usunąć osobny bundle. |
-| text composition engine | 21,9 | P | Zachować przypadki planera; usunąć obowiązkową rasteryzację i współdzielić bundle. |
-| generic soft insertions | 0,8 | P | Zachować; placementy i legalność z planu. |
-| dynamic insertion slots | 1,5 | P | Zachować; bez publicznego renderu. |
-| page template adapter | 4,6 | P | Zachować; nie bundlować niezależnie dla każdego wariantu. |
-| jsPDF adapter | 1,6 | B | Jeden minimalny PDF; bez powtarzania asercji geometrii. |
-| composition adapter | 4,1 | P+B | Wszystkie capability w planie, jeden wspólny PDF dla backendu. |
-| composition oracle | 10,5 | P/V | Porównać plany; PDF oracle przenieść do visual/compatibility. |
-| composition image | 4,5 | P+B | Box i flow sprawdzać w planie; jeden minimalny test osadzenia obrazu. |
-| contrast evaluation prototype | 0,1 | P | Zachować; syntetyczny raster jest wejściem evaluatora, nie PDF-em. |
-| editorial numbered flow | 27,6 | P+B | Kolejność i bariery z planu; najwyżej jeden PDF z tekstem, bez Popplera i ink-occupancy. |
-| composition page limits | 13,9 | P | Zachować; test odrzucenia i residualu bez artefaktu. |
-| public MCP behavior | 26,8 | T+B | Batch/dry-run dla tras; jeden reprezentatywny render publiczny. |
-| dynamic insertion public contract | 5,9 | T | Dodać siedem asercji do `public MCP behavior` i usunąć osobny check. |
-| public CLI behavior | 7,4 | T+B | Jeden PDF; parity, warning i warianty planu jako dry-run. |
-| report images | 30,9 | P+B | Codec i pozycja w planie/resolverze; jeden PDF obrazu, bez ImageMagick/Popplera. |
-| report chrome | 6,0 | P+B | Dynamiczną wysokość i położenie sprawdzać w planie; reuse jednego PDF-a publicznego. |
-| editorial flow | 12,8 | P+B | Wszystkie fixture’y plan-only; jeden lub dwa PDF-y reprezentatywne, bez rasteru. |
-| editorial parity | 6,1 | V | Wyłączyć z szybkiego release; zastąpić jednorazowym showcase visual-QA. |
-| slide artifacts | 1,1 | B | Zachować jeden deck: PDF + PNG + PPTX. |
-| brand contract | 128,5 | P/T+B | Największy kandydat: mutacje i błędy plan/dry-run, jeden showcase zamiast dziesiątek renderów. |
-| composition documentation | 0,1 | P | Zachować; kontrola statyczna. |
-| manifest contract | 0,9 | T+B | Walidować jeden przygotowany manifest showcase. |
-| manifest consumers | 75,7 | T | Zachować audyt/inspekcję, usunąć ponowne renderowanie showcase. |
-| input errors | 5,2 | T | Wszystkie przypadki w jednym procesie; nigdy nie renderować błędnego wejścia. |
-| MCP schema | 2,4 | T | Zachować jedno `listTools`. |
-| configuration reach | 51,3 | P+B | Warianty geometrii porównywać w planie; jeden render sprawdzający seam konfiguracji. |
-| architecture | 0,6 | P | Zachować; analiza statyczna. |
-| script duplication | 0,0 | P | Zachować; analiza statyczna. |
-| source context | 0,2 | P | Zachować; root confinement. |
-| source materialization | 0,1 | P | Zachować; ZIP/cache/traversal bez renderera. |
-| Markdown normalizer | 0,1 | P | Zachować; AST i diagnostyka. |
-| image resolver | 9,3 | P | Zachować rzeczywiste dekodowanie PNG/WebP/AVIF, ale bez PDF; współdzielić fixture’y. |
-| brand assets | 15,8 | P+B | Publish/derivative i jeden embed smoke; bez pełnego decku dla każdego przypadku. |
-| brand release template | 0,3 | P | Zachować; inspekcja template’u. |
+| composition engine contract | 1.4 | P | Retain; no renderer. |
+| template flow contract | 0.4 | P | Retain; template compilation and geometry need no PDF. |
+| structure scoring | 0.3 | P | Retain; pure scoring functions on a synthetic plan. |
+| composition input adapter | 0.5 | P | Retain; normalization and schema. |
+| report plan contract | 0.7 | P | Retain until the legacy seam is removed; then move assertions into the adapter and remove the separate bundle. |
+| text composition engine | 21.9 | P | Retain planner cases; remove mandatory rasterization and share the bundle. |
+| generic soft insertions | 0.8 | P | Retain; placement and legality from the plan. |
+| dynamic insertion slots | 1.5 | P | Retain; `applyDynamicInsertionRequests` and slot legality are renderer-neutral. |
+| page template adapter | 4.6 | P | Retain; do not bundle independently for every variant. |
+| jsPDF adapter | 1.6 | B | One minimal PDF; do not repeat geometry assertions. |
+| composition adapter | 4.1 | P+B | Keep all capabilities in the plan and one shared backend PDF. |
+| composition oracle | 10.5 | P/V | Compare plans; move PDF oracle to visual/compatibility. |
+| composition image | 4.5 | P+B | Check box and flow in plan; one minimal image-embedding test. |
+| contrast evaluation prototype | 0.1 | P | Retain; synthetic raster is evaluator input, not a PDF. |
+| editorial numbered flow | 27.6 | P+B | Keep order/barriers in plan; at most one text PDF, without Poppler/ink occupancy. |
+| composition page limits | 13.9 | P | Retain rejection/residual without artifact. |
+| public MCP contract | 26.8 | T+B | Batch/dry-run routes; one representative public render. |
+| dynamic insertion public contract | 5.9 | T | Merge its assertions into the public MCP contract if the transport remains one process. |
+| public CLI behavior | 7.4 | T+B | One PDF; parity, warning, and plan variants as dry-run. |
+| report images | 30.9 | P+B | Codec and position in plan/resolver; one image PDF without ImageMagick/Poppler. |
+| report chrome | 6.0 | P+B | Check dynamic height and position in plan; reuse one backend smoke. |
+| editorial flow | 12.8 | P+B | All fixtures plan-only; one or two representative PDFs without raster. |
+| editorial parity | 6.1 | V | Remove from fast release; replace with one-off showcase visual QA. |
+| slide artifacts | 1.1 | B | Retain one deck: PDF + PNG + PPTX. |
+| brand contract | 128.5 | P/T+B | Largest candidate: plan/dry-run mutations and errors, one showcase instead of dozens of renders. |
+| composition documentation | 0.1 | P | Retain; static control. |
+| manifest contract | 0.9 | T+B | Validate one prepared showcase manifest. |
+| manifest consumers | 75.7 | T | Retain audit/inspection, remove repeated showcase rendering. |
+| input errors | 5.2 | T | One process for all cases; never render invalid input. |
+| MCP schema | 2.4 | T | Retain one `listTools`. |
+| configuration reach | 51.3 | P+B | Compare geometry variants in plan; one render for the configuration seam. |
+| architecture | 0.6 | P | Retain; static analysis. |
+| script duplication | 0.0 | P | Retain; source analysis. |
+| source context | 0.2 | P | Retain; path and root confinement. |
+| source materialization | 0.1 | P | Retain; ZIP/cache/traversal. |
+| Markdown normalizer | 0.1 | P | Retain; AST and diagnostics. |
+| image resolver | 9.3 | P | Retain real PNG/WebP/AVIF decoding without PDF; share fixtures. |
+| brand assets | 15.8 | P+B | Publish/derivative and one embed smoke; no full deck per case. |
+| brand release template | 0.3 | P | Retain; template inspection. |
 
-Najbardziej oczywiste usunięcia lub scalenia po dodaniu brakujących asercji to:
+Most obvious removals or merges after adding missing assertions were:
 
-1. osobny `dynamic insertion public contract` (asercje w `public MCP
-   behavior`);
-2. ponowne generowanie showcase w `manifest consumers` (manifest z jednego
-   demo/showcase);
-3. raster i współrzędne z `editorial numbered flow`, `report chrome`,
-   `report images` i `composition oracle` (geometria jest już w planie);
-4. `editorial parity` z szybkiego release (jeden ręcznie generowany showcase
-   wystarcza jako visual smoke);
-5. `report plan contract` po zamknięciu legacy seamu, po przeniesieniu jego
-   asercji do istniejącego testu adaptera.
+1. the separate `dynamic insertion public contract`, if its assertions are
+   owned by the public MCP transport contract;
+2. repeated showcase generation in `manifest consumers`;
+3. raster and coordinates from editorial numbered flow, report chrome, report
+   images, and composition oracle where geometry is already in the plan;
+4. `editorial parity` from the fast release (one manually generated showcase is
+   enough for visual smoke);
+5. `report plan contract` after the legacy seam closes and its assertions move
+   to the existing adapter test.
 
-Nie usuwamy asercji. Usuwamy tylko powtarzane materializacje i narzędzia, które
-nie dowodzą niczego ponad zaakceptowany plan.
+Assertions are not removed. Only repeated materialization and tools that prove
+no more than an accepted plan are removed.
 
-## Pomiar bazowy
+## Baseline and current evidence
 
-Źródłem jest `server/qa/test-timings.jsonl`, wygenerowany 2026-09-09 przez
-`npm run test:timings -- --no-build`. Przebieg zakończył się sukcesem: 39
-unikalnych checków w 503,6 s. Pomiar wykonano przed wydzieleniem suite’u
-`brand`; dlatego w tabeli czas dawnego wpisu `brand contract` został
-przypisany do nowego suite’u `brand`, a pozostałe wpisy artifacts pomniejszono
-o ten czas. Czasy w tabeli są sumą czasu checków (współdzielone wpisy są
-wykonywane raz i przypisane do pierwszego suite’u).
+The original baseline came from `server/qa/test-timings.jsonl`, generated on
+2026-09-09 by `npm run test:timings -- --no-build`: 39 unique checks completed
+successfully in 503.6 seconds. It was measured before the brand suite was
+separated; historical `brand contract` time was therefore assigned to the new
+`brand` suite. The default `npm test` is a different, smaller gate and now
+passes 23/23 checks in approximately 122 seconds.
 
-| Suite | Łącznie | Unikalne checki |
-|---|---:|---:|
-| smoke | 2,1 s | 3 |
-| composition | 92,9 s | 13 (+3 współdzielone ze smoke) |
-| artifacts | 116,7 s | 8 |
-| brand | 128,9 s | 1 |
-| quality | 162,9 s | 14 |
-| całość | 503,6 s | 39 |
+The current release gate is authoritative for release status:
 
-### Pomiar po pierwszej redukcji
+```text
+npm run test:release  → 39/39 passed, 2026-09-09
+npm test              → 23/23 passed, approximately 122 s
+```
 
-Najnowszy pełny przebieg `npm run test -- --no-build --timings` (poza
-sandboxem, 2026-09-09) przeszedł wszystkie 24 checki w 205,15 s:
+`npm run test:editorial-full` is intentionally separate and covers 506
+fixtures. The latest run passed all fixtures; future snapshots must report its
+result independently rather than inferring it from either command above.
 
-| Suite | Łącznie | Checki |
-|---|---:|---:|
-| composition | 99,28 s | 16 |
-| artifacts | 105,86 s | 8 |
-| całość | 205,15 s | 24 |
+## Suite decisions after consolidation
 
-Najdroższe pozostałe checki to `report images` (35,50 s), `public MCP
-behavior` (28,04 s), `editorial numbered flow` (28,83 s), `text composition
-engine` (23,33 s) i `composition page limits` (14,71 s). Ich czas wynika
-głównie z osobnych procesów, bundlowania i rasteryzacji; sama liczba zapisanych
-PDF-ów nie jest jedynym kosztem. To są następne kandydaty do optymalizacji,
-ale nie redukujemy ich bez zachowania dowodu właściwego dla danego backendu.
+The target suite map is:
 
-Najdroższe checki: `brand contract` 128,9 s, `manifest consumers` 76,0 s,
-`configuration reach` 51,7 s, `report images` 43,4 s, `public MCP behavior`
-28,4 s, `editorial numbered flow` 27,8 s i `text composition engine` 21,7 s.
-
-## Inwentaryzacja checków
-
-### Smoke
-
-| Check | Czas | Decyzja artefaktowa | Tańszy odpowiednik / decyzja |
-|---|---:|---|---|
-| composition engine contract | 1,4 s | `not-generated` | Zachować; testuje seam plan–evaluator i używa atrap backendu tylko do sprawdzenia odmowy renderu odrzuconego planu. |
-| template flow contract | 0,4 s | `not-generated` | Zachować; kompilacja template’u i geometria nie wymagają PDF. |
-| structure scoring | 0,3 s | `not-generated` | Zachować; czyste funkcje scoringu na sztucznym planie. |
-
-### Composition
-
-| Check | Czas | Decyzja artefaktowa | Tańszy odpowiednik / decyzja |
-|---|---:|---|---|
-| composition engine contract | współdzielony | `not-generated` | Nie uruchamiać drugi raz; właściciel w smoke. |
-| composition input adapter | 0,5 s | `not-generated` | Zachować; schema i normalizacja dokumentu. |
-| template flow contract | współdzielony | `not-generated` | Nie uruchamiać drugi raz; właściciel w smoke. |
-| report plan contract | 0,7 s | `not-generated` | Zachować; `resolveReportPlan` i asercje planu. |
-| text composition engine | 21,7 s | `split` | Większość asercji nie potrzebuje artefaktu. Wydzielić długi przypadek raster/PDF obstacle QA do jednego testu artefaktu, a pozostałe przypadki utrzymać przy engine’u. |
-| generic soft insertions | 0,8 s | `not-generated` | Zachować; placementy metric/chart/image/table są sprawdzane z planu. |
-| dynamic insertion slots | 1,5 s | `not-generated` | Zachować; `applyDynamicInsertionRequests` i legalność slotów są renderer-neutral. |
-| page template adapter | 4,6 s | `not-generated` | Zachować; test używa engine’u tekstowego, nie potrzebuje PDF. Osobny koszt to trzy bundlowania testowe. |
-| jsPDF adapter | 1,9 s | `retain` | Zachować; sprawdza realny PDF, `pdftotext`, `pdfimages` i backend block capabilities. |
-| composition adapter | 4,3 s | `split` | Asercje planu przenieść do bezpośredniego `planReportComposition`; zostawić minimalny PDF dla tekstu, tabeli, chartu i grafiki. |
-| composition oracle | 10,6 s | `retain` | Zachować jako test porównania backendu/oracle; nie zastępować samym planem. |
-| composition image | 4,5 s | `retain` | Zachować; sprawdza obraz, boundary, caption i tekst po renderze. |
-| contrast evaluation prototype | 0,1 s | `not-generated` | Zachować; syntetyczne rastry i evaluator, bez PDF. |
-| editorial numbered flow | 27,8 s | `split` | Asercje planowania, kolejności i candidate search mogą być bez artefaktu; zostawić jeden render/raster dla ink-occupancy i zgodności plan→PDF. |
-| composition page limits | 14,0 s | `not-generated` | Zachować bez renderu; dalsza optymalizacja fixture’a tylko jeśli zachowa próbę strony ponad limitem. |
-| structure scoring | współdzielony | `not-generated` | Nie uruchamiać drugi raz; właściciel w smoke. |
-
-### Artifacts
-
-| Check | Czas | Decyzja artefaktowa | Tańszy odpowiednik / decyzja |
-|---|---:|---|---|
-| public MCP behavior | 28,4 s | `split` | Zachować proces MCP i minimalne reprezentatywne PDF/PNG/PPTX; warianty powtarzające wyłącznie plan przenieść do odpowiedzi bez artefaktu. |
-| dynamic insertion public contract | 5,8 s | `not-generated` | Już używa `dry_run`; nie dodawać PDF. Asercje planu są prawidłowo wykonywane bez renderera. |
-| public CLI behavior | 8,3 s | `split` | Zachować jeden realny PDF i jeden test plan/render parity; warianty ostrzeżeń mogą korzystać z `dry_run`. |
-| report images | 43,4 s | `retain` | Zachować; WebP/AVIF, caption, float, raster i `pdftotext` są przedmiotem testu. Ograniczyć powtarzanie tych samych scenariuszy w innych checkach. |
-| report chrome | 6,4 s | `retain` | Zachować; położenie słów i linii footeru musi być sprawdzone po malowaniu. Test planu może być dodatkowym szybkim testem, nie zamiennikiem. |
-| editorial flow | 17,6 s | `split` | Macierz 480 przypadków już nie potrzebuje artefaktu. Spośród 26 fixture’ów PDF wybrać reprezentantów klas błędów, a pozostałe asercje przenieść do planu dopiero po zbudowaniu odpowiednika geometrii. |
-| editorial parity | 5,8 s | `retain` | Zachować; porównuje znormalizowany PDF i ink-occupancy. |
-| slide artifacts | 0,9 s | `retain` | Zachować; PDF→PNG i edytowalny PPTX są celem testu. |
-
-### Brand
-
-| Check | Czas | Decyzja artefaktowa | Tańszy odpowiednik / decyzja |
-|---|---:|---|---|
-| brand contract | 128,9 s | `split` | Nie usuwać w ciemno. Rozdzielić testy manifestu/template planu od mutacji, które rzeczywiście muszą potwierdzić zmianę PNG/PPTX; uruchamiać pełny kontrakt jako osobny gate release. |
-
-### Quality
-
-| Check | Czas | Decyzja artefaktowa | Tańszy odpowiednik / decyzja |
-|---|---:|---|---|
-| composition documentation | 0,1 s | `not-generated` | Zachować; kontrola statycznych dokumentów. |
-| manifest contract | 0,9 s | `retain` | Manifest powstaje z renderu decku; można ograniczyć do jednego minimalnego decku, ale nie zastąpić go samym obiektem. |
-| manifest consumers | 76,0 s | `split` | Największy kandydat do rozdzielenia: audit/inspect manifestu i jego schematu mogą działać na przygotowanym drzewie, a renderować tylko jeden fixture per format wymagający dowodu. |
-| input errors | 5,2 s | `not-generated` | CLI/MCP muszą odrzucać błędy na granicy; nie renderować poprawnych artefaktów. |
-| MCP schema | 2,4 s | `not-generated` | Połączenie MCP jest przedmiotem testu, ale nie potrzebuje `render_report`. Zachować jedno `listTools`. |
-| configuration reach | 51,7 s | `retain` | Test celowo dowodzi, że zmiana geometrii zmienia PDF, a zmiana score nie zmienia PDF. Zredukować liczbę mutacji przez grupowanie pól, nie usunąć renderu. |
-| architecture | 0,6 s | `not-generated` | Zachować; analiza modułów i cykli. |
-| script duplication | 0,0 s | `not-generated` | Zachować; analiza źródeł. |
-| source context | 0,2 s | `not-generated` | Zachować; ścieżki i granice rootów. |
-| source materialization | 0,1 s | `not-generated` | Zachować; ZIP, cache i traversal. |
-| Markdown normalizer | 0,1 s | `not-generated` | Zachować; AST i diagnostyka. |
-| image resolver | 9,2 s | `not-generated` | Nie tworzy artefaktu wyjściowego; wymaga realnego dekodowania PNG/WebP/AVIF, więc optymalizacja dotyczy współdzielenia wejściowych rastrów, nie usuwania PDF. |
-| brand assets | 16,0 s | `retain` | Publikacja i derivative manifestu są testowane na plikach; PDF embedding można ograniczyć do jednego przypadku. |
-| brand release template | 0,3 s | `not-generated` | Zachować; inspekcja i kompilacja template’u bez renderera. |
-
-## Wnioski i kolejność prac
-
-1. Nie skracamy testów przez usunięcie asercji ani przez zmianę testowanego
-   kontraktu. Najpierw pytamy, czy dana asercja potrzebuje artefaktu jako
-   dowodu; jeśli nie, przenosimy ją do planu albo odpowiedzi procesu.
-2. Największy bezpieczny zysk powinien pochodzić z checków `split`:
-   `manifest consumers`, `brand contract`, `editorial flow` oraz mieszanych
-   testów composition. Każdy z nich wymaga osobnego seam’u, ponieważ obecnie
-   część asercji jest zakodowana przez `pdftotext` lub wynik procesu.
-3. Checki `retain` pozostają artefaktowe, bo ich dowód dotyczy backendu:
-   `report images`, `report chrome`, `editorial parity`, `jsPDF adapter`,
-   `configuration reach` i `slide artifacts`.
-4. Po każdej migracji uruchamiamy najpierw zmieniony check bez artefaktu,
-   potem minimalny test artefaktu, a na końcu `test:timings`. Za ukończone
-   uznajemy dopiero rozwiązanie, w którym każdy pozostawiony render ma
-   nazwany powód, a czas i pokrycie są porównywalne z tym snapshotem.
-
-## Kryterium ukończenia zadania
-
-Każdy z 39 unikalnych checków ma oznaczoną decyzję artefaktową i uzasadnienie.
-Obecnie nie ma checku z decyzją `remove`: testy bez artefaktu już są oznaczone
-`not-generated`, a przypadki mieszane wymagają najpierw rozdzielenia. Po
-migracji żadna asercja dotycząca wyłącznie planu nie powinna uruchamiać
-renderera. Każdy test z decyzją `retain` musi mieć najmniejszy fixture
-dowodzący konkretnej własności, a pełny kontrakt brandowy i procesowe testy
-publiczne pozostają osobnymi gate’ami przed wydaniem.
-
-## Decyzja przy każdej funkcji testowej
-
-Audyt obejmuje wszystkie 24 skrypty wykonywane przez domyślne `npm run test`
-(suite `composition` i `artifacts`), sam `test-harness.mjs` oraz współdzielone
-testowe helpery z `server/scripts/lib/`, które te skrypty importują. W każdym z
-nich każda nazwana lokalna funkcja ma bezpośrednio nad deklaracją komentarz
-`@test-decision` i `@test-action`. Komentarz mówi nie tylko, czy funkcję
-zachować, ale także czy docelowo:
-
-- pozostawić ją jako asercję planu (`plan-only`, `plan-assertion`),
-- scalić fixture’y lub wspólne asercje (`plan-fixture-or-assertion`),
-- scalić uruchamianie transportu i procesów (`merge-transport`,
-  `merge-process-runner`),
-- współdzielić bundlowanie (`merge-shared-bundle`),
-- utrzymać jedną partię planowania (`plan-batch`), albo
-- przenieść kosztowną weryfikację do jednego smoke/showcase gate’u
-  (`visual-gate`),
-- usunąć osierocony helper po potwierdzeniu braku wywołań
-  (`remove-candidate`).
-
-Nie dopisujemy komentarzy do anonimowych callbacków `map`/`filter` ani do
-funkcji domenowych importowanych z `src/`: nie są testowymi seamami tego
-harnessu, a ich odpowiedzialność jest opisana w dokumentacji modułów. Decyzja
-o koszcie takiej funkcji znajduje się przy testowym call-site. Współdzielone
-funkcje z `scripts/lib/` są natomiast objęte komentarzami, bo to kod testowy i
-to tam powstają wspólne procesy, fixture’y i dekodery. Jeżeli w kolejnym kroku
-będziemy przenosić helpery do wspólnych modułów, ten sam komentarz i decyzję
-trzeba przenieść razem z deklaracją.
-
-Najważniejsze decyzje scalające wynikające z komentarzy:
-
-1. `build` nie powinien być wykonywany w każdym teście; jeden wspólny bundle
-   jest przygotowywany przez harness albo helper testowy.
-2. Procesowe MCP/CLI łączymy w scenariusze transportowe i utrzymujemy jeden
-   proces na partię, zamiast uruchamiać go dla każdego wariantu.
-3. Fixture’y i asercje planu z `text-composition-engine`, `editorial-flow` i
-   `editorial-numbered-flow` łączymy według własności planu, a nie według
-   obecnego pliku.
-4. PDF/XML/raster/ink helpers nie są usuwane bez dowodu; przechodzą do jednego
-   reprezentatywnego showcase/visual-QA gate’u. Szybki test używa planu.
-5. Powtarzające się normalizatory tokenów, geometrii i asercji mogą trafić do
-   `server/scripts/lib/plan-test-utils.mjs`, ale dopiero po porównaniu
-   komunikatów błędów i zakresu danych wejściowych.
-
-### Konkretne scalenia suite’ów
-
-Scalanie nie oznacza zlania wszystkich kontraktów w jeden nieczytelny test.
-Oznacza wspólny fixture, proces i warstwę asercji tam, gdzie dowód jest ten
-sam:
-
-| Docelowy przebieg | Obecne checki/funkcje | Co wspólnie sprawdza | Co pozostaje osobne |
+| Target suite | Current owners | Shared proof | Remains separate |
 |---|---|---|---|
-| `composition-plan-contract` | engine contract, input adapter, template flow, report plan, soft insertions, dynamic slots, page limits, structure scoring, contrast prototype | wejście → normalizacja → legalność → placementy, sloty, diagnostyka i scoring w pamięci | kontrakt publicznego transportu i backend PDF |
-| `editorial-plan-matrix` | planowe części `editorial flow` i `editorial numbered flow` | jedna macierz fixture’ów oraz wspólne asercje kolumn, flow barriers, continuation i insertionów | reprezentatywny render oraz visual-QA |
-| `public-transport-contract` | public MCP behavior, dynamic insertion public, public CLI behavior | wspólne dane wejściowe, oczekiwane odpowiedzi, błędy i dry-run; jeden proces na partię scenariuszy danego transportu | MCP i CLI pozostają dwoma adapterami, bo mają różne protokoły |
-| `pdf-backend-smoke` | jsPDF adapter, composition adapter, composition image, report chrome, report images | jeden minimalny dokument zawierający tekst, tabelę, obraz, chrome i insertion; asercje formatu oraz zapisu | testy specyficzne dla resolvera obrazów i osobne formaty PNG/PPTX |
-| `visual-showcase` | raster/PDF helpers z text engine, numbered flow, composition oracle, editorial parity | jedna materializacja demonstracyjna, ink/token/box parity i oracle | nie jest częścią szybkiego `npm run test`; uruchamiany jawnie/nightly |
+| `composition-plan-contract` | engine contract, input adapter, template flow, report plan, soft insertions, dynamic slots, page limits, structure scoring | input → normalization → legality → placements, slots, diagnostics, and scoring in memory | public transport and PDF backend |
+| `editorial-plan-matrix` | plan parts of editorial flow and editorial numbered flow | one fixture matrix and shared assertions for columns, barriers, continuation, and insertions | representative render and visual QA |
+| `public-transport-contract` | public MCP contract, dynamic insertion public, public CLI behavior | shared inputs, expected responses, errors, and dry-run; one process per transport batch | MCP and CLI remain separate adapters because protocols differ |
+| `pdf-backend-smoke` | jsPDF adapter, composition adapter, composition image, report chrome | one minimal document with text, table, image, chrome, and insertion; format/write assertions | resolver-specific input tests and separate PNG/PPTX formats |
+| `visual-showcase` | raster/PDF helpers, composition oracle, editorial parity | one demonstration materialization, ink/token/box parity, and oracle | not part of fast `npm test`; explicit/nightly |
 
-W każdym wierszu najpierw przenosimy asercje do wspólnego planu, następnie
-uruchamiamy jeden reprezentatywny smoke. Dopiero potem można usunąć stare
-wywołania renderera. Samo połączenie plików bez wspólnego fixture’a nie jest
-scaleniem i nie obniży kosztu.
+The actual current owners include `test-public-mcp-contract.mjs`,
+`test-editorial-plan-contract.mjs`, and `test-editorial-visual-gate.mjs`.
+The former `test-public-behavior.mjs` and `test-report-images.mjs` monoliths are
+not harness owners. Image input is covered by `test-image-resolver.mjs` and
+composition image/backend checks; public MCP behavior is covered by the
+128-line `test-public-mcp-contract.mjs`.
 
-### Pomiar po pierwszej serii scaleń
+Merging does not mean putting every contract into one unreadable test. It means
+sharing a fixture, process, and assertion layer where the evidence is the same.
+For each row, move assertions to the shared plan first, then run one
+representative smoke. Only afterwards may the old renderer invocations be
+removed.
 
-Poniższe czasy pochodzą z bezpośrednich uruchomień pojedynczych skryptów poza
-`test-harness` (host, 2026-09-09). Są orientacyjne, bo zależą od obciążenia i
-throttlingu CPU:
+## Function-level audit
 
-| Skrypt | Czas | Wynik | Zmiana/scalenie |
-|---|---:|---|---|
-| `test-composition-report-data-adapter.mjs` | 0,19 s | PASS | dwa bundlowania → jeden build wielowejściowy |
-| `test-template-flow-contract.mjs` | 0,10 s | PASS | dwa bundlowania → jeden build |
-| `test-report-plan.mjs` | 0,17 s | PASS | trzy bundlowania → jeden build |
-| `test-page-template-adapter.mjs` | 4,27 s | PASS | trzy bundlowania → jeden build |
-| `test-composition-page-limits.mjs` | 5,40 s | PASS | cztery bundlowania → jeden build; mniejsze fixture’y |
-| `test-editorial-flow.mjs` | 13,32 s | PASS | 24 warianty plan-only + 2 PDF reprezentanty |
-| `test-editorial-numbered-flow.mjs` | 30,60 s | PASS | jeden backend smoke; raster/PDF parity opt-in |
-| `test-dynamic-insertion-public.mjs` | 5,91 s | PASS | bezpośredni MCP contract, 7 insertion lines, 4 strony |
-| `test-cli.mjs` | 6,32 s | PASS | pięć requestów render/dry-run w jednej partii |
-| `test-report-images.mjs` | 31,77 s | PASS | jeden PDF dla PNG/WebP/AVIF/float/ZIP; bez raster QA |
-| `test-report-composition-adapter.mjs` | 4,42 s | PASS | jeden adapter smoke dla tekstu, tabeli, chartu i grafiki |
-| `test-report-composition-image.mjs` | 4,86 s | PASS | jeden image boundary/caption plan + backend smoke |
-| `test-report-chrome.mjs` | 6,33 s | PASS | jeden PDF chrome |
+The audit covers all 24 scripts run by the default `npm test` at the time of
+the function audit (the `composition` and `artifacts` suites), the harness, and
+the shared test helpers imported from `server/scripts/lib/`. Every named local
+function has a comment directly above its declaration with `@test-decision`
+and `@test-action`. The comment records whether to:
 
-Agentowe pomiary tej samej serii mieściły się w granicach: page-template
-5,55 s, page-limits 7,91 s, editorial flow 16,93 s, CLI 6,69 s, report images
-33,34 s, composition adapter 6,05 s i composition image 5,29 s. Różnica nie
-oznacza regresji; jest spodziewaną zmiennością środowiska. Nie uruchamiano
-`npm run test` ani testów, które uruchamiają inne testy.
+- keep it as a plan assertion (`plan-only`, `plan-assertion`);
+- merge fixtures or shared assertions (`plan-fixture-or-assertion`);
+- merge transport and process execution (`merge-transport`,
+  `merge-process-runner`);
+- share bundling (`merge-shared-bundle`);
+- keep one planning batch (`plan-batch`); or
+- move expensive verification into one smoke/showcase gate (`visual-gate`).
 
-Weryfikacja statyczna po audycie wykazała 227 nazwanych funkcji w tych skryptach
-i współdzielonych helperach oraz jeden nazwany callback właściwości MCP; 0
-deklaracji pozostało nieoznaczonych. Same komentarze nie zmieniają ścieżki
-wykonania, dlatego nie uruchamiamy pełnego, wielominutowego suite’u ponownie;
-przed każdą zmianą implementacyjną obowiązuje jednak `node --check` dla
-zmienionych skryptów oraz test właściwego suite’u.
+An orphan helper may be removed only after confirming it has no callers
+(`remove-candidate`).
 
-Rozkład decyzji w tym snapshotcie to: `visual-gate` 98,
-`plan-fixture-or-assertion` 52, `plan-assertion` 41, `plan-only` 11,
-`merge-process-runner` 3, `merge-shared-bundle` 4, `merge-transport` 4,
-`merge-showcase-manifest` 6, `merge-timing` 2,
-`merge-shared-assertions` 3 oraz po jednej funkcji dla
-`centralize-manifest`, `shared-harness`, `plan-batch` i
-`remove-candidate`. To są decyzje dla funkcji, nie nowe testy ani dodatkowe
-przebiegi harnessu.
+Anonymous `map`/`filter` callbacks and domain functions imported from `src/`
+are not annotated: they are not seams owned by this harness, and their
+responsibility is documented with their module. The cost decision for an
+imported function belongs at the test call site. Shared functions under
+`scripts/lib/` are annotated because they are test code and own shared
+processes, fixtures, and decoders. If a helper moves again, move its decision
+comment with its declaration.
 
-### Zastąpienie publicznego monolitu
+## Completion boundary
 
-`test-public-behavior.mjs` zawierał 611 linii i mieszał kontrakt MCP z testami
-backendu raportów, obrazów, chrome oraz wszystkimi formatami slajdów. Został
-zastąpiony przez `test-public-mcp-contract.mjs` (128 linii), który zachowuje
-wyłącznie publiczny smoke: initialize/listTools, list/inspect brand, ZIP
-source, dry-run raportu, zaakceptowany render raportu, odrzucenie niewłaściwego
-`template_ref` oraz minimalny render slajdu. Szczegóły PDF/PNG/PPTX pozostają w
-`test-report-composition-*`, `test-report-chrome.mjs`,
-`test-report-composition-image.mjs` i `test-slide-artifacts.mjs`; format-specific
-image input pozostaje pokryty przez `test-image-resolver.mjs`, a materializacja
-źródeł przez `test-source-materialization.mjs`.
+Release 1.0 is complete when the current release gate is green and every
+retained artifact has a named backend reason. The 39/39 result on 2026-09-09
+meets that release-gate condition; the 23/23 default `npm test` result is the
+fast gate evidence; and the latest 506/506 `test:editorial-full` run is green.
+Documentation and legacy audits remain separately tracked.
 
-Bezpośredni pomiar nowego kontraktu (bez harnessu, host, 2026-09-09) wyniósł
-3,42 s i zakończył się `PASS`. Stary skrypt nie jest już wpisany do harnessu;
-nowy test jest jedynym właścicielem publicznego MCP smoke.
-
-### Stan po migracji suite'ów
-
-Powyższa tabela zachowuje historyczne pomiary usuniętych lub zastąpionych
-skryptów. Aktualny harness używa następujących właścicieli:
-
-- `test-report-images.mjs` usunięto; obrazy są sprawdzane planowo i backendowo
-  przez `test-report-composition-image.mjs`, a formaty wejściowe przez
-  `test-image-resolver.mjs`.
-- `test-public-behavior.mjs` usunięto; jego publiczny kontrakt MCP jest w
-  `test-public-mcp-contract.mjs`.
-- `test-editorial-numbered-flow.mjs` nie jest domyślnym przebiegiem; jego
-  szybka ścieżka planowa jest w `test-editorial-plan-contract.mjs`, natomiast
-  PDF/PNG i ink QA pozostają jawnie uruchamianym
-  `test-editorial-visual-gate.mjs`.
-
-W efekcie domyślne testy sprawdzają istnienie i legalność planu bez
-materializacji artefaktu. Renderowanie pozostaje pojedynczym smoke lub
-opcjonalnym visual gate'em, a nie powtarza się dla każdego wariantu danych.
+Optimization follow-ups may further merge fixtures, share bundles, or move
+visual checks out of the fast path, but may not delete assertions or change the
+document-flow contract. Release 1.1 deferrals such as automatic brand lockup
+materialization, removal of the legacy renderer fallback, and explicit
+`paintOrder` are outside this test-cost task and must not be smuggled into the
+1.0 gate.

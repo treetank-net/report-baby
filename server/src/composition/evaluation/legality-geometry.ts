@@ -3,6 +3,11 @@ import { graphicIntervalsForLine } from '../geometry/visual-geometry.js';
 
 type RectLike = { x: number; y: number; width: number; height: number };
 
+type StructuredPlacement = Pick<
+  CompositionPlan['blockPlacements'][number] | CompositionPlan['tablePlacements'][number],
+  'page' | 'slotId' | 'box'
+>;
+
 /** Return the floating-point tolerance used by evaluator geometry checks. */
 /**
  * @planner-target composition/evaluation/legality-geometry.ts
@@ -51,7 +56,22 @@ export function lineEntersGraphic(line: CompositionPlan['lines'][number], graphi
   });
 }
 
-/** Count usable complete lines after an existing line and wrapping graphics. */
+/** Determine whether a candidate line occupies a structured block or table in its slot. */
+/**
+ * @planner-target composition/evaluation/legality-geometry.ts
+ * @planner-responsibility Keep structured placements from being counted as free line capacity.
+ */
+export function lineEntersStructuredPlacement(
+  line: CompositionPlan['lines'][number],
+  slot: CompositionSlot,
+  placement: StructuredPlacement,
+): boolean {
+  return placement.page === line.page
+    && placement.slotId === slot.id
+    && overlaps(line.box, placement.box);
+}
+
+/** Count usable complete lines after an existing line, graphics, and structured placements. */
 /**
  * @planner-target composition/evaluation/legality-geometry.ts
  * @planner-responsibility Keep the current usableLinesAfter implementation intact until its target seam is extracted.
@@ -60,6 +80,7 @@ export function usableLinesAfter(
   line: CompositionPlan['lines'][number],
   slot: CompositionSlot,
   graphics: CompositionPlan['graphicPlacements'],
+  structuredPlacements: StructuredPlacement[] = [],
   nextLineHeight = line.box.height,
 ): number {
   const lineHeight = nextLineHeight;
@@ -70,7 +91,9 @@ export function usableLinesAfter(
       && graphic.slotId !== slot.id
       && graphic.wrap === 'around'
       && lineEntersGraphic({ ...line, box: { ...line.box, y } }, graphic));
-    if (!available) usable += 1;
+    const candidate = { ...line, box: { ...line.box, y } };
+    const occupiedByStructuredPlacement = structuredPlacements.some((placement) => lineEntersStructuredPlacement(candidate, slot, placement));
+    if (!available && !occupiedByStructuredPlacement) usable += 1;
   }
   return usable;
 }

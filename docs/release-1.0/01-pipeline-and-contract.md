@@ -1,123 +1,136 @@
-# Plan 01 — pipeline i kontrakt
+# Plan 01 — pipeline and contract
 
-Status: w większości wykonany; pozostał audyt publicznego kontraktu i legacy
-ścieżek
+Status: largely complete; the remaining work is an audit of the public
+contract and legacy paths.
 
-## Uruchamianie testów
+## Running the tests
 
-W repozytorium istnieje jeden kanoniczny runner testów: `server/scripts/test-harness.mjs`.
-Pojedyncze pliki `test-*.mjs` są jego wewnętrznymi przypadkami, a nie osobnymi
-komendami produktu ani elementami bundla runtime.
+The repository has one canonical test runner:
+`server/scripts/test-harness.mjs`. Individual `test-*.mjs` files are its
+internal cases, not separate product commands or runtime bundle components.
 
-Z katalogu `server/`:
+From `server/`:
 
-- `npm test` przebudowuje aktualne bundla i uruchamia release gate dla
-  composition oraz końcowych artefaktów;
-- `npm test -- --suite composition` uruchamia kontrakty planera;
-- `npm test -- --suite artifacts` uruchamia testy PDF/PNG/PPTX, chrome,
-  editorial i pozostałe kontrakty artefaktów;
-- `npm run test:brand` uruchamia osobny, ciężki kontrakt profili, template’ów i
-  mutacji brandowych;
-- `npm test -- --suite quality --no-build` uruchamia rozszerzone kontrole
-  utrzymaniowe, poza podstawowym gate’em release;
-- `npm run test:editorial-full` uruchamia pełną macierz 506 fixture’ów
-  przepływu redakcyjnego; zwykły `test:release` korzysta z szybkiego zestawu
-  reprezentatywnego;
-- `npm run baseline:verify` pozostaje osobną kontrolą corpus, ponieważ
-  porównuje zapisane artefakty i może wymagać świadomej aktualizacji baseline.
+- `npm test` rebuilds the current bundles and runs the default release gate for
+  composition and final artifacts;
+- `npm test -- --suite composition` runs planner contracts;
+- `npm test -- --suite artifacts` runs PDF/PNG/PPTX, chrome, editorial, and
+  other artifact contracts;
+- `npm run test:release` runs the complete 39-check release gate;
+- `npm run test:brand` runs the separate, expensive contract for brand
+  profiles, templates, and brand mutations;
+- `npm test -- --suite quality --no-build` runs extended maintenance checks
+  outside the basic release gate;
+- `npm run test:editorial-full` runs the full 506-fixture editorial-flow
+  matrix; the regular release gate uses a fast representative set;
+- `npm run baseline:verify` remains a separate corpus check because it compares
+  stored artifacts and may require a deliberate baseline update;
+- `npm test -- --suite visual` runs opt-in PDF/raster visual gates, including
+  the editorial visual gate, rather than placing them in the default fast gate.
 
-Runner buduje bundla przed domyślnym testem, aby testy nie użyły przypadkiem
-starego `cli-bundle.cjs` lub `bundle.cjs`. `--no-build` służy tylko do szybkiego
-powtarzania wcześniej zbudowanego przebiegu.
+The current release evidence is:
 
-## Pomiar czasu suite’ów
+| Check | Result | Evidence |
+|---|---|---|
+| `npm run test:release` | PASS | 39/39 checks completed on 2026-09-09 |
+| `npm test` | PASS | 23/23 checks completed in approximately 122 seconds |
+| public MCP contract | PASS | public MCP contract is green |
 
-Sam komunikat na stdout nie jest wystarczającym pomiarem: znika po zakończeniu
-procesu i nie pokazuje, który check opóźnił cały przebieg. Do pełnego pomiaru
-służy:
+The runner builds the bundles before the default test so that tests cannot
+accidentally use an old `cli-bundle.cjs` or `bundle.cjs`. `--no-build` is only
+for quickly repeating an already-built run.
+
+## Suite timing
+
+The message printed to stdout is not a sufficient measurement: it disappears
+when the process ends and does not show which check delayed the complete run.
+Use this command for a complete timing report:
 
 ```sh
 npm run test:timings -- --no-build
 ```
 
-Polecenie uruchamia `test-harness.mjs --suite all` i zapisuje raport JSONL do
-`server/qa/test-timings.jsonl`. Plik jest artefaktem QA i jest ignorowany przez
-Git. Każdy rekord jest dopisywany natychmiast po zdarzeniu, więc przerwany
-przebieg nadal zachowuje czasy ukończonych checków:
+The command runs `test-harness.mjs --suite all` and writes a JSONL report to
+`server/qa/test-timings.jsonl`. The file is a QA artifact ignored by Git. Each
+record is appended immediately after the event, so an interrupted run still
+retains the timings of completed checks:
 
-- `run-start` zawiera suite’y, liczbę unikalnych checków i informację, czy
-  wykonano build;
-- `check-start` oraz `check-complete` zawierają nazwę, skrypt, suite i decyzję
-  artefaktową (`not-generated`, `remove`, `retain` albo `split`) oraz
-  `elapsedMs`; rekord końcowy ma również status `passed`/`failed`;
-- `run-complete` zawiera łączny czas, `suiteTotals` oraz liczby
-  `checkCount`/`plannedCheckCount`; gdy przebieg buduje bundla, build jest
-  raportowany jako osobny pseudo-suite `build`.
+- `run-start` contains the suites, the number of unique checks, and whether a
+  build was performed;
+- `check-start` and `check-complete` contain the name, script, suite, artifact
+  decision (`not-generated`, `remove`, `retain`, or `split`), and `elapsedMs`;
+  the final record also contains `passed`/`failed` status;
+- `run-complete` contains total time, `suiteTotals`, and
+  `checkCount`/`plannedCheckCount`; when the run builds bundles, the build is
+  reported as a separate pseudo-suite named `build`.
 
-Raport można zapisać poza repozytorium, np.:
+The report can be written outside the repository, for example:
 
 ```sh
 TEST_TIMINGS_PATH=/tmp/report-baby-timings.jsonl npm run test:timings -- --no-build
 ```
 
-Check współdzielony przez
-kilka suite’ów jest wykonywany tylko raz; `suiteTotals.<name>.skippedDuplicateChecks`
-opisuje pominięte kopie, aby sum suite’ów nie udawała czasu kolejnych uruchomień.
+A check shared by multiple suites is executed only once;
+`suiteTotals.<name>.skippedDuplicateChecks` records the skipped copies so that
+suite totals do not pretend those checks ran again.
 
-Wcześniej czas był mierzony tylko doraźnie przez komunikaty harnessu. Ostatnie
-zapisane przebiegi dały orientacyjnie: smoke ~2,5 s, szybki editorial ~26,5 s,
-limity stron ~23,4 s, a quality ~188,4 s. Są to czasy konkretnego środowiska,
-nie kontrakt wydajnościowy; kanonicznym źródłem bieżących danych jest raport
-JSONL z `test:timings`.
+Earlier, timing was measured only ad hoc through harness messages. The latest
+recorded runs gave approximately: smoke ~2.5 s, fast editorial ~26.5 s, page
+limits ~23.4 s, and quality ~188.4 s. These are measurements from a particular
+environment, not a performance contract; the canonical source of current data
+is the JSONL report from `test:timings`.
 
-Snapshot pełnego `all` z 2026-09-09 (bez builda, 39 unikalnych checków) wyglądał
-następująco:
+The following is the historical full-`all` snapshot from 2026-09-09 before the
+latest test-cost reductions. It is retained as a baseline, not as the current
+release result:
 
-| Suite | Czas sumy checków | Checki | Uwagi |
+| Suite | Sum of check times | Checks | Notes |
 |---|---:|---:|---|
-| smoke | 2,1 s | 3 | szybki kontrakt planera |
-| composition | 92,9 s | 13 | 3 checki współdzielone ze smoke |
-| artifacts | 116,7 s | 8 | wielokrotne renderowanie CLI/PDF/PNG/PPTX |
-| brand | 128,9 s | 1 | osobny, ciężki kontrakt profili i mutacji brandowych |
-| quality | 162,9 s | 14 | kontrakty utrzymaniowe i wejściowe |
-| całość | 503,6 s | 39 | około 8 min 24 s, bez builda |
+| smoke | 2.1 s | 3 | fast planner contract |
+| composition | 92.9 s | 13 | 3 checks shared with smoke |
+| artifacts | 116.7 s | 8 | repeated CLI/PDF/PNG/PPTX rendering |
+| brand | 128.9 s | 1 | separate, expensive brand profile and mutation contract |
+| quality | 162.9 s | 14 | maintenance and input contracts |
+| total | 503.6 s | 39 | approximately 8 min 24 s, without build |
 
-Największe pojedyncze koszty tego przebiegu to: `brand contract` 128,9 s,
-`manifest consumers` 76,0 s, `configuration reach` 51,7 s, `report images`
-43,4 s oraz `public MCP behavior` 28,4 s. To są pierwsze kandydaty do decyzji
-o usunięciu albo ograniczeniu artefaktu; sama nazwa checku nie przesądza
-jeszcze, które jego asercje można odłączyć od renderowania. Decyzja artefaktowa
-jest zapisana osobno, ponieważ opisuje możliwość usunięcia renderu, a nie
-aktualny sposób uruchamiania testu.
+The largest individual costs in that run were: `brand contract` 128.9 s,
+`manifest consumers` 76.0 s, `configuration reach` 51.7 s, `report images`
+43.4 s, and `public MCP behavior` 28.4 s. These were the first candidates for
+removing or limiting artifacts; the check name alone does not determine which
+assertions can be detached from rendering. The artifact decision is recorded
+separately because it describes whether rendering can be removed, not how the
+test is currently executed.
 
-## Wykonane w pierwszym przebiegu
+## Completed in the first pass
 
-- usunięto drugą ewaluację z `planReportComposition()`;
-- wrapper zwraca teraz `result.evaluation` z engine’u;
-- test composition potwierdza jedną fazę `evaluation` w wyniku;
-- contract test potwierdza jedno wywołanie evaluatora dla jednego planu;
-- bundlowanie testów composition używa CommonJS, dzięki czemu testy dochodzą
-  do asercji zamiast kończyć się na `Dynamic require of "process"`;
-- adapter input ma asercję pełnego mapowania obecnych block kinds.
+- removed the second evaluation from `planReportComposition()`;
+- the wrapper now returns `result.evaluation` from the engine;
+- the composition test confirms one `evaluation` phase in the result;
+- the contract test confirms one evaluator call for one plan;
+- composition test bundling uses CommonJS, allowing tests to reach assertions
+  instead of ending at `Dynamic require of "process"`;
+- the input adapter has an assertion for the complete mapping of current block
+  kinds;
+- the editorial integration has a plan-only contract for cross-flow placement;
+  PDF token and raster occupancy checks are kept in an opt-in visual gate.
 
-## Wynik audytu ścieżek publicznych
+## Public-path audit result
 
-- Nie znaleziono wewnętrznych importów z `composition/index.ts`; moduł jest
-  używany jako publiczny seam bundlowany przez testy i potencjalnych callerów.
-  Dlatego nie zawężam eksportów automatycznie — wymaga to osobnej decyzji
-  breaking-change opartej na publicznym użyciu.
-- Aliasy `main`, `header`, `footer`, `title`, `headerContent` i ich warianty
-  są obsługiwane w `compositionInputSchema`, ale nie znaleziono ich użycia w
-  wewnętrznym rendererze poza samym parserem. Nie usuwam ich w ciemno: trzeba
-  potwierdzić, czy są częścią wspieranego wejścia zewnętrznego, czy tylko
-  pozostałością migracji.
-- Testowe fixture’y starego kształtu są przepisywane przez testowy helper do
-  canonical `flows`; nie są dowodem, że produkcja potrzebuje starego
-  `ReportData`.
+- No internal imports from `composition/index.ts` were found; the module is
+  used as a public seam bundled by tests and potential callers. Therefore,
+  exports are not narrowed automatically — that requires a separate
+  breaking-change decision based on public usage.
+- The aliases `main`, `header`, `footer`, `title`, `headerContent`, and their
+  variants are supported by `compositionInputSchema`, but no use was found in
+  the internal renderer beyond the parser itself. They are not removed
+  blindly: we must confirm whether they are supported external input or merely
+  migration leftovers.
+- Test fixtures in the old shape are rewritten by a test helper into canonical
+  `flows`; this does not prove that production still needs the old `ReportData`.
 
-## Cel
+## Goal
 
-Uczynić jeden przebieg composition wiarygodnym i widocznym:
+Make one composition pass reliable and observable:
 
 ```text
 CompositionInput
@@ -129,88 +142,92 @@ CompositionInput
   → renderer
 ```
 
-Wynik planowania ma być jedynym wynikiem używanym do decyzji o renderowaniu.
+The planning result must be the only result used to decide whether rendering
+may proceed.
 
-## Stan obecny
+## Current state
 
-- `createCompositionEngine()` wywołuje planner, a następnie evaluator jeden
-  raz: [`composition-engine.ts`](../../server/src/composition/composition-engine.ts).
-- `planReportComposition()` zwraca wybraną `result.evaluation` z engine’u i
-  nie wywołuje evaluatora ponownie:
+- `createCompositionEngine()` calls the planner and then the evaluator once:
+  [`composition-engine.ts`](../../server/src/composition/composition-engine.ts).
+- `planReportComposition()` returns the selected `result.evaluation` from the
+  engine and does not evaluate again:
   [`report-composition-entrypoint.ts`](../../server/src/composition/report-composition-entrypoint.ts#L57-L93).
-- `dry_run` i zwykły render korzystają ze wspólnego przygotowania composition;
-  `resolveReportPlanOnly()` pozostaje wyłącznie ścieżką legacy odpowiedzi.
-- Rejestrator narzędzi znajduje się w
+- `dry_run` and regular rendering use shared composition preparation;
+  `resolveReportPlanOnly()` remains only as a legacy response path.
+- The tool registry is located at
   [`interfaces/mcp/render-tools.ts`](../../server/src/interfaces/mcp/render-tools.ts).
-- `report-composition-entrypoint.ts` nie jest drugim rendererem: jest
-  produkcyjnym punktem wejścia, który składa input, metryki jsPDF, policy
-  planera i capability renderera.
-- Contract test dochodzi do asercji i potwierdza pojedynczą ewaluację planu;
-  bundlowanie testów używa CommonJS.
+- `report-composition-entrypoint.ts` is not a second renderer: it is the
+  production entry point that assembles input, jsPDF metrics, planner policy,
+  and renderer capabilities.
+- The contract test reaches its assertions and confirms a single plan
+  evaluation; test bundling uses CommonJS.
+- The public MCP contract is green in the current release evidence.
 
-## Kroki
+## Steps
 
-1. W `planReportComposition()` zwrócić `result.evaluation` zamiast wywoływać
-   evaluator ponownie.
-2. Usunąć niepotrzebny import bezpośredniego evaluatora z tego wrappera.
-3. Dodać do contract testu licznik wywołań evaluatora i asercję, że jeden
-   konkretny plan jest oceniony raz.
-4. Naprawić sposób budowania tymczasowego bundla contract testu. Nie zmieniać
-   asercji tylko po to, aby ominąć błąd runtime. **Wykonane:** contract test i
-   adapter test używają CommonJS oraz przechodzą do asercji.
-5. Opisać, które dane są publicznym `CompositionInput`, a które są
-   wewnętrznym etapem przygotowania composition.
-6. Sprawdzić pełne mapowanie obecnych block kinds od schema do renderera.
-   **Częściowo wykonane:** adapter input ma test wszystkich obecnych rodzajów;
-   pozostaje potwierdzenie ich wspólnej ścieżki aż do renderera.
-7. Zdecydować na podstawie użycia, które eksporty z `composition/index.ts` są
-   publicznym seamem, a które powinny zostać wewnętrzne.
-8. Zmapować wszystkie call site’y `report-composition-entrypoint.ts` i
-   potwierdzić, że nie ma równoległej implementacji renderera. **Wykonane:**
-   usunięto historyczną nazwę `shadow` z API, pliku i testu.
-9. Utrzymać zasadę własności konfiguracji: evaluator może czytać tylko
-   `composition_score`, planner nie czyta YAML, a adapter przekazuje mu policy
-   z właściwego seamu `pdf`. `quality` i visual-QA nie mogą stać się zgodą na
-   nielegalny plan.
+1. In `planReportComposition()`, return `result.evaluation` instead of calling
+   the evaluator again.
+2. Remove the unnecessary direct evaluator import from this wrapper.
+3. Add an evaluator-call counter to the contract test and assert that one
+   concrete plan is evaluated once.
+4. Fix how the contract test's temporary bundle is built. Do not change
+   assertions merely to bypass a runtime error. **Completed:** the contract
+   and adapter tests use CommonJS and reach their assertions.
+5. Document which data is public `CompositionInput` and which data is an
+   internal composition-preparation stage.
+6. Check the complete mapping of current block kinds from schema to renderer.
+   **Partially completed:** the input adapter tests all current kinds; the
+   shared path all the way to the renderer still needs confirmation.
+7. Decide from usage which exports from `composition/index.ts` are a public
+   seam and which should be internal.
+8. Map all call sites of `report-composition-entrypoint.ts` and confirm that no
+   parallel renderer implementation exists. **Completed:** the historical
+   name `shadow` was removed from the API, file, and test.
+9. Preserve configuration ownership: the evaluator may read only
+   `composition_score`, the planner does not read YAML, and the adapter passes
+   planner policy through the correct `pdf` seam. `quality` and visual QA must
+   not become permission to accept an illegal plan.
 
-## Testy i kryteria ukończenia
+## Tests and completion criteria
 
-- contract test przechodzi aż do asercji;
-- licznik potwierdza jedno wywołanie evaluatora dla jednego wyniku;
-- normalny render nie zmienia zachowania istniejącego corpus;
-- `CompositionPlanResult` jest przekazywany do renderera bez ponownego
-  rozwiązywania legalności;
-- punkt wejścia composition nie ukrywa drugiej ścieżki renderowania;
-- konfiguracja nie jest pobierana przez moduł z niewłaściwej grupy ani przez
-  rdzeń planera bezpośrednio z YAML;
-- nie ma produkcyjnego translatora starego `ReportData` ani `Cursor`;
-- nieznany block kind kończy się czytelnym błędem.
+- the contract test reaches its assertions;
+- the counter confirms one evaluator call for one result;
+- regular rendering does not change the behavior of the existing corpus;
+- `CompositionPlanResult` is passed to the renderer without resolving legality
+  again;
+- the composition entry point does not hide a second rendering path;
+- configuration is not read by a module from the wrong group or by the planner
+  core directly from YAML;
+- there is no production translator for the old `ReportData` or `Cursor`;
+- an unknown block kind ends with a clear error;
+- `npm run test:release` passes 39/39 and `npm test` passes 23/23 in the current
+  release evidence.
 
-## Pozostały zakres po pierwszym przebiegu
+## Remaining scope after the first pass
 
-- przeprowadzić audyt użycia eksportów `composition/index.ts`;
-- zdecydować, które aliasy wejściowe są jeszcze potrzebne i przygotować ich
-  usunięcie jako świadomy breaking change, jeżeli nie ma już call site’ów;
-- podłączyć `dry_run` do tego samego wyniku planowania — to zależy od planu 05,
-  ale jest odnotowanym brakiem tego etapu;
-- potwierdzić wspólną ścieżkę block kinds od schema do backendu, nie tylko
-  normalizację do `CompositionDocument`.
-- potwierdzić w kolejnym audycie, że kanoniczny punkt wejścia pozostaje jedynym
-  publicznym wejściem do planowania raportu;
-- rozstrzygnąć, czy `composition_search` jest konfiguracją runtime planera,
-  czy tylko konfiguracją testów i eksperymentów.
-- Dodać do testów kontraktu przypadki regresyjne z visual QA jako opisane
-  wejścia composition, a nie tylko jako snapshoty PDF-a. Szczególnie trzeba
-  zachować sprawdzenie pełnego mapowania tekstu, tabeli, listy i glyphów.
+- audit usage of exports from `composition/index.ts`;
+- decide which input aliases are still needed and prepare their removal as a
+  deliberate breaking change if no call sites remain;
+- connect `dry_run` to the same planning result — this depends on plan 05 but
+  is a recorded gap in that stage;
+- confirm the shared block-kind path from schema to backend, not only
+  normalization to `CompositionDocument`;
+- confirm in the next audit that the canonical entry point remains the only
+  public entry point for report planning;
+- decide whether `composition_search` is runtime planner configuration or only
+  test and experiment configuration;
+- add regression cases from visual QA to the contract tests as described
+  `CompositionInput`, rather than only as PDF snapshots. In particular,
+  preserve checks for complete mapping of text, tables, lists, and glyphs.
 
-## Wymaga uzupełnienia po wykonaniu punktu X
+## Requires completion after point X
 
-- Ostateczna lista publicznych eksportów wymaga uzupełnienia po punkcie 7,
-  gdy znamy faktyczne call site’y i testy integracyjne.
-- Dokładny kontrakt `dry_run` wymaga uzupełnienia po wykonaniu planu 05, bo
-  dopiero wtedy będzie wiadomo, które pola planu mają być ujawnione.
+- The final list of public exports requires completion after point 7, when
+  actual call sites and integration tests are known.
+- The exact `dry_run` contract requires completion after plan 05, because only
+  then will it be clear which plan fields must be exposed.
 
-## Poza zakresem
+## Out of scope
 
-Nie przywracamy starego inputu jako drugiego formatu i nie tworzymy nowej
-warstwy danych tylko po to, by opakować obecny `CompositionPlan`.
+We do not restore the old input as a second format and do not create a new data
+layer merely to wrap the current `CompositionPlan`.

@@ -1,156 +1,139 @@
-# Plan release 1.0: stabilny model flow i kompozycji
+# Release 1.0 plan: stable flow and composition model
 
-Status: indeks planów wykonawczych
+Status: completed; the numbered documents in [`docs/release-1.0/`](release-1.0/)
+are the execution record and current release evidence.
 
-## Cel
+## Goal
 
-Release 1.0 ma zakończyć przejście na jeden sposób układania treści:
+Release 1.0 completes the migration to one content-layout pipeline:
 
 ```text
 CompositionInput → flows → planner → placements → evaluator → renderer
 ```
 
-Chcemy mieć jeden deterministyczny i utrzymywalny przebieg, w którym:
+The pipeline is deterministic and maintainable:
 
-- input opiera się na named flows i uporządkowanych blocks;
-- template opisuje geometrię, sloty, trasy i miejsca zarezerwowane;
-- planner mierzy treść i wybiera placements przed rysowaniem;
-- grafiki i inne elementy zajmujące miejsce wpływają na układ tekstu;
-- evaluator odrzuca nielegalne plany i punktuje legalne układy;
-- planner może porównać ograniczoną liczbę kandydatów;
-- zwykły PDF, debug PDF i `dry_run` opisują ten sam plan;
-- renderer wykonuje plan, ale nie podejmuje po fakcie decyzji o łamaniu tekstu.
+- input uses named flows and ordered blocks;
+- templates describe geometry, slots, routes, and reserved areas;
+- the planner measures content and selects placements before drawing;
+- graphics and other occupying elements affect text layout;
+- the evaluator rejects illegal plans and scores legal layouts;
+- bounded candidate alternatives may be compared;
+- regular PDF, debug PDF, and `dry_run` describe the same plan;
+- the renderer executes the plan and does not make post-hoc wrapping decisions.
 
-Nie przywracamy starego `Cursor` ani starego płaskiego `ReportData`. Nie
-tworzymy nowego słownika pojęć ani nowego modelu domenowego tylko po to, aby
-opakować obecne zachowanie innymi nazwami.
+The old `Cursor` and flat `ReportData` models are not restored. No new domain
+vocabulary or entity is introduced merely to rename existing behavior.
 
-## Decyzje nadrzędne
+## Governing decisions
 
-1. Pętla planner–evaluator zostaje w zakresie release’u. Planner przygotowuje
-   kandydatów, evaluator sprawdza legalność i score, a wynik wybierany jest
-   spośród legalnych planów.
-2. Hard violations są ważniejsze niż score. Nielegalny plan nie może wygrać
-   dlatego, że wygląda dobrze w innych aspektach.
-3. Zakres pierwszej pętli jest ograniczony i deterministyczny. Nie budujemy
-   od razu globalnego solvera całego dokumentu.
-4. Najpierw zabezpieczamy obecne zachowanie testami, potem wydzielamy kod
-   planera według odpowiedzialności. Nie dzielimy funkcji mechanicznie.
-5. Każda wartość wpływająca na layout, score, threshold albo visual QA ma
-   pochodzić z istniejącej konfiguracji YAML.
-6. Dokumentacja kanoniczna planera, evaluatora i uzasadnień decyzji jest
-   aktualizowana w tym samym kroku co zmiana kontraktu lub reguły. Plan release
-   nie jest jedynym miejscem opisu systemu.
-7. Header i footer są zwykłymi powtarzalnymi flowami. Ich wysokość wynika z
-   zawartości i paddingów w trybie `fit_content`; template może świadomie
-   wybrać stałą ramę. Istniejące placeholdery `{{page.number}}` oraz
-   `{{page.count}}` pozostają kanonicznym kontraktem numeracji stron.
+1. The planner–evaluator loop is in scope. The planner prepares candidates, the
+   evaluator checks legality and score, and selection considers legal plans only.
+2. Hard violations outrank score; an illegal plan can never win because it looks
+   better in another dimension.
+3. The first loop is bounded and deterministic; there is no unrestricted global
+   document solver.
+4. Existing behavior is protected by tests before code is moved by
+   responsibility. Functions are not split mechanically.
+5. Layout, score, threshold, and visual-QA values come from the existing YAML
+   configuration seam.
+6. Canonical planner/evaluator/decision documentation is updated with each
+   contract or rule change; this index is not the only source of truth.
+7. Header and footer are ordinary repeating flows. Their height is content- and
+   padding-driven in `fit_content` mode, while a template may choose a fixed
+   frame. Existing `{{page.number}}` and `{{page.count}}` placeholders remain
+   the canonical page-number contract.
 
-## Plany wykonawcze
+## Execution documents
 
-Szczegóły, zależności, testy i miejsca wymagające doprecyzowania są w:
+1. [Pipeline and contract](release-1.0/01-pipeline-and-contract.md)
+2. [Geometry and shared frames](release-1.0/02-geometry-and-frames.md)
+3. [Evaluator and score](release-1.0/03-evaluator-and-scoring.md)
+4. [Planner–evaluator loop](release-1.0/04-planner-evaluator-loop.md)
+5. [Render, dry_run, and debug](release-1.0/05-render-dry-run-debug-parity.md)
+6. [Planner maintainability](release-1.0/06-planner-maintainability.md)
+7. [Block kinds and soft insertions](release-1.0/07-block-kinds-and-soft-insertions.md)
+8. [Candidate-search depth](release-1.0/08-candidate-search-depth.md)
+9. [Structural continuity and image formats](release-1.0/09-structure-penalties-and-image-formats.md)
+10. [Composition module migration](release-1.0/10-composition-module-migration.md)
+11. [Domain organization of `server/src`](release-1.0/11-src-domain-organization.md)
+12. [Dynamic page chrome and repeating flow](release-1.0/12-dynamic-page-chrome.md)
+13. [Test-cost audit](release-1.0/13-test-cost-audit.md)
 
-1. [Pipeline i kontrakt](release-1.0/01-pipeline-and-contract.md)
-2. [Geometria i wspólne ramy](release-1.0/02-geometry-and-frames.md)
-3. [Evaluator i score](release-1.0/03-evaluator-and-scoring.md)
-4. [Pętla planner–evaluator](release-1.0/04-planner-evaluator-loop.md)
-5. [Render, dry_run i debug](release-1.0/05-render-dry-run-debug-parity.md)
-6. [Utrzymywalność planera](release-1.0/06-planner-maintainability.md)
-7. [Block kinds i miękkie insertiony](release-1.0/07-block-kinds-and-soft-insertions.md)
-8. [Głębokość wyszukiwania kandydatów](release-1.0/08-candidate-search-depth.md)
-9. [Kary za dzielenie struktur i obsługa formatów obrazów](release-1.0/09-structure-penalties-and-image-formats.md)
-10. [Kategorie i migracja modułów composition](release-1.0/10-composition-module-migration.md) — praca utrzymaniowa.
-11. [Domenowe uporządkowanie całego `server/src`](release-1.0/11-src-domain-organization.md) — praca utrzymaniowa.
-12. [Dynamiczny page chrome i powtarzalne flow](release-1.0/12-dynamic-page-chrome.md)
+The current system contract is documented separately in
+[Composition](composition/README.md). Execution documents describe work order;
+Composition documents describe current behavior and rule rationale. Both must
+be updated when a planner, evaluator, or public contract changes.
 
-Dokumentacja aktualnego systemu znajduje się osobno w katalogu
-[Composition](composition/README.md). Plany wykonawcze opisują kolejność prac,
-a dokumenty Composition opisują stan i uzasadnienie reguł. Każda zakończona
-zmiana planera, evaluatora albo kontraktu musi zaktualizować oba miejsca.
+## Audited regressions
 
-## Regresje z audytu composition
+These cases remain in the harness with explicit contracts. A failure is
+classified as a test defect, an unsupported capability, or a real quality
+signal; it is never hidden by recording a new baseline.
 
-Te przypadki pozostają w harnessie jako regresje. Nie nagrywamy nowej baseline,
-aby ukryć czerwony wynik. Każdy przypadek ma osobny status: naprawiony błąd
-testu, niezaimplementowana zdolność composition albo realny sygnał jakości.
+| Case | Contract | Current status |
+| --- | --- | --- |
+| `page-layout-editorial-two-column` | selectable flow text and both columns | parser accepts compressed and uncompressed streams; gate passes |
+| `page-fill-table` | page count and content fill | parser and plan checks pass; sparse-tail policy remains an explicit quality follow-up |
+| `inline-markup-report` | bold/italic fallback, glyphs, and table/list markup | renderer-neutral runs and selectable text pass |
+| `page-fill-gap-tightening` | response to a sparse last page | legacy warning is not a composition rule; keep as an explicit contract decision |
 
-| Przypadek | Co obecnie sprawdza | Wynik audytu | Zadanie |
-|---|---|---|---|
-| `page-layout-editorial-two-column` | odczyt tekstu flow z PDF-a i obecność obu kolumn | test był fałszywie pusty, bo parser odrzucał niekompresowane strumienie; parser naprawiony, przypadek przechodzi | utrzymać test parsera i fail-closed, a docelowo porównywać pomiar z planem composition |
-| `page-fill-table` | liczba stron i minimalne wypełnienie stron | parser naprawiony; aktualnie 57 przebiegów na stronie 1 i 9 na stronie 2, przy czym druga strona jest wizualnie rzadka | zdefiniować w planie jako test rozkładu treści/tabeli, wyłączyć chrome z pomiaru i dodać ocenę końcowego fragmentu |
-| `inline-markup-report` | bold, italic, glyph fallback i markup w tabeli/listach | Composition zachowuje AST jako `CompositionInlineRun`, renderuje semantyczne style, przełącza brakujące glify na fallback per run/komórkę i utrzymuje selekcjonowalny tekst | utrzymać regresję; dalsza praca może dotyczyć kolejnych formatów fontów, nie powrotu do parsera legacy |
-| `page-fill-gap-tightening` | reakcję na zbyt rzadką ostatnią stronę | oczekiwanie warningu `A4 report gaps tightened by factor` pochodzi ze starego, dwuprzebiegowego renderera; obecny composition robi jeden przebieg, a fixture mieści się na jednej stronie | zastąpić warning asercją composition-native na legalność, fill i score albo świadomie dodać drugą iterację w planie 04 |
+The quick harness uses composition-native assertions. The full editorial matrix
+and visual checks remain available as separate gates.
 
-Szybka poprawka harnessu jest częścią planu 05. Pozostałe trzy przypadki są
-celowo zachowane jako zadania regresyjne i nie wolno ich „naprawiać” przez
-obniżenie oczekiwań bez zmiany kontraktu renderer’a.
-
-## Zależności
+## Dependencies
 
 ```text
-01 pipeline i kontrakt
+01 pipeline and contract
         ↓
-02 geometria i wspólne ramy
+02 geometry and shared frames
         ↓
-03 evaluator i score
+03 evaluator and score
         ↓
-04 pętla planner–evaluator
+04 planner–evaluator loop
         ↓
-05 render, dry_run i debug
+05 render, dry_run, and debug
         ↓
-06 utrzymywalność planera
+06 planner maintainability
         ↓
-07 kolejne block kinds i miękkie insertiony
+07 block kinds and soft insertions
         ↓
-08 głębokość wyszukiwania kandydatów
+08 candidate-search depth
         ↓
-09 kary za dzielenie struktur i formaty obrazów
+09 structural continuity and image formats
         ↓
-10–11 organizacja modułów i domenowe uporządkowanie `server/src`
+10–11 module and domain organization
         ↓
-12 dynamiczny page chrome i powtarzalne flow
+12 dynamic page chrome and repeating flow
+        ↓
+13 test-cost audit
 ```
 
-Plan 05 może być częściowo wykonywany wcześniej jako obserwacja obecnego
-renderingu, ale jego pełne kryteria zależą od planu 04. Plan 07 jest
-rozszerzeniem po udowodnieniu, że pętla działa na ograniczonym przypadku. Plan
-08 jest celowo późniejszy: najpierw musimy wiedzieć, jakie ruchy elementu są
-legalne i jak działa pełne przeliczenie tekstu, dopiero potem mierzymy, czy
-przeszukujemy wystarczająco dużą część dozwolonego obszaru.
+## Release criteria and evidence
 
-## Kryteria całego release’u
+- one documented flow-based input format;
+- every supported block kind passes validation, measurement, placement,
+  evaluation, and rendering;
+- no content loss, illegal overlap, or unexplained placement gaps;
+- planner, evaluator, debug, and renderer use the same frames;
+- each candidate is evaluated once and the evaluator does not mutate it;
+- the best legal plan is selected with deterministic tie-breaking;
+- `dry_run` and render expose the same plan;
+- composition tests and manual real-editorial review are available;
+- maintainers can find each rule owner and rationale in canonical Composition
+  documentation rather than only in history or code comments.
 
-- jeden opisany produkcyjny format inputu oparty o flows;
-- każdy obsługiwany block kind przechodzi walidację, pomiar, placement,
-  ewaluację i renderowanie;
-- brak utraty treści, nielegalnego overlapu i pustych placement gaps;
-- planner, evaluator, debug i renderer używają tych samych ram;
-- każdy kandydat jest oceniany raz, evaluator nie mutuje planu;
-- wybrany jest najlepszy legalny plan, z deterministycznym tie-breakiem;
-- `dry_run` i render opisują ten sam plan;
-- działają testy composition oraz ręczny przegląd realnego editorialu;
-- maintainer może znaleźć cały przebieg i właściciela reguły w dokumentacji.
-- maintainer może znaleźć aktualny kontrakt planera, evaluatora oraz powód
-  decyzji w [kanonicznej dokumentacji composition](composition/README.md), a
-  nie tylko w historii planu lub komentarzu kodu.
+The release gates provide the current evidence: `npm run test:release` passes
+39/39 checks, `npm test` passes 23/23 checks, and
+`npm run test:editorial-full` passes 506/506 fixtures on 2026-09-09.
 
-## Granica zakresu
+## Scope boundary
 
-Research wykazał, że ograniczona pętla jest realna bez wymiany backendu PDF.
-Globalny solver bez limitu, pełne floaty, arbitralne constrainty oraz pełne
-RTL/CJK pozostają poza bazowym zakresem, dopóki wcześniejsze plany nie pokażą,
-że obecne seam’y są wystarczające. Zobacz
-[research wykonalności](research/release-1.0-feasibility-research.md).
+The bounded loop works without replacing the PDF backend. An unrestricted
+global solver, full floats, arbitrary constraints, and full RTL/CJK remain
+outside Release 1.0. See the
+[feasibility research](research/release-1.0-feasibility-research.md).
 
-Kiedy dokument wykonawczy mówi „wymaga uzupełnienia po X”, oznacza to, że
-obecny kod nie daje jeszcze wystarczającej wiedzy do bezpiecznej specyfikacji.
-Po wykonaniu X należy zaktualizować ten dokument, zanim zaczniemy kolejny
-zależny etap.
-
-## Zadania końcowe po planie 08
-
-Szczegółowy zakres zadań końcowych znajduje się w [Planie 09](release-1.0/09-structure-penalties-and-image-formats.md):
-
-- kara punktowa za nieestetyczne dzielenie list i tabel;
-- obsługa WebP i AVIF w resolverze, rendererze i screeningu kontrastu;
-- skrócenie czasu feedbacku testów bez usuwania pełnego gate’u release’owego.
+Remaining optimization work is documented in Plan 09: structural continuity
+weight calibration, decoder limits, and further test feedback reductions without
+removing the complete release gate.

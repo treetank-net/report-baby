@@ -1,251 +1,250 @@
-# Plan 04 — pętla planner–evaluator
+# Plan 04 — planner–evaluator loop
 
-Status: wykonany w ograniczonym zakresie; selekcja i refinement kandydatów są
-podłączone do normalnego renderowania dla jawnych, ruchomych insertionów i
-grafik. Globalne feedback-driven rewrites pozostają poza zakresem.
+Status: functionally complete for the explicit 1.0 scope; candidate selection
+and refinement are connected to normal rendering for explicit movable
+insertions and graphics. Global feedback-driven rewrites remain out of scope.
+Release evidence: the release harness passes 39/39 checks and the default
+`npm test` passes 23/23 checks (2026-09-09). Multi-insertion/global solving and
+full cost benchmarking remain follow-ups or 1.1 work.
 
-## Cel
+## Goal
 
-Planner i evaluator mają współpracować przy wyborze układu:
+The planner and evaluator must cooperate when choosing a layout:
 
 ```text
-planner przygotowuje wariant
-  → plan jednego przebiegu
-  → evaluator ocenia go raz
-  → feedback wskazuje legalność i jakość
-  → planner przygotowuje ograniczoną zmianę
-  → wybór najlepszego legalnego planu
+planner prepares a variant
+  → one-pass plan
+  → evaluator scores it once
+  → feedback reports legality and quality
+  → planner prepares a bounded change
+  → choose the best legal plan
 ```
 
-To nie wymaga rozmowy z LLM-em. „Rozmowa” oznacza deterministyczne przekazanie
-wyniku ewaluacji do kolejnego kroku planera.
+This does not require an LLM conversation. “Conversation” means deterministic
+transfer of an evaluation result to the next planner step.
 
-## Stan obecny
+## Current state
 
-`createTextCompositionPlanner` udostępnia deterministyczne kandydaty dla
-istniejącej propozycji insertionu. Engine ewaluje każdy kandydat raz, odrzuca
-nielegalne warianty, wybiera legalny plan z najwyższym score, a przy remisie
-zachowuje wcześniejszy wariant. Po wyborze planner może wykonać ograniczoną
-lokalną rundę refinementu wokół najlepszego kandydata i engine ponownie ocenia
-tylko tę skończoną listę. Jednoplanowa ścieżka pozostaje kompatybilna dla
-innych plannerów.
+`createTextCompositionPlanner` exposes deterministic candidates for an existing
+insertion proposal. The engine evaluates each candidate once, rejects illegal
+variants, chooses the legal plan with the highest score and, on a tie, keeps the
+earlier variant. After selection, the planner can perform one bounded local
+refinement round around the best candidate, and the engine evaluates only that
+finite list again. A single-plan path remains compatible with other planners.
 
-To jest feedback evaluatora w kontrolowanej postaci: evaluator zwraca
-legalność, score i breakdown, a planner używa wybranego placementu jako środka
-lokalnego zakresu. Nie jest to jeszcze globalny rewrite wszystkich decyzji
-layoutowych. Reflow pozostaje osobnym kosztem przygotowania pojedynczego
-kandydata i jest raportowany oddzielnie w `reflowPasses`.
+This is evaluator feedback in a controlled form: the evaluator returns legality,
+score and breakdown, and the planner uses the selected placement as the center
+of a local range. It is not yet a global rewrite of all layout decisions.
+Reflow remains a separate cost of preparing one candidate and is reported
+separately in `reflowPasses`.
 
-## Wnioski z analizy obecnego mechanizmu
+## Findings from the current mechanism
 
-- Stałe sloty `A/B/C` nie tworzą jeszcze sensownej przestrzeni optymalizacji.
-  Przy zachowanej kolejności cytatów wybór jest w praktyce zachłanny i
-  deterministyczny.
-- Kandydaty dla ruchomego insertionu są niezależnymi alternatywami jego pozycji
-  w jawnych bounds. Nie są już tylko przebiegami stabilizacyjnymi. Dla
-  przypadków bez `movableInsertionBounds` nadal pozostaje ścieżka jednego planu
-  albo stabilizacyjnych reflow.
-- Reflow jest potrzebny tylko wtedy, gdy pozycja insertionu zależy od
-  położenia wcześniejszej treści albo innej przeszkody. Jeżeli box ma już
-  ustaloną, legalną pozycję, wystarczy jedno pełne planowanie i ewaluacja.
-- Rzeczywisty eksperyment optymalizacyjny powinien opisywać w istniejącej
-  propozycji placementu: pozycję preferowaną, dozwolone bounds, zmierzony
-  rozmiar i sposób wyrównania. Planner może wtedy wygenerować skończony zbiór
-  pozycji w bounds, najlepiej wyrównanych do siatki linii, usunąć duplikaty i
-  ocenić każdy kompletny plan.
-- Reflow pozostaje wewnętrznym etapem przygotowania pojedynczego kandydata,
-  jeśli kandydat ma anchor zależny od tekstu. Nie powinien być sam w sobie
-  traktowany jako alternatywa jakościowa.
-- Pierwszy eksperyment ograniczamy do jednego ruchomego cytatu oraz fixture’u
-  z wieloma małymi akapitami. Mierzymy liczbę unikalnych kandydatów, legalność,
-  liczbę przebiegów reflow, score i miarę łamania tekstu. Dopiero po tym można
-  rozważać wiele jednocześnie ruchomych insertionów.
+- Fixed slots `A/B/C` do not yet create a meaningful optimization space. With
+  quote order preserved, selection is effectively greedy and deterministic.
+- Candidates for a movable insertion are independent position alternatives in
+  explicit bounds. They are no longer merely stabilization passes. Without
+  `movableInsertionBounds`, the one-plan path or stabilization reflow remains.
+- Reflow is needed only when an insertion position depends on earlier content or
+  another obstacle. If a box already has a fixed legal position, one complete
+  planning pass and one evaluation are sufficient.
+- A real optimization experiment should describe, in the existing placement
+  proposal, the preferred position, allowed bounds, measured size and alignment
+  method. The planner can then generate a finite set of positions in those
+  bounds, preferably aligned to the line grid, deduplicate them and evaluate
+  every complete plan.
+- Reflow remains an internal preparation stage for one candidate when that
+  candidate has a text-dependent anchor. It should not itself be treated as a
+  quality alternative.
+- The first experiment is limited to one movable quote and a fixture with many
+  small paragraphs. Measure the number of unique candidates, legality, reflow
+  passes, score and a text-fragmentation measure. Considering multiple movable
+  insertions is explicitly deferred to a follow-up/1.1 scope.
 
-Eksperymentalny seam w plannerze to `movableInsertionBounds`, kluczowany tym
-samym `flow:block`, który już identyfikuje insertion. Każda definicja zawiera
-`bounds`, opcjonalną preferowaną pozycję, oś (`x` lub `y`) i `candidateCount`.
-Rama jest obszarem legalnym, a nie rozmiarem cytatu: planner zachowuje zmierzony
-rozmiar cytatu i przesuwa jego prostokąt tak, aby w całości mieścił się w ramie.
-Każdy wygenerowany prostokąt dostaje osobny pełny plan. Wybrany plan zachowuje
-ramę w `movableInsertionFrames`, dzięki czemu zwykły composition debug może
-wyrysować ją na czerwono. W pierwszym eksperymencie wszystkie sześć pozycji
-było legalnych, pozycje `y` wyniosły `25, 37, 49, 61, 73, 85`, a przebieg reflow
-wyniósł `0` dla każdego kandydata, ponieważ rama nie była zależna od tekstu.
-W kontrolowanym fixture ruchomego insertionu silnik wygenerował pięć
-kandydatów coarse oraz trzy kandydatury refinementu. Wszystkie były legalne,
-a ich score różnił się przez balans, spacing i fragmentację tekstu. W realnym
-editorialu zmiana pozycji cytatu usuwała wykryte orphan lines i poprawiała
-wynik względem stałej pozycji; szczegóły są w trace oraz w teście
+The experimental seam in the planner is `movableInsertionBounds`, keyed by the
+same `flow:block` that already identifies the insertion. Each definition
+contains `bounds`, an optional preferred position, an axis (`x` or `y`) and
+`candidateCount`. The frame is the legal area, not the quote size: the planner
+keeps the measured quote size and moves its rectangle so it fits entirely in the
+frame. Each generated rectangle receives a separate complete plan. The selected
+plan retains the frame in `movableInsertionFrames`, allowing the ordinary
+composition debug output to draw it in red. In the first experiment all six
+positions were legal, the `y` positions were `25, 37, 49, 61, 73, 85`, and the
+reflow pass count was `0` for every candidate because the frame did not depend on
+text. In the controlled movable-insertion fixture the engine generated five
+coarse candidates and three refinement candidates. All were legal, and their
+scores differed through balance, spacing and text fragmentation. In real
+editorial content, moving the quote removed detected orphan lines and improved
+the score relative to its fixed position; details are in the trace and in
 `test-editorial-numbered-flow.mjs`.
 
-Istniejące dane, które mogą być pierwszym neighborhood kandydatów:
+Existing data that can seed the first candidate neighborhood:
 
 - insertion proposals;
-- route i sloty;
-- flow barriers i `flowBarrierBoxCandidates`;
-- istniejące breakpoints tekstu;
-- growth/defer dla elementów, które już mają takie reguły.
+- route and slots;
+- flow barriers and `flowBarrierBoxCandidates`;
+- existing text breakpoints;
+- growth/defer rules for elements that already have them.
 
-### Konfiguracja wyszukiwania
+### Search configuration
 
-`composition_search` opisuje obecnie wartości używane przez testy i
-eksperymenty do zbudowania `movableInsertionBounds`. Produkcyjny planner nie
-czyta tej grupy z YAML; przyjmuje policy przez swój interfejs. To jest
-świadoma, ale niedomknięta decyzja seamu, a nie powód, aby planner importował
-`render-config.yml`.
+`composition_search` currently describes values used by tests and experiments to
+construct `movableInsertionBounds`. The production planner does not read this
+group from YAML; it receives policy through its interface. This is an
+intentional but unfinished seam, not a reason for the planner to import
+`render-config.yml`, and it does not expand the current 1.0 scope.
 
-## Najbliższy priorytet: opisać i uruchomić rzeczywiste ruchy elementu
+## Immediate priority: describe and run actual element movement
 
-Zanim zwiększymy liczbę kandydatów albo zaczniemy przesuwać wiele elementów,
-musimy jawnie opisać, co może się zmienić dla jednego konkretnego insertionu.
-Nie wprowadzamy nowej encji. Wykorzystujemy istniejący block, jego placement,
-box, powiązany flow i istniejące obstacles/barriers.
+Before increasing the candidate count or moving multiple elements, describe
+explicitly what may change for one concrete insertion. Do not introduce a new
+entity. Use the existing block, its placement, box, related flow and existing
+obstacles/barriers.
 
-### Co można zadeklarować
+### What can be declared
 
-| Obszar | Przykład deklaracji | Co sprawdza planner |
+| Area | Example declaration | What the planner checks |
 |---|---|---|
-| Pozycja | „najlepiej tutaj, ale do 10 mm wyżej lub niżej” | generuje pozycje w podanym zakresie, bez wychodzenia poza bounds |
-| Kierunek ruchu | tylko `x`, tylko `y`, albo oba kierunki | nie tworzy wariantów w niedozwolonym kierunku |
-| Przyklejenie | dolna krawędź grafiki przy dolnej krawędzi obszaru; cytat związany z początkiem tekstu | zachowuje wskazaną relację w każdym kandydacie |
-| Wyrównanie | lewa, prawa lub środkowa krawędź względem boxa/slotu | zmienia tylko dozwoloną współrzędną |
-| Rozmiar | szerokość i wysokość stałe albo zakres `min`–`max` | odrzuca wariant poza zakresem; nie zmienia wymiaru, którego nie wolno zmieniać |
-| Proporcje | stałe proporcje grafiki albo niezależna szerokość/wysokość | zachowuje proporcje, jeśli użytkownik ich nie poluzował |
-| Padding | minimalny i maksymalny padding treści | box cytatu nie staje się mniejszy niż jego treść i wymagany padding |
-| Tekst wewnątrz | szerokość nie mniejsza niż wymagana przez najdłuższe słowo; wysokość wyliczona z fontu i liczby linii | przy zmianie szerokości ponownie mierzy i łamie tekst; nie dopuszcza do overflow ani utraty słów |
-| Wpływ na flow | box grafiki/cytatu zasłania określony obszar flow | przelicza dostępne miejsca tekstu po każdej zmianie boxa |
+| Position | “prefer this position, but allow up to 10 mm above or below” | generates positions in the specified range without leaving the bounds |
+| Movement direction | only `x`, only `y`, or both directions | does not create variants in a forbidden direction |
+| Attachment | the graphic’s bottom edge is attached to the area’s bottom edge; the quote is attached to the text start | preserves the stated relation in every candidate |
+| Alignment | left, right or centered edge relative to a box/slot | changes only the permitted coordinate |
+| Size | fixed width and height or a `min`–`max` range | rejects a variant outside the range; does not change a dimension that must remain fixed |
+| Aspect ratio | fixed graphic ratio or independent width/height | preserves the ratio unless the user relaxed it |
+| Padding | minimum and maximum content padding | the quote box is not smaller than its content and required padding |
+| Text inside | width no smaller than the longest required word; height calculated from font and line count | remeasures and wraps text after a width change; disallows overflow or lost words |
+| Flow impact | a graphic/quote box obscures a defined flow area | recalculates available text areas after every box change |
 
-### Co jest możliwe już teraz
+### What is already possible
 
-Obecny kod potrafi bez zmiany podstawowego modelu:
+The current code can, without changing the basic model:
 
-1. wziąć istniejący insertion i zmierzyć jego rzeczywisty rozmiar;
-2. wyznaczyć jego dozwolone bounds;
-3. wygenerować kilka deterministycznych pozycji na jednej osi;
-4. utrzymać element w całości w bounds;
-5. użyć jego boxa jako przeszkody dla tekstu;
-6. przeliczyć pełny układ dla każdej pozycji;
-7. odrzucić warianty nielegalne;
-8. porównać legalne warianty przez score i wybrać najlepszy;
-9. wykonać lokalne doprecyzowanie wokół wybranego wariantu;
-10. zapisać pozycję, score i koszt ponownego przeliczenia w trace.
+1. take an existing insertion and measure its actual size;
+2. determine its allowed bounds;
+3. generate several deterministic positions on one axis;
+4. keep the element entirely inside the bounds;
+5. use its box as an obstacle for text;
+6. recalculate the complete layout for each position;
+7. reject illegal variants;
+8. compare legal variants by score and select the best;
+9. perform local refinement around the selected variant;
+10. record position, score and recalculation cost in the trace.
 
-To jest zakres pierwszej implementacji produkcyjnej. Nie zakładamy jeszcze, że
-możemy bezpiecznie zmieniać rozmiar każdego elementu.
+This is the scope of the first production implementation. We do not yet assume
+that the size of every element can be changed safely.
 
-### Czego obecny kod jeszcze nie gwarantuje
+### What the current code does not guarantee
 
-Poniższe możliwości wymagają osobnych testów i nie mogą zostać dopisane jako
-luźne opcje bez określenia ich skutków:
+The following capabilities require separate tests and must not be added as loose
+options without defining their effects:
 
-- zmiana szerokości tekstowego insertionu połączona z ponownym pomiarem jego
-  wysokości;
-- zgniatanie boxa do wartości minimalnej wynikającej z fontu, paddingu i
-  najdłuższego słowa;
-- jednoczesne utrzymywanie przyklejenia do krawędzi i zmiany rozmiaru;
-- przesuwanie jednocześnie w osi `x` i `y`;
-- optymalizacja kilku insertionów w jednym przebiegu;
-- automatyczne wyznaczanie bounds na podstawie relacji do dowolnego innego
-  elementu;
-- nieograniczone przeszukiwanie całej strony.
+- changing a text insertion’s width together with remeasuring its height;
+- shrinking a box to the minimum dictated by font, padding and the longest word;
+- maintaining attachment to an edge while changing size;
+- moving simultaneously on the `x` and `y` axes;
+- optimizing multiple insertions in one pass (follow-up/1.1);
+- automatically deriving bounds from a relation to any other element;
+- unbounded search across the whole page.
 
-### Rozdzielenie legalności od wyglądu
+### Separating legality from appearance
 
-Planner sprawdza, czy może zbudować wariant. Evaluator odpowiada na dwa osobne
-pytania:
+The planner checks whether it can build a variant. The evaluator answers two
+separate questions:
 
-- czy wariant łamie twarde ograniczenie, na przykład wychodzi poza bounds,
-  traci słowa albo narusza niedozwoloną relację;
-- jeśli jest legalny, czy wygląda lepiej od innych legalnych wariantów.
+- does the variant violate a hard constraint, such as leaving the bounds,
+  losing words or breaking a forbidden relation;
+- if it is legal, does it look better than other legal variants?
 
-Naruszenie bounds, minimalnej szerokości tekstu, paddingu, proporcji albo
-przyklejenia jest odrzuceniem. Większy odstęp, gorsze łamanie akapitu albo
-gorszy balans kolumny pozostają ujemnymi punktami, ale nie odrzucają wariantu.
+Violating bounds, minimum text width, padding, aspect ratio or attachment is a
+rejection. A larger gap, worse paragraph wrapping or poorer column balance stays
+as negative points but does not reject the variant.
 
-### Kryterium zamknięcia tego priorytetu
+### Completion criterion for this priority
 
-Test produkcyjnego renderowania musi pokazać, że deklaracja ruchu przechodzi
-przez cały przebieg: zmierzony box → kandydaci → ponowne ułożenie tekstu →
-ocena → wybrany PDF. Musimy również umieć odczytać z trace, które pozycje
-sprawdzono, które odrzucono, które zaakceptowano i dlaczego wybrany wariant
-był najlepszy.
+A production-render test must show the complete path: measured box → candidates
+→ text re-layout → evaluation → selected PDF. The trace must also show which
+positions were checked, which were rejected, which were accepted and why the
+selected variant was best.
 
-## Minimalny wariant implementacji
+## Minimal implementation variant
 
-1. Pozostawić `planDocumentOnce()` jako wykonanie jednego wariantu.
-2. Utrzymywać ograniczony feedback: wybrany kandydat i numer rundy są jedyną
-   informacją zwrotną do lokalnego refinementu. Nie przekazywać evaluatorowi
-   odpowiedzialności za mutowanie planu.
-3. Generować tylko deterministyczne warianty istniejących decyzji. Na pierwszy
-   eksperyment wybrać jeden przypadek, rekomendacyjnie:
-   - przesunięcie grafiki/cytatu względem istniejących flow barriers; albo
-   - wybór breakpointu, gdy kolejna linia trafia w obstacle.
-4. Ograniczyć liczbę wariantów i iteracji wartościami z YAML.
-5. Deduplikować warianty po istniejącej sygnaturze placementów/proposals.
-6. Oceniać każdy wariant dokładnie raz.
-7. Odrzucać hard violations przed porównaniem score.
-8. Zachować najlepszy legalny plan, a nie ostatni plan.
-9. Jeżeli nie ma legalnego planu, zwrócić `rejected` z agregatem diagnostyki.
-10. W trace zapisać kolejność prób, wynik, score i powód kolejnej zmiany.
-11. Utrzymać `page-fill-table` jako przyszły kontrolowany przypadek dla innych
-   insertionów. Nie optymalizować jednocześnie tabeli, cytatów i wszystkich
-   flow.
-12. Rozstrzygnąć źródło `composition_search` dla runtime’u. Jeśli ma sterować
-    produkcyjnym wyszukiwaniem, dodać ją do typed render-config seamu i
-    przekazać przez adapter do policy planera. Jeśli pozostaje eksperymentem,
-    usunąć ją z produkcyjnego `render-config.yml` albo jawnie oznaczyć jako
-    test-only, aby konfiguracja nie obiecywała nieistniejącego zachowania.
+1. Keep `planDocumentOnce()` as the execution of one variant.
+2. Keep feedback bounded: the selected candidate and round number are the only
+   feedback to local refinement. Do not make the evaluator responsible for
+   mutating the plan.
+3. Generate only deterministic variants of existing decisions. For the first
+   experiment choose one case, preferably:
+   - moving a graphic/quote relative to existing flow barriers; or
+   - selecting a breakpoint when the next line reaches an obstacle.
+4. Limit the number of variants and iterations with YAML values.
+5. Deduplicate variants using the existing placement/proposal signature.
+6. Evaluate each variant exactly once.
+7. Reject hard violations before comparing scores.
+8. Keep the best legal plan, not the last plan.
+9. If there is no legal plan, return `rejected` with an aggregate diagnostic.
+10. Record trial order, result, score and the reason for the next change in the
+    trace.
+11. Keep `page-fill-table` as a future controlled case for other insertions. Do
+    not optimize the table, quotes and all flows simultaneously in 1.0.
+12. Resolve the runtime source of `composition_search`. If it controls
+    production search, add it to the typed render-config seam and pass it
+    through the adapter to the planner policy. If it remains experimental,
+    remove it from production `render-config.yml` or explicitly mark it as
+    test-only so that configuration does not promise behavior that is not used.
+    This seam is a follow-up and does not block the current 1.0 contract.
 
-## Pseudoprzebieg
+## Pseudoflow
 
 ```text
-wariant początkowy
+initial variant
   → planDocumentOnce
   → evaluate
-  → zapisz wynik
-  → wygeneruj następną dozwoloną zmianę
-  → powtarzaj do braku zmiany, stabilizacji albo limitu
-  → zwróć najlepszy legalny plan
+  → record result
+  → generate the next allowed change
+  → repeat until there is no change, stabilization or a limit
+  → return the best legal plan
 ```
 
-Nie należy na początku zmieniać jednocześnie pozycji grafik, cytatów,
-breakpointów, growth i routingu na całym dokumencie. Wtedy nie będzie wiadomo,
-która decyzja poprawiła lub zepsuła układ.
+At the beginning, do not change graphic positions, quotes, breakpoints, growth
+and routing simultaneously across the whole document. Otherwise it will be
+impossible to tell which decision improved or damaged the layout.
 
-## Testy i kryteria ukończenia
+## Tests and completion criteria
 
-- dwa legalne warianty wybierają wariant z wyższym score;
-- wariant nielegalny nie wygrywa przez wysoki score;
-- realne przebiegi insertion reflow i ruchome pozycje są obserwowalne osobno;
-- trace raportuje koszt `reflowPasses` osobno dla każdego kandydata, aby można
-  było mierzyć koszt selekcji przed optymalizacją;
-- test graniczny rozróżnia pierwszy odrzucony plan source-order i drugi plan
-  zaakceptowany po przeniesieniu insertionu;
-- limit iteracji jest respektowany;
-- kolejność wariantów jest deterministyczna;
-- jeden wariant ma dokładnie jedną ewaluację;
-- trace pokazuje wszystkie próby;
-- realny editorial pokazuje widoczną, uzasadnioną zmianę układu;
-- koszt pełnego planowania jest mierzony i ma konfigurowalny limit.
-- test pokazuje, że różnica pomiędzy dwoma legalnymi wariantami wynika z
-  jawnego feedbacku evaluatora, a nie z przypadkowej kolejności rysowania.
-- źródło policy `composition_search` jest jednoznaczne i przetestowane;
-  runtime nie ma konfiguracji, której faktycznie nie używa.
+- two legal variants select the variant with the higher score;
+- an illegal variant cannot win through a high score;
+- real insertion reflow and movable positions are observable separately;
+- the trace reports `reflowPasses` separately for each candidate so selection
+  cost can be measured before optimization;
+- a boundary test distinguishes the first source-order rejected plan from the
+  second plan accepted after moving the insertion;
+- the iteration limit is respected;
+- variant order is deterministic;
+- one variant has exactly one evaluation;
+- the trace shows every trial;
+- real editorial content shows a visible, justified layout change;
+- planning cost is exposed in the trace; benchmarking full editorial planning
+  and setting a cost budget is a follow-up/1.1 item;
+- a test shows that the difference between two legal variants comes from
+  explicit evaluator feedback, not accidental drawing order;
+- the `composition_search` policy source is unambiguous and tested; runtime has
+  no configuration that it does not actually use;
+- the release harness passes 39/39 checks and default `npm test` passes 23/23
+  checks.
 
-## Wymaga uzupełnienia po wykonaniu punktu X
+## Follow-ups after point X
 
-- Globalny zakres feedbacku wymaga uzupełnienia po benchmarku wielu
-  jednocześnie ruchomych insertionów. Eksperyment 1 świadomie ogranicza się do
-  jednego cytatu.
-- Dokładne mapowanie składników score na decyzje planera wymaga dalszych testów;
-  obecnie wystarczają score breakdown, placementy i trace.
-- Limit kosztu wymaga uzupełnienia po benchmarku realnego editorialu, nie na
-  podstawie samego limitu `planner_max_iterations`.
-- Decyzja o runtime’owym seamie `composition_search` wymaga uzupełnienia po
-  porównaniu kosztu konfiguracji globalnej z konfiguracją konkretnego
-  insertionu/template’u.
+- The global feedback scope requires a benchmark with multiple movable
+  insertions. Experiment 1 intentionally limits itself to one quote. A
+  multi-insertion/global solver is follow-up/1.1 work.
+- Exact mapping of score components to planner decisions requires further tests;
+  score breakdown, placements and trace are currently sufficient for 1.0.
+- The cost limit requires a benchmark of a real editorial, not just the
+  `planner_max_iterations` limit. This is follow-up/1.1 work.
+- The runtime `composition_search` seam requires a comparison of global
+  configuration cost with configuration for a particular insertion/template.
 
-## Poza zakresem
+## Out of scope
 
-Nie budujemy globalnego solvera, losowego searchu ani nie pozwalamy, aby
-nielegalny plan był fallbackiem „najmniej złym”.
+We do not build a global solver, random search or allow an illegal plan as a
+“least bad” fallback.
