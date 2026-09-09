@@ -140,6 +140,110 @@ Opis marki, okres i tytuł headera pozostają osobnymi slotami tylko wtedy, gdy
 template chce je niezależnie pozycjonować. Ich kolizja z rozrastającym się
 lockupem jest błędem geometrii, a nie powodem do cichego zmniejszania tekstu.
 
+### Co znaczy „inline” w tym zadaniu
+
+„Inline” opisuje tutaj relację lockupu do pozostałych elementów chrome, a nie
+`CompositionInlineRun` wewnątrz jednej linii tekstu. Lockup nie jest jedynym
+blokiem w definicji headera: może współistnieć z tytułem artykułu, okresem,
+regułą albo innym slotem metadanych. Każdy z tych elementów ma własny pomiar i
+box, a layout układa je w zadanej kolejności i z zadanymi odstępami.
+
+Przykładowy header z lockupem, tytułem i okresem może wyglądać tak:
+
+```yaml
+flows:
+  header:
+    repeat: each-page
+    slots:
+      - header-lockup
+      - header-period
+      - header-title
+
+slots:
+  header-lockup:
+    kind: lockup
+    fit_content: true
+  header-period:
+    kind: text
+    fit_content: true
+  header-title:
+    kind: text
+    fit_content: true
+```
+
+Wynikowa kompozycja jednej strony nie oznacza trzech konkurujących headerów,
+tylko jeden powtarzalny flow z trzema układanymi elementami:
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ [lockup: znak + nazwa marki]       [okres publikacji]    │
+│ Tytuł artykułu, który może zająć jedną lub kilka linii    │
+│ ───────────────────────────────────────────────────────── │
+└──────────────────────────────────────────────────────────┘
+                         ↓ zmierzona granica headera
+                    [flow main / insertiony]
+```
+
+Sama kolejność slotów nie przesądza jeszcze o kierunku ułożenia. Template musi
+opisać relację geometryczną, na przykład pierwszy wiersz poziomy oraz tytuł
+złożony pod nim:
+
+```yaml
+header_layout:
+  - row: [header-lockup, header-period]
+  - stack: [header-title]
+```
+
+To nadal jest jeden `header` flow: `row` i `stack` są sposobem ułożenia jego
+slotów, a nie kolejnymi flowami ani konkurencyjnymi wariantami pierwszej
+strony. Kalkulator mierzy każdy slot, następnie mierzy wiersze/stosy i zwraca
+jedną granicę headera dla `main`.
+
+Jeżeli tytuł urośnie do dwóch linii, rośnie tylko jego slot oraz wynikowa
+wysokość grupy headera; lockup zachowuje swoje wymiary, a `main` zaczyna się
+poniżej nowej granicy. Jeżeli lockup nie ma ani znaku, ani nazwy, jego slot
+znika w trybie `fit_content`, ale pozostałe sloty nadal są układane.
+
+Numer strony jest analogicznym slotem metadanych, jednak domyślnie należy go
+umieścić w footerze. Przykład pełnego powtarzalnego chrome:
+
+```yaml
+flows:
+  footer:
+    repeat: each-page
+    slots:
+      - footer-rule
+      - footer-page-number
+
+slots:
+  footer-page-number:
+    kind: text
+    text: "{{page.number}} / {{page.count}}"
+    fit_content: true
+```
+
+Lockup może też być użyty poza headerem, o ile wybrany slot dopuszcza jego
+rodzaj. Wtedy pozostaje tym samym mierzonym blokiem, a zmienia się tylko
+miejsce i polityka powtarzania:
+
+```yaml
+flows:
+  sidebar:
+    slots:
+      - sidebar-lockup
+
+slots:
+  sidebar-lockup:
+    kind: lockup
+    asset: brand-mark
+    label: "ACME Logistics"
+    fit_content: true
+```
+
+Powyższe przykłady są docelowym kontraktem planera; nie oznaczają jeszcze
+istniejącej składni parsera. Wartości odstępów, paddingów i limitów pozostają
+w `server/templates/render-config.yml`, a nie w literalach TypeScriptu.
+
 Domyślne `gap_mm` raportowego lockupu zachowujemy bez zmiany wizualnej.
 Pierwszy przebieg migracji nie dodaje drugiego, niezależnego źródła odstępu.
 Jeżeli później template ma świadomie nadpisywać gap, istniejące pole `gap`

@@ -135,6 +135,20 @@ A graphic component is a brand-defined composition of assets, shapes and
 optional variable text. Content references the component semantically; it does
 not manually construct its nested geometry.
 
+## Lockup
+
+A lockup is a measured structured block that groups an optional brand mark
+asset with an optional brand label. The label belongs to the same composition
+as the mark, analogous to an image caption belonging to its image, but it is
+laid out beside the mark rather than being a separate flow block. A lockup may
+be placed in any slot whose template contract allows that block kind; a
+repeating header is a flow policy, not a different lockup identity.
+
+In page chrome, “inline lockup” means that the lockup coexists with other
+header or footer blocks such as an article title, publication period or page
+number. It does not mean a text inline run. Each block keeps its own measured
+box and the layout composes those boxes in order.
+
 ## Renderer
 
 The renderer is the backend adapter that turns an accepted composition plan
