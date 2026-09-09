@@ -20,6 +20,10 @@ const corpus = [
 const baseBody = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny przewozow dlugodystansowych. Firmy spedycyjne reaguja konsolidacja floty i inwestycjami w cyfrowe platformy wymiany ladunkow. Ten raport podsumowuje najwazniejsze obserwacje z ostatniego kwartalu i wskazuje kierunki na kolejne miesiace.';
 const twoSentenceBody = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny.';
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function mulberry32(seed) {
   let state = seed >>> 0;
   return () => {
@@ -30,6 +34,10 @@ function mulberry32(seed) {
   };
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function seededText(seed, wordCount) {
   const random = mulberry32(seed);
   const words = corpus.flatMap((text) => text.split(/\s+/));
@@ -38,16 +46,28 @@ function seededText(seed, wordCount) {
   return result.join(' ');
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function scaledIntro(lines, seed, marker) {
   if (lines === 0) return undefined;
   const wordCount = { 1: 16, 3: 52, 8: 132 }[lines];
   return `Intro ${marker} ${seededText(seed, wordCount)}`;
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function scaledHighlights(count, marker, seed) {
   return Array.from({ length: count }, (_, index) => `Wniosek ${marker} ${index + 1}: ${seededText(seed + index, 12)}`);
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function section(heading, body = baseBody, level) {
   return { heading, body, ...(level === undefined ? {} : { level }) };
 }
@@ -258,10 +278,18 @@ for (const brand of brandRefs) {
   }
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function normalize(value) {
   return value.toLowerCase().replace(/[^\p{L}\p{N}_-]/gu, '');
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function median(values) {
   const sorted = values.filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
   if (sorted.length === 0) return undefined;
@@ -269,6 +297,10 @@ function median(values) {
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function templateColumnFrames(input, pageWidth) {
   const templatePath = join(root, 'templates', input.template, 'template.yml');
   const source = parseYaml(readFileSync(templatePath, 'utf8'));
@@ -282,6 +314,10 @@ function templateColumnFrames(input, pageWidth) {
   });
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function columnForX(x, frames) {
   const containing = frames.findIndex((frame) => x >= frame.left - 0.5 && x <= frame.right + 0.5);
   if (containing >= 0) return containing;
@@ -293,6 +329,10 @@ function columnForX(x, frames) {
   }, 0);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move full rendering and XML geometry checks to the showcase/visual-QA gate; retain plan assertions here and reuse one backend smoke.
+ */
 function parseBbox(xml, input) {
   return [...xml.matchAll(/<page width="([0-9.]+)" height="([0-9.]+)">([\s\S]*?)<\/page>/g)].map((pageMatch, pageIndex) => {
     const width = Number(pageMatch[1]);
@@ -321,6 +361,10 @@ function parseBbox(xml, input) {
   });
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function assertNoWordOverlaps(pages) {
   const tolerance = 1;
   for (const page of pages) {
@@ -340,7 +384,15 @@ function assertNoWordOverlaps(pages) {
   }
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function assertNoColumnOverflow(pages, input) {
+  /**
+   * @test-decision plan-assertion
+   * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+   */
   const framesFor = (page) => templateColumnFrames(input, page.width);
   const leftWords = pages.flatMap((page) => contentLines(page, input).filter((line) => line.column === 0).flatMap((line) => line.contentWords));
   const leftEdge = Math.min(...leftWords.map((word) => word.xMin));
@@ -360,6 +412,10 @@ function assertNoColumnOverflow(pages, input) {
   }
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function assertNoWideSolitaryHyphenLines(pages, input) {
   for (const page of pages) {
     const bodyLines = page.lines.filter((line) => line.yMin > page.height * 0.25 && line.yMin < page.footerY);
@@ -372,6 +428,10 @@ function assertNoWideSolitaryHyphenLines(pages, input) {
   }
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function contentTokens(input) {
   const data = input.data;
   const content = [
@@ -390,6 +450,10 @@ function contentTokens(input) {
   return new Set(content.filter((token) => !chromeTokens.has(token)));
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function contentLines(page, input) {
   const expected = contentTokens(input);
   return page.lines
@@ -400,11 +464,19 @@ function contentLines(page, input) {
     .filter((line) => line.contentWords.length > 0);
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function sectionHeadingLine(pages, heading) {
   const token = normalize(String(heading).split(/\s+/)[0]);
   return pages.flatMap((page) => page.lines).find((line) => line.tokens.includes(token));
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function firstBodyLine(pages, sectionData) {
   const headingLine = sectionHeadingLine(pages, sectionData.heading);
   assert.ok(headingLine, `heading '${sectionData.heading}' was not found in PDF`);
@@ -418,6 +490,10 @@ function firstBodyLine(pages, sectionData) {
   return candidates[0];
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function assertNoOrphanedFirstLines(pages, input) {
   const gaps = pages.flatMap((page) => page.lines.flatMap((line) => line.words.slice(1).map((word, index) => word.xMin - line.words[index].xMax)));
   const wordGap = median(gaps) ?? 4;
@@ -440,6 +516,10 @@ function assertNoOrphanedFirstLines(pages, input) {
   }
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function assertColumnBreaksFillTheColumn(pages, input) {
   if (input.data.intro) return;
   const blockTokens = new Set([
@@ -475,6 +555,10 @@ function assertColumnBreaksFillTheColumn(pages, input) {
   }
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function assertNoEmptyContentColumns(pages, input) {
   for (const page of pages.slice(0, -1)) {
     const lines = contentLines(page, input);
@@ -487,6 +571,10 @@ function assertNoEmptyContentColumns(pages, input) {
   }
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function assertTablesDoNotStartInAnEmptyColumn(pages, input) {
   const table = input.data.table;
   if (!table) return;
@@ -509,6 +597,10 @@ function assertTablesDoNotStartInAnEmptyColumn(pages, input) {
   }
 }
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan/fixture helper; consolidate repeated editorial geometry assertions into one plan contract.
+ */
 function assertNoInternalColumnHoles(pages, input) {
   const headingTokens = new Set((input.data.sections ?? []).flatMap((sectionData) => String(sectionData.heading).split(/\s+/).map(normalize)));
   const introTokens = new Set(String(input.data.intro ?? '').split(/\s+/).map(normalize));
@@ -547,7 +639,11 @@ function assertNoInternalColumnHoles(pages, input) {
   }
 }
 
-function renderBatch(fixtures, workDir, concurrency, brandStore, planOnly = false) {
+/**
+ * @test-decision backend-smoke
+ * @test-action Keep one representative PDF batch for backend smoke; all editorial variants use planBatch.
+ */
+function renderBatch(fixtures, workDir, concurrency, brandStore) {
   const batchCount = Math.min(concurrency, fixtures.length);
   const batches = Array.from({ length: batchCount }, () => []);
   fixtures.forEach((fixture, index) => batches[index % batchCount].push(fixture));
@@ -569,14 +665,67 @@ function renderBatch(fixtures, workDir, concurrency, brandStore, planOnly = fals
     });
     const payload = JSON.stringify(batch.map((fixture) => ({
       tool: 'render_report',
-      args: planOnly
-        ? { ...fixture.input, data: legacyFixtureToCompositionInput(fixture.input.data), dry_run: true }
-        : { ...fixture.input, data: legacyFixtureToCompositionInput(fixture.input.data), output_path: join(workDir, `${fixture.name}.pdf`) },
+      args: { ...fixture.input, data: legacyFixtureToCompositionInput(fixture.input.data), output_path: join(workDir, `${fixture.name}.pdf`) },
     })));
     child.stdin.end(payload);
   })));
 }
 
+/**
+ * @test-decision plan-batch
+ * @test-action Merge all editorial fixture responses into one plan contract; assert the same dry-run invariants for reproducers, seeds, and the optional exhaustive matrix.
+ */
+function assertPlannedEditorialFixtures(plannedFixtures) {
+  for (const { fixture, result } of plannedFixtures) {
+    assert.equal(result.dryRun, true, `${fixture.name}: expected dry-run response`);
+    assert.equal(result.compositionEvaluation?.status, 'accepted', `${fixture.name}: dry-run composition was not accepted`);
+    assert.ok((result.compositionPlan?.lines?.length ?? 0) > 0, `${fixture.name}: dry-run plan has no lines`);
+  }
+}
+
+/**
+ * @test-decision plan-batch
+ * @test-action Keep as the single batched planner pass for the editorial matrix; merge fixtures instead of rendering each case.
+ */
+function planBatch(fixtures, workDir, concurrency, brandStore) {
+  if (fixtures.length === 0) return Promise.resolve([]);
+  const batchCount = Math.min(concurrency, fixtures.length);
+  const batches = Array.from({ length: batchCount }, () => []);
+  fixtures.forEach((fixture, index) => batches[index % batchCount].push(fixture));
+  return Promise.all(batches.map((batch) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['cli-bundle.cjs', '--batch'], {
+      cwd: root,
+      env: { ...process.env, REPORT_BABY_DATA: workDir, REPORT_BABY_BRAND_STORE: brandStore },
+    });
+    let stderr = '';
+    let stdout = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) return reject(new Error(childProcessFailure(`plan-only CLI [${batch.map((fixture) => fixture.name).join(', ')}]`, { status: code, stdout, stderr })));
+      try {
+        const results = stdout.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+        if (results.length !== batch.length) throw new Error(`expected ${batch.length} plan responses, received ${results.length}`);
+        resolve(results.map((result, index) => ({ fixture: batch[index], result })));
+      } catch (error) {
+        reject(new Error(`plan-only CLI returned invalid JSON: ${error.message}; stdout=${stdout.slice(0, 500)}`));
+      }
+    });
+    const payload = JSON.stringify(batch.map((fixture) => ({
+      tool: 'render_report',
+      args: { ...fixture.input, data: legacyFixtureToCompositionInput(fixture.input.data), dry_run: true },
+    })));
+    child.stdin.end(payload);
+  })));
+}
+
+/**
+ * @test-decision visual-gate
+ * @test-action Move full rendering and XML geometry checks to the showcase/visual-QA gate; retain plan assertions here and reuse one backend smoke.
+ */
 async function measureRendered(name, input, workDir) {
   const outputPath = join(workDir, `${name}.pdf`);
   const { stdout: bbox } = await execFileAsync('pdftotext', ['-bbox-layout', outputPath, '-']);
@@ -612,11 +761,22 @@ try {
   const requestedConcurrency = Number.parseInt(process.env.EDITORIAL_FLOW_CONCURRENCY ?? '8', 10);
   const concurrency = Math.max(1, Math.min(8, Number.isFinite(requestedConcurrency) ? requestedConcurrency : 8));
   prepareDemoBrandStore(join(root, '..'), brandStore, 'editorial-test');
-  const matrixSelected = selectedFixtures.filter((fixture) => fixture.name.startsWith('matrix-'));
-  const pdfSelected = selectedFixtures.filter((fixture) => !fixture.name.startsWith('matrix-'));
-  await renderBatch(matrixSelected, workDir, concurrency, brandStore, true);
+  // Keep one PDF per geometry family. The remaining reproducers still run
+  // through the real CLI and assert an accepted composition plan below.
+  const artifactReproducerNames = new Set([
+    'reproducer-three-unequal-columns',
+    'reproducer-C-table-flow',
+  ]);
+  const pdfSelected = selectedFixtures.filter((fixture) => artifactReproducerNames.has(fixture.name));
+  const planSelected = selectedFixtures.filter((fixture) => !artifactReproducerNames.has(fixture.name));
+  const plannedFixtures = (await planBatch(planSelected, workDir, concurrency, brandStore)).flat();
+  assertPlannedEditorialFixtures(plannedFixtures);
   await renderBatch(pdfSelected, workDir, concurrency, brandStore);
   let nextFixture = 0;
+  /**
+   * @test-decision visual-gate
+   * @test-action Move full rendering and XML geometry checks to the showcase/visual-QA gate; retain plan assertions here and reuse one backend smoke.
+   */
   async function worker() {
     while (nextFixture < pdfSelected.length) {
       const fixture = pdfSelected[nextFixture];

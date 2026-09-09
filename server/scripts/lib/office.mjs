@@ -1,6 +1,10 @@
 import { pathToFileURL } from 'node:url';
 import { runProcess } from './process.mjs';
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function findOfficeConverter(profileDirectory, { filesystemDirectory = profileDirectory, filesystemDirectories = [] } = {}) {
   const profile = `-env:UserInstallation=${pathToFileURL(profileDirectory).href}`;
   for (const command of ['soffice', 'libreoffice']) {

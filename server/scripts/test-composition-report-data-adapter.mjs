@@ -2,31 +2,20 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runProcess } from './lib/process.mjs';
 import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
+import { build } from 'esbuild';
 
-const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-data-'));
-const bundle = join(temporary, 'composition.cjs');
-const schemaBundle = join(temporary, 'schema.cjs');
-const build = runProcess('npx', [
-  'esbuild',
-  'src/composition/index.ts',
-  '--bundle',
-  '--platform=node',
-  '--format=cjs',
-  `--outfile=${bundle}`,
-], { cwd: root, timeout: 30_000 });
-if (build.status !== 0) throw new Error(`composition adapter test bundle failed: ${build.stderr || build.stdout}`);
-const buildSchema = runProcess('npx', [
-  'esbuild',
-  'src/contracts/input/schema.ts',
-  '--bundle',
-  '--platform=node',
-  '--format=cjs',
-  `--outfile=${schemaBundle}`,
-], { cwd: root, timeout: 30_000 });
-if (buildSchema.status !== 0) throw new Error(`composition schema test bundle failed: ${buildSchema.stderr || buildSchema.stdout}`);
+const bundle = join(temporary, 'composition/index.cjs');
+const schemaBundle = join(temporary, 'contracts/input/schema.cjs');
+await build({
+  entryPoints: ['src/composition/index.ts', 'src/contracts/input/schema.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outdir: temporary,
+  outExtension: { '.js': '.cjs' },
+});
 
 try {
   const composition = await import(bundle);

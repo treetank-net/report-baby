@@ -8,6 +8,17 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import { runProcess } from './lib/process.mjs';
 import { createEditorialNumberedFixture } from './lib/editorial-numbered-fixture.mjs';
+import {
+  assertExactNumberSet,
+  assertFlowBarrierBoxCandidates,
+  assertFlowPlacementRegistryMatchesPlan,
+  assertNoEmptyContinuationColumn,
+  assertNoInternalRouteGaps,
+  assertOrdinaryLinesRespectFlowBarrierBoxCandidates,
+  numberedTokens,
+  numbers,
+  plannedLines,
+} from './lib/editorial-numbered-plan-assertions.mjs';
 import { inspectColumnBalance, readPdfLayout } from './lib/pdf-layout-diff.mjs';
 
 const root = process.cwd();
@@ -20,50 +31,12 @@ const geometryBundle = join(temporary, 'geometry.cjs');
 const debugArtifactDirectory = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR
   ? join(process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR, 'editorial-numbered-flow')
   : undefined;
+const visualGate = process.env.EDITORIAL_NUMBERED_VISUAL === '1';
 
-function plannedLines(plan) {
-  return [...plan.lines, ...(plan.insertionLines ?? [])];
-}
-
-function assertFlowBarrierBoxCandidates(result) {
-  const candidates = result.plan.flowBarrierBoxCandidates ?? [];
-  assert.ok(candidates.length > 0, 'editorial plan must expose flow barrier box candidates');
-  assert.ok(result.plan.decisions.some((decision) => decision.code === 'FLOW_BARRIER_BOXES_CONSUMED'), 'editorial planner must consume flow barrier box candidates while wrapping text');
-  for (const candidate of candidates) {
-    assert.equal(typeof candidate.flowId, 'string');
-    assert.ok(candidate.previousSourceId || candidate.nextSourceId);
-    assert.ok(candidate.box.width > 0 && candidate.box.height > 0, `flow barrier box candidate must have a positive box: ${JSON.stringify(candidate)}`);
-    for (const sourceId of [candidate.previousSourceId, candidate.nextSourceId].filter(Boolean)) {
-      const source = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === sourceId && graphic.page === candidate.page);
-      assert.ok(source, `flow barrier box candidate must reference an existing graphic: ${JSON.stringify(candidate)}`);
-    }
-    const placement = result.plan.flowPlacements.find((flowPlacement) => flowPlacement.id === candidate.placementId && flowPlacement.page === candidate.page);
-    assert.ok(placement, `flow barrier box candidate must reference an existing flow placement: ${JSON.stringify(candidate)}`);
-    assert.ok(candidate.box.x >= placement.box.x && candidate.box.x + candidate.box.width <= placement.box.x + placement.box.width);
-    assert.ok(candidate.box.y >= placement.box.y && candidate.box.y + candidate.box.height <= placement.box.y + placement.box.height);
-  }
-  assert.ok(candidates.some((candidate) => candidate.flowId === 'main' && (candidate.previousSourceId?.startsWith('insertion:') || candidate.nextSourceId?.startsWith('insertion:'))), 'editorial main flow must expose at least one insertion candidate');
-}
-
-function assertOrdinaryLinesRespectFlowBarrierBoxCandidates(result) {
-  const candidatesByPlacement = new Map();
-  for (const candidate of result.plan.flowBarrierBoxCandidates ?? []) {
-    const group = candidatesByPlacement.get(candidate.placementId) ?? [];
-    group.push(candidate);
-    candidatesByPlacement.set(candidate.placementId, group);
-  }
-  for (const placement of result.plan.flowPlacements ?? []) {
-    const candidates = candidatesByPlacement.get(placement.id);
-    if (!candidates) continue;
-    const lines = result.plan.lines.filter((line) => line.page === placement.page && line.slotId === placement.slotId);
-    for (const line of lines) {
-      assert.ok(candidates.some((candidate) => line.box.y >= candidate.box.y
-        && line.box.y + line.box.height <= candidate.box.y + candidate.box.height),
-      `ordinary line escaped its consumed flow barrier candidate: ${JSON.stringify({ line, candidates })}`);
-    }
-  }
-}
-
+/**
+ * @test-decision merge-shared-bundle
+ * @test-action Merge into one shared test-bundle helper so each check does not invoke esbuild independently.
+ */
 function build(entry, output, extra = []) {
   const result = runProcess('npx', [
     'esbuild', entry, '--bundle', '--platform=node', '--target=node18', '--format=cjs', ...extra, `--outfile=${output}`,
@@ -77,15 +50,12 @@ build('src/rendering/primitives.ts', primitivesBundle, ['--loader:.wasm=binary',
 build('src/template/contracts.ts', templateBundle);
 build('src/template/geometry.ts', geometryBundle);
 
-function numberedTokens(text, prefixes) {
-  const pattern = prefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|');
-  return [...text.matchAll(new RegExp(`\\b(?:${pattern})\\d{4}\\b`, 'gu'))].map((match) => match[0]);
-}
 
-function numbers(tokens) {
-  return tokens.map((token) => Number(token.match(/\d{4}$/u)?.[0]));
-}
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function pdfWords(path) {
   const result = runProcess('pdftotext', ['-bbox-layout', path, '-']);
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -100,10 +70,18 @@ function pdfWords(path) {
   return words;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function normalizedPdfToken(value) {
   return value.toLocaleLowerCase('und').replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function assertRenderedHeaderLinesStayInsidePlan(pdfPath, result, toleranceMm) {
   const words = pdfWords(pdfPath).filter((word) => word.page === 0);
   const titleLines = result.plan.lines.filter((line) => line.flowId === 'header' && line.blockId === 'header-overflow-title');
@@ -120,6 +98,10 @@ function assertRenderedHeaderLinesStayInsidePlan(pdfPath, result, toleranceMm) {
   }
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function assertRenderedHeaderMetaStaysInsidePlan(pdfPath, result, toleranceMm) {
   const words = pdfWords(pdfPath).filter((word) => word.page === 0);
   const metaLine = result.plan.lines.find((line) => line.flowId === 'header' && line.blockId === 'header-meta');
@@ -136,9 +118,17 @@ function assertRenderedHeaderMetaStaysInsidePlan(pdfPath, result, toleranceMm) {
   assert.ok(actual.every((word) => word.xMin >= left && word.xMax <= right && word.yMin >= top && word.yMax <= bottom), `rendered header metadata escaped its plan box: ${JSON.stringify({ metaLine, actual, left, top, right, bottom })}`);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function decodePpm(buffer) {
   assert.equal(buffer.subarray(0, 2).toString('ascii'), 'P6', 'raster output must be an RGB PPM');
   let offset = 2;
+  /**
+   * @test-decision plan-assertion
+   * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
+   */
   const token = () => {
     while (offset < buffer.length && /\s/u.test(String.fromCharCode(buffer[offset]))) offset += 1;
     if (buffer[offset] === 35) {
@@ -159,11 +149,19 @@ function decodePpm(buffer) {
   return { width, height, pixels };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function pixelAt(image, x, y) {
   const offset = (y * image.width + x) * 3;
   return [image.pixels[offset], image.pixels[offset + 1], image.pixels[offset + 2]];
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function inkProfileInBox(image, box, pageSize, qa) {
   const scaleX = image.width / pageSize.width;
   const scaleY = image.height / pageSize.height;
@@ -213,6 +211,10 @@ function inkProfileInBox(image, box, pageSize, qa) {
       previous.maxX = Math.max(previous.maxX, row.maxX);
     } else bands.push({ startY: row.y, endY: row.y, inkPixels: row.inkPixels, minX: row.minX, maxX: row.maxX });
   }
+  /**
+   * @test-decision visual-gate
+   * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+   */
   const toMm = (value, scale) => value / scale;
   const boxMm = {
     x: box.x,
@@ -241,10 +243,18 @@ function inkProfileInBox(image, box, pageSize, qa) {
   };
 }
 
+/**
+ * @test-decision remove-candidate
+ * @test-action Remove after the visual-gate extraction; no caller exists in the current suite and the same value is available from inkProfileInBox.
+ */
 function inkPixelsInBox(image, box, pageSize, qa) {
   return inkProfileInBox(image, box, pageSize, qa).inkPixels;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 async function assertRenderedInk(artifactPath, result, geometry, renderConfig, directory) {
   const qa = renderConfig.quality.pdf_pixel_qa;
   assert.ok(qa && Number.isFinite(qa.raster_dpi), 'render config must define quality.pdf_pixel_qa');
@@ -312,84 +322,23 @@ async function assertRenderedInk(artifactPath, result, geometry, renderConfig, d
   return report;
 }
 
-function assertExactNumberSet(actual, expected, message) {
-  const sortedActual = [...actual].sort((a, b) => a - b);
-  assert.deepEqual(sortedActual, expected, message);
-}
 
-function routeForPage(template, page) {
-  const layout = template.layouts.find((candidate) => candidate.id === page.layoutId);
-  const route = template.routes.main;
-  const slots = route.slotsByLayout?.[layout?.id ?? ''] ?? route.slots;
-  return { layout, slots };
-}
 
-function assertNoInternalRouteGaps(result) {
-  for (const page of result.plan.pages) {
-    const { layout, slots } = routeForPage(result.template, page);
-    const occupied = new Set(result.plan.lines
-      .filter((line) => line.flowId === 'main' && line.page === page.page && line.routeIndex !== undefined)
-      .map((line) => line.routeIndex));
-    const ordered = [...occupied].sort((a, b) => a - b);
-    if (ordered.length < 2) continue;
-    for (let index = ordered[0]; index <= ordered.at(-1); index += 1) {
-      if (occupied.has(index)) continue;
-      const slotId = slots[index];
-      const definition = layout?.slots.find((slot) => slot.id === slotId);
-      if (definition?.kind === 'block') continue;
-      assert.fail(`page ${page.page} has an unfilled main-flow route segment ${index} before later content`);
-    }
-  }
-}
 
-function assertNoEmptyContinuationColumn(result) {
-  const mainLines = result.plan.lines.filter((line) => line.flowId === 'main' && !line.blockId.startsWith('header') && !line.blockId.startsWith('footer'));
-  for (const page of result.plan.pages.slice(0, -1)) {
-    const pageLines = mainLines.filter((line) => line.page === page.page);
-    if (pageLines.length === 0) continue;
-    const segmentLines = result.plan.slots
-      .filter((slot) => slot.page === page.page && slot.id.includes(':segment-'))
-      .map((slot) => ({ slotId: slot.id, slot, lines: pageLines.filter((line) => line.slotId === slot.id) }))
-      .sort((left, right) => left.slot.box.x - right.slot.box.x);
-    if (segmentLines.length < 2) continue;
-    assert.ok(segmentLines[0].lines.length > 0, `page ${page.page} entered a later column without using the first column`);
-    assert.ok(segmentLines[1].lines.length > 0, `page ${page.page} left the second column empty before continuing the flow to the next page`);
-  }
-}
 
-function assertFlowPlacementRegistryMatchesPlan(result) {
-  const registry = result.plan.flowPlacements ?? [];
-  const allPlannedLines = plannedLines(result.plan);
-  const routedTextSlots = result.plan.slots.filter((slot) => slot.kind === 'text'
-    && slot.flowId !== undefined
-    && slot.routeIndex !== undefined);
-  assert.equal(
-    new Set(registry.map((placement) => placement.id)).size,
-    registry.length,
-    'flow placement registry must not contain duplicate placement ids',
-  );
-  assert.deepEqual(
-    new Set(registry.map((placement) => placement.slotId)),
-    new Set(routedTextSlots.map((slot) => slot.id)),
-    'flow placement registry must include every routed text slot, including empty capacity',
-  );
-  for (const placement of registry) {
-    const lines = allPlannedLines.filter((line) => line.flowId === placement.flowId && line.slotId === placement.slotId);
-    const blockIds = [...new Set(lines.map((line) => line.blockId))];
-    assert.equal(placement.hasContent, lines.length > 0, `flow placement ${placement.id} hasContent must match its actual lines`);
-    assert.equal(placement.lineCount, lines.length, `flow placement ${placement.id} lineCount must match its actual lines`);
-    assert.deepEqual(placement.blockIds, blockIds, `flow placement ${placement.id} must identify its actual blocks`);
-    assert.ok(Number.isFinite(placement.box.x) && Number.isFinite(placement.box.y)
-      && placement.box.width > 0 && placement.box.height > 0,
-    `flow placement ${placement.id} must expose usable geometry`);
-    assert.ok(lines.every((line) => line.routeIndex === undefined || line.routeIndex === placement.routeIndex), `flow placement ${placement.id} must own all routed lines from its route index`);
-  }
-}
 
+/**
+ * @test-decision plan-assertion
+ * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
+ */
 function escapeXml(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 async function writeDebugArtifacts(directory, result, fixture, artifact) {
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'numbered-editorial.pdf'), artifact);
@@ -557,6 +506,10 @@ try {
   assert.equal(movableSearchTrace?.selectedCandidate, movableEvaluationPhase?.details?.selectedCandidate, 'editorial trace and evaluation must identify the same winner');
   assert.ok(movableCandidates.every((candidate) => candidate.status === 'accepted'), 'movable quote candidates must remain legal');
   assert.ok(new Set(movableCandidates.map((candidate) => candidate.score)).size > 1, 'movable quote search must distinguish candidate quality');
+  /**
+   * @test-decision plan-assertion
+   * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
+   */
   const orphanScore = (candidate) => candidate.scoreBreakdown?.find((component) => component.code === 'orphan-lines');
   assert.equal(orphanScore(result.evaluation)?.value, 1, 'the fixed reference placement must count the existing isolated paragraph fragment');
   const selectedCandidate = movableCandidates.find((candidate) => candidate.index === movableEvaluationPhase.details.selectedCandidate);
@@ -795,10 +748,14 @@ try {
   const artifactPath = join(temporary, 'numbered-editorial.pdf');
   await writeFile(artifactPath, artifact);
   if (debugArtifactDirectory) await writeDebugArtifacts(debugArtifactDirectory, result, fixture, artifact);
-  const inkOccupancy = await assertRenderedInk(artifactPath, result, geometry, renderConfig, debugArtifactDirectory);
-  const tokenPattern = new RegExp(`^(?:${fixture.tokenPrefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|')})\\d{4}$`, 'u');
-  const words = pdfWords(artifactPath).filter((word) => tokenPattern.test(word.text));
-  assertExactNumberSet(numbers(words.map((word) => word.text)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'final PDF must contain every numbered word exactly once');
+  let inkOccupancy = { lineChecks: [], slotChecks: [] };
+  let columnBalance;
+  if (visualGate) {
+    inkOccupancy = await assertRenderedInk(artifactPath, result, geometry, renderConfig, debugArtifactDirectory);
+    const tokenPattern = new RegExp(`^(?:${fixture.tokenPrefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|')})\\d{4}$`, 'u');
+    const words = pdfWords(artifactPath).filter((word) => tokenPattern.test(word.text));
+    assertExactNumberSet(numbers(words.map((word) => word.text)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'final PDF must contain every numbered word exactly once');
+  }
 
   const headerOverflowInput = structuredClone(fixture.input);
   headerOverflowInput.flows.header.blocks[0] = {
@@ -810,19 +767,21 @@ try {
   const headerOverflowPdf = newPdf('portrait', [geometry.width, geometry.height]);
   const headerOverflow = planReportComposition(headerOverflowPdf, template, geometry, headerOverflowInput, { family: 'DejaVu', maxPages: 12 });
   assert.equal(headerOverflow.evaluation.status, 'accepted', JSON.stringify(headerOverflow.evaluation));
-  const headerOverflowArtifact = renderComposition(headerOverflow.document, headerOverflow, createJsPdfTextBackend(headerOverflowPdf, 'DejaVu', compositionStylesFromRenderConfig({
-    foreground: [25, 51, 79],
-    muted: [88, 106, 131],
-    primary: [42, 110, 166],
-    quote: [232, 117, 61],
-  }), compositionPdfBackendOptionsFromRenderConfig()));
-  const headerOverflowPath = join(temporary, 'header-overflow-regression.pdf');
-  await writeFile(headerOverflowPath, headerOverflowArtifact);
-  assertRenderedHeaderLinesStayInsidePlan(headerOverflowPath, headerOverflow, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
-  assertRenderedHeaderMetaStaysInsidePlan(headerOverflowPath, headerOverflow, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
+  if (visualGate) {
+    const headerOverflowArtifact = renderComposition(headerOverflow.document, headerOverflow, createJsPdfTextBackend(headerOverflowPdf, 'DejaVu', compositionStylesFromRenderConfig({
+      foreground: [25, 51, 79],
+      muted: [88, 106, 131],
+      primary: [42, 110, 166],
+      quote: [232, 117, 61],
+    }), compositionPdfBackendOptionsFromRenderConfig()));
+    const headerOverflowPath = join(temporary, 'header-overflow-regression.pdf');
+    await writeFile(headerOverflowPath, headerOverflowArtifact);
+    assertRenderedHeaderLinesStayInsidePlan(headerOverflowPath, headerOverflow, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
+    assertRenderedHeaderMetaStaysInsidePlan(headerOverflowPath, headerOverflow, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
 
-  const columnBalance = inspectColumnBalance(readPdfLayout(artifactPath), renderConfig.quality.layout_diff);
-  if (debugArtifactDirectory) await writeFile(join(debugArtifactDirectory, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));
+    columnBalance = inspectColumnBalance(readPdfLayout(artifactPath), renderConfig.quality.layout_diff);
+    if (debugArtifactDirectory) await writeFile(join(debugArtifactDirectory, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));
+  }
 
   const authoredBlockOrder = new Map(fixture.sourceShape.map((block, index) => [block.id, index]));
   const planNumbers = numbers(numberedTokens(plannedLines(result.plan)

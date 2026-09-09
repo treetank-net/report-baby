@@ -21,6 +21,10 @@ const build = runProcess('npx', [
 ], { cwd: root, timeout: 30_000 });
 if (build.status !== 0) throw new Error(`dynamic insertion test bundle failed: ${build.stderr || build.stdout}`);
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
+ */
 function fixture() {
   const lorem = createDeterministicLorem();
   return {

@@ -14,6 +14,10 @@ export class PdfTextExtractionError extends Error {
  * An empty string is a valid extraction result for a PDF without selectable
  * text; only a failed pdftotext process is an extraction error.
  */
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function extractPdfText(pdfPath, options = []) {
   try {
     return execFileSync('pdftotext', [...options, pdfPath, '-'], { encoding: 'utf8' });
@@ -22,6 +26,10 @@ export function extractPdfText(pdfPath, options = []) {
   }
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function extractPdfWords(pdfPath) {
   const xml = extractPdfText(pdfPath, ['-bbox-layout']);
   const result = [];

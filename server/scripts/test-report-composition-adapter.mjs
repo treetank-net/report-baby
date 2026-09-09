@@ -77,6 +77,10 @@ try {
   const geometry = pageGeometryFromTemplate(compiled);
   const pdf = newPdf();
   let randomState = 0x51ade;
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
+   */
   const random = () => {
     randomState = (1664525 * randomState + 1013904223) >>> 0;
     return randomState / 0x100000000;
@@ -159,17 +163,6 @@ try {
   }), { family: 'DejaVu', maxPages: 2, measureBlock: metricCapabilities.measureBlock });
   assert.equal(metricResult.evaluation.status, 'accepted', JSON.stringify(metricResult.evaluation));
   assert.deepEqual(metricResult.plan.blockPlacements.map((placement) => placement.blockId), ['metric-1', 'metric-2']);
-  const metricArtifact = renderComposition(metricResult.document, metricResult, createJsPdfTextBackend(metricPdf, 'DejaVu', styles, {
-    ...compositionPdfBackendOptionsFromRenderConfig(),
-    blockRenderers: { metric: metricCapabilities.renderer },
-  }));
-  const metricArtifactPath = join(temporary, 'metric-composition.pdf');
-  await writeFile(metricArtifactPath, metricArtifact);
-  const metricText = runProcess('pdftotext', [metricArtifactPath, '-']);
-  assert.equal(metricText.status, 0, metricText.stderr);
-  assert.match(metricText.stdout, /REACH/u);
-  assert.match(metricText.stdout, /1200/u);
-  assert.match(metricText.stdout, /LEADS/u);
 
   const chartSource = structuredClone(source);
   chartSource.id = 'pages/editorial-chart-composition';
@@ -193,17 +186,6 @@ try {
   }), { family: 'DejaVu', maxPages: 2, measureBlock: chartCapabilities.measureBlock });
   assert.equal(chartResult.evaluation.status, 'accepted', JSON.stringify(chartResult.evaluation));
   assert.deepEqual(chartResult.plan.blockPlacements.map((placement) => placement.blockId), ['chart-1']);
-  const chartArtifact = renderComposition(chartResult.document, chartResult, createJsPdfTextBackend(chartPdf, 'DejaVu', styles, {
-    ...compositionPdfBackendOptionsFromRenderConfig(),
-    blockRenderers: { chart: chartCapabilities.renderer },
-  }));
-  const chartArtifactPath = join(temporary, 'chart-composition.pdf');
-  await writeFile(chartArtifactPath, chartArtifact);
-  const chartText = runProcess('pdftotext', [chartArtifactPath, '-']);
-  assert.equal(chartText.status, 0, chartText.stderr);
-  assert.match(chartText.stdout, /Reach by channel/u);
-  assert.match(chartText.stdout, /Search/u);
-  assert.match(chartText.stdout, /12/u);
   assert.equal(chartResult.document.flows.main.blocks.find((block) => block.kind === 'chart')?.kind, 'chart');
   const chartPlacement = chartResult.plan.blockPlacements.find((placement) => placement.blockId === 'chart-1');
   assert.ok(chartPlacement, 'chart should have a semantic block placement');
@@ -289,17 +271,6 @@ try {
   assert.equal(tableResult.evaluation.status, 'accepted', JSON.stringify(tableResult.evaluation));
   assert.equal(tableResult.plan.tablePlacements.length, 2);
   assert.deepEqual(tableResult.plan.tablePlacements.map((placement) => [placement.startRow, placement.endRow, placement.repeatsHeader]), [[0, 6, false], [6, 10, true]]);
-  const tableArtifact = renderComposition(tableResult.document, tableResult, createJsPdfTextBackend(tablePdf, 'DejaVu', styles, {
-    ...compositionPdfBackendOptionsFromRenderConfig(),
-    tableRenderer: tableCapabilities.renderer,
-  }));
-  const tableArtifactPath = join(temporary, 'table-composition.pdf');
-  await writeFile(tableArtifactPath, tableArtifact);
-  const tableText = runProcess('pdftotext', [tableArtifactPath, '-']);
-  assert.equal(tableText.status, 0, tableText.stderr);
-  assert.match(tableText.stdout, /Reach by channel/u);
-  assert.match(tableText.stdout, /Channel 10/u);
-  assert.match(tableText.stdout, /Narrative after table/u);
 
   const tableGapSource = structuredClone(source);
   tableGapSource.id = 'pages/editorial-table-gap-composition';

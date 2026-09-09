@@ -420,6 +420,10 @@ try {
   const targetContrastComponent = targetContrastEvaluation.scoreBreakdown.find((component) => component.code === 'contrast');
   assert.notEqual(targetContrastComponent?.value, highContrastComponent?.value, 'contrast values above the target must remain distinguishable');
   assert.notEqual(targetContrastComponent?.points, highContrastComponent?.points, 'contrast penalties above the target must remain distinguishable');
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
+   */
   const localizedContrastPlan = (badGlyphCount) => ({
     ...contrastPlan,
     slots: contrastPlan.slots.map((slot) => ({ ...slot, box: { ...slot.box, width: 1000 } })),
@@ -438,12 +442,20 @@ try {
     graphicPlacements: [{ id: 'graphic:photo', graphicId: 'photo', assetId: 'photo', slotId: 'graphic', page: 1, shape: 'rectangle', wrap: 'none', box: { x: 0, y: 0, width: 1000, height: 1 } }],
     _badGlyphCount: badGlyphCount,
   });
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-action Keep as a pure composition fixture helper; merge duplicate fixture builders into a shared plan-fixtures module.
+   */
   const localizedImage = (badGlyphCount) => ({
     width: 1000,
     height: 1,
     channels: 3,
     pixels: Uint8Array.from(Array.from({ length: 1000 }, (_, index) => (index < badGlyphCount ? [0, 0, 0] : [255, 255, 255])).flat()),
   });
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
+   */
   const localizedContrast = (badGlyphCount) => evaluateCompositionPlan(contrastDocument, localizedContrastPlan(badGlyphCount), {
     contrastProvider: createCompositionContrastProvider({ rasterImages: new Map([['photo', localizedImage(badGlyphCount)]]), foreground: [0, 0, 0], sampleCount: 1, sampleSeed: 'same-corpus' }),
   });

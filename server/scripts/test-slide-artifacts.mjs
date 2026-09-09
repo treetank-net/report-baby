@@ -15,6 +15,10 @@ const temporary = await mkdtemp(join(tmpdir(), 'report-baby-slide-artifacts-'));
 const renderConfig = parse(await readFile(join(root, 'templates', 'render-config.yml'), 'utf8'));
 const canvas = renderConfig.canvas;
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+ */
 function runCli(requests) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, ['cli-bundle.cjs', '--batch'], {

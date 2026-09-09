@@ -2,6 +2,10 @@ import { execFileSync } from 'node:child_process';
 
 const TOKEN_RE = /[^\p{L}\p{N}]+/gu;
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function decodeXml(value) {
   return value
     .replace(/&amp;/gu, '&')
@@ -11,19 +15,35 @@ export function decodeXml(value) {
     .replace(/&#39;/gu, "'");
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function normalizeToken(value) {
   return value.toLocaleLowerCase('und').replace(TOKEN_RE, '');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function normalizedTokens(text) {
   return text.split(/\s+/u).map(normalizeToken).filter(Boolean);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function numberAttribute(attributes, name) {
   const match = new RegExp(`${name}="([\\d.-]+)"`, 'u').exec(attributes);
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function parseLine(attributes, body, page) {
   const words = [];
   const wordPattern = /<word\s+([^>]+)>([\s\S]*?)<\/word>/gu;
@@ -50,6 +70,10 @@ function parseLine(attributes, body, page) {
   };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function parsePdfLayoutXml(xml) {
   const pages = [];
   const pagePattern = /<page\b([^>]*)>([\s\S]*?)<\/page>/gu;
@@ -74,10 +98,18 @@ export function parsePdfLayoutXml(xml) {
   return { pages };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function readPdfLayout(pdfPath) {
   return parsePdfLayoutXml(execFileSync('pdftotext', ['-bbox-layout', pdfPath, '-'], { encoding: 'utf8' }));
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function inspectColumnBalance(layout, options = {}) {
   const requiredSettings = ['column_count', 'column_span_exclusion_factor', 'column_fill_warn_ratio', 'column_ink_balance_warn_ratio', 'page_edge_ratio'];
   const missingSettings = requiredSettings.filter((key) => !Number.isFinite(options[key]));
@@ -124,10 +156,18 @@ export function inspectColumnBalance(layout, options = {}) {
   });
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function allLines(layout) {
   return layout.pages.flatMap((page) => page.lines);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function tokenCounts(layout) {
   const counts = new Map();
   for (const token of allLines(layout).flatMap((line) => line.tokens)) {
@@ -136,6 +176,10 @@ function tokenCounts(layout) {
   return counts;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function countDifferences(expected, actual) {
   const missing = [];
   const extra = [];
@@ -150,10 +194,18 @@ function countDifferences(expected, actual) {
   return { missing, extra };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function lineKey(line) {
   return line.tokens.join(' ');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function lineSignature(line, anchorTokenCount) {
   if (line.tokens.length < anchorTokenCount) return null;
   const prefix = line.tokens.slice(0, anchorTokenCount);
@@ -161,11 +213,19 @@ function lineSignature(line, anchorTokenCount) {
   return `${prefix.join(' ')} … ${suffix.join(' ')}`;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function uniqueLineIndex(lines, key) {
   const matches = lines.filter((line) => lineKey(line) === key);
   return matches.length === 1 ? matches[0] : null;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function matchLines(expectedLines, actualLines, anchorTokenCount) {
   const matches = [];
   const used = new Set();
@@ -187,6 +247,10 @@ function matchLines(expectedLines, actualLines, anchorTokenCount) {
   return matches;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function median(values) {
   if (!values.length) return 0;
   const sorted = [...values].sort((left, right) => left - right);
@@ -194,6 +258,10 @@ function median(values) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function laneGroups(lines, tolerancePoints) {
   const lanes = [];
   for (const line of [...lines].sort((left, right) => left.xMin - right.xMin || left.yMin - right.yMin)) {
@@ -204,10 +272,18 @@ function laneGroups(lines, tolerancePoints) {
   return lanes;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function horizontallyOverlaps(left, right) {
   return Math.min(left.xMax, right.xMax) > Math.max(left.xMin, right.xMin);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function hasInterveningText(pageLines, previous, current) {
   return pageLines.some((line) => line !== previous && line !== current
     && line.yMax > previous.yMax
@@ -215,6 +291,10 @@ function hasInterveningText(pageLines, previous, current) {
     && (horizontallyOverlaps(line, current) || !horizontallyOverlaps(line, previous)));
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function spacingFindings(layout, settings, pointsToMm) {
   const findings = [];
   const tolerancePoints = settings.lane_origin_tolerance_mm / pointsToMm;
@@ -256,6 +336,10 @@ function spacingFindings(layout, settings, pointsToMm) {
     .slice(0, settings.max_spacing_findings);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function inspectPdfSpacing(layout, options = {}) {
   const requiredSettings = ['lane_origin_tolerance_mm', 'line_gap_warn_mm', 'line_gap_severe_mm', 'page_edge_ratio', 'max_spacing_findings'];
   const missingSettings = requiredSettings.filter((key) => !Number.isFinite(options[key]));
@@ -265,10 +349,18 @@ export function inspectPdfSpacing(layout, options = {}) {
   return spacingFindings(layout, options, 25.4 / options.pointsPerInch);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function spacingDifferenceKey(finding) {
   return `${finding.page}|${normalizeToken(finding.after)}|${normalizeToken(finding.before)}`;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function spacingDifferences(expected, actual, settings) {
   const expectedByKey = new Map(expected.map((finding) => [spacingDifferenceKey(finding), finding]));
   const changed = [];
@@ -289,6 +381,10 @@ function spacingDifferences(expected, actual, settings) {
   return changed.sort((left, right) => ({ error: 0, warning: 1, info: 2 }[left.severity] - ({ error: 0, warning: 1, info: 2 }[right.severity]) || right.gapMm - left.gapMm));
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function envelope(layout, pointsToMm) {
   return layout.pages.map((page) => {
     const lines = page.lines;
@@ -306,10 +402,18 @@ function envelope(layout, pointsToMm) {
   });
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function round(value) {
   return Math.round(value * 100) / 100;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function comparePdfLayouts(expected, actual, options = {}) {
   const requiredSettings = ['movement_warn_mm', 'movement_error_mm', 'lane_origin_tolerance_mm', 'line_gap_warn_mm', 'line_gap_severe_mm', 'page_edge_ratio', 'max_spacing_findings', 'anchor_token_count'];
   const missingSettings = requiredSettings.filter((key) => !Number.isFinite(options[key]));
@@ -372,11 +476,19 @@ export function comparePdfLayouts(expected, actual, options = {}) {
   };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function shorten(value, maxLength) {
   const text = value.replace(/\s+/gu, ' ').trim();
   return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}…`;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function formatPdfLayoutDiff(report, paths = {}) {
   const lines = [
     'PDF layout diff',

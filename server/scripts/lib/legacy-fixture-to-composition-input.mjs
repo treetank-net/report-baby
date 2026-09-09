@@ -6,9 +6,17 @@
  * they are valuable visual/regression cases, but this translator is the only
  * place where those stories are rewritten into the public flow contract.
  */
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 export function legacyFixtureToCompositionInput(report = {}) {
   const flows = {};
   const main = [];
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+   */
   const add = (type, value) => { if (value !== undefined && value !== null) main.push({ type, ...value }); };
 
   if (report.intro?.trim()) add('text', { id: 'intro', role: 'intro', text: report.intro });

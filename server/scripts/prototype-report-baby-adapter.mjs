@@ -162,7 +162,7 @@ const reports = [
       sections: [{ heading: 'Map', body: 'A short introduction.\n\n![Map of the fleet](assets/map.png "Fleet map")' }],
     },
   }, {
-    productFixture: 'test-report-images.mjs / Markdown image',
+    productFixture: 'test-report-composition-image.mjs / Markdown image and caption geometry',
     image: { mode: 'block', shape: 'rectangle' },
     claims: ['image is placed once as a block and text remains selectable around it'],
     unsupportedSemantics: ['brand asset bytes are not loaded by the composition prototype'],
@@ -174,7 +174,7 @@ const reports = [
       sections: [{ heading: 'Map', body: `${'A paragraph before the image. '.repeat(12)}\n\n![Map of the fleet](assets/map.png "Fleet map")\n\n${'A paragraph after the image. '.repeat(26)}` }],
     },
   }, {
-    productFixture: 'test-report-images.mjs / adapted float variant',
+    productFixture: 'test-report-composition-image.mjs / adapted float variant',
     image: { mode: 'float', shape: 'ellipse', width: 32, height: 48 },
     claims: ['image exclusion changes available line width without entering the image mask'],
     unsupportedSemantics: ['current production renderer treats this image as a block, not a float'],

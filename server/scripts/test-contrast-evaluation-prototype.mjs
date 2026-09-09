@@ -14,31 +14,55 @@ const config = parse(readFileSync(join(root, 'templates', 'render-config.yml'), 
 const minimum = config.contrast.body_minimum;
 const sampleCount = Math.max(2, Math.min(32, Math.round(config.quality.pdf_pixel_qa.raster_dpi / 20)));
 
+/**
+ * @test-decision merge-shared-assertions
+ * @test-action Keep the local failure seam for now; merge only when a shared test assertion module is introduced without changing diagnostics.
+ */
 function fail(message) {
   throw new Error(message);
 }
 
+/**
+ * @test-decision merge-shared-assertions
+ * @test-action Keep the local failure seam for now; merge only when a shared test assertion module is introduced without changing diagnostics.
+ */
 function assert(condition, message) {
   if (!condition) fail(message);
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function channelLuminance(value) {
   const srgb = value / 255;
   return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function relativeLuminance(rgb) {
   return 0.2126 * channelLuminance(rgb[0])
     + 0.7152 * channelLuminance(rgb[1])
     + 0.0722 * channelLuminance(rgb[2]);
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function contrastRatio(first, second) {
   const lighter = Math.max(relativeLuminance(first), relativeLuminance(second));
   const darker = Math.min(relativeLuminance(first), relativeLuminance(second));
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function pixelAt(image, x, y, pageBackground) {
   const clampedX = Math.max(0, Math.min(image.width - 1, Math.floor(x)));
   const clampedY = Math.max(0, Math.min(image.height - 1, Math.floor(y)));
@@ -51,6 +75,10 @@ function pixelAt(image, x, y, pageBackground) {
   ));
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function everyPixelRatio(image, rect, foreground, pageBackground) {
   let minimumRatio = Number.POSITIVE_INFINITY;
   let samples = 0;
@@ -65,6 +93,10 @@ function everyPixelRatio(image, rect, foreground, pageBackground) {
   return { status: minimumRatio >= minimum ? 'at-or-above-reference' : 'below-reference', minimumRatio, samples };
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function averageRatio(image, rect, foreground, pageBackground) {
   const totals = [0, 0, 0];
   let samples = 0;
@@ -81,6 +113,10 @@ function averageRatio(image, rect, foreground, pageBackground) {
   return { status: ratio >= minimum ? 'at-or-above-reference' : 'below-reference', ratio, samples };
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function sampledRatios(image, rect, foreground, pageBackground) {
   let minimumRatio = Number.POSITIVE_INFINITY;
   let samples = 0;
@@ -97,10 +133,18 @@ function sampledRatios(image, rect, foreground, pageBackground) {
   return { status: minimumRatio >= minimum ? 'at-or-above-reference' : 'below-reference', minimumRatio, samples };
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function makeImage(width, height, pixel) {
   return { width, height, channels: pixel.length, pixels: Buffer.from(Array.from({ length: width * height }, () => pixel).flat()) };
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function makeSplitImage(width, height, splitStart, splitEnd) {
   const pixels = Buffer.alloc(width * height * 3);
   for (let y = 0; y < height; y += 1) {
@@ -116,6 +160,10 @@ function makeSplitImage(width, height, splitStart, splitEnd) {
   return { width, height, channels: 3, pixels };
 }
 
+/**
+ * @test-decision plan-only
+ * @test-action Keep as a pure evaluator/calculator test; it needs no renderer or raster artifact.
+ */
 function evaluateCandidate(image, x, pageBackground) {
   const rect = { x, y: 4, width: 20, height: 12 };
   const foreground = [0, 0, 0];

@@ -543,3 +543,39 @@ Rozkład decyzji w tym snapshotcie to: `visual-gate` 98,
 `centralize-manifest`, `shared-harness`, `plan-batch` i
 `remove-candidate`. To są decyzje dla funkcji, nie nowe testy ani dodatkowe
 przebiegi harnessu.
+
+### Zastąpienie publicznego monolitu
+
+`test-public-behavior.mjs` zawierał 611 linii i mieszał kontrakt MCP z testami
+backendu raportów, obrazów, chrome oraz wszystkimi formatami slajdów. Został
+zastąpiony przez `test-public-mcp-contract.mjs` (128 linii), który zachowuje
+wyłącznie publiczny smoke: initialize/listTools, list/inspect brand, ZIP
+source, dry-run raportu, zaakceptowany render raportu, odrzucenie niewłaściwego
+`template_ref` oraz minimalny render slajdu. Szczegóły PDF/PNG/PPTX pozostają w
+`test-report-composition-*`, `test-report-chrome.mjs`,
+`test-report-composition-image.mjs` i `test-slide-artifacts.mjs`; format-specific
+image input pozostaje pokryty przez `test-image-resolver.mjs`, a materializacja
+źródeł przez `test-source-materialization.mjs`.
+
+Bezpośredni pomiar nowego kontraktu (bez harnessu, host, 2026-09-09) wyniósł
+3,42 s i zakończył się `PASS`. Stary skrypt nie jest już wpisany do harnessu;
+nowy test jest jedynym właścicielem publicznego MCP smoke.
+
+### Stan po migracji suite'ów
+
+Powyższa tabela zachowuje historyczne pomiary usuniętych lub zastąpionych
+skryptów. Aktualny harness używa następujących właścicieli:
+
+- `test-report-images.mjs` usunięto; obrazy są sprawdzane planowo i backendowo
+  przez `test-report-composition-image.mjs`, a formaty wejściowe przez
+  `test-image-resolver.mjs`.
+- `test-public-behavior.mjs` usunięto; jego publiczny kontrakt MCP jest w
+  `test-public-mcp-contract.mjs`.
+- `test-editorial-numbered-flow.mjs` nie jest domyślnym przebiegiem; jego
+  szybka ścieżka planowa jest w `test-editorial-plan-contract.mjs`, natomiast
+  PDF/PNG i ink QA pozostają jawnie uruchamianym
+  `test-editorial-visual-gate.mjs`.
+
+W efekcie domyślne testy sprawdzają istnienie i legalność planu bez
+materializacji artefaktu. Renderowanie pozostaje pojedynczym smoke lub
+opcjonalnym visual gate'em, a nie powtarza się dla każdego wariantu danych.

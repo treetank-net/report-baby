@@ -3,6 +3,10 @@ import { runProcess } from './process.mjs';
 
 const BRANDS = ['flux', 'orbit', 'parcelia', 'pyrus'];
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function prepareDemoBrandStore(repoRoot, store, release = 'test') {
   const brandRoot = join(repoRoot, 'examples', 'brand-showcase', 'brands');
   const bundle = join(repoRoot, 'server', 'brand-tool-bundle.cjs');

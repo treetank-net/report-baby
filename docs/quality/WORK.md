@@ -138,7 +138,7 @@ Independent of everything. Cheapest visible win in the set.
 - [x] **G4.3 One spawn wrapper, one showcase iteration — `0215cc2`.** Nine scripts have their
   own `spawn`; seven iterate the showcase their own way.
 - [x] **G4.4 One fixture builder — `3d8d874`.** Three exist: `visual-qa.mjs`,
-  `test-public-behavior.mjs`, `test-brand-contract.mjs`.
+  `test-public-mcp-contract.mjs`, `test-brand-contract.mjs`.
 - [x] **G4.5 Wire the gate, per mechanism — `0215cc2`.** `goals:script-dup` asserts each count
   from G4.1 individually: `findOfficeConverter` 1, fixture builders 1, showcase
   iterations 1, process runners 1, identical normalised bodies 0. Body hashing, not

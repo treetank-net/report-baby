@@ -1,10 +1,18 @@
 import { createHash } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function zipEntries(buffer) {
   const entries = [];
   let end = buffer.length - 22;
@@ -31,10 +39,18 @@ export function zipEntries(buffer) {
   return entries;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function stripTimestamps(buffer) {
   return Buffer.from(buffer.toString('latin1').replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?/g, 'QA-TIMESTAMP'), 'latin1');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function pptxContentHash(buffer) {
   const hash = createHash('sha256');
   for (const entry of zipEntries(buffer).sort((left, right) => (left.name < right.name ? -1 : 1))) {
@@ -43,6 +59,10 @@ export function pptxContentHash(buffer) {
   return hash.digest('hex');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function pdfContentHash(buffer) {
   const normalized = buffer
     .toString('latin1')

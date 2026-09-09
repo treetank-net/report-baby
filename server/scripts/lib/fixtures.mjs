@@ -1,8 +1,16 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export const longWords = (count, word) => Array.from({ length: count }, (_, index) => `${word}${index + 1}`).join(' ');
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export async function writePublicBrandFixture(brandDir) {
   await mkdir(join(brandDir, 'acme'), { recursive: true });
   await writeFile(join(brandDir, 'acme', '_brand.yml'), `
@@ -59,6 +67,10 @@ slots:
 `, 'utf8');
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function standardDeck() {
   return {
     brand: 'QA Fixture',
@@ -120,6 +132,10 @@ export function standardDeck() {
   };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function standardReport() {
   return {
     template: 'default-report',
@@ -145,8 +161,16 @@ export function standardReport() {
   };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function editorialRegressionReport(variant) {
   const prose = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny. Firmy spedycyjne reaguja konsolidacja floty i inwestycjami w cyfrowe platformy wymiany ladunkow.';
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+   */
   const section = (index, body = prose) => ({ heading: `Fixture section ${index}`, body });
   const report = { template: 'pages/editorial-two-column', data: { title: `Editorial regression ${variant}`, footer: `Regression ${variant}` } };
   if (variant === 'A') report.data = { ...report.data, intro: 'Krótki wstęp do raportu.', sections: [section(1), section(2)] };
@@ -168,10 +192,18 @@ export function editorialRegressionReport(variant) {
   return report;
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function buildDeck(slides, extra = {}) {
   return { brand: 'QA Fixture', footer: 'Synthetic visual QA fixture', ...extra, slides };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function compositionStandardReport() {
   return {
     template_ref: 'default-report',
@@ -199,6 +231,10 @@ export function compositionStandardReport() {
   };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function compositionEditorialRegressionReport(variant) {
   const prose = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny. Firmy spedycyjne reaguja konsolidacja floty i inwestycjami w cyfrowe platformy wymiany ladunkow.';
   const blocks = [];
@@ -250,6 +286,10 @@ export function compositionEditorialRegressionReport(variant) {
   return report;
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function compositionMultipageReport() {
   return { template_ref: 'default-report', data: { flows: {
     header: { continuation: 'forbidden', blocks: [{ type: 'heading', role: 'header', text: 'Long-form editorial review' }] },
@@ -261,6 +301,10 @@ export function compositionMultipageReport() {
   } } };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function compositionInlineMarkupReport() {
   return { template_ref: 'default-report', data: { flows: {
     header: { continuation: 'forbidden', blocks: [{ type: 'heading', role: 'header', text: 'Inline markup and glyph fallback' }, { type: 'text', role: 'header', text: 'Bold runs, a glyph the brand font lacks, and two heading levels' }] },
@@ -285,6 +329,10 @@ export function compositionInlineMarkupReport() {
   } } };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function compositionPageFillReport(variant) {
   const data = { flows: {
     header: { continuation: 'forbidden', blocks: [{ type: 'heading', role: 'header', text: `Page-fill fixture: ${variant}` }] },
@@ -297,6 +345,10 @@ export function compositionPageFillReport(variant) {
   return { template_ref: 'default-report', data };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function compositionGapTighteningReport() {
   return { template_ref: 'default-report', data: { flows: {
     header: { continuation: 'forbidden', blocks: [{ type: 'heading', role: 'header', text: 'Page-fill fixture: gap tightening' }] },
@@ -305,11 +357,19 @@ export function compositionGapTighteningReport() {
   } } };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function multipageReport() {
   const report = standardReport();
   return { ...report, data: { ...report.data, title: 'Long-form editorial review', subtitle: 'Sections that cross page breaks on purpose', intro: `${longWords(160, 'Lead')}.`, sections: Array.from({ length: 5 }, (_, index) => ({ heading: `Article ${index + 1} spanning a page break`, body: `${longWords(320, 'Body')}.` })) } };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function inlineMarkupReport() {
   const report = standardReport();
   return {
@@ -333,6 +393,10 @@ export function inlineMarkupReport() {
   };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function pageFillReport(variant) {
   const base = { template: 'default-report', data: { title: `Page-fill fixture: ${variant}`, subtitle: 'Synthetic content used only by the page-fitting gate', intro: 'This report is synthetic and contains no customer data.', footer: 'Synthetic page-fill fixture' } };
   if (variant === 'section') base.data.sections = [{ heading: 'A paragraph crossing a page boundary', body: `${longWords(195, 'SectionWord')}.` }];
@@ -346,10 +410,18 @@ export function pageFillReport(variant) {
   return base;
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function gapTighteningReport() {
   return { template: 'default-report', data: { title: 'Page-fill fixture: gap tightening', subtitle: 'Synthetic content used to exercise the second render pass', intro: `${longWords(28, 'IntroWord')}.`, sections: Array.from({ length: 4 }, (_, index) => ({ heading: `Gap section ${index + 1}`, body: `${longWords(36, 'GapWord')}.` })), highlights: ['A compact synthetic conclusion.', 'A second compact synthetic conclusion.'], footer: 'Synthetic page-fill fixture' } };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function brandContractDeck() {
   return {
     title: 'Contract test',

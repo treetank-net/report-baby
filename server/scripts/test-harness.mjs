@@ -32,19 +32,23 @@ const suites = {
     ['composition oracle', 'scripts/test-report-composition-oracle.mjs'],
     ['composition image', 'scripts/test-report-composition-image.mjs'],
     ['contrast evaluation prototype', 'scripts/test-contrast-evaluation-prototype.mjs'],
-    ['editorial numbered flow', 'scripts/test-editorial-numbered-flow.mjs'],
+    ['editorial plan contract', 'scripts/test-editorial-plan-contract.mjs'],
     ['composition page limits', 'scripts/test-composition-page-limits.mjs'],
     ['structure scoring', 'scripts/test-structure-scoring.mjs'],
   ],
   artifacts: [
-    ['public MCP behavior', 'scripts/test-public-behavior.mjs'],
+    ['public MCP contract', 'scripts/test-public-mcp-contract.mjs'],
     ['dynamic insertion public contract', 'scripts/test-dynamic-insertion-public.mjs'],
     ['public CLI behavior', 'scripts/test-cli.mjs'],
-    ['report images', 'scripts/test-report-images.mjs'],
     ['report chrome', 'scripts/test-report-chrome.mjs'],
     ['editorial flow', 'scripts/test-editorial-flow.mjs'],
     ['editorial parity', 'scripts/test-editorial-parity.mjs'],
     ['slide artifacts', 'scripts/test-slide-artifacts.mjs'],
+  ],
+  visual: [
+    ['editorial visual gate', 'scripts/test-editorial-visual-gate.mjs'],
+  ],
+  brand: [
     ['brand contract', 'scripts/test-brand-contract.mjs'],
   ],
   quality: [
@@ -65,6 +69,61 @@ const suites = {
   ],
 };
 
+// This is an artifact decision, not a description of what the test happens
+// to do today. `split` means that the current file contains both removable
+// plan/process assertions and a smaller artifact proof to retain.
+const artifactDecisions = new Map([
+  ['scripts/test-composition-engine-contract.mjs', 'not-generated'],
+  ['scripts/test-template-flow-contract.mjs', 'not-generated'],
+  ['scripts/test-structure-scoring.mjs', 'not-generated'],
+  ['scripts/test-composition-report-data-adapter.mjs', 'not-generated'],
+  ['scripts/test-report-plan.mjs', 'not-generated'],
+  ['scripts/test-text-composition-engine.mjs', 'split'],
+  ['scripts/test-generic-soft-insertions.mjs', 'not-generated'],
+  ['scripts/test-dynamic-insertion-slots.mjs', 'not-generated'],
+  ['scripts/test-page-template-adapter.mjs', 'not-generated'],
+  ['scripts/test-js-pdf-adapter.mjs', 'retain'],
+  ['scripts/test-report-composition-adapter.mjs', 'split'],
+  ['scripts/test-report-composition-oracle.mjs', 'retain'],
+  ['scripts/test-report-composition-image.mjs', 'retain'],
+  ['scripts/test-contrast-evaluation-prototype.mjs', 'not-generated'],
+  ['scripts/test-editorial-plan-contract.mjs', 'not-generated'],
+  ['scripts/test-editorial-visual-gate.mjs', 'retain'],
+  ['scripts/test-composition-page-limits.mjs', 'not-generated'],
+  ['scripts/test-public-mcp-contract.mjs', 'retain'],
+  ['scripts/test-dynamic-insertion-public.mjs', 'not-generated'],
+  ['scripts/test-cli.mjs', 'split'],
+  ['scripts/test-report-chrome.mjs', 'retain'],
+  ['scripts/test-editorial-flow.mjs', 'split'],
+  ['scripts/test-editorial-parity.mjs', 'retain'],
+  ['scripts/test-slide-artifacts.mjs', 'retain'],
+  ['scripts/test-brand-contract.mjs', 'split'],
+  ['scripts/test-composition-documentation.mjs', 'not-generated'],
+  ['scripts/test-manifest-contract.mjs', 'retain'],
+  ['scripts/test-showcase-manifest-consumers.mjs', 'split'],
+  ['scripts/test-input-errors.mjs', 'not-generated'],
+  ['scripts/test-mcp-schema-snapshot.mjs', 'not-generated'],
+  ['scripts/test-config-reach.mjs', 'retain'],
+  ['scripts/architecture-check.mjs', 'not-generated'],
+  ['scripts/script-dup.mjs', 'not-generated'],
+  ['scripts/test-source-context.mjs', 'not-generated'],
+  ['scripts/test-source-materialization.mjs', 'not-generated'],
+  ['scripts/test-markdown-normalizer.mjs', 'not-generated'],
+  ['scripts/test-image-resolver.mjs', 'not-generated'],
+  ['scripts/test-brand-assets.mjs', 'retain'],
+  ['scripts/test-brand-release-template.mjs', 'not-generated'],
+]);
+
+/**
+ * @test-decision centralize-manifest
+ * @test-action Keep artifact classification in the harness as the single source of truth; merge duplicate script metadata into this map.
+ */
+function artifactDecisionFor(script) {
+  const decision = artifactDecisions.get(script);
+  if (!decision) throw new Error(`test harness: missing artifact decision for ${script}`);
+  return decision;
+}
+
 const args = process.argv.slice(2);
 const selectedSuites = args.filter((arg) => arg.startsWith('--suite=')).map((arg) => arg.slice('--suite='.length));
 const timingsArgumentIndex = args.indexOf('--timings');
@@ -80,6 +139,10 @@ const shouldList = args.includes('--list');
 const shouldBuild = !args.includes('--no-build') && !shouldList;
 
 let timingWriteFailure;
+/**
+ * @test-decision merge-timing
+ * @test-action Keep one JSONL writer and one aggregation pass; do not let individual checks measure or persist timings independently.
+ */
 async function writeTimingEvent(event) {
   if (!timingsPath || timingWriteFailure) return;
   try {
@@ -90,6 +153,10 @@ async function writeTimingEvent(event) {
   }
 }
 
+/**
+ * @test-decision shared-harness
+ * @test-action Keep as the harness failure/control seam; do not duplicate error handling in individual checks.
+ */
 function fail(message) {
   console.error(`test harness: ${message}`);
   process.exitCode = 2;
@@ -100,7 +167,7 @@ if (hasInvalidTimingsArgument) {
 } else if (shouldList) {
   for (const [suite, checks] of Object.entries(suites)) {
     console.log(`${suite}:`);
-    for (const [label, script] of checks) console.log(`  ${label} (${script})`);
+    for (const [label, script] of checks) console.log(`  ${label} [artifact: ${artifactDecisionFor(script)}] (${script})`);
   }
 } else {
   const requestedNames = selectedSuites.length > 0 ? selectedSuites : ['composition', 'artifacts'];
@@ -117,13 +184,17 @@ if (hasInvalidTimingsArgument) {
         if (seenScripts.has(script)) continue;
         seenScripts.add(script);
         checkOwner.set(script, suite);
-        checks.push([label, script, suite]);
+        checks.push([label, script, suite, artifactDecisionFor(script)]);
       }
     }
     for (const [, script] of checks) await access(join(root, script));
 
     const suiteStartedAt = performance.now();
     const timingChecks = [];
+    /**
+     * @test-decision merge-timing
+     * @test-action Keep one JSONL writer and one aggregation pass; do not let individual checks measure or persist timings independently.
+     */
     function timingSuiteTotals() {
       const timingSuiteNames = shouldBuild ? ['build', ...names] : names;
       return Object.fromEntries(timingSuiteNames.map((name) => {
@@ -155,11 +226,16 @@ if (hasInvalidTimingsArgument) {
         console.error(`test harness: unable to initialize timing report ${timingsPath}: ${error.message}`);
       }
     }
+    /**
+     * @test-decision merge-process-runner
+     * @test-action Keep one child-process runner and batch compatible checks through it; this is the seam for reducing process startup overhead.
+     */
     async function run(label, command, commandArgs, suite = 'build') {
       console.log(`\n[test-harness] ${label}`);
       const startedAt = performance.now();
       const startedAtIso = new Date().toISOString();
-      await writeTimingEvent({ event: 'check-start', label, script: commandArgs.at(-1), suite, startedAt: startedAtIso });
+      const artifactDecision = suite === 'build' ? 'not-applicable' : artifactDecisionFor(commandArgs.at(-1));
+      await writeTimingEvent({ event: 'check-start', label, script: commandArgs.at(-1), suite, artifactDecision, startedAt: startedAtIso });
       try {
         await new Promise((resolve, reject) => {
           const child = spawn(command, commandArgs, { cwd: root, env: process.env, stdio: 'inherit' });
@@ -171,16 +247,16 @@ if (hasInvalidTimingsArgument) {
         });
       } catch (error) {
         const elapsedMs = Math.round(performance.now() - startedAt);
-        timingChecks.push({ label, suite, elapsedMs, status: 'failed' });
-        await writeTimingEvent({ event: 'check-complete', label, script: commandArgs.at(-1), suite, elapsedMs, status: 'failed', error: error.message });
+        timingChecks.push({ label, suite, artifactDecision, elapsedMs, status: 'failed' });
+        await writeTimingEvent({ event: 'check-complete', label, script: commandArgs.at(-1), suite, artifactDecision, elapsedMs, status: 'failed', error: error.message });
         throw error;
       }
       const elapsedMs = Math.round(performance.now() - startedAt);
-      timingChecks.push({ label, suite, elapsedMs, status: 'passed' });
+      timingChecks.push({ label, suite, artifactDecision, elapsedMs, status: 'passed' });
       const warningMs = Number(feedbackConfig.check_warning_ms);
       const warning = Number.isFinite(warningMs) && elapsedMs > warningMs ? ' [over check warning budget]' : '';
       console.log(`[test-harness] ${label}: ${elapsedMs} ms${warning}`);
-      await writeTimingEvent({ event: 'check-complete', label, script: commandArgs.at(-1), suite, elapsedMs, status: 'passed', warning: Boolean(warning) });
+      await writeTimingEvent({ event: 'check-complete', label, script: commandArgs.at(-1), suite, artifactDecision, elapsedMs, status: 'passed', warning: Boolean(warning) });
     }
 
     try {

@@ -4,30 +4,19 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runProcess } from './lib/process.mjs';
+import { build } from 'esbuild';
 
-const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-template-flow-'));
-const bundle = join(temporary, 'template-contract.cjs');
-const geometryBundle = join(temporary, 'page-geometry.cjs');
-const build = runProcess('npx', [
-  'esbuild',
-  'src/template/contracts.ts',
-  '--bundle',
-  '--platform=node',
-  '--format=cjs',
-  `--outfile=${bundle}`,
-], { cwd: root, timeout: 30_000 });
-if (build.status !== 0) throw new Error(`template contract test bundle failed: ${build.stderr || build.stdout}`);
-const geometryBuild = runProcess('npx', [
-  'esbuild',
-  'src/template/geometry.ts',
-  '--bundle',
-  '--platform=node',
-  '--format=cjs',
-  `--outfile=${geometryBundle}`,
-], { cwd: root, timeout: 30_000 });
-if (geometryBuild.status !== 0) throw new Error(`page geometry test bundle failed: ${geometryBuild.stderr || geometryBuild.stdout}`);
+const bundle = join(temporary, 'contracts.cjs');
+const geometryBundle = join(temporary, 'geometry.cjs');
+await build({
+  entryPoints: ['src/template/contracts.ts', 'src/template/geometry.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outdir: temporary,
+  outExtension: { '.js': '.cjs' },
+});
 
 try {
   const { compileTemplateSource, resolvePlan } = await import(bundle);

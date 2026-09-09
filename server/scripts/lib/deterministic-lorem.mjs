@@ -7,6 +7,10 @@ import { LoremIpsum } from 'lorem-ipsum';
  * lengths and punctuation exercise wrapping while the seeded PRNG keeps the
  * expected page geometry stable between runs.
  */
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function createDeterministicLorem(seed = 0x6d2b79f5) {
   let state = seed | 0;
   return new LoremIpsum({
@@ -17,10 +21,18 @@ export function createDeterministicLorem(seed = 0x6d2b79f5) {
   });
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function loremWords(lorem, count) {
   return lorem.generateWords(count);
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function loremSentence(lorem, lowerBound = 8, upperBound = 14) {
   return lorem.generateSentences(1, lowerBound, upperBound);
 }

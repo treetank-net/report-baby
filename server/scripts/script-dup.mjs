@@ -8,7 +8,7 @@ const CHECK = process.argv.includes('--check');
 const SCRIPT_ROOTS = [join(ROOT, 'scripts'), join(ROOT, 'server', 'scripts')];
 const FIXTURE_CONSUMERS = [
   'server/scripts/test-brand-contract.mjs',
-  'server/scripts/test-public-behavior.mjs',
+  'server/scripts/test-public-mcp-contract.mjs',
   'server/scripts/visual-qa.mjs',
 ];
 

@@ -2,25 +2,31 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runProcess } from './lib/process.mjs';
 import { fixtureDocument } from './lib/composition-fixture.mjs';
+import { build } from 'esbuild';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-plan-'));
-const bundle = join(temporary, 'report-plan.mjs');
-const compositionBundle = join(temporary, 'composition.cjs');
-const assertionsBundle = join(temporary, 'report-plan-assertions.mjs');
-const build = runProcess('npx', ['esbuild', 'src/report/legacy-plan.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${bundle}`], { cwd: root, timeout: 30_000 });
-if (build.status !== 0) throw new Error(`report plan test bundle failed: ${build.stderr || build.stdout}`);
-const assertionsBuild = runProcess('npx', ['esbuild', 'src/report/legacy-plan-assertions.ts', '--bundle', '--platform=node', '--format=esm', `--outfile=${assertionsBundle}`], { cwd: root, timeout: 30_000 });
-if (assertionsBuild.status !== 0) throw new Error(`report plan assertions test bundle failed: ${assertionsBuild.stderr || assertionsBuild.stdout}`);
-const compositionBuild = runProcess('npx', ['esbuild', 'src/composition/index.ts', '--bundle', '--platform=node', '--format=cjs', `--outfile=${compositionBundle}`], { cwd: root, timeout: 30_000 });
-if (compositionBuild.status !== 0) throw new Error(`report plan composition test bundle failed: ${compositionBuild.stderr || compositionBuild.stdout}`);
+const bundle = join(temporary, 'report/legacy-plan.cjs');
+const compositionBundle = join(temporary, 'composition/index.cjs');
+const assertionsBundle = join(temporary, 'report/legacy-plan-assertions.cjs');
+await build({
+  entryPoints: ['src/report/legacy-plan.ts', 'src/report/legacy-plan-assertions.ts', 'src/composition/index.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outdir: temporary,
+  outExtension: { '.js': '.cjs' },
+});
 
 try {
   const { resolveReportPlan } = await import(bundle);
   const { assertReportPlan } = await import(assertionsBundle);
   const { compositionDocumentFromInput: normalizeCompositionInput } = await import(compositionBundle);
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
+   */
   const documentFromFixture = (fixture) => fixtureDocument(normalizeCompositionInput, fixture);
   const geometry = {
     width: 210,

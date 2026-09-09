@@ -1,5 +1,9 @@
 import { spawnSync } from 'node:child_process';
 
+/**
+ * @test-decision merge-process-runner
+ * @test-action Keep one child-process seam and batch compatible commands; callers should not duplicate spawn, timeout, or failure normalization.
+ */
 export function runProcess(command, args = [], options = {}) {
   const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...options });
   return {
@@ -11,6 +15,10 @@ export function runProcess(command, args = [], options = {}) {
   };
 }
 
+/**
+ * @test-decision merge-process-runner
+ * @test-action Keep one child-process seam and batch compatible commands; callers should not duplicate spawn, timeout, or failure normalization.
+ */
 export function childProcessFailure(label, { status, signal, stdout = '', stderr = '', error } = {}) {
   const output = [stderr, stdout].filter((value) => value && value.trim()).join('\n').trim();
   const details = error?.message ?? output;

@@ -9,12 +9,20 @@ import { createPrototypePlanner } from '../prototype-composition-kernel.mjs';
 
 const legacyPlanFixture = createPrototypePlanner();
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 function flowBlocks(flow, fallback = []) {
   if (Array.isArray(flow)) return flow;
   if (flow && typeof flow === 'object' && Array.isArray(flow.blocks)) return flow.blocks;
   return fallback;
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 function legacyRole(role, kind) {
   if (kind === 'heading' || role === 'heading') return 'section_heading';
   if (role === 'intro') return 'intro';
@@ -22,6 +30,10 @@ function legacyRole(role, kind) {
   return 'body';
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 function legacyText(block) {
   if (typeof block.text === 'string') return block.text;
   if (block.kind === 'metric' && block.metric) {
@@ -36,6 +48,10 @@ function legacyText(block) {
   return '';
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 function legacyBlock(block) {
   if (!block || typeof block !== 'object') throw new TypeError('Composition flow blocks must be objects.');
   if (typeof block.type === 'string') return block;
@@ -51,10 +67,18 @@ function legacyBlock(block) {
   };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 function slotId(page, regionId) {
   return `${page + 1}:${regionId}`;
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 function slotFromRegion(page, regionId, region, flowId) {
   return {
     id: slotId(page.index, regionId),
@@ -66,6 +90,10 @@ function slotFromRegion(page, regionId, region, flowId) {
   };
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 function compositionPlanFromLegacy(legacyPlan) {
   const pages = legacyPlan.pages.map((page) => ({
     page: page.index + 1,
@@ -189,6 +217,10 @@ function compositionPlanFromLegacy(legacyPlan) {
  * Convert the current prototype fixture into the small semantic document
  * accepted by the composition-engine seam.
  */
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 export function documentFromLegacyFixture(fixture) {
   const { blocks, sidebar, ...rest } = fixture;
   return {
@@ -205,6 +237,10 @@ export function documentFromLegacyFixture(fixture) {
  * Convert the semantic document back to the legacy kernel input. This is the
  * compatibility boundary; the kernel itself is deliberately not aware of
  * the new naming.
+ */
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
  */
 export function legacyFixtureFromDocument(document) {
   if (!document || typeof document !== 'object') throw new TypeError('Composition document must be an object.');
@@ -238,6 +274,10 @@ export function legacyFixtureFromDocument(document) {
  * `planner` is injectable so the legacy implementation can be replaced after
  * parity is established without changing callers.
  */
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 export function createCompositionEngine({ planner = legacyPlanFixture } = {}) {
   if (typeof planner !== 'function') throw new TypeError('Composition planner must be a function.');
   return {
@@ -249,6 +289,10 @@ export function createCompositionEngine({ planner = legacyPlanFixture } = {}) {
 
 export const compositionEngine = createCompositionEngine();
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
+ */
 export function planComposition(document, metrics) {
   return compositionEngine.plan(document, metrics);
 }
@@ -256,6 +300,10 @@ export function planComposition(document, metrics) {
 /**
  * Transitional projection of the prototype result into the renderer-neutral
  * engine contract. The raw plan remains available for parity and debugging.
+ */
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a renderer-neutral composition adapter/fixture; merge equivalent legacy and composition setup at this shared seam.
  */
 export function planCompositionContract(document, metrics) {
   const raw = compositionEngine.plan(document, metrics);

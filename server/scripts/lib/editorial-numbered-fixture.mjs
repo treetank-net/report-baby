@@ -53,6 +53,10 @@ const SOURCE_SHAPE = [
 
 const TITLE_WORDS = 12;
 const BODY_SCALE = 1.4;
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 function createLoremGenerator() {
   let seed = 0x6d2b79f5;
   return new LoremIpsum({
@@ -63,20 +67,36 @@ function createLoremGenerator() {
   });
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 function nextToken(state, word) {
   const number = state.next;
   state.next += 1;
   return `${word.toLowerCase()}${String(number).padStart(4, '0')}`;
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 function numberedText(count, state, lorem) {
   return lorem.generateWords(count).split(/\s+/u).map((word) => nextToken(state, word)).join(' ');
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 function countFor(kind, sourceWords) {
   return kind === 'paragraph' ? Math.ceil(sourceWords * BODY_SCALE) : sourceWords;
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
 export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX, quoteMarkOffsetY, illustration }) {
   const state = { next: 1 };
   const lorem = createLoremGenerator();

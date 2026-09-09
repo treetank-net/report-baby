@@ -4,9 +4,17 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runProcess } from './process.mjs';
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function decodePpm(buffer) {
   if (buffer.subarray(0, 2).toString('ascii') !== 'P6') throw new Error('raster output must be an RGB PPM');
   let offset = 2;
+  /**
+   * @test-decision visual-gate
+   * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+   */
   const token = () => {
     while (offset < buffer.length && /\s/u.test(String.fromCharCode(buffer[offset]))) offset += 1;
     if (buffer[offset] === 35) {
@@ -25,11 +33,19 @@ function decodePpm(buffer) {
   return { width, height, pixels };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 function pixelAt(image, x, y) {
   const offset = (y * image.width + x) * 3;
   return [image.pixels[offset], image.pixels[offset + 1], image.pixels[offset + 2]];
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export function inkProfileInBox(image, box, pageSize, qa) {
   const scaleX = image.width / pageSize.width;
   const scaleY = image.height / pageSize.height;
@@ -78,6 +94,10 @@ export function inkProfileInBox(image, box, pageSize, qa) {
       previous.maxX = Math.max(previous.maxX, row.maxX);
     } else bands.push({ startY: row.y, endY: row.y, inkPixels: row.inkPixels, minX: row.minX, maxX: row.maxX });
   }
+  /**
+   * @test-decision visual-gate
+   * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+   */
   const toMm = (value, scale) => value / scale;
   return {
     status: inkPixels === 0 ? 'empty' : 'occupied',
@@ -89,6 +109,10 @@ export function inkProfileInBox(image, box, pageSize, qa) {
   };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+ */
 export async function inspectPdfInk({ artifactPath, pages, lines, slots, pageSize, qa }) {
   if (!qa || !Number.isFinite(qa.raster_dpi)) throw new Error('render config must define quality.pdf_pixel_qa.raster_dpi');
   const rasterDirectory = await mkdtemp(join(tmpdir(), 'report-baby-ink-raster-'));
@@ -97,6 +121,10 @@ export async function inspectPdfInk({ artifactPath, pages, lines, slots, pageSiz
     const raster = runProcess('pdftoppm', ['-f', '1', '-l', String(pages.length), '-r', String(qa.raster_dpi), artifactPath, prefix], { timeout: 30_000 });
     if (raster.status !== 0) throw new Error(raster.stderr || raster.stdout || 'pdftoppm failed');
     const images = pages.map((page) => ({ page: page.page, image: decodePpm(readFileSync(`${prefix}-${page.page}.ppm`)) }));
+    /**
+     * @test-decision visual-gate
+     * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
+     */
     const profile = (item) => {
       const image = images.find((candidate) => candidate.page === item.page)?.image;
       if (!image) throw new Error(`missing raster page ${item.page}`);

@@ -22,6 +22,10 @@ const debugArtifactDirectory = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR
   ? join(process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR, 'editorial-parity')
   : undefined;
 
+/**
+ * @test-decision merge-shared-bundle
+ * @test-action Merge into one shared test-bundle helper so each check does not invoke esbuild independently.
+ */
 function build(entry, output, extra = []) {
   const result = runProcess('npx', [
     'esbuild', entry, '--bundle', '--platform=node', '--target=node18', '--format=cjs', ...extra, `--outfile=${output}`,

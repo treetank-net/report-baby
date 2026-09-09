@@ -20,6 +20,10 @@ try {
   const bundled = await import(bundlePath);
   const composition = bundled.default ?? bundled;
   const { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } = composition;
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-rationale Keep as a shared plan fixture; geometry is supplied by the plan and needs no PDF render.
+   */
   const line = (blockId, page, slotId, startWord = 0, endWord = 1, routeIndex = 0) => ({
     blockId,
     flowId: 'main',

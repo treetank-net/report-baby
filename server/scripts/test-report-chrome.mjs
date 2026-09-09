@@ -16,17 +16,33 @@ const config = parse(await readFile(join(root, 'templates', 'render-config.yml')
 const mmToPt = config.canvas.points_per_inch / 25.4;
 const tolerance = config.pdf.composition_geometry_tolerance * mmToPt + 1;
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+ */
 function decodeXml(value) {
   return value.replace(/&amp;/gu, '&').replace(/&lt;/gu, '<').replace(/&gt;/gu, '>').replace(/&quot;/gu, '"');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+ */
 function parseBbox(xml) {
   return [...xml.matchAll(/<page\b([^>]*)>([\s\S]*?)<\/page>/gu)].map((pageMatch, index) => {
+    /**
+     * @test-decision visual-gate
+     * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+     */
     const pageNumber = (name) => Number(new RegExp(`${name}="([\\d.-]+)"`, 'u').exec(pageMatch[1])?.[1]);
     return {
     page: index + 1,
     width: pageNumber('width'),
     words: [...pageMatch[2].matchAll(/<word\s+([^>]+)>([\s\S]*?)<\/word>/gu)].map((wordMatch) => {
+      /**
+       * @test-decision visual-gate
+       * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+       */
       const number = (name) => Number(new RegExp(`${name}="([\\d.-]+)"`, 'u').exec(wordMatch[1])?.[1]);
       return { text: decodeXml(wordMatch[2]), xMin: number('xMin'), yMin: number('yMin'), xMax: number('xMax'), yMax: number('yMax') };
     }),
@@ -34,7 +50,11 @@ function parseBbox(xml) {
   });
 }
 
-function render(request, outputPath, brandStore) {
+/**
+ * @test-decision visual-gate
+ * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+ */
+function render(request, outputPath, brandStore, renderArtifact = true) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [bundle, '--json', 'render_report'], {
       cwd: root,
@@ -49,6 +69,7 @@ function render(request, outputPath, brandStore) {
     child.on('error', reject);
     child.on('close', async (code) => {
       if (code !== 0) return reject(new Error(`report chrome render failed (${code}): ${stderr || stdout}`));
+      if (!renderArtifact) return resolve({ result: JSON.parse(stdout) });
       try {
         const { stdout: bbox } = await execFileAsync('pdftotext', ['-bbox-layout', outputPath, '-']);
         const { stdout: text } = await execFileAsync('pdftotext', [outputPath, '-']);
@@ -57,18 +78,30 @@ function render(request, outputPath, brandStore) {
         reject(error);
       }
     });
-    child.stdin.end(JSON.stringify({ ...request, output_path: outputPath, diagnostics: 'full' }));
+    child.stdin.end(JSON.stringify({ ...request, ...(renderArtifact ? { output_path: outputPath } : { dry_run: true }), diagnostics: 'full' }));
   });
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+ */
 function placement(plan, flowId, page) {
   return plan.flowPlacements.find((candidate) => candidate.flowId === flowId && candidate.page === page && candidate.hasContent);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+ */
 function wordsContaining(page, marker) {
   return page.words.filter((word) => word.text.includes(marker));
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Keep only one representative backend artifact smoke in the release path; merge repeated PDF/image checks into the showcase visual gate.
+ */
 function assertWordInPlacement(page, marker, planned, label) {
   assert.ok(planned, `${label} marker ${marker} has no planned placement on page ${page.page}`);
   const words = wordsContaining(page, marker);
@@ -156,7 +189,7 @@ try {
       main: { continuation: 'allowed', blocks: [{ type: 'text', role: 'body', text: Array.from({ length: 260 }, (_, index) => `dynamic${index}`).join(' ') }] },
       footer: { continuation: 'forbidden', blocks: [] },
     }, assets: [{ id: 'header-mark', source: 'brand://orbit/releases/chrome-test/brand/assets/logos/logo-mark.svg' }] },
-  }, dynamicOutputPath, brandStore);
+  }, dynamicOutputPath, brandStore, false);
   assert.equal(dynamicRendered.result.compositionEvaluation.status, 'accepted', JSON.stringify(dynamicRendered.result.compositionEvaluation));
   const dynamicPlan = dynamicRendered.result.compositionPlan;
   const dynamicLockup = dynamicPlan.blockPlacements.find((placement) => placement.kind === 'lockup' && placement.page === 1);

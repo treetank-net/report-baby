@@ -21,6 +21,10 @@ const templateBundle = join(temporary, 'template.cjs');
 const geometryBundle = join(temporary, 'geometry.cjs');
 const parityConfig = parse(await readFile(join(root, 'templates/composition-pixel-qa-prototype.yml'), 'utf8'));
 
+/**
+ * @test-decision merge-shared-bundle
+ * @test-action Merge into one shared test-bundle helper so each check does not invoke esbuild independently.
+ */
 function build(entry, output, extra = []) {
   const result = runProcess('npx', [
     'esbuild',
@@ -42,20 +46,36 @@ build('src/rendering/primitives.ts', primitivesBundle, ['--loader:.wasm=binary',
 build('src/template/contracts.ts', templateBundle);
 build('src/template/geometry.ts', geometryBundle);
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function normalizeToken(token) {
   return token.toLocaleLowerCase('und').replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function tokenCounts(text) {
   const counts = new Map();
   for (const token of text.split(/\s+/u).map(normalizeToken).filter(Boolean)) counts.set(token, (counts.get(token) ?? 0) + 1);
   return counts;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function joinHyphenatedLines(text) {
   return text.replace(/-\s*\n/gu, '');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function missingTokens(expected, actual) {
   return [...expected].flatMap(([token, count]) => {
     const missing = count - (actual.get(token) ?? 0);
@@ -63,11 +83,19 @@ function missingTokens(expected, actual) {
   });
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function pdfPages(pdfPath) {
   const info = execFileSync('pdfinfo', [pdfPath], { encoding: 'utf8' });
   return Number(info.match(/^Pages:\s+(\d+)$/mu)?.[1]);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function crc32(bytes) {
   let crc = 0xffffffff;
   for (const byte of bytes) {
@@ -77,6 +105,10 @@ function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function pngChunk(type, data) {
   const name = Buffer.from(type, 'ascii');
   const output = Buffer.alloc(12 + data.length);
@@ -87,6 +119,10 @@ function pngChunk(type, data) {
   return output;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function fixturePng(width, height) {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);
@@ -113,6 +149,10 @@ function fixturePng(width, height) {
   ]);
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+ */
 function lineBoxParity(plan, pdfPath) {
   const toleranceMm = parityConfig.pdf_parity.points_tolerance * 25.4 / 72;
   // This oracle compares the narrative/footer token stream below. Header
@@ -257,6 +297,10 @@ try {
   assert.ok(numberedLeftSlot && numberedRightSlot, 'numbered PDF fixture must expose both column slots');
   const pointsPerMm = 72 / 25.4;
   const numberedColumnBoundary = ((numberedLeftSlot.box.x + numberedLeftSlot.box.width) + numberedRightSlot.box.x) / 2 * pointsPerMm;
+  /**
+   * @test-decision visual-gate
+   * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
+   */
   const leftOfPdfEntry = (entry) => entry.x < numberedColumnBoundary;
   assert.deepEqual(numberedEntries.filter(leftOfPdfEntry).map((entry) => entry.number).sort((a, b) => a - b), [...numberedHeadingWords, ...numberedBodyWords].map((word) => Number(word.slice(5))).sort((a, b) => a - b), 'the first column must contain the complete heading and body stream');
   assert.deepEqual(numberedEntries.filter((entry) => !leftOfPdfEntry(entry)).map((entry) => entry.number).sort((a, b) => a - b), numberedTailWords.map((word) => Number(word.slice(5))).sort((a, b) => a - b), 'the second column must start only after the first stream is complete');

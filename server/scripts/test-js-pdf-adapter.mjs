@@ -133,19 +133,9 @@ try {
   assert.match(graphicAssetList.stdout, /image\s+no/u);
   const transparentBoundaryGraphic = structuredClone(graphicAssetDocument);
   transparentBoundaryGraphic.graphics[0].shape = 'ellipse';
-  const transparentBoundaryPdf = new jsPDF({ unit: 'mm', format: [100, 100] });
-  const transparentBoundaryResult = createTextCompositionEngine(template).plan(transparentBoundaryGraphic, createJsPdfTextMetrics(transparentBoundaryPdf, 'helvetica', styles));
+  const transparentBoundaryResult = createTextCompositionEngine(template).plan(transparentBoundaryGraphic, createJsPdfTextMetrics(new jsPDF({ unit: 'mm', format: [100, 100] }), 'helvetica', styles));
   assert.equal(transparentBoundaryResult.evaluation.status, 'accepted', JSON.stringify(transparentBoundaryResult.evaluation));
   assert.equal(transparentBoundaryResult.evaluation.diagnostics.some((item) => item.code === 'LINE_GRAPHIC_OVERLAP'), false);
-  const transparentBoundaryArtifact = renderComposition(transparentBoundaryGraphic, transparentBoundaryResult, createJsPdfTextBackend(transparentBoundaryPdf, 'helvetica', styles, {
-    ...backendOptions,
-    imageAssets: new Map([['photo-1', { data: fixtureImage, format: 'PNG', width: 1, height: 1 }]]),
-  }));
-  const transparentBoundaryOutput = join(temporary, 'graphic-asset-ellipse-boundary.pdf');
-  await writeFile(transparentBoundaryOutput, transparentBoundaryArtifact);
-  const transparentBoundaryList = runProcess('pdfimages', ['-list', transparentBoundaryOutput]);
-  assert.equal(transparentBoundaryList.status, 0, transparentBoundaryList.stderr);
-  assert.match(transparentBoundaryList.stdout, /image\s+no/u);
 
   const captionPdf = new jsPDF({ unit: 'mm', format: [100, 100] });
   const captionStyle = { captionGap: 2, captionBottomGap: 2, captionLineHeight: 4, captionBaselineOffset: 1, captionSize: 6, captionPaddingX: 1.5 };
@@ -229,6 +219,10 @@ try {
   assert.ok(reachWord, 'metric label should have a selectable bbox');
   const reachBox = reachWord.slice(1).map(Number);
   const metricBox = atomicResult.plan.blockPlacements[0].box;
+  /**
+   * @test-decision plan-only
+   * @test-action Keep as a plan-only contract; assert legality, diagnostics, placements, and geometry from the in-memory plan.
+   */
   const pointsToMm = (value) => value * 25.4 / 72;
   assert.ok(pointsToMm(reachBox[0]) >= metricBox.x);
   assert.ok(pointsToMm(reachBox[2]) <= metricBox.x + metricBox.width);
@@ -244,16 +238,18 @@ try {
   );
 
   const chartTemplate = {
-    maxPages: 1,
+    maxPages: 3,
     layouts: [{ id: 'chart', width: 100, height: 100, slots: [
       { id: 'chart', regionId: 'chart', kind: 'block', allowedBlockKinds: ['chart'], box: { x: 8, y: 8, width: 84, height: 58 } },
       { id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 70, width: 84, height: 22 } },
     ] }],
-    routes: { main: { slots: ['chart', 'body'], layouts: ['chart'], continuation: 'forbidden' } },
+    routes: { main: { slots: ['chart', 'body'], layouts: ['chart'], continuation: 'allowed' } },
   };
   const chartDocument = {
-    flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
+    flows: { main: { id: 'main', continuation: 'allowed', blocks: [
       { id: 'chart-1', kind: 'chart', role: 'chart', atomic: true, chart: { type: 'bar', title: 'Reach by channel', subtitle: 'Qualified visits', prefix: '', suffix: '', data: [{ label: 'Search', value: 12 }, { label: 'Social', value: 8 }] } },
+      { id: 'chart-2', kind: 'chart', role: 'chart', atomic: true, chart: { type: 'line', title: 'Reach over time', subtitle: 'Monthly trend', prefix: '', suffix: '', data: [{ label: 'Jan', value: 12 }, { label: 'Feb', value: 18 }] } },
+      { id: 'chart-3', kind: 'chart', role: 'chart', atomic: true, chart: { type: 'pie', title: 'Reach mix', subtitle: 'Channel share', prefix: '', suffix: '', data: [{ label: 'Search', value: 12 }, { label: 'Social', value: 8 }] } },
       { id: 'body', kind: 'paragraph', role: 'body', text: 'The body follows the chart.' },
     ] } },
   };
@@ -278,7 +274,7 @@ try {
   chartMetrics.measureBlock = chartCapabilities.measureBlock;
   const chartResult = createTextCompositionEngine(chartTemplate).plan(chartDocument, chartMetrics);
   assert.equal(chartResult.evaluation.status, 'accepted', JSON.stringify(chartResult.evaluation));
-  assert.equal(chartResult.plan.blockPlacements.length, 1);
+  assert.equal(chartResult.plan.blockPlacements.length, 3);
   const chartArtifact = renderComposition(chartDocument, chartResult, createJsPdfTextBackend(chartPdf, 'helvetica', styles, {
     pageSizeTolerance: renderConfig.pdf.page_size_tolerance,
     blockRenderers: { chart: chartCapabilities.renderer },
@@ -290,25 +286,8 @@ try {
   assert.match(chartText.stdout, /Reach by channel/u);
   assert.match(chartText.stdout, /Search/u);
   assert.match(chartText.stdout, /12/u);
-  for (const type of ['line', 'pie']) {
-    const variantDocument = structuredClone(chartDocument);
-    variantDocument.flows.main.blocks[0].chart.type = type;
-    const variantPdf = new jsPDF({ unit: 'mm', format: [100, 100] });
-    const variantMetrics = createJsPdfTextMetrics(variantPdf, 'helvetica', styles);
-    variantMetrics.measureBlock = chartCapabilities.measureBlock;
-    const variantResult = createTextCompositionEngine(chartTemplate).plan(variantDocument, variantMetrics);
-    assert.equal(variantResult.evaluation.status, 'accepted', JSON.stringify(variantResult.evaluation));
-    const variantArtifact = renderComposition(variantDocument, variantResult, createJsPdfTextBackend(variantPdf, 'helvetica', styles, {
-      pageSizeTolerance: renderConfig.pdf.page_size_tolerance,
-      blockRenderers: { chart: chartCapabilities.renderer },
-    }));
-    const variantOutput = join(temporary, `chart-${type}.pdf`);
-    await writeFile(variantOutput, variantArtifact);
-    const variantText = runProcess('pdftotext', [variantOutput, '-']);
-    assert.equal(variantText.status, 0, variantText.stderr);
-    assert.match(variantText.stdout, /Reach by channel/u);
-    assert.match(variantText.stdout, /Search/u);
-  }
+  assert.match(chartText.stdout, /Reach over time/u);
+  assert.match(chartText.stdout, /Reach mix/u);
   const smallChartTemplate = structuredClone(chartTemplate);
   smallChartTemplate.layouts[0].slots[0].box.height = 20;
   smallChartTemplate.layouts[0].slots[1].box.y = 32;

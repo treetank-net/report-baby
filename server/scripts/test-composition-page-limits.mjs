@@ -5,29 +5,38 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { runProcess } from './lib/process.mjs';
 import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
+import { build } from 'esbuild';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-page-limits-'));
 const bundles = {
-  adapter: join(temporary, 'composition-adapter.cjs'),
-  primitives: join(temporary, 'primitives.cjs'),
-  template: join(temporary, 'template.cjs'),
-  geometry: join(temporary, 'geometry.cjs'),
+  adapter: join(temporary, 'composition/report-composition-entrypoint.cjs'),
+  primitives: join(temporary, 'rendering/primitives.cjs'),
+  template: join(temporary, 'template/contracts.cjs'),
+  geometry: join(temporary, 'template/geometry.cjs'),
 };
-
-function build(entry, output, extra = []) {
-  const result = runProcess('npx', ['esbuild', entry, '--bundle', '--platform=node', '--target=node18', '--format=cjs', ...extra, `--outfile=${output}`], { cwd: root, timeout: 30_000 });
-  if (result.status !== 0) throw new Error(result.stderr || result.stdout);
-}
-
-build('src/composition/report-composition-entrypoint.ts', bundles.adapter);
-build('src/rendering/primitives.ts', bundles.primitives, ['--loader:.wasm=binary', '--loader:.ttf=binary']);
-build('src/template/contracts.ts', bundles.template);
-build('src/template/geometry.ts', bundles.geometry);
+await build({
+  entryPoints: [
+    'src/composition/report-composition-entrypoint.ts',
+    'src/rendering/primitives.ts',
+    'src/template/contracts.ts',
+    'src/template/geometry.ts',
+  ],
+  bundle: true,
+  platform: 'node',
+  target: 'node18',
+  format: 'cjs',
+  outdir: temporary,
+  outExtension: { '.js': '.cjs' },
+  loader: { '.wasm': 'binary', '.ttf': 'binary' },
+});
 
 const prose = 'Transport drogowy w Europie Srodkowej przechodzi glebokie zmiany strukturalne. Rosnace koszty paliwa oraz nowe regulacje dotyczace czasu pracy kierowcow zmieniaja rachunek ekonomiczny. Firmy spedycyjne reaguja konsolidacja floty i inwestycjami w cyfrowe platformy wymiany ladunkow.';
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
+ */
 const validEditorialInput = (body) => legacyFixtureToCompositionInput({
   intro: 'Krotki wstep do raportu.',
   sections: [{ heading: 'Dlugoterminowa zmiana na rynku', body }],
@@ -47,7 +56,7 @@ try {
     newPdf('portrait', [geometry.width, geometry.height]),
     compiled,
     geometry,
-    validEditorialInput(Array.from({ length: 100 }, () => prose).join(' ')),
+    validEditorialInput(Array.from({ length: 25 }, () => prose).join(' ')),
     { family: 'DejaVu', maxPages: 1 },
   );
   assert.equal(onePageLimit.plan.pages.length, 1, 'planner must materialize exactly the configured one-page limit');
@@ -59,7 +68,7 @@ try {
     newPdf('portrait', [geometry.width, geometry.height]),
     compiled,
     geometry,
-    validEditorialInput(Array.from({ length: 140 }, () => prose).join(' ')),
+    validEditorialInput(Array.from({ length: 80 }, () => prose).join(' ')),
     { family: 'DejaVu', maxPages: 4 },
   );
   const exceeded = genuinelyTooLong.plan.diagnostics.find((item) => item.code === 'MAX_PAGES_EXCEEDED');

@@ -37,7 +37,7 @@ const sourceBuild = runProcess('npx', [
 if (sourceBuild.status !== 0) throw new Error(`composition image source bundle failed: ${sourceBuild.stderr || sourceBuild.stdout}`);
 
 try {
-  const { renderReportCompositionPdf } = await import(rendererBundle);
+  const { renderReportCompositionPdf, resolveReportCompositionOnly } = await import(rendererBundle);
   const { createSourceContext } = await import(sourceBundle);
   const imagePath = join(root, '..', 'examples/brand-showcase/brands/flux/assets/backgrounds/hero.png');
   const sourceContext = createSourceContext({
@@ -62,10 +62,16 @@ try {
 
   assert.equal(result.composition.evaluation.status, 'accepted', JSON.stringify(result.composition.evaluation));
   const image = result.drawings.find((drawing) => drawing.kind === 'image');
+  const imagePlacement = result.composition.plan.blockPlacements.find((placement) => placement.kind === 'image');
+  const caption = result.drawings.find((drawing) => drawing.kind === 'text' && drawing.text === 'Prepared asset');
   const boundary = result.composition.plan.graphicPlacements.find((graphic) => graphic.graphicId.endsWith(':boundary'));
   const afterLines = result.composition.plan.lines.filter((line) => line.blockId.endsWith(':part-2'));
   const afterLinesOnBoundarySlot = afterLines.filter((line) => line.page === boundary?.page && line.slotId === boundary?.slotId);
   assert.ok(image, 'composition backend did not draw the authored image');
+  assert.ok(imagePlacement?.imageBox && imagePlacement.captionBox, 'image plan must expose both image and caption geometry');
+  assert.ok(caption, 'caption must be materialized by the composition backend');
+  assert.ok(caption.x >= imagePlacement.captionBox.x && caption.x <= imagePlacement.captionBox.x + imagePlacement.captionBox.width, JSON.stringify({ caption, captionBox: imagePlacement.captionBox }));
+  assert.ok(caption.y >= imagePlacement.captionBox.y && caption.y <= imagePlacement.captionBox.y + imagePlacement.captionBox.height, JSON.stringify({ caption, captionBox: imagePlacement.captionBox }));
   assert.ok(boundary && boundary.paint === false, 'planner boundary must not be painted a second time');
   assert.ok(afterLines.length > 0, 'text after the image was not planned');
   assert.ok(afterLinesOnBoundarySlot.some((line) => line.box.x + line.box.width <= boundary.box.x), 'text beside the wrapped image must remain in the free interval');
@@ -79,6 +85,25 @@ try {
   const normalizedText = text.stdout.replace(/\s+/gu, ' ');
   assert.match(normalizedText, /Prepared asset/u);
   assert.match(normalizedText, /After the image/u);
+
+  const fallback = await resolveReportCompositionOnly('pages/editorial-two-column', legacyFixtureToCompositionInput({
+    title: 'Float fallback composition plan',
+    sections: [{
+      heading: 'Promote an oversized float',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'image', src: 'root://hero.png', alt: 'Oversized floating map', width: '90%', wrap: 'left' },
+          { type: 'text', text: 'This text must start below the image when the requested float leaves less than the configured minimum line width. '.repeat(4) },
+        ],
+      }],
+    }],
+  }), undefined, sourceContext);
+  assert.equal(fallback.evaluation.status, 'accepted', JSON.stringify(fallback.evaluation));
+  const fallbackPlacement = fallback.plan.blockPlacements.find((placement) => placement.kind === 'image');
+  const fallbackLines = fallback.plan.lines.filter((line) => line.blockId === 'section-1-body' && line.text.includes('This text must'));
+  assert.ok(fallbackPlacement?.imageBox && fallbackLines.length > 0, JSON.stringify({ fallbackPlacement, fallbackLineCount: fallbackLines.length }));
+  assert.ok(fallbackLines.every((line) => line.box.y >= fallbackPlacement.imageBox.y + fallbackPlacement.imageBox.height), JSON.stringify({ imageBox: fallbackPlacement.imageBox, fallbackLines }));
   console.log(JSON.stringify({
     status: 'passed',
     pages: result.composition.plan.pages.length,

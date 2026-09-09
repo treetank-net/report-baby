@@ -9,16 +9,17 @@ import { deflateSync } from 'node:zlib';
 import { loremIpsum } from 'lorem-ipsum';
 import { parse } from 'yaml';
 import { runProcess } from './lib/process.mjs';
+import { plannedLines } from './lib/editorial-numbered-plan-assertions.mjs';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-text-engine-'));
 const bundle = join(temporary, 'composition.cjs');
 const primitivesBundle = join(temporary, 'render-primitives.cjs');
 
-function plannedLines(plan) {
-  return [...plan.lines, ...(plan.insertionLines ?? [])];
-}
-
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function crc32(buffer) {
   let crc = 0xffffffff;
   for (const value of buffer) {
@@ -28,6 +29,10 @@ function crc32(buffer) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function pngChunk(type, data) {
   const typeBuffer = Buffer.from(type, 'ascii');
   const body = Buffer.concat([typeBuffer, data]);
@@ -38,6 +43,10 @@ function pngChunk(type, data) {
   return chunk;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function createBackgroundAsset(width, height, colorAt) {
   // The contrast fixture supplies a synthetic raster asset directly. It does
   // not rasterize the debug PDF; the later pdftoppm step is only for viewing
@@ -70,6 +79,10 @@ function createBackgroundAsset(width, height, colorAt) {
   return { width, height, raster: { width, height, channels: 3, pixels: raster }, data: `data:image/png;base64,${png.toString('base64')}` };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function splitBackgroundAsset(width, height) {
   return createBackgroundAsset(width, height, (x) => {
     const dark = x >= Math.floor(width * 0.56) && x < Math.floor(width * 0.72);
@@ -77,6 +90,10 @@ function splitBackgroundAsset(width, height) {
   });
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function gradientBackgroundAsset(width, height, stripeCount) {
   const white = [246, 246, 246];
   const navy = [38, 71, 108];
@@ -90,6 +107,10 @@ function gradientBackgroundAsset(width, height, stripeCount) {
   });
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function composeDebugPageRaster(width, height, pageBackground, placement, asset, fitContainBox, imagePixelAtPoint) {
   // This raster is an independent visual-QA image used by the assertions. It
   // mirrors the asset placement (including fit: contain) for inspection and
@@ -137,9 +158,17 @@ const primitivesBuild = runProcess('npx', [
 ], { cwd: root, timeout: 30_000 });
 if (primitivesBuild.status !== 0) throw new Error(`text composition render bundle failed: ${primitivesBuild.stderr || primitivesBuild.stdout}`);
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function decodePpm(buffer) {
   assert.equal(buffer.subarray(0, 2).toString('ascii'), 'P6', 'pixel QA must receive RGB PPM output');
   let offset = 2;
+  /**
+   * @test-decision plan-assertion
+   * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
+   */
   const token = () => {
     while (offset < buffer.length && /\s/u.test(String.fromCharCode(buffer[offset]))) offset += 1;
     if (buffer[offset] === 35) {
@@ -158,11 +187,19 @@ function decodePpm(buffer) {
   return { width, height, pixels: buffer.subarray(offset) };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function pixelAt(image, x, y) {
   const offset = (y * image.width + x) * 3;
   return [image.pixels[offset], image.pixels[offset + 1], image.pixels[offset + 2]];
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function inkProfileInBox(image, box, pageSize, qa) {
   const scaleX = image.width / pageSize.width;
   const scaleY = image.height / pageSize.height;
@@ -211,6 +248,10 @@ function inkProfileInBox(image, box, pageSize, qa) {
       previous.maxX = Math.max(previous.maxX, row.maxX);
     } else bands.push({ startY: row.y, endY: row.y, inkPixels: row.count, minX: row.minX, maxX: row.maxX });
   }
+  /**
+   * @test-decision visual-gate
+   * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+   */
   const toMm = (value, scale) => value / scale;
   return {
     status: count === 0 ? 'empty' : 'occupied',
@@ -232,6 +273,10 @@ function inkProfileInBox(image, box, pageSize, qa) {
   };
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function pdfWords(path) {
   const result = runProcess('pdftotext', ['-bbox-layout', path, '-']);
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -247,6 +292,10 @@ function pdfWords(path) {
   return words;
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 function assertPdfSpatialOrder(words, fixture, qa) {
   const tokenPattern = new RegExp(`^(?:${fixture.prefixes.join('|')})\\d{4}$`, 'u');
   const tokens = words.filter((word) => tokenPattern.test(word.text));
@@ -287,6 +336,10 @@ function assertPdfSpatialOrder(words, fixture, qa) {
   assert.equal(qa.minimum_ink_pixels > 0, true, 'pixel QA must require positive ink');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 async function writeNumberedPixelArtifacts(directory, result, document, artifact, pixelChecks) {
   if (!directory) return;
   await mkdir(directory, { recursive: true });
@@ -313,6 +366,10 @@ async function writeNumberedPixelArtifacts(directory, result, document, artifact
   if (document.graphics?.length === 0) throw new Error('numbered obstacle debug artifact lost its obstacle graphics');
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 async function writeMovableCandidateArtifacts(directory, candidates, document, createBackend, newPdf, renderComposition, evaluateCompositionPlan, renderConfig) {
   if (!directory) return;
   await mkdir(directory, { recursive: true });
@@ -351,6 +408,10 @@ async function writeMovableCandidateArtifacts(directory, candidates, document, c
   await writeFile(join(directory, 'movable-quote-candidates.json'), JSON.stringify(entries, null, 2));
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 async function writeMovableGraphicArtifacts(directory, candidates, document, createBackend, newPdf, renderComposition, evaluateCompositionPlan, renderConfig) {
   if (!directory) return;
   await mkdir(directory, { recursive: true });
@@ -400,9 +461,17 @@ async function writeMovableGraphicArtifacts(directory, candidates, document, cre
   await writeFile(join(directory, 'movable-graphic-candidates.json'), JSON.stringify(entries, null, 2));
 }
 
+/**
+ * @test-decision visual-gate
+ * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+ */
 async function writeContrastPlannerArtifacts(directory, candidates, document, contrastProvider, background, createBackend, newPdf, renderComposition, evaluateCompositionPlan, sampleCompositionContrast, fitContainBox, imagePixelAtPoint, renderConfig, selectedCandidate) {
   if (!directory) return;
   await mkdir(directory, { recursive: true });
+  /**
+   * @test-decision visual-gate
+   * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+   */
   const backgroundPlacementFor = (candidate) => candidate.graphicPlacements.find((graphic) => graphic.graphicId === 'contrast-background');
   const styles = {
     body: { fontSize: 10, lineHeight: 5, baselineOffset: 3.8, fontStyle: 'normal', textColor: [38, 71, 108] },
@@ -410,10 +479,18 @@ async function writeContrastPlannerArtifacts(directory, candidates, document, co
   };
   const contrastTargetRatio = renderConfig.contrast.body_minimum;
   const contrastQualityResponse = renderConfig.composition_score.contrast_quality_response;
+  /**
+   * @test-decision visual-gate
+   * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+   */
   const contrastQualityForRatio = (ratio) => {
     const signal = Math.max(0, (ratio - 1) / (contrastTargetRatio - 1));
     return signal / (signal + contrastQualityResponse);
   };
+  /**
+   * @test-decision visual-gate
+   * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
+   */
   const pointColorForQuality = (quality) => {
     const red = Math.round(220 + (30 - 220) * quality);
     const green = Math.round(20 + (150 - 20) * quality);
@@ -515,6 +592,10 @@ try {
   const { newPdf } = await import(primitivesBundle);
   const compositionRenderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
   let randomState = 0x5eed;
+  /**
+   * @test-decision plan-assertion
+   * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
+   */
   const random = () => {
     randomState = (1664525 * randomState + 1013904223) >>> 0;
     return randomState / 0x100000000;
@@ -1244,6 +1325,10 @@ try {
     'every numbered quote word must be painted in the insertion layer in source order',
   );
   assert.equal(numberedObstacle.plan.lines.some((line) => numberedQuoteWords.some((quote) => quote.id === line.blockId)), false, 'quote text must never masquerade as ordinary column flow');
+  /**
+   * @test-decision plan-assertion
+   * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
+   */
   const obstacleZones = (page) => Object.fromEntries(pixelFixture.expected_zones.map((zone) => [zone.id, numberedObstacleLines.filter((line) => {
     if (line.page !== page) return false;
     const lineRight = line.box.x + line.box.width;
@@ -1824,6 +1909,10 @@ try {
   assert.deepEqual(oversizedTable.plan.residualContent[0]?.remainingRows, { start: 0, end: 4 });
 
   const kpiSlots = ['metric-1', 'metric-2', 'metric-3'];
+  /**
+   * @test-decision plan-assertion
+   * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
+   */
   const kpiLayout = (id) => ({
     id,
     width: 100,
@@ -1835,6 +1924,10 @@ try {
     layouts: [kpiLayout('kpi-opening'), kpiLayout('kpi-continuation')],
     routes: { main: { slots: kpiSlots, slotsByLayout: { 'kpi-continuation': kpiSlots }, layouts: ['kpi-opening', 'kpi-continuation'], continuation: 'allowed' } },
   };
+  /**
+   * @test-decision plan-assertion
+   * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
+   */
   const metricDocument = (count) => ({
     flows: { main: { id: 'main', continuation: 'allowed', blocks: Array.from({ length: count }, (_, index) => ({ id: `metric-${index + 1}`, kind: 'metric', role: 'metric', atomic: true, metric: { label: `Metric ${index + 1}`, value: index + 1 } })) } },
   });

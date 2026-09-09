@@ -6,41 +6,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { loremIpsum } from 'lorem-ipsum';
-import { runProcess } from './lib/process.mjs';
 import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
+import { build } from 'esbuild';
 
 const root = process.cwd();
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-page-template-adapter-'));
-const compositionBundle = join(temporary, 'composition.cjs');
-const templateBundle = join(temporary, 'template.cjs');
-const geometryBundle = join(temporary, 'page-geometry.cjs');
-const buildComposition = runProcess('npx', [
-  'esbuild',
-  'src/composition/index.ts',
-  '--bundle',
-  '--platform=node',
-  '--format=cjs',
-  `--outfile=${compositionBundle}`,
-], { cwd: root, timeout: 30_000 });
-if (buildComposition.status !== 0) throw new Error(`page template adapter composition bundle failed: ${buildComposition.stderr || buildComposition.stdout}`);
-const buildTemplate = runProcess('npx', [
-  'esbuild',
-  'src/template/contracts.ts',
-  '--bundle',
-  '--platform=node',
-  '--format=cjs',
-  `--outfile=${templateBundle}`,
-], { cwd: root, timeout: 30_000 });
-if (buildTemplate.status !== 0) throw new Error(`page template adapter template bundle failed: ${buildTemplate.stderr || buildTemplate.stdout}`);
-const buildGeometry = runProcess('npx', [
-  'esbuild',
-  'src/template/geometry.ts',
-  '--bundle',
-  '--platform=node',
-  '--format=cjs',
-  `--outfile=${geometryBundle}`,
-], { cwd: root, timeout: 30_000 });
-if (buildGeometry.status !== 0) throw new Error(`page template adapter geometry bundle failed: ${buildGeometry.stderr || buildGeometry.stdout}`);
+const compositionBundle = join(temporary, 'composition/index.cjs');
+const templateBundle = join(temporary, 'template/contracts.cjs');
+const geometryBundle = join(temporary, 'template/geometry.cjs');
+await build({
+  entryPoints: ['src/composition/index.ts', 'src/template/contracts.ts', 'src/template/geometry.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  outdir: temporary,
+  outExtension: { '.js': '.cjs' },
+});
 
 try {
   const { compositionTemplateFromPageGeometry, compositionDocumentFromInput, createTextCompositionEngine } = await import(compositionBundle);
@@ -51,6 +32,10 @@ try {
   await rm(temporary, { recursive: true, force: true });
 }
 
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
+ */
 async function runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate }) {
   const source = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
   const compiled = compileTemplateSource(source);
@@ -203,6 +188,10 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   );
 
   let randomState = 0xface;
+  /**
+   * @test-decision plan-fixture-or-assertion
+   * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
+   */
   const random = () => {
     randomState = (1664525 * randomState + 1013904223) >>> 0;
     return randomState / 0x100000000;
