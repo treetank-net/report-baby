@@ -18,8 +18,8 @@ list, not a promise that every item is already solved.
     distinguishable from the placement and line-box frames. The same geometry
     is now consumed by ordinary text wrapping; the existing graphic exclusion
     lookup remains as a defensive collision check.
-- `CHROME header band` and `CHROME footer {page}/{pages}` — page chrome, not
-  editorial flow content.
+- `CHROME header band` and `CHROME footer {page}/{pages}` — debugowe etykiety
+  page chrome, nie publiczne placeholdery template'u ani treść editorial flow.
 - line boxes — the concrete rectangles where a particular flow line was
   painted; their labels are outside the rectangles so they cannot obscure the
   text being inspected.

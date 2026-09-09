@@ -42,7 +42,8 @@ opakować obecne zachowanie innymi nazwami.
    aktualizowana w tym samym kroku co zmiana kontraktu lub reguły. Plan release
    nie jest jedynym miejscem opisu systemu.
 7. Header i footer są zwykłymi powtarzalnymi flowami. Ich wysokość wynika z
-   zawartości i paddingów, a istniejące placeholdery `{{page.number}}` oraz
+   zawartości i paddingów w trybie `fit_content`; template może świadomie
+   wybrać stałą ramę. Istniejące placeholdery `{{page.number}}` oraz
    `{{page.count}}` pozostają kanonicznym kontraktem numeracji stron.
 
 ## Plany wykonawcze

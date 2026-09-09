@@ -94,7 +94,8 @@ wyliczania geometrii.
   tego samego fixture’u.
 - `test-report-chrome.mjs` sprawdza publiczny PDF na zmiennym main flow:
   kotwy header/footer/main względem planowanych placementów, regułę footera,
-  lockup na każdej stronie i numerację `{page} / {pages}`. Nie porównuje
+  lockup na każdej stronie i debugową etykietę numeracji `{page} / {pages}`.
+  Ta etykieta nie jest publicznym placeholderem template'u. Nie porównuje
   tekstowego hash-a całego artykułu, więc fixture może zmienić treść i łamanie.
 - Regresja `test:editorial-flow` przechodzi dla 506 fixture’ów po tej zmianie.
 

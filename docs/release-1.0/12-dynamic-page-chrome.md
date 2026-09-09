@@ -10,8 +10,10 @@ opisuje nowy kontrakt zachowania chrome opartego na rzeczywistej zawartości.
 ## Cel
 
 Elementy u góry i dołu strony mają być planowane tak samo jak pozostałe sloty,
-ale z jawną polityką powtarzania. Ich geometria nie może wynikać z pustego,
-stałego pasa zarezerwowanego w template'cie.
+ale z jawną polityką powtarzania i jawnym trybem wysokości. Stały box jest
+dozwolonym wyborem template'u; problemem jest tylko ukryty, stały pas, który
+ogranicza `main`, mimo że template nie zadeklarował takiego chrome. Tryb
+`fit_content` ma wyliczać geometrię z zawartości zamiast z pustej ramy.
 
 Docelowy przepływ dla każdej strony:
 
@@ -114,20 +116,25 @@ Warto zachować ten wygląd jako punkt odniesienia:
 ### Kontrakt po migracji
 
 Lockup jest jednym złożonym slotem/grupą headera, a nie dwoma niezależnymi
-flowami. Wewnątrz ma dwa opcjonalne content bounds:
+flowami. Jego kanoniczny model ma dwa opcjonalne content bounds:
 
 ```text
 lockup group
   → mark (asset, opcjonalny)
-  → gap_mm (tylko gdy mark i name istnieją)
-  → name (tekst brandu, opcjonalny)
+  → gap_mm (tylko gdy mark i label istnieją)
+  → label (tekst marki/opis marki, opcjonalny)
 ```
+
+`mark` oznacza referencję do assetu, a `label` oznacza tekst obok znaku.
+Nie wprowadzamy równoległych pól `name`, `asset` ani `description` na tym
+samym poziomie. Obecna nazwa marki jest mapowana na `label`; obecny uppercase
+pozostaje stylem wariantu, a nie ograniczeniem semantycznym pola.
 
 Jego rozmiar wylicza jeden kalkulator:
 
 ```text
-group.width  = mark.width + gap + name.width
-group.height = max(mark.height, name.height)
+group.width  = mark.width + gap + label.width
+group.height = max(mark.height, label.height)
                + padding_top + padding_bottom
 ```
 
@@ -161,13 +168,13 @@ flows:
 
 slots:
   header-lockup:
-    kind: lockup
+    type: lockup
     fit_content: true
   header-period:
-    kind: text
+    type: text
     fit_content: true
   header-title:
-    kind: text
+    type: text
     fit_content: true
 ```
 
@@ -217,7 +224,7 @@ flows:
 
 slots:
   footer-page-number:
-    kind: text
+    type: text
     text: "{{page.number}} / {{page.count}}"
     fit_content: true
 ```
@@ -234,8 +241,8 @@ flows:
 
 slots:
   sidebar-lockup:
-    kind: lockup
-    asset: brand-mark
+    type: lockup
+    mark: brand-mark
     label: "ACME Logistics"
     fit_content: true
 ```
@@ -243,6 +250,29 @@ slots:
 Powyższe przykłady są docelowym kontraktem planera; nie oznaczają jeszcze
 istniejącej składni parsera. Wartości odstępów, paddingów i limitów pozostają
 w `server/templates/render-config.yml`, a nie w literalach TypeScriptu.
+
+### Źródło zawartości i stare struktury danych
+
+Nie tworzymy osobnego modelu danych tylko dla chrome. Dotychczasowe pola
+`title`, `header`, `footer`, `brand`, `subtitle` i `period` pozostają źródłem
+treści. Adapter normalizuje je do nazwanych flowów (`title`, `header`,
+`footer`), a template decyduje, które sloty i layouty przyjmują te flowy.
+W ten sposób stare dane nadal opisują *co* ma zostać pokazane, natomiast flow
+template'u opisuje *gdzie i w jakiej kolejności* ma to zostać ułożone.
+
+W slotach tekstowych dopuszczamy ograniczone, tylko do odczytu zmienne ścieżki
+do znormalizowanych flowów, na przykład:
+
+```text
+{{flow.title.blocks[0].text}}
+```
+
+Taka ścieżka jest projekcją treści do wskazanego slotu, a nie drugim przebiegiem
+tego flowu. Nie pozwalamy na dowolne wywołania ani dowolny dostęp do obiektu.
+Brak opcjonalnego źródła zwija slot; brak źródła wymaganego przez template
+kończy się diagnostyką i odrzuceniem kandydata. Ten sam blok nie może być
+jednocześnie wyświetlany przez projekcję i przez zwykły slot na tej samej
+stronie.
 
 Domyślne `gap_mm` raportowego lockupu zachowujemy bez zmiany wizualnej.
 Pierwszy przebieg migracji nie dodaje drugiego, niezależnego źródła odstępu.
@@ -280,6 +310,10 @@ W punkcie 12 „wpływ chrome na `main`” oznacza zatem zmianę granicy dostęp
 ### Header i footer
 
 - header i footer są zwykłymi flowami z `repeat: each-page`;
+- `repeat: each-page` jest oceniane po wyborze layoutu strony. Powtarzalny
+  flow otrzymuje instancję tylko na stronie, której layout znajduje się na
+  białej liście `CompositionFlowRoute.layouts` i ma sloty w
+  `slotsByLayout`;
 - sloty powtarzalnego flow są rozpatrywane przed `main` na każdej stronie;
 - wymagane elementy mają pierwszeństwo przed soft insertionami, a soft
   insertiony przed `main` tylko w zakresie zadeklarowanej polityki strony;
@@ -287,6 +321,23 @@ W punkcie 12 „wpływ chrome na `main`” oznacza zatem zmianę granicy dostęp
   pozostają właściwościami flow/template'u, nie wyjątkami w rendererze;
 - powtarzalny flow nie tworzy samowolnie nowych stron tylko dlatego, że jest
   powtarzany; `ensurePage` stosuje zwykłe reguły legalności i limitów.
+
+`template_ref` wybiera obecnie jeden skompilowany template dla całego
+przebiegu composition, więc repeat nie może przypadkiem przejść do innego
+template'u. Biała lista layoutów w route jest wystarczającym mechanizmem
+wyjątków dla stron tytułowych i continuation. Dopiero gdy dokument będzie mógł
+łączyć różne `template_ref` na poszczególnych stronach, dodamy analogiczną,
+obowiązkową białą listę template'ów; nie wprowadzamy globalnego wyjątku po
+stronie renderer'a.
+
+Przykład zakresu powtarzania dla obecnego modelu:
+
+| `template_ref` | layout strony | instancja `header` |
+|---|---|---|
+| `pages/showcase-report` | `pages/showcase-report:title` | nie, route headera nie obejmuje strony tytułowej |
+| `pages/showcase-report` | `pages/showcase-report:first` | tylko jeśli route jawnie ma ten layout |
+| `pages/showcase-report` | `pages/showcase-report:continuation` | tak, jeśli layout jest na białej liście route'u |
+| inny `template_ref` | dowolny jego layout | nie dziedziczy headera z `pages/showcase-report` |
 
 ### Wysokość zależna od treści
 
@@ -301,9 +352,11 @@ W punkcie 12 „wpływ chrome na `main`” oznacza zatem zmianę granicy dostęp
   bez zmiany ich kolejności;
 - `fit_content`, wzrost i maksymalna wysokość są właściwościami slotu/layoutu,
   a nie specjalnym kodem `pageChrome`;
-- w trybie stałym przekroczenie ramy podlega polityce slotu (`reject` albo
-  jawnie dozwolone `shrink-to-fit`); tryb zmienny nie może być domyślnym
-  fallbackiem dla przepełnienia stałego slotu;
+- `overflow` zawsze pochodzi z definicji slotu template'u. `fit_content`
+  określa, czy box może rosnąć, a `overflow` określa reakcję po przekroczeniu
+  ramy lub limitu; brak deklaracji normalizujemy do `reject`. `shrink-to-fit`
+  działa wyłącznie wtedy, gdy template jawnie go wybierze, i nie jest
+  fallbackiem kodu planera;
 - przekroczenie maksymalnej wysokości, dolnej granicy strony albo twardego
   obstacle'u odrzuca kandydat jako nielegalny; nie wolno ściskać `main`, aby
   ukryć naruszenie;
@@ -326,6 +379,23 @@ Każdy z tych elementów musi mieć wskazane źródło geometrii: slot flowu,
 wyliczoną grupę headera albo jawnie zdefiniowaną dekorację template'u. Nie
 utrzymujemy drugiego, ukrytego prostokąta, który niezależnie ogranicza `main`.
 
+## Strategia migracji testów
+
+Istniejące testy często sprawdzają wysokość stałego headera. Nie usuwamy tego
+założenia mechanicznie. Każdy fixture otrzymuje jedną z dwóch jawnych
+klasyfikacji:
+
+| Rodzaj fixture'u | Ustawienie | Asercja |
+|---|---|---|
+| testuje geometrię zależną od zawartości | `fit_content: true` | początek `main` i kolejne sloty wynikają z boxa zmierzonego headera |
+| testuje konkretny stały band/template | `fit_content` pominięte, stała rama | zachowana wysokość i granica zadeklarowana przez template |
+
+Test nie może przypadkiem sprawdzać stałej wysokości tylko dlatego, że zna
+historyczny offset renderera. Oczekiwany offset należy wyprowadzać z planu
+(`slotBoxes`, obstacle albo wynikowej granicy chrome). Stała rama pozostaje
+tam, gdzie jej zachowanie jest istotą testu, np. regresja konkretnego
+template'u, a nie jako domyślne założenie wszystkich testów.
+
 ## Zmienne generowane stron
 
 Zachowujemy istniejącą składnię placeholderów:
@@ -339,17 +409,19 @@ Obie zmienne są dostępne w każdym tekstowym slocie, także w headerze,
 footerze i innych powtarzalnych flowach. Nie wprowadzamy aliasów `{page}` ani
 `{numberOfPages}`. `pageCount` pozostaje lokalną nazwą implementacyjną.
 
-Placeholdery są rozwiązywane po ustaleniu finalnego zaakceptowanego planu.
-Jeżeli ich podstawienie może zmienić łamanie tekstu, pomiar musi uwzględnić
-rozmiar wygenerowanego tekstu albo zastosować drugi, jawny przebieg
-finalizacji. Nie wolno renderować innego tekstu niż ten, którego szerokość
-została użyta do decyzji o legalności.
+`{{page.number}}` i `{{page.count}}` są podstawiane po ustaleniu finalnego
+zaakceptowanego planu, ale ich box jest mierzony wcześniej z szerokością
+rezerwowaną dla największej dozwolonej liczby stron (`maxPages`). Dzięki temu
+nie wprowadzamy drugiej iteracji planera tylko dlatego, że `9` zmieniło się na
+`10`. Pomiar i render korzystają z tego samego kalkulatora szerokości; jeżeli
+plan przekroczyłby skonfigurowany limit stron, jest odrzucany jak każdy inny
+plan poza limitem.
 
 Przykładowe deklaracje:
 
 ```text
 footer text: "{{page.number}} / {{page.count}}"
-header text: "{{section.title}} — {{page.number}} / {{page.count}}"
+header title source: "{{flow.title.blocks[0].text}}"
 ```
 
 Numer strony nie powinien być dodatkowo składany jako `${page} / ${pageCount}`
@@ -365,8 +437,8 @@ w rendererze, jeżeli template deklaruje go jako slot tekstowy.
 | krótki tytuł | jedna linia, wspólne paddingi, brak pustej nadmiarowej wysokości |
 | długi tytuł | zawinięcie i wzrost slotu; kolejne insertiony oraz `main` przesuwają się w dół |
 | tytuł przekracza maksymalną wysokość | kandydat odrzucony z diagnostyką, bez kompresowania treści |
-| `{{page.number}}` zmienia szerokość z `9` na `10` | pomiar i render używają tego samego rozwiązania placeholdera |
-| `{{page.count}}` nie jest jeszcze znane | pozostaje nierozwiązane do finalizacji; planer nie udaje wartości końcowej |
+| `{{page.number}}` zmienia szerokość z `9` na `10` | box był mierzony z rezerwą `maxPages`; render używa tego samego kalkulatora |
+| `{{page.count}}` nie jest jeszcze znane | box ma zarezerwowaną szerokość `maxPages`, a finalna liczba jest podstawiana po akceptacji planu |
 | footer bez treści | footer nie tworzy pustej ramy, chyba że template wymaga minimum |
 | footer z numerem strony | zwykły powtarzalny slot tekstowy z istniejącymi placeholderami |
 | pierwsza strona bez headera | wynika z `start_page`/layoutu, a nie z warunku w rendererze |
