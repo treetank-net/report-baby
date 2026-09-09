@@ -500,6 +500,34 @@ uruchamiamy jeden reprezentatywny smoke. Dopiero potem można usunąć stare
 wywołania renderera. Samo połączenie plików bez wspólnego fixture’a nie jest
 scaleniem i nie obniży kosztu.
 
+### Pomiar po pierwszej serii scaleń
+
+Poniższe czasy pochodzą z bezpośrednich uruchomień pojedynczych skryptów poza
+`test-harness` (host, 2026-09-09). Są orientacyjne, bo zależą od obciążenia i
+throttlingu CPU:
+
+| Skrypt | Czas | Wynik | Zmiana/scalenie |
+|---|---:|---|---|
+| `test-composition-report-data-adapter.mjs` | 0,19 s | PASS | dwa bundlowania → jeden build wielowejściowy |
+| `test-template-flow-contract.mjs` | 0,10 s | PASS | dwa bundlowania → jeden build |
+| `test-report-plan.mjs` | 0,17 s | PASS | trzy bundlowania → jeden build |
+| `test-page-template-adapter.mjs` | 4,27 s | PASS | trzy bundlowania → jeden build |
+| `test-composition-page-limits.mjs` | 5,40 s | PASS | cztery bundlowania → jeden build; mniejsze fixture’y |
+| `test-editorial-flow.mjs` | 13,32 s | PASS | 24 warianty plan-only + 2 PDF reprezentanty |
+| `test-editorial-numbered-flow.mjs` | 30,60 s | PASS | jeden backend smoke; raster/PDF parity opt-in |
+| `test-dynamic-insertion-public.mjs` | 5,91 s | PASS | bezpośredni MCP contract, 7 insertion lines, 4 strony |
+| `test-cli.mjs` | 6,32 s | PASS | pięć requestów render/dry-run w jednej partii |
+| `test-report-images.mjs` | 31,77 s | PASS | jeden PDF dla PNG/WebP/AVIF/float/ZIP; bez raster QA |
+| `test-report-composition-adapter.mjs` | 4,42 s | PASS | jeden adapter smoke dla tekstu, tabeli, chartu i grafiki |
+| `test-report-composition-image.mjs` | 4,86 s | PASS | jeden image boundary/caption plan + backend smoke |
+| `test-report-chrome.mjs` | 6,33 s | PASS | jeden PDF chrome |
+
+Agentowe pomiary tej samej serii mieściły się w granicach: page-template
+5,55 s, page-limits 7,91 s, editorial flow 16,93 s, CLI 6,69 s, report images
+33,34 s, composition adapter 6,05 s i composition image 5,29 s. Różnica nie
+oznacza regresji; jest spodziewaną zmiennością środowiska. Nie uruchamiano
+`npm run test` ani testów, które uruchamiają inne testy.
+
 Weryfikacja statyczna po audycie wykazała 227 nazwanych funkcji w tych skryptach
 i współdzielonych helperach oraz jeden nazwany callback właściwości MCP; 0
 deklaracji pozostało nieoznaczonych. Same komentarze nie zmieniają ścieżki
