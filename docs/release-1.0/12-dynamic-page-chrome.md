@@ -201,9 +201,11 @@ header_layout:
   - stack: [header-title]
 ```
 
-To nadal jest jeden `header` flow: `row` i `stack` są sposobem ułożenia jego
-slotów, a nie kolejnymi flowami ani konkurencyjnymi wariantami pierwszej
-strony. Kalkulator mierzy każdy slot, następnie mierzy wiersze/stosy i zwraca
+To jest zapis poglądowy, a nie drugi format konfiguracji. Jedyną kanoniczną
+deklaracją pozostają `flows.header.slots` oraz ramy i kolejność slotów w
+template'cie; poziome ułożenie wynika z ich relacji geometrycznej. Nie dodajemy
+na tym etapie osobnego pola parsera `header_layout`. Nadal jest to jeden
+`header` flow, a kalkulator mierzy sloty zgodnie z istniejącymi ramami i zwraca
 jedną granicę headera dla `main`.
 
 Jeżeli tytuł urośnie do dwóch linii, rośnie tylko jego slot oraz wynikowa
