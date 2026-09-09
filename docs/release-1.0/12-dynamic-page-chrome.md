@@ -37,6 +37,10 @@ jest polityka cyklu życia, a nie osobny mechanizm layoutu lub pomiaru.
   z `reserved_bands.header` i buduje numer strony poza tekstowym flow;
 - template'y `showcase-report` i `showcase-report-band` mają osobny flow
   `header`, ale jego slot tytułu jest obecnie stałą ramą;
+- większość template'ów `pages/editorial-*` oraz `default-report` deklaruje
+  tylko `reserved_bands.header` i `reserved_bands.footer`, bez tekstowego
+  flowu `header`; brand/logo pojawia się wtedy wyłącznie z rendererowego
+  chrome;
 - `document-layout.ts` planuje zwykłe flow przed powtarzanymi flowami, więc
   dynamiczny header nie może jeszcze przesuwać wcześniej ułożonego `main`;
 - backend obsługuje istniejące placeholdery `{{page.number}}` i
@@ -44,6 +48,104 @@ jest polityka cyklu życia, a nie osobny mechanizm layoutu lub pomiaru.
   implementacyjnym;
 - `reserved_bands.header` pozostaje przejściowym źródłem geometrii, dopóki
   planowanie headera nie przejmie jego odpowiedzialności.
+
+## Audyt aktualnych definicji chrome
+
+Ta migracja nie ma zachowywać backward compatibility wewnętrznych funkcji ani
+starych ścieżek kodu. Ma zachować dotychczasowy wygląd i znaczenie dokumentu,
+o ile nie zmieniamy tego świadomie w nowym kontrakcie. Obecne źródła chrome są
+rozproszone:
+
+| Źródło | Co definiuje obecnie | Rola docelowa |
+|---|---|---|
+| `page.reserved_bands.header/footer` | stały obszar odejmowany od segmentów flow | wynikowa granica geometrii, wyliczana z aktywnych slotów headera/footera |
+| `slots.header`, `header-period` | tekstowe ramy nagłówka w `showcase-report*` | zwykłe sloty powtarzalnego flow, mierzone przed `main` |
+| `slots.header-lockup` | zarezerwowany box typu `lockup` | grupa logo + nazwa marki, której geometria jest widoczna w planie |
+| `flows.header` | powtarzanie headera od zadeklarowanej strony | jedyna reguła specjalna: `repeat: each-page` |
+| `slots.footer` + `flows.footer` | stały slot i powtarzany footer | zwykły powtarzalny flow z wygenerowanymi placeholderami |
+| `CompositionPagePlan.chrome` | ramy header band, reguły, footer, numer strony i lockup | projekcja wynikowej geometrii do rendererów |
+| `pageChrome()` / `drawReportChrome()` | stałe bandy, logo, brand name, reguły i `${page} / ${pageCount}` | renderer dekoracji; bez osobnego właściciela geometrii treści |
+| `pdf.header_*` | mieszanka aktywnych wartości i historycznych fallbacków | tylko wartości używane przez nowy seam; reszta do usunięcia po testach |
+| `chrome.report_lockup.*` | rozmiar logo, rozmiar nazwy, wyrównanie i `gap_mm` | domyślny styl wewnętrznego layoutu lockupu |
+
+`chrome.lockup.*` w tym samym `render-config.yml` dotyczy slajdów (PPTX/SVG),
+nie raportowego page chrome. Nie należy mieszać tych dwóch układów w jednym
+module; można jedynie zachować zgodną semantykę odstępu.
+
+### Co jest aktywne, a co przejściowe
+
+- Aktywnym kontraktem composition są named flows, sloty, `repeat`,
+  `fit_content`, `grow`, reserved bands i wynikowe placementy.
+- Aktywnym źródłem wizualnego odstępu raportowego lockupu jest obecnie
+  `chrome.report_lockup.standard.gap_mm` lub wariant `continuation`, używany
+  bezpośrednio przez `drawReportChrome()`.
+- `CompiledTemplateSlot.gap` jest parsowany wyłącznie dla slotu `lockup`, ale
+  adapter composition nie przekazuje go do `CompositionSlotTemplate`, a
+  raportowy renderer go nie odczytuje. Nie wolno udawać, że template już
+  kontroluje ten odstęp.
+- `PDF_CONFIG.headerBandHeight`, `headerRepeatBandHeight`, `headerTitleTop`,
+  `headerBandTitleTop`, `headerRepeatTopLineY` i `headerRepeatTitleY` są
+  kandydatami do usunięcia lub scalenia po dodaniu nowego kalkulatora. Ich
+  obecność w YAML nie oznacza, że każdy wpływa na raportowy composition.
+- `pageChrome()` ma fallback do `PDF_CONFIG.headerBandHeight`, nawet gdy dany
+  layout nie deklaruje bandu headera. To jest źródło pustej przestrzeni, a nie
+  wymaganie nowego modelu.
+
+## Lockup: logo, nazwa marki i odstęp
+
+### Zachowanie obecne
+
+Raportowy renderer wybiera wariant `standard` albo `continuation` z
+`chrome.report_lockup`. Logo jest dopasowywane przez `drawContainedImage()` do
+`mark_width_mm` albo `full_logo_width_mm` i `max_height_mm`. Nazwa marki jest
+rysowana obok rzeczywiście wyrenderowanej szerokości logo z odstępem
+`gap_mm`, a jej baseline jest wyrównywany względem wysokości logo.
+
+Warto zachować ten wygląd jako punkt odniesienia:
+
+- wariant standardowy i continuation mogą mieć różne wymiary oraz font;
+- wyrównanie domyślne pozostaje `middle`;
+- odstęp jest poziomy i liczony od faktycznego bounds logo, nie od pustej ramy;
+- nazwa marki jest uppercase, tak jak obecnie;
+- jeżeli asset logo nie istnieje, obecny renderer nadal rezerwuje jego
+  domyślne wymiary. W nowym kontrakcie ten przypadek powinien zwijać brakujący
+  element zamiast tworzyć niewidoczny odstęp.
+
+### Kontrakt po migracji
+
+Lockup jest jednym złożonym slotem/grupą headera, a nie dwoma niezależnymi
+flowami. Wewnątrz ma dwa opcjonalne content bounds:
+
+```text
+lockup group
+  → mark (asset, opcjonalny)
+  → gap_mm (tylko gdy mark i name istnieją)
+  → name (tekst brandu, opcjonalny)
+```
+
+Jego rozmiar wylicza jeden kalkulator:
+
+```text
+group.width  = mark.width + gap + name.width
+group.height = max(mark.height, name.height)
+               + padding_top + padding_bottom
+```
+
+W trybie stałym grupa respektuje box template'u i overflow policy. W trybie
+`fit_content` box rośnie do pomierzonego contentu, ale nigdy poza `max_width`
+i `max_height` z konfiguracji. Brak jednego z elementów nie pozostawia jego
+fikcyjnych wymiarów ani odstępu.
+
+Opis marki, okres i tytuł headera pozostają osobnymi slotami tylko wtedy, gdy
+template chce je niezależnie pozycjonować. Ich kolizja z rozrastającym się
+lockupem jest błędem geometrii, a nie powodem do cichego zmniejszania tekstu.
+
+Domyślne `gap_mm` raportowego lockupu zachowujemy bez zmiany wizualnej.
+Pierwszy przebieg migracji nie dodaje drugiego, niezależnego źródła odstępu.
+Jeżeli później template ma świadomie nadpisywać gap, istniejące pole `gap`
+trzeba jawnie przeprowadzić przez adapter i opisać jego priorytet względem
+`chrome.report_lockup`; nie wolno pozostawić pozornie działającej, ignorowanej
+definicji.
 
 ### Chrome a „zgniatanie” `main` w obecnej implementacji
 
@@ -84,14 +186,20 @@ W punkcie 12 „wpływ chrome na `main`” oznacza zatem zmianę granicy dostęp
 
 ### Wysokość zależna od treści
 
+- Domyślny tryb pozostaje stały: pominięte `fit_content` oznacza, że slot
+  respektuje ramę template'u. Zmienny tryb jest jawnym `fit_content: true` i
+  nie może zostać włączony samym pojawieniem się dłuższego tekstu.
 - pusty header nie zajmuje miejsca, chyba że template jawnie deklaruje
-  niezerowe minimum, np. dla lockupu marki;
+  niezerowe minimum, np. dla lockupu marki, albo działa w stałym trybie;
 - niepusty header otrzymuje wysokość zmierzonej zawartości plus wspólny
   `padding-top` i `padding-bottom` z konfiguracji renderowania;
 - zawinięty tytuł zwiększa wysokość headera, a następne sloty są przesuwane
   bez zmiany ich kolejności;
 - `fit_content`, wzrost i maksymalna wysokość są właściwościami slotu/layoutu,
   a nie specjalnym kodem `pageChrome`;
+- w trybie stałym przekroczenie ramy podlega polityce slotu (`reject` albo
+  jawnie dozwolone `shrink-to-fit`); tryb zmienny nie może być domyślnym
+  fallbackiem dla przepełnienia stałego slotu;
 - przekroczenie maksymalnej wysokości, dolnej granicy strony albo twardego
   obstacle'u odrzuca kandydat jako nielegalny; nie wolno ściskać `main`, aby
   ukryć naruszenie;
@@ -147,7 +255,8 @@ w rendererze, jeżeli template deklaruje go jako slot tekstowy.
 
 | Przypadek | Oczekiwane zachowanie |
 |---|---|
-| brak tytułu, brak lockupu | header zwija się do zera; `main` zaczyna się od zwykłej pozycji contentu |
+| brak tytułu, brak lockupu, tryb zmienny | header zwija się do zera; `main` zaczyna się od zwykłej pozycji contentu |
+| brak tytułu, tryb stały | zostaje zadeklarowana pusta rama; jest to świadomy wybór template'u |
 | brak tytułu, lockup marki | pozostaje tylko zadeklarowane minimum lockupu i jego paddingi |
 | krótki tytuł | jedna linia, wspólne paddingi, brak pustej nadmiarowej wysokości |
 | długi tytuł | zawinięcie i wzrost slotu; kolejne insertiony oraz `main` przesuwają się w dół |
@@ -162,6 +271,12 @@ w rendererze, jeżeli template deklaruje go jako slot tekstowy.
 | header wypycha `main` poza stronę | kandydat nielegalny albo tworzona jest następna strona według zwykłych reguł |
 | strona zawiera wyłącznie chrome | nie tworzymy pustej strony kontynuacyjnej bez wymaganej treści |
 | debug PDF i zwykły PDF | obie ścieżki korzystają z tych samych boxów wynikowego planu |
+| logo + nazwa marki | lockup zachowuje wariantowy `gap_mm` i pionowe wyrównanie względem rzeczywistego logo |
+| logo bez nazwy marki | grupa zawiera tylko logo; nie ma pustego końcowego gapu |
+| nazwa marki bez logo | grupa zawiera tylko tekst; nie rezerwuje niewidocznej szerokości logo |
+| długi opis/nazwa marki | szerokość jest mierzona; przekroczenie limitu kończy się `shrink-to-fit` albo odrzuceniem zgodnie z polityką slotu |
+| standard vs continuation | każdy wariant zachowuje własny rozmiar logo, font, wysokość maksymalną i gap |
+| lockup koliduje z `header-period` | kandydat jest nielegalny; nie przesuwamy tekstu poza zadeklarowany slot bez reguły layoutu |
 
 ## Kolejność implementacji
 

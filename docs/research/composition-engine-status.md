@@ -18,8 +18,8 @@ for migration context, not as an implementation requirement.
 | headings and block order | yes | yes | yes, public editorial route | spacing/keep parity pending |
 | multi-page continuation | yes | yes | yes, public editorial route with opening/continuation geometry | page-flow parity pending |
 | growing ordinary box and pushed columns | yes | yes | yes in prototype seam | no: arbitrary dependency solver pending |
-| footer flow | yes, if template declares it | yes | yes as a repeated flow; line and page number remain transitional chrome | no: full header/footer parity pending |
-| title/subtitle/period/brand chrome | named flows; template `lockup` slots reserve the brand box | yes, where the template declares routes | public planner route; lockup geometry is reserved by the plan, while the rule and page label remain renderer chrome | repeated chrome parity still pending |
+| footer flow | yes, if template declares it | yes | yes as a repeated flow; line and page number remain transitional chrome | no: full header/footer parity is tracked in [release plan 12](../release-1.0/12-dynamic-page-chrome.md) |
+| title/subtitle/period/brand chrome | named flows; template `lockup` slots reserve the brand box | yes, where the template declares routes | public planner route; lockup geometry is reserved by the plan, while background, brand name, rule and page label remain renderer chrome | repeated chrome parity is tracked in [release plan 12](../release-1.0/12-dynamic-page-chrome.md) |
 | title page | `title` flow plus title-page slots | yes | public planner route with forbidden continuation | broader title-page parity corpus pending |
 | KPI, chart, table | semantic blocks | KPI/chart/table in declared block slots | public planner route with PDF/PNG/PPTX or PDF artifact gates | broader brand parity pending |
 | authored images and captions | normalized asset records yes | atomic image block in ordinary flow slots | public planner route with boundary/wrap and PNG checks | broader multi-image/brand parity pending |
@@ -115,10 +115,12 @@ must be declared explicitly by a different template.
 `renderReportCompositionShadowPdf` remains its compatibility name for the
 prototype harness. A `render_report` call plans and evaluates named flows,
 including title, header and footer flows, before the jsPDF adapter draws them.
-The remaining renderer-owned chrome is deliberately limited to the rule and
-page label. There is no production report-data translator or legacy fallback
-in the MCP/CLI path; old stories are retained only in test-only corpora until
-their fixture inputs are rewritten.
+The current report renderer still owns the header background, report lockup and
+brand name, rule, and page label. Their migration to content-driven repeated
+flow geometry is tracked in [release plan 12](../release-1.0/12-dynamic-page-chrome.md).
+There is no production report-data translator or legacy fallback in the MCP/CLI
+path; old stories are retained only in test-only corpora until their fixture
+inputs are rewritten.
 
 For a page flow, `slots` describes the opening layout and optional
 `continuation_slots` describes the layout used after that flow crosses a page
@@ -237,6 +239,11 @@ report renderer paints the brand mark and name inside that box. Header text is
 therefore planned against the lockup instead of relying on an implicit
 renderer coordinate. This keeps automatic brand content simple for callers
 while making its occupied area visible to collision checks.
+The current report lockup uses `chrome.report_lockup.*.gap_mm` in the renderer
+for the distance between the actual logo bounds and the brand name. The
+template slot's optional `gap` is parsed but is not yet part of report
+composition geometry; the single-source, content-sized lockup contract is
+specified in [release plan 12](../release-1.0/12-dynamic-page-chrome.md).
 If a future product requirement needs a clipped or transformed asset, that is
 an asset-preparation concern before planning, where a dedicated raster/vector
 library can produce the final PNG; it is not a jsPDF-kernel capability.
