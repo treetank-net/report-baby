@@ -62,27 +62,38 @@ represented as a one-item metrics block when needed.
 
 ## Template
 
-A template is a reusable page-composition contract. It defines page layouts,
+A template is a reusable page-composition contract. It defines page geometry,
 named regions, accepted flows, continuation routes, defaults and overflow
 policies. A template decides where content may go; authored content does not
 normally contain coordinates.
 
 ## Layout
 
-A layout is one concrete page arrangement supplied by the template selected for
-one page. Different pages of the same document may use different templates and
-therefore different layouts.
+A layout is the document-level declaration of how one document is assembled
+from page templates. In the current contract it is an ordered array of
+template assignments to page ranges; if layout rules become more complex, the
+same concept may become an object containing that array and additional rules.
+There is one layout for a document, not a set of competing layouts.
 
-Pages in the same scheduled range reuse the same layout and slot names. A
-change of page template is a page-schedule decision, not a continuation-specific
-slot or frame.
+The public declaration uses the singular name `layout`; `layouts` is not a
+second domain concept for the same document arrangement.
 
-## Page-template schedule
+Each layout entry combines a page range with a template reference. It is an
+entry in the declaration, not a separate domain entity.
 
-The page-template schedule maps page numbers or page ranges to template
-identifiers. For example, page 1 may use template X, pages 2–5 template Y,
-and pages 6–8 template Z. The selected template supplies the layout, chrome,
-regions and slot geometry for that page.
+The concrete geometry of a page belongs to its selected template. `pageLayout`
+is not a separate domain concept.
+
+Pages in the same layout range reuse the same template and slot names. A
+change of template between ranges is a layout decision, not a
+continuation-specific slot or frame.
+
+## Template selection
+
+The layout maps page numbers or page ranges to template identifiers. For
+example, page 1 may use template X, pages 2–5 template Y, and pages 6–8
+template Z. The selected template supplies the page geometry, chrome, regions
+and slot geometry for that page.
 
 A flow continues into a later page when its continuation policy permits the
 move and the selected template exposes the same named destination slot. There
@@ -178,8 +189,9 @@ reject a plan; preferred constraints may produce a warning or an alternative.
 
 ## Plan
 
-A plan is the deterministic proposed composition: selected layouts, slots,
-placements, line positions, flow continuations and decisions. It
+A plan is the deterministic proposed composition: selected templates and their
+page assignments, slots, placements, line positions, flow continuations and
+decisions. It
 is an intermediate result, not a PDF.
 
 ## Evaluator

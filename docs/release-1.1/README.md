@@ -28,6 +28,7 @@ change the completed 1.0 plan.
 | [08-diagnostics-and-remediation.md](08-diagnostics-and-remediation.md) | explanatory diagnostics, actionable remedies, and skill/CLI/MCP guidance | Release 1.0 test and planner follow-up |
 | [09-pdf-aesthetic-rules.md](09-pdf-aesthetic-rules.md) | measurable PDF spacing rules, dynamic intro/header behavior, and aesthetic evaluator feedback | editorial artifact review |
 | [10-empty-space-and-placement-optimization.md](10-empty-space-and-placement-optimization.md) | detect unexplained whitespace and choose better legal placements using plan geometry | editorial artifact review |
+| [11-document-layout-contract.md](11-document-layout-contract.md) | replace `page_template_schedule` and route-level `layouts` with one document `layout` that assigns templates to page ranges | terminology and ownership follow-up to 02 |
 | [runtime-plan-annotations.md](runtime-plan-annotations.md) | runtime-only plan decisions, traces, diagnostics, and their lifecycle | 02 layout migration |
 
 Each document remains a proposal until a separate decision is made about its
