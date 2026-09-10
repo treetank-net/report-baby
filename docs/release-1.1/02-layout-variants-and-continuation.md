@@ -1,6 +1,13 @@
 # Release 1.1 — page-template schedule without `continuation_*`
 
-Status: direction accepted; implementation has not started.
+Status: implemented and verified.
+
+The migration is complete: page schedules now select ordinary page templates,
+legacy `continuation_slots`/`continuation_frame` fields are rejected, and the
+planner, evaluator, dry-run plan, renderer, and spacing report use the same
+per-page template reference. Verification includes the composition and quality
+suites, the dynamic insertion and late-first-placement fixtures, and the brand
+showcase render.
 
 ## Decision
 

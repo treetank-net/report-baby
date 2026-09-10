@@ -116,8 +116,6 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
   const planGeometry: PageGeometry = {
     ...geometry,
     bands: { ...geometry.bands, footer: geometry.bands.footer ? { ...geometry.bands.footer, top: footerTop } : { x: 0, top: footerTop, width: geometry.width, bottom: geometry.height } },
-    continuationTop: geometry.continuationTop ?? PDF_CONFIG.headerRepeatHeight + PDF_CONFIG.headerRepeatBottomGap,
-    continuationBottom: geometry.continuationBottom ?? footerTop,
   };
   const compositionDocument = compositionDocumentFromInput(data);
   const resolvedImages = new Map<string, Awaited<ReturnType<typeof resolveImageAsset>>>();
@@ -193,6 +191,7 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
     includeTitlePage: Boolean(data.flows.title && template.pageTitle),
     includeHeaderFlow: Boolean(data.flows.header),
     auxiliaryTextWidths: { footer: footerTextWidth(doc, geometry, maxPages, theme) },
+    headerBottomGap: PDF_CONFIG.headerBottomGap,
     policy: { minimumWrapWidth: PDF_CONFIG.floatMinWidth },
     styles: compositionStyles,
     ...(combined ? { measureBlock: combined.measureBlock } : {}),

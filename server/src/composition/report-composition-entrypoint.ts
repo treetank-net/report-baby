@@ -51,6 +51,7 @@ export interface ReportCompositionOptions {
   insertionRequests?: PlacementRequests;
   pageTemplateSchedule?: PageTemplateScheduleInput;
   pageTemplateSources?: PageTemplateSource[];
+  headerBottomGap?: number;
 }
 
 export interface ReportCompositionResult {
@@ -104,6 +105,7 @@ export function planReportComposition(
       maxPages: options.maxPages,
       ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
       includeHeaderFlow: options.includeHeaderFlow ?? true,
+      ...(options.headerBottomGap === undefined ? {} : { headerBottomGap: options.headerBottomGap }),
       ...(options.mainFlowId === undefined ? {} : { mainFlowId: options.mainFlowId }),
       ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
     }))
@@ -111,6 +113,7 @@ export function planReportComposition(
     maxPages: options.maxPages,
     ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
     includeHeaderFlow: options.includeHeaderFlow ?? true,
+    ...(options.headerBottomGap === undefined ? {} : { headerBottomGap: options.headerBottomGap }),
     ...(options.mainFlowId === undefined ? {} : { mainFlowId: options.mainFlowId }),
     ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
     })];
@@ -129,7 +132,11 @@ export function planReportComposition(
   const selected = planned.reduce((best, candidate) => compareCompositionEvaluations(candidate.result.evaluation, best.result.evaluation) < 0 ? candidate : best);
   const template = selected.template;
   const result = selected.result;
-  attachPlanSpacingReport(result.plan, document, metrics, geometry);
+  const geometryForPage = (page: CompositionPlan['pages'][number]): PageGeometry => {
+    if (!pageTemplateSources || page.templateRef === undefined) return geometry;
+    return pageTemplateSources.find((source) => source.templateRef === page.templateRef)?.geometry ?? geometry;
+  };
+  attachPlanSpacingReport(result.plan, document, metrics, geometry, geometryForPage);
   appendInlineDiagnostics(doc, options.family, document, result, options.inlineFontCoverage);
   return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };
 }

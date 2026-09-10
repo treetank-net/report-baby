@@ -89,6 +89,26 @@ try {
     ['quote-top', 'quote-bottom', 'quote-top', 'quote-bottom', 'quote-top', 'quote-bottom', 'quote-top'],
   );
 
+  const scheduledTemplate = {
+    ...template,
+    layouts: [
+      template.layouts[0],
+      { id: 'sidebar-page', width: 100, height: 100, slots: [...template.layouts[0].slots, { id: 'sidebar', regionId: 'sidebar', kind: 'text', box: { x: 5, y: 5, width: 30, height: 30 } }] },
+    ],
+    pageTemplateSchedule: [
+      { from: 1, to: 2, templateRef: 'article', layoutId: 'article' },
+      { from: 3, templateRef: 'sidebar-page', layoutId: 'sidebar-page' },
+    ],
+  };
+  const scheduledOverlay = applyDynamicInsertionRequests(scheduledTemplate, document, {
+    insertion_flows: [{ flow_id: 'quotes', start_page: 3, slots: [{ id: 'scheduled-quote', frame: { x: 0.45, y: 0.2, width: 0.45, height: 'auto' }, allowed_roles: ['quote'] }] }],
+  });
+  assert.deepEqual(scheduledOverlay.routes.quotes?.slotsByLayout?.article, [], 'a page-3 overlay must not be advertised on earlier template layouts');
+  assert.deepEqual(scheduledOverlay.routes.quotes?.slotsByLayout?.['sidebar-page'], ['scheduled-quote'], 'a page-3 overlay must be advertised on the selected template layout');
+  const scheduledResult = createTextCompositionEngine(scheduledOverlay).plan(document, metrics);
+  assert.ok(scheduledResult.plan.insertionLines?.some((line) => line.blockId === 'quote-1' && line.page === 3 && line.slotId === '3:scheduled-quote'), 'the page-3 overlay must be available on its selected page');
+  assert.ok(!scheduledResult.plan.insertionLines?.some((line) => line.slotId === '1:scheduled-quote' || line.slotId === '2:scheduled-quote'), 'the page-3 overlay must not be available before its selected page');
+
   assert.throws(
     () => applyDynamicInsertionRequests(template, document, { insertion_flows: [{ flow_id: 'main', slots: [{ id: 'bad', frame: { x: 0, y: 0, width: 0.5, height: 0.2 } }] }] }),
     /cannot be 'main'/u,

@@ -68,17 +68,22 @@ export function declaredTextSlotsForFlow(
   });
 }
 
-export function addAutomaticSegmentPushes(
+/**
+ * @planner-target composition/adapters/page-template-slots.ts
+ * @planner-responsibility Attach content-segment targets to declared main-slot growth.
+ */
+export function addContentSegmentGrowthTargets(
   slot: CompositionSlotTemplate,
   source: CompiledTemplate['slots'][string],
   segments: CompositionSlotTemplate[],
 ): CompositionSlotTemplate {
-  if (!source.grow?.auto) return slot;
+  if (!slot.grow || segments.length === 0) return slot;
+  if (!source.grow?.auto && (source.grow?.pushes?.length ?? 0) === 0) return slot;
   const bottom = slot.box.y + slot.box.height;
   const pushes = segments.filter((segment) => segment.box.y >= bottom).map((segment) => segment.id);
   return {
     ...slot,
-    grow: slot.grow ? { ...slot.grow, pushes: [...new Set([...(slot.grow.pushes ?? []), ...pushes])] } : undefined,
+    grow: { ...slot.grow, pushes: [...new Set([...(slot.grow.pushes ?? []), ...pushes])] },
   };
 }
 
@@ -93,7 +98,7 @@ export function declaredMainTextSlots(
     .filter((slot) => slot.id !== 'content')
     .map((slot) => {
       const source = compiled.slots[slot.id];
-      return source ? addAutomaticSegmentPushes(slot, source, segments) : slot;
+      return source ? addContentSegmentGrowthTargets(slot, source, segments) : slot;
     });
 }
 

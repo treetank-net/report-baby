@@ -220,8 +220,9 @@ export function attachPlanSpacingReport(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
   geometry: PageGeometry,
+  geometryForPage: (page: CompositionPlan['pages'][number]) => PageGeometry = () => geometry,
 ): void {
-  const geometryByPage = new Map(plan.pages.map((page) => [page.page, pageGeometryFor(page, geometry)]));
+  const geometryByPage = new Map(plan.pages.map((page) => [page.page, pageGeometryFor(page, geometryForPage(page))]));
   const pages = plan.pages.map((page) => pageGeometryReport(page, geometryByPage.get(page.page)!));
   const stylesBySlot = textStylesBySlot(plan, document, metrics);
   const slots = plan.slots.map((slot) => slotSpacingReport(plan, slot, geometryByPage.get(slot.page)!, stylesBySlot));

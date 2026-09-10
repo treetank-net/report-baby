@@ -9,6 +9,8 @@ export interface ResolveReportPlanInput {
   geometry: PageGeometry;
   pageCount?: number;
   compositionDocument: CompositionDocument;
+  /** Optional per-page geometry provenance supplied by the composition planner. */
+  pageTemplateForPage?: (page: number) => { templateRef: string; geometry: PageGeometry } | undefined;
 }
 
 function box(segment: PageSegment): { x: number; y: number; width: number; height: number } {
@@ -42,12 +44,16 @@ function firstPageFlowTop(geometry: PageGeometry, hasIntro: boolean, narrative: 
   return geometry.bands.header?.bottom ?? geometry.content.top;
 }
 
-function geometryForPage(geometry: PageGeometry, page: number): PageGeometry {
-  return geometry;
+function geometryForPage(input: ResolveReportPlanInput, page: number): PageGeometry {
+  return input.pageTemplateForPage?.(page)?.geometry ?? input.geometry;
+}
+
+function templateRefForPage(input: ResolveReportPlanInput, page: number): string | undefined {
+  return input.pageTemplateForPage?.(page)?.templateRef;
 }
 
 function pageBlocks(input: ResolveReportPlanInput, page: number, document: CompositionDocument): ResolvedReportBlock[] {
-  const geometry = geometryForPage(input.geometry, page);
+  const geometry = geometryForPage(input, page);
   const hasIntro = document.flows.main?.blocks.some((item) => item.role === 'intro') ?? false;
   const blocks: ResolvedReportBlock[] = [];
   if (geometry.bands.header) {
@@ -111,8 +117,9 @@ export function resolveReportPlan(input: ResolveReportPlanInput): ResolvedReport
     templateRef: input.templateRef,
     pages: Array.from({ length: pageCount }, (_, index): ResolvedReportPagePlan => ({
       page: index + 1,
-      width: geometryForPage(input.geometry, index + 1).width,
-      height: geometryForPage(input.geometry, index + 1).height,
+      ...(templateRefForPage(input, index + 1) === undefined ? {} : { templateRef: templateRefForPage(input, index + 1) }),
+      width: geometryForPage(input, index + 1).width,
+      height: geometryForPage(input, index + 1).height,
       continuation: index > 0,
       blocks: pageBlocks(input, index + 1, document),
     })),
@@ -125,6 +132,7 @@ export function reportPlanSummary(plan: ResolvedReportPlan): Record<string, unkn
     templateRef: plan.templateRef,
     pages: plan.pages.map((page) => ({
       page: page.page,
+      ...(page.templateRef === undefined ? {} : { templateRef: page.templateRef }),
       width: page.width,
       height: page.height,
       continuation: page.continuation,

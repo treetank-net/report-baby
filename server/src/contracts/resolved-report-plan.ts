@@ -14,6 +14,8 @@ export interface ResolvedReportBlock {
 
 export interface ResolvedReportPagePlan {
   page: number;
+  /** Template that supplied this page's geometry when a page schedule is used. */
+  templateRef?: string;
   width: number;
   height: number;
   continuation: boolean;

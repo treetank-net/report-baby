@@ -18,6 +18,7 @@ import { resolveImageAsset } from '../rendering/image-resolver.js';
 import type { SourceContext } from '../source/context.js';
 import { prepareReportComposition } from './composition-runtime.js';
 import type { PageTemplateSource } from '../composition/adapters/page-template.js';
+import { normalizePageTemplateSchedule, templateRefAtPage } from '../composition/adapters/page-template-schedule.js';
 import { resolvePagePlaceholders } from '../composition/text/page-placeholders.js';
 import { attachResolvedChromeSpacingReport } from '../composition/observability/spacing-report.js';
 
@@ -76,6 +77,27 @@ function compositionGeometryForSchedule(name: string, schedule?: PageTemplateSch
   const primary = sources[0];
   if (!primary) throw new Error('A page-template schedule needs at least one template.');
   return { template: primary.compiled, geometry: primary.geometry, sources };
+}
+
+function scheduledPageTemplateResolver(
+  schedule: PageTemplateScheduleInput | undefined,
+  sources: PageTemplateSource[] | undefined,
+): ((page: number) => { templateRef: string; geometry: PageGeometry } | undefined) | undefined {
+  if (!schedule || !sources) return undefined;
+  const variant = normalizePageTemplateSchedule(schedule.map((entry) => ({
+    pages: {
+      ...(entry.pages.from === undefined ? {} : { from: entry.pages.from }),
+      ...(entry.pages.to === undefined ? {} : { to: entry.pages.to }),
+      ...(entry.pages.count === undefined ? {} : { count: entry.pages.count }),
+    },
+    templateRef: entry.template_ref,
+  })))[0];
+  if (!variant) return undefined;
+  return (page: number) => {
+    const templateRef = templateRefAtPage(variant, page);
+    const source = templateRef === undefined ? undefined : sources.find((candidate) => candidate.templateRef === templateRef);
+    return source ? { templateRef: source.templateRef, geometry: source.geometry } : undefined;
+  };
 }
 
 async function reportLogo(theme: RenderTheme, sourceContext: SourceContext | undefined) {
@@ -287,9 +309,15 @@ export interface ReportRenderDiagnostics {
 export async function renderReportPdfDetailed(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, compositionDebug = false, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
   const planned = await renderReportCompositionPdf(name, data, theme, sourceContext, compositionDebug, insertionRequests, pageTemplateSchedule);
   for (const diagnostic of planned.composition.evaluation.diagnostics) if (diagnostic.severity === 'warning') warnings.push(diagnostic.message);
-  const { geometry } = compositionGeometryForSchedule(name, pageTemplateSchedule);
-  const plan = resolveReportPlan({ templateRef: name, theme, geometry, pageCount: Math.max(1, planned.composition.plan.pages.length), compositionDocument: planned.composition.document });
-  assertReportPlan(plan, { requireCoverage: geometry.dynamicFlow, maxCoverageGap: PDF_CONFIG.planCoverageMaxGap });
+  const resolved = compositionGeometryForSchedule(name, pageTemplateSchedule);
+  const pageTemplateForPage = (page: number) => {
+    const compositionPage = planned.composition.plan.pages.find((candidate) => candidate.page === page);
+    const templateRef = compositionPage?.templateRef;
+    const source = templateRef === undefined ? undefined : resolved.sources?.find((candidate) => candidate.templateRef === templateRef);
+    return source ? { templateRef: source.templateRef, geometry: source.geometry } : undefined;
+  };
+  const plan = resolveReportPlan({ templateRef: name, theme, geometry: resolved.geometry, pageCount: Math.max(1, planned.composition.plan.pages.length), compositionDocument: planned.composition.document, pageTemplateForPage });
+  assertReportPlan(plan, { requireCoverage: resolved.geometry.dynamicFlow, maxCoverageGap: PDF_CONFIG.planCoverageMaxGap });
   return { buffer: planned.buffer, diagnostics: { plan, drawings: planned.drawings, composition: planned.composition } };
 }
 
@@ -379,9 +407,10 @@ export async function renderReportCompositionPdf(name: string, data: Composition
 }
 
 export function resolveReportPlanOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), pageTemplateSchedule?: PageTemplateScheduleInput): ResolvedReportPlan {
-  const { geometry } = compositionGeometryForSchedule(name, pageTemplateSchedule);
-  const plan = resolveReportPlan({ templateRef: name, theme, geometry, pageCount: 1, compositionDocument: compositionDocumentFromInput(data) });
-  assertReportPlan(plan, { requireCoverage: geometry.dynamicFlow, maxCoverageGap: PDF_CONFIG.planCoverageMaxGap });
+  const resolved = compositionGeometryForSchedule(name, pageTemplateSchedule);
+  const pageTemplateForPage = scheduledPageTemplateResolver(pageTemplateSchedule, resolved.sources);
+  const plan = resolveReportPlan({ templateRef: name, theme, geometry: resolved.geometry, pageCount: 1, compositionDocument: compositionDocumentFromInput(data), ...(pageTemplateForPage ? { pageTemplateForPage } : {}) });
+  assertReportPlan(plan, { requireCoverage: resolved.geometry.dynamicFlow, maxCoverageGap: PDF_CONFIG.planCoverageMaxGap });
   return plan;
 }
 

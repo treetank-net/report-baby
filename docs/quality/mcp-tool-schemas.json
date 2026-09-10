@@ -1969,6 +1969,65 @@
           },
           "type": "object"
         },
+        "page_template_schedule": {
+          "description": "Optional ordered page ranges selecting built-in page templates. Each range uses ordinary slots; it does not create continuation slots.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "pages": {
+                "additionalProperties": false,
+                "properties": {
+                  "count": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "max": {
+                            "exclusiveMinimum": 0,
+                            "type": "integer"
+                          },
+                          "min": {
+                            "exclusiveMinimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "min",
+                          "max"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "from": {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              "template_ref": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "pages",
+              "template_ref"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
         "placement_requests": {
           "additionalProperties": false,
           "description": "Optional per-render insertion slots. These request-owned slots are layered onto the selected page template and do not mutate it.",

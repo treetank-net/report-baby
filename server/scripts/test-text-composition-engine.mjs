@@ -673,6 +673,27 @@ try {
   assert.ok(result.plan.decisions.some((decision) => ['KEEP_CLUSTER_PUSHED', 'KEEP_CLUSTER_RELAXED'].includes(decision.code)), 'keep cluster decision should be visible');
   assert.ok(result.plan.slots.some((slot) => slot.id === '1:main-a' && slot.state !== 'open'));
   assert.ok(result.plan.trace?.phases.some((phase) => phase.name === 'preflight'));
+
+  const lateFirstPlacementTemplate = {
+    maxPages: 2,
+    layouts: [
+      { id: 'page-one', templateRef: 'page-one', width: 100, height: 100, slots: [{ id: 'placeholder', regionId: 'chrome', kind: 'text', box: { x: 5, y: 5, width: 90, height: 10 } }] },
+      { id: 'page-two', templateRef: 'page-two', width: 100, height: 100, slots: [{ id: 'sidebar', regionId: 'sidebar', flowId: 'sidebar', kind: 'text', box: { x: 5, y: 5, width: 90, height: 80 }, allowedRoles: ['sidebar'] }] },
+    ],
+    pageTemplateSchedule: [
+      { from: 1, to: 1, templateRef: 'page-one', layoutId: 'page-one' },
+      { from: 2, templateRef: 'page-two', layoutId: 'page-two' },
+    ],
+    routes: {
+      sidebar: { slots: ['sidebar'], slotsByLayout: { 'page-one': [], 'page-two': ['sidebar'] }, continuation: 'forbidden' },
+    },
+  };
+  const lateFirstPlacement = createTextCompositionEngine(lateFirstPlacementTemplate).plan({
+    flows: { sidebar: { id: 'sidebar', continuation: 'forbidden', blocks: [{ id: 'late-sidebar', kind: 'paragraph', role: 'sidebar', text: 'The first legal sidebar slot is on page two.' }] } },
+  }, metrics);
+  assert.equal(lateFirstPlacement.evaluation.status, 'accepted', JSON.stringify(lateFirstPlacement.evaluation));
+  assert.ok(lateFirstPlacement.plan.lines.some((line) => line.blockId === 'late-sidebar' && line.page === 2 && line.slotId === '2:sidebar'), 'a forbidden-continuation flow must search later pages before its first placement');
+  assert.ok(!lateFirstPlacement.evaluation.diagnostics.some((diagnostic) => diagnostic.code === 'FLOW_CONTINUATION_FORBIDDEN'), 'a missing first-page slot must not be reported as forbidden continuation');
   assert.ok(result.plan.trace?.phases.some((phase) => phase.name === 'flow-placement'));
   assert.ok(result.plan.trace?.blocks.some((block) => block.blockId === 'body' && block.fragments.length > 0), 'plan trace must group fragments by source block');
   assert.ok(result.plan.trace?.slots.some((slot) => slot.slotId === '1:main-a' && slot.lineCount > 0), 'plan trace must expose slot occupancy');

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runProcess } from './lib/process.mjs';
@@ -55,7 +55,7 @@ try {
       },
     },
     flows: {
-      main: { id: 'main', slots: ['intro'], continuationSlots: ['content'], continuation: 'allowed' },
+      main: { id: 'main', slots: ['intro', 'content'], continuation: 'allowed' },
       footer: { id: 'footer', slots: ['footer'], continuation: 'forbidden', repeat: 'each-page' },
     },
     constraints: { insideCanvas: true, noOverlap: false },
@@ -74,11 +74,20 @@ try {
 
   const { inspectBrandTemplate } = await import(bundle);
   const inspected = await inspectBrandTemplate(brandRoot, 'brand://demo/primary', 'pages/editorial');
-  assert.equal(inspected.compiled.flows.main.continuationSlots?.[0], 'content');
+  assert.deepEqual(inspected.compiled.flows.main.slots, ['intro', 'content']);
+  assert.equal('continuationSlots' in inspected.compiled.flows.main, false);
   assert.deepEqual(inspected.compiled.slots.intro.allowedBlockKinds, ['paragraph']);
   assert.deepEqual(inspected.compiled.slots.intro.grow, { axis: 'y', maxHeight: 0.3, pushes: ['content'] });
   assert.deepEqual(inspected.compiled.page?.blockGrowth.intro, { axis: 'y', maxHeight: 0.3, pushes: ['content'] });
   assert.equal(inspected.compiled.page?.flow.lead, 'intro');
+  const legacyPath = join(releaseRoot, 'templates', 'pages', 'editorial.json');
+  const legacySource = JSON.parse(await readFile(legacyPath, 'utf8'));
+  legacySource.flows.main.continuationSlots = ['content'];
+  await writeFile(legacyPath, JSON.stringify(legacySource, null, 2));
+  await assert.rejects(
+    () => inspectBrandTemplate(brandRoot, 'brand://demo/primary', 'pages/editorial'),
+    /continuation_slots/u,
+  );
   console.log(JSON.stringify({ status: 'passed', template: inspected.templateRef, sourcePath: inspected.sourcePath }, null, 2));
 } finally {
   await rm(temporary, { recursive: true, force: true });

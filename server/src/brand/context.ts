@@ -260,7 +260,29 @@ function sourceSlotFromCompiled(value: unknown): RecordValue {
   };
 }
 
+function rejectLegacyContinuationFields(compiled: RecordValue): void {
+  const slots = isRecord(compiled.slots) ? compiled.slots : {};
+  for (const [slotId, value] of Object.entries(slots)) {
+    if (!isRecord(value)) continue;
+    if (value.continuationFrame !== undefined || value.continuation_frame !== undefined) {
+      throw new Error(`Brand template '${String(compiled.id)}' slot '${slotId}' uses continuation_frame; define an ordinary slot in the selected page template.`);
+    }
+  }
+  const flows = isRecord(compiled.flows) ? compiled.flows : {};
+  for (const [flowId, value] of Object.entries(flows)) {
+    if (!isRecord(value)) continue;
+    if (value.continuationSlots !== undefined || value.continuation_slots !== undefined) {
+      throw new Error(`Brand template '${String(compiled.id)}' flow '${flowId}' uses continuation_slots; list ordinary slots in the selected page template.`);
+    }
+  }
+  const page = isRecord(compiled.page) ? compiled.page : undefined;
+  if (page && (page.continuation !== undefined || page.continuationFrame !== undefined || page.continuation_frame !== undefined)) {
+    throw new Error(`Brand template '${String(compiled.id)}' uses continuation geometry; select an ordinary page template through the page schedule.`);
+  }
+}
+
 function sourceFromCompiledTemplate(compiled: RecordValue): RecordValue {
+  rejectLegacyContinuationFields(compiled);
   const slots = isRecord(compiled.slots) ? compiled.slots : {};
   const flows = isRecord(compiled.flows) ? compiled.flows : {};
   const sourceFlows = Object.fromEntries(Object.entries(flows).map(([id, value]) => {

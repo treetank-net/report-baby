@@ -514,7 +514,7 @@ function advanceTextBlockWhenNoCapacity(
   const { flowId, plan, route } = context;
   runtime.lastLegalSlotId = prepared.slot.id;
   recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_SLOT', runtime, target, 'next-block-spacing-or-line-height-does-not-fit');
-  if (route.continuation === 'forbidden' && cursor.routeIndex >= target.availableRouteSlots.length - 1) {
+  if (runtime.hasPlacement && route.continuation === 'forbidden' && cursor.routeIndex >= target.availableRouteSlots.length - 1) {
     plan.diagnostics.push(diagnostic('error', 'FLOW_CONTINUATION_FORBIDDEN', `Flow '${flowId}' cannot continue beyond its available slots on page ${currentPage.page}.`, { flowId, blockId: block.id, page: currentPage.page, slotId: prepared.slot.id }));
     addResidual(plan.residualContent, flowId, block, cursor.startWord, runtime.lastLegalSlotId, 'flow-continuation-forbidden');
     return { kind: 'stop' };

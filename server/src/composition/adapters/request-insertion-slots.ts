@@ -115,11 +115,19 @@ function baseRouteForFlow(template: CompositionTemplate, flowId: string): Compos
   };
 }
 
-function addRouteSlots(route: CompositionFlowRoute, slotIds: string[], template: CompositionTemplate): CompositionFlowRoute {
+function addRouteSlots(route: CompositionFlowRoute, slotIds: string[], template: CompositionTemplate, pages: number[]): CompositionFlowRoute {
   const slots = [...new Set([...route.slots, ...slotIds])];
   const insertionSlots = [...new Set([...(route.insertionSlots ?? []), ...slotIds])];
-  const layoutIds = route.layouts ?? template.layouts.map((layout) => layout.id);
-  const slotsByLayout = Object.fromEntries(layoutIds.map((layoutId) => [layoutId, [...new Set([...(route.slotsByLayout?.[layoutId] ?? []), ...slotIds])]]));
+  const scheduleLayoutIds = template.pageTemplateSchedule?.map((entry) => entry.layoutId) ?? [];
+  const layoutIds = [...new Set([
+    ...(route.layouts ?? []),
+    ...(scheduleLayoutIds.length > 0 ? scheduleLayoutIds : route.layouts ? [] : template.layouts.map((layout) => layout.id)),
+  ])];
+  const selectedLayoutIds = new Set(pages.map((page) => routeLayout(route, template, page)?.id).filter((id): id is string => id !== undefined));
+  const slotsByLayout = Object.fromEntries(layoutIds.map((layoutId) => [layoutId, [
+    ...(route.slotsByLayout?.[layoutId] ?? []),
+    ...(selectedLayoutIds.has(layoutId) ? slotIds : []),
+  ].filter((id, index, values) => values.indexOf(id) === index)]));
   return { ...route, slots, insertionSlots, layouts: [...layoutIds], slotsByLayout };
 }
 
@@ -217,7 +225,7 @@ export function applyDynamicInsertionRequests(
       }
     }
     routes[flow.flow_id] = {
-      ...addRouteSlots(route, normalizedSlots.map((slot) => slot.id), template),
+      ...addRouteSlots(route, normalizedSlots.map((slot) => slot.id), template, pages),
       continuation: flow.continuation ?? route.continuation,
       ...(flow.repeat === 'each-page' ? { repeat: 'each-page' as const } : {}),
       ...(flow.start_page === undefined ? {} : { startPage: flow.start_page }),

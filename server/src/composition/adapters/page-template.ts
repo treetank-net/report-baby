@@ -27,6 +27,8 @@ export interface PageTemplateCompositionOptions {
   auxiliaryTextWidths?: Record<string, number>;
   includeTitlePage?: boolean;
   includeHeaderFlow?: boolean;
+  /** Configured breathing room after a static header before ordinary content. */
+  headerBottomGap?: number;
 }
 
 export interface PageTemplateSource {
@@ -268,7 +270,12 @@ export function compositionTemplateFromPageGeometry(
   const layoutId = compiled.id;
   const titleLayoutId = `${compiled.id}:title`;
   const contentBottom = geometry.bands.footer?.top ?? geometry.content.bottom;
-  const contentTop = geometry.continuationTop ?? geometry.segments.reduce((top, segment) => Math.min(top, segment.top), geometry.content.top);
+  const segmentTop = geometry.segments.reduce((top, segment) => Math.min(top, segment.top), geometry.content.top);
+  const staticHeaderBottom = (compiled.flows.header?.slots ?? [])
+    .map((slotId) => compiled.slots[slotId])
+    .filter((slot): slot is NonNullable<typeof slot> => slot !== undefined && slot.fitContent !== true)
+    .reduce((bottom, slot) => Math.max(bottom, (slot.frame.y + slot.frame.height) * geometry.height), segmentTop);
+  const contentTop = Math.max(segmentTop, staticHeaderBottom + (options.headerBottomGap ?? 0));
   const leadBlockId = geometry.flow.lead;
   const lead = leadBlockId ? geometry.blockFrames[leadBlockId] : undefined;
   const mainSourceIds = [...new Set(mainFlow.slots)];
