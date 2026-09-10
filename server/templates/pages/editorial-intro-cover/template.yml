@@ -31,22 +31,23 @@ slots:
     role: header
   intro-image:
     type: image
-    frame: { x: 0.081, y: 0.16, width: 0.838, height: 0 }
+    frame: { x: 0.081, y: 0.10, width: 0.838, height: 0 }
     fit_content: true
-    grow: { axis: y, pushes: [intro-lead] }
+    grow: { axis: y, pushes: [intro-lead, content] }
     role: intro
     allowed_block_kinds: [image]
   intro-lead:
     type: text
-    # Reserve a generous fit-content envelope so the preceding image can
-    # push this slot down without exhausting its mutable height.
-    frame: { x: 0.081, y: 0.16, width: 0.838, height: 0.60 }
+    # Start empty and grow to the measured lead. The lead pushes the main
+    # content slot so the first page can continue below the intro.
+    frame: { x: 0.081, y: 0.10, width: 0.838, height: 0 }
     fit_content: true
-    grow: { axis: y }
+    grow: { axis: y, pushes: [content] }
     role: intro
     allowed_block_kinds: [paragraph]
   content:
     type: text
+    # Leave the configured body gap after the measured intro lead.
     frame: { x: 0.081, y: 0.16, width: 0.838, height: 0.77 }
   footer:
     type: text
@@ -64,7 +65,6 @@ flows:
   main:
     slots: [content]
     priority: 200
-    start_page: 2
     continuation: allowed
   footer:
     slots: [footer]

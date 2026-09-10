@@ -457,6 +457,7 @@ export interface CompositionPlan {
   flowPlacements?: CompositionFlowPlacement[];
   spacing?: CompositionPlanSpacingReport;
   trace?: CompositionPlanTrace;
+  suggestions?: CompositionSuggestion[];
 }
 
 export interface CompositionEvaluation {
@@ -466,6 +467,18 @@ export interface CompositionEvaluation {
   score: number;
   scoreBreakdown: CompositionScoreComponent[];
   residualContent: CompositionResidualContent[];
+  suggestions?: CompositionSuggestion[];
+}
+
+/** Actionable, non-legality guidance produced from an evaluated plan. */
+export interface CompositionSuggestion {
+  code: string;
+  message: string;
+  page?: number;
+  flowId?: string;
+  blockId?: string;
+  evidence?: Record<string, unknown>;
+  remedies?: string[];
 }
 
 export interface CompositionScoreComponent {

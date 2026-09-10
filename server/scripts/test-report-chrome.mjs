@@ -210,6 +210,8 @@ try {
   assert.ok(dynamicHeaderPlacement && dynamicHeaderSlot && dynamicHeaderSlot.box.height > 0, 'dynamic header must be materialized with measured height');
   assert.ok(dynamicPlan.pages[0].chrome.headerBand.height >= dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height - tolerance, 'dynamic chrome band must contain the measured header box');
   assert.ok(dynamicPlan.pages[0].chrome.headerRule && dynamicPlan.pages[0].chrome.headerRule.y >= dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height - tolerance, 'dynamic chrome rule must follow the measured header box');
+  assert.ok(dynamicPlan.pages[0].chrome.headerRule && dynamicPlan.pages[0].chrome.headerRule.y - (dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height) >= config.pdf.header_bottom_gap - tolerance, 'dynamic chrome rule must preserve the configured gap below header content');
+  assert.ok(dynamicRendered.result.compositionEvaluation.scoreBreakdown.some((component) => component.code === 'header-spacing'), 'composition evaluation must expose header spacing');
   const dynamicMainPlacement = dynamicPlan.flowPlacements.find((candidate) => candidate.flowId === 'main' && candidate.hasContent && candidate.page === 1);
   assert.ok(dynamicMainPlacement && dynamicHeaderSlot && dynamicMainPlacement.box.y >= dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height - tolerance, 'main flow must start below dynamic header geometry');
   for (const page of dynamicPlan.pages) {

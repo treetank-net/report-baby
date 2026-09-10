@@ -26,6 +26,7 @@ change the completed 1.0 plan.
 | [05-contract-cleanup-and-test-consolidation.md](05-contract-cleanup-and-test-consolidation.md) | public alias/export audit and further consolidation of expensive tests | 1.0 README, plans 01 and 13 |
 | [06-floats-and-text-direction.md](06-floats-and-text-direction.md) | full floats and RTL/CJK | 1.0 README, 1.0 limitations |
 | [08-diagnostics-and-remediation.md](08-diagnostics-and-remediation.md) | explanatory diagnostics, actionable remedies, and skill/CLI/MCP guidance | Release 1.0 test and planner follow-up |
+| [09-pdf-aesthetic-rules.md](09-pdf-aesthetic-rules.md) | measurable PDF spacing rules, dynamic intro/header behavior, and aesthetic evaluator feedback | editorial artifact review |
 | [runtime-plan-annotations.md](runtime-plan-annotations.md) | runtime-only plan decisions, traces, diagnostics, and their lifecycle | 02 layout migration |
 
 Each document remains a proposal until a separate decision is made about its

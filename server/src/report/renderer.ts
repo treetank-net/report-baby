@@ -340,10 +340,10 @@ function dynamicHeaderBandHeight(composition: ReportCompositionResult, page: Com
   const contentSlots = new Set(composition.plan.flowPlacements?.filter((placement) => placement.page === page.page && placement.flowId === 'header' && placement.hasContent).map((placement) => placement.slotId) ?? []);
   const activeSlots = headerSlots.filter((slot) => slot.fitContent !== true || contentSlots.has(slot.id) || slot.kind === 'graphic');
   const contentBottom = activeSlots.reduce((bottom, slot) => Math.max(bottom, slot.box.y + slot.box.height), 0);
-  // The rule is drawn `headerBottomGap` above the band bottom.  Include that
-  // breathing room in a fit-content band so the rule follows the measured
-  // header instead of crossing its last line.
-  return contentBottom > 0 ? contentBottom + PDF_CONFIG.headerBottomGap : staticHeight;
+  // The rule is drawn `headerBottomGap` above the band bottom. Reserve a
+  // second configured gap below the measured header so the title never
+  // touches the rule.
+  return contentBottom > 0 ? contentBottom + PDF_CONFIG.headerBottomGap * 2 : staticHeight;
 }
 
 function pageChrome(doc: jsPDF, page: CompositionPlan['pages'][number], pageCount: number, geometry: PageGeometry, theme: RenderTheme, lockup?: CompositionBox, headerHeight?: number): CompositionPageChrome {

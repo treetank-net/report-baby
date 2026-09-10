@@ -250,6 +250,36 @@ type InsertionSpacingDetail = {
   crossStreamSpread: number;
 };
 
+type HeaderSpacingDetail = {
+  page: number;
+  headerBottom: number;
+  firstContentTop: number;
+  gap: number;
+  deficit: number;
+};
+
+/** Measure the breathing room between repeated chrome and page content. */
+export function scoreHeaderSpacing(plan: CompositionPlan): CompositionScoreComponent {
+  const minimumGap = scoreConfigNumber('headerContentGapMinMm');
+  const details: HeaderSpacingDetail[] = [];
+  for (const page of plan.pages) {
+    const headerLines = plan.lines.filter((line) => line.page === page.page && line.flowId === 'header');
+    const contentLines = plan.lines.filter((line) => line.page === page.page && line.flowId !== 'header' && line.layer !== 'insertion');
+    if (headerLines.length === 0 || contentLines.length === 0) continue;
+    const headerBottom = Math.max(...headerLines.map((line) => line.box.y + line.box.height));
+    const firstContentTop = Math.min(...contentLines.map((line) => line.box.y));
+    const gap = firstContentTop - headerBottom;
+    details.push({ page: page.page, headerBottom, firstContentTop, gap, deficit: Math.max(0, minimumGap - gap) });
+  }
+  const deficit = details.reduce((sum, item) => sum + item.deficit, 0);
+  return {
+    code: 'header-spacing',
+    value: details.length > 0 ? details.reduce((sum, item) => sum + item.gap, 0) / details.length : minimumGap,
+    points: -deficit * scoreConfigNumber('headerContentGapPenalty'),
+    details: { minimumGap, pages: details },
+  };
+}
+
 /**
  * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Calculate spacing details for one insertion block.
@@ -434,7 +464,7 @@ export function scoreContrast(assessments: CompositionContrastAssessment[]): Com
  * @planner-responsibility Keep the current scoreLegalPlan implementation intact until its target seam is extracted.
  */
 export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
+  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreHeaderSpacing(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
   return {
     score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
     breakdown,

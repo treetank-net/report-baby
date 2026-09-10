@@ -351,6 +351,7 @@ export function compositionTemplateFromPageGeometry(
   const uniqueSlots = [...new Map(allSlots.map((slot) => [slot.id, slot])).values()];
   const firstPageContentTop = Math.max(
     contentTop,
+    ...segments.map((segment) => segment.box.y),
     lead?.bottom ?? contentTop,
     ...mainSourceIds
       .filter((sourceId) => sourceId !== 'content')

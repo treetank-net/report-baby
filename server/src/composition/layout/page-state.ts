@@ -313,7 +313,11 @@ export function growSlot(
     const pushedDefinition = currentPage.layout.slots.find((candidate) => candidate.id === pushedId);
     if (pushedDefinition?.kind !== 'text') continue;
     pushed.box.height = Math.max(0, pushed.box.height - delta);
-    if (pushed.box.height === 0) pushed.state = 'exhausted';
+    // A zero-height fit-content slot is still a legal target: it may be
+    // measured and grow when its flow reaches it (for example an intro lead
+    // pushed below a dynamic cover image). Fixed-height slots remain
+    // exhausted when no capacity is left.
+    if (pushed.box.height === 0 && pushedDefinition?.fitContent !== true) pushed.state = 'exhausted';
   }
   recordFlowDecision(context, 'SLOT_GROWN', runtime, target);
 }
