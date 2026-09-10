@@ -18,6 +18,7 @@ import { resolveImageAsset } from '../rendering/image-resolver.js';
 import type { SourceContext } from '../source/context.js';
 import { prepareReportComposition } from './composition-runtime.js';
 import { resolvePagePlaceholders } from '../composition/text/page-placeholders.js';
+import { attachResolvedChromeSpacingReport } from '../composition/observability/spacing-report.js';
 
 export interface TemplateInfo { name: string; description: string; }
 
@@ -297,7 +298,11 @@ function dynamicHeaderBandHeight(composition: ReportCompositionResult, page: Com
   if (!headerSlots.some((slot) => slot.fitContent)) return staticHeight;
   const contentSlots = new Set(composition.plan.flowPlacements?.filter((placement) => placement.page === page.page && placement.flowId === 'header' && placement.hasContent).map((placement) => placement.slotId) ?? []);
   const activeSlots = headerSlots.filter((slot) => slot.fitContent !== true || contentSlots.has(slot.id) || slot.kind === 'graphic');
-  return activeSlots.reduce((bottom, slot) => Math.max(bottom, slot.box.y + slot.box.height), 0);
+  const contentBottom = activeSlots.reduce((bottom, slot) => Math.max(bottom, slot.box.y + slot.box.height), 0);
+  // The rule is drawn `headerBottomGap` above the band bottom.  Include that
+  // breathing room in a fit-content band so the rule follows the measured
+  // header instead of crossing its last line.
+  return contentBottom > 0 ? contentBottom + PDF_CONFIG.headerBottomGap : staticHeight;
 }
 
 function pageChrome(doc: jsPDF, page: CompositionPlan['pages'][number], pageCount: number, geometry: PageGeometry, theme: RenderTheme, lockup?: CompositionBox, headerHeight?: number): CompositionPageChrome {
@@ -330,6 +335,7 @@ function attachPageChrome(doc: jsPDF, composition: ReportCompositionResult, geom
     const lockup = composition.plan.slots.find((slot) => slot.page === page.page && slot.id === `${page.page}:header-lockup`);
     page.chrome = pageChrome(doc, page, composition.plan.pages.length, pageGeometry, theme, lockup?.box, dynamicHeaderBandHeight(composition, page, pageGeometry));
   }
+  attachResolvedChromeSpacingReport(composition.plan);
 }
 
 export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false, insertionRequests?: PlacementRequests): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {

@@ -23,11 +23,10 @@ its current page arrangement to a later page. `forbidden` ends that instance
 when its current page route is exhausted; it does not forbid moving between
 slots on that same page, creating another page for a different flow, or
 creating a repeated instance of the same flow. The physical destination for a
-continuation and the alternate geometry of that destination are separate
-concepts from this permission. The policy is declared by the template because
-the same named flow can be page-local in one template and multi-page in
-another. The page schedule and compatible slots still have to provide the
-destination; the policy alone never creates one.
+continuation is selected by the document's page-template schedule. The policy
+is declared by the template because the same named flow can be page-local in
+one template and multi-page in another. The schedule and a compatible slot
+must still provide the destination; the policy alone never creates one.
 
 ## Generated page metadata
 
@@ -70,8 +69,32 @@ normally contain coordinates.
 
 ## Layout
 
-A layout is one concrete page arrangement selected from a template. Different
-pages of the same document may use different layouts.
+A layout is one concrete page arrangement supplied by the template selected for
+one page. Different pages of the same document may use different templates and
+therefore different layouts.
+
+Pages in the same scheduled range reuse the same layout and slot names. A
+change of page template is a page-schedule decision, not a continuation-specific
+slot or frame.
+
+## Page-template schedule
+
+The page-template schedule maps page numbers or page ranges to template
+identifiers. For example, page 1 may use template X, pages 2–5 template Y,
+and pages 6–8 template Z. The selected template supplies the layout, chrome,
+regions and slot geometry for that page.
+
+A flow continues into a later page when its continuation policy permits the
+move and the selected template exposes the same named destination slot. There
+is no separate continuation slot or alternate continuation frame. If a named
+slot is absent from the selected template, that page is not a legal destination
+for that flow.
+
+## Frame
+
+A frame is the capacity of a slot in the layout selected for a page. The same
+slot name may have different geometry in different templates, but geometry is
+owned by the selected template rather than by a continuation-specific override.
 
 ## Region
 
@@ -113,6 +136,27 @@ flow contributes several blocks or when a block is split across pages.
 The public model does not need a separate `box` or `region instance` concept.
 The backend may call the geometry of a slot or placement a box, but that is an
 implementation detail.
+
+## Spacing report
+
+A spacing report explains a plan's geometry without inspecting rendered pixels.
+It distinguishes the template's static page boundaries from the resolved
+chrome boundary and from the content that actually occupies a slot.
+
+- A **slot box** is the capacity declared or materialized by the layout.
+- An **occupied box** is the extent consumed by the placed content.
+- **Padding** is internal space between a content box and its text or child
+  content.
+- A **margin** is style-level space between adjacent blocks.
+- A **boundary gap** is the distance from a slot or occupied box to a page
+  boundary or reserved band.
+- Boundary gaps are signed: positive means separation, zero means touching,
+  and negative means that the slot crosses the named band boundary.
+- **Line height** and **baseline offset** explain the relationship between a
+  text line box and the visible glyphs inside it.
+
+These are measured facts projected by the plan. They do not become new
+placement rules and they must not be reconstructed from a PDF raster.
 
 ## Anchor
 

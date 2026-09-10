@@ -295,6 +295,15 @@ export function createJsPdfTextMetrics(
     },
     /**
      * @planner-target composition/adapters/pdf/text.ts
+     * @planner-responsibility Keep the current textMargins implementation intact until its target seam is extracted.
+     */
+    textMargins(style) {
+      const selected = styles[style];
+      if (!selected) throw new Error(`No jsPDF composition style was provided for '${style}'.`);
+      return { before: selected.marginBefore ?? 0, after: selected.marginAfter ?? 0 };
+    },
+    /**
+     * @planner-target composition/adapters/pdf/text.ts
      * @planner-responsibility Keep the current textTrailingReserve implementation intact until its target seam is extracted.
      */
     textTrailingReserve(style) {

@@ -361,6 +361,117 @@ sources are distributed:
 not report page chrome. Do not mix the two layouts in one module; only retain
 compatible gap semantics.
 
+## Spacing and boundary report
+
+Raw `x`, `y`, `width`, and `height` values are not sufficient to explain why a
+page looks sparse or why text appears close to a footer. The report composition
+now adds `compositionPlan.spacing` after planning. It is an explanatory
+projection; it does not make placement or legality decisions.
+
+The projection has three layers:
+
+| Layer | What it reports | How to read it |
+|---|---|---|
+| `spacing.pages` | page size, template margins, static reserved bands, content box, columns, and usable segments | these are the template's physical boundaries before dynamic chrome is projected |
+| `spacing.slots` | the outer slot box, occupied box, occupied/remaining height, `gapBefore`, `gapAfter`, and distance to static/resolved header/footer bands | compare `gapAfter` with `staticBandGaps.toFooter` and `chromeBandGaps.toFooter`; the first is the static template boundary, the second is the resolved chrome boundary |
+| `spacing.textPlacements` | actual text box, slot box, line count, line height, baseline offset, padding, configured margins, and neighboring-content gaps | this is the evidence for the visible text position; it is not the same thing as the slot's capacity |
+
+`staticBandGaps` and `chromeBandGaps` are signed distances: a positive value
+means separation, zero means touching, and a negative value means that the
+slot crosses the named band boundary (which is expected for the header/footer
+slot itself).
+
+`spacing.pages[*].bands` deliberately contains the static geometry from the
+template. `pages[*].chrome` remains the resolved renderer projection. For a
+fit-content header, the two values can differ: the old normalized reserved
+band is retained as a structural fallback, while `chrome.headerBand` follows
+the measured header and its configured bottom gap.
+
+If `staticBandGaps.fromHeader` is negative while
+`chromeBandGaps.fromHeader` is approximately zero, that is a transitional
+signal: the legacy static reserved band is wider than the resolved dynamic
+header. It is not a rendered overlap. Future cleanup can make legality and
+capacity use the resolved boundary directly, then remove this diagnostic
+distinction.
+
+The current editorial Trans.INFO plan illustrates the distinction:
+
+```text
+page 1 main slot:       y=228.1408 .. 276.2100
+page 1 last text line:  y=270.5408 .. 275.5408
+page 1 footer rule:     y=276.2100
+visible gap:            0.6692 mm
+
+page 2 main slot:       y=29.7600 .. 267.3000
+page 2 last text line:  y=259.9600 .. 264.9600
+page 2 footer rule:     y=276.2100
+slot → footer:          8.9100 mm
+text → footer:          11.2500 mm
+```
+
+For the same four-page run, the resolved chrome is identical on pages 1–4
+except for the measured page-number width:
+
+| Element | Box (mm) | Meaning |
+|---|---|---|
+| `headerBand` | `x=0, y=0, w=210, h=29.82` | dynamic band: measured header bottom `23.82` plus the configured `6` mm bottom gap |
+| `headerRule` | `x=18, y=23.82, w=174, h=0.8` | rule starts at the configured PDF margin, not at the slot inset |
+| header slot | `x=17.01, y=17.82, w=175.98, h=6` | one-line title slot produced from the normalized template frame |
+| `footerRule` | `x=18, y=276.21, w=174, h=0.3` | fixed footer boundary (`0.93 × 297`) |
+| footer slot | `x=17.01, y=276.21, w=161.35, h=11.88` | footer flow capacity after reserving the measured page-number width and configured gap; actual footer text occupies `3.5` mm |
+| page 1 number | `x=186.0169, y=276.1878, w=5.9831, h=2.8222` | right-aligned `1 / 4` box |
+| page 2 number | `x=185.4722, y=276.1878, w=6.5278, h=2.8222` | right-aligned `2 / 4` box |
+
+The `0.99` mm difference between `17.01` and `18` is intentional: slot
+frames use `0.081 × 210`, while chrome rules use `pdf.margin=18`. It is not an
+extra text padding. The continuation main slots are
+`x=17.01/108, y=29.76, w=84.99, h=237.54`; their bottom is `267.30`, leaving
+`8.91` mm before the footer rule. The first-page main slots are pushed down by
+the full-width intro and page-one allocation and end at `276.21`, so their
+remaining capacity is only `0.6692` mm (left) and `3.0692` mm (right) in this
+run.
+
+In that run the intro slot itself is
+`x=17.01, y=36.591, w=175.98, h=182.5798`; its lead text occupies
+`y=172.3708 .. 219.1708` after the cover image. The main flow then starts at
+`y=228.1408`, so the visible `8.97` mm between the intro content and main is a
+page-one allocation gap, not body padding.
+
+The page-2 slot ends at 90% of the page because its
+`continuation_frame` is `{ y: 0.1235, height: 0.7765 }`; the footer band starts
+at 93%. This is why the plan leaves a structural 8.91 mm gap, and why the
+actual content can leave more than two additional 5 mm body lines. Page 1
+uses `content.frame` ending at the footer boundary, so the final line is
+allowed to approach the rule.
+
+Text spacing is now explicit rather than inferred from line height alone. The
+current PDF styles report, for example:
+
+```text
+body:    lineHeight=5, baselineOffset=3.8, padding={top:0,bottom:0}, margin={before:0,after:2.8}
+heading: lineHeight=6, baselineOffset=4.7, padding={top:0,bottom:0}, margin={before:4.2,after:1.4}
+quote:   lineHeight=5.6, padding={top:1.5,bottom:1.5}, margin={before:0,after:4.2}
+```
+
+The plan must keep these concepts separate:
+
+- **slot box** — capacity declared or materialized by the layout;
+- **occupied box** — the extent actually consumed by text, graphics, or a
+  structured block;
+- **padding** — internal space between a block's box and its text content;
+- **margin** — style-level space used between neighboring blocks;
+- **boundary gap** — distance between an occupied/slot box and a page band;
+- **line height/baseline** — typography metrics explaining why ink does not
+  fill the entire line box.
+
+For adjacent text blocks, the reported `gapBefore`/`gapAfter` is the measured
+placement gap. It need not equal the sum of both configured margins: the PDF
+adapter combines neighboring margins with `max(previous.marginAfter,
+next.marginBefore)`.
+
+No renderer or visual-QA tool should reconstruct these values from pixels when
+the plan already exposes them.
+
 ### Active and transitional pieces
 
 - The active composition contract consists of named flows, slots, `repeat`,

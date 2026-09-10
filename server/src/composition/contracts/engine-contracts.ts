@@ -23,6 +23,7 @@ export interface CompositionTextMetrics {
   glyphs?(styleName: string): CompositionGlyphSpec[];
   glyphBaselineOffset?(styleName: string): number;
   textIndent?(styleName: string): number;
+  textMargins?(styleName: string): { before: number; after: number };
   textTrailingReserve?(styleName: string): number;
   blockGap?(previousStyle: string, nextStyle: string): number;
   measureBlock?(block: CompositionBlock, box: CompositionBox): CompositionBlockMeasurement;
@@ -54,6 +55,76 @@ export interface CompositionBox {
   y: number;
   width: number;
   height: number;
+}
+
+/** Physical insets in the same units as a composition box (normally mm). */
+export interface CompositionInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/** Static page geometry projected into the plan report. */
+export interface CompositionPageGeometryReport {
+  page: number;
+  layoutId: string;
+  pageBox: CompositionBox;
+  margins: CompositionInsets;
+  contentBox: CompositionBox;
+  bands: Record<string, CompositionBox>;
+  segments: CompositionBox[];
+  columns: CompositionBox[];
+}
+
+/** Renderer-neutral text spacing used by one block style. */
+export interface CompositionTextSpacingReport {
+  styleName: string;
+  lineHeight: number;
+  baselineOffset?: number;
+  padding: { top: number; bottom: number };
+  margin: { before: number; after: number };
+  textIndent?: number;
+}
+
+/** Occupancy and signed boundary gaps for one materialized slot. */
+export interface CompositionSlotSpacingReport {
+  page: number;
+  slotId: string;
+  regionId: string;
+  flowId?: string;
+  box: CompositionBox;
+  occupiedBox?: CompositionBox;
+  occupiedHeight: number;
+  remainingHeight: number;
+  gapBefore: number;
+  gapAfter: number;
+  staticBandGaps?: { fromHeader?: number; toFooter?: number };
+  chromeBandGaps?: { fromHeader?: number; toFooter?: number };
+  textStyles?: CompositionTextSpacingReport[];
+}
+
+/** Actual text placement spacing, including gaps to neighboring content. */
+export interface CompositionTextPlacementSpacingReport {
+  blockId: string;
+  flowId: string;
+  page: number;
+  slotId: string;
+  layer?: 'flow' | 'insertion';
+  box: CompositionBox;
+  slotBox: CompositionBox;
+  lineCount: number;
+  spacing: CompositionTextSpacingReport;
+  gapBefore: number;
+  gapAfter: number;
+  gapToFooter?: number;
+}
+
+/** Explainable geometry and spacing projection attached to a composition plan. */
+export interface CompositionPlanSpacingReport {
+  pages: CompositionPageGeometryReport[];
+  slots: CompositionSlotSpacingReport[];
+  textPlacements: CompositionTextPlacementSpacingReport[];
 }
 
 export interface CompositionPageChrome {
@@ -382,6 +453,7 @@ export interface CompositionPlan {
   repeatFlowIds?: string[];
   minimumFragmentLines?: number;
   flowPlacements?: CompositionFlowPlacement[];
+  spacing?: CompositionPlanSpacingReport;
   trace?: CompositionPlanTrace;
 }
 

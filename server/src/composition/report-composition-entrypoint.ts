@@ -14,6 +14,7 @@ import type { TextCompositionPlannerPolicy } from './contracts/planner-policy.js
 import { compositionStylesFromRenderConfig } from './adapters/render-config.js';
 import { applyDynamicInsertionRequests } from './adapters/request-insertion-slots.js';
 import { hasInlineMark, missingInlineCodePointsByStyle, missingInlineGlyphWarning, missingTableGlyphWarning } from './text/inline-runs.js';
+import { attachPlanSpacingReport } from './observability/spacing-report.js';
 
 export {
   compositionChartStyleFromRenderConfig,
@@ -93,6 +94,7 @@ export function planReportComposition(
     ...options.policy,
   };
   const result = createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics);
+  attachPlanSpacingReport(result.plan, document, metrics, geometry);
   appendInlineDiagnostics(doc, options.family, document, result, options.inlineFontCoverage);
   return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };
 }

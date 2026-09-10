@@ -13,6 +13,7 @@ const execFileAsync = promisify(execFile);
 const root = process.cwd();
 const bundle = process.env.REPORT_BABY_TEST_BUNDLE ?? 'cli-bundle.cjs';
 const config = parse(await readFile(join(root, 'templates', 'render-config.yml'), 'utf8'));
+const templateConfig = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
 const mmToPt = config.canvas.points_per_inch / 25.4;
 const tolerance = config.pdf.composition_geometry_tolerance * mmToPt + 1;
 
@@ -143,6 +144,16 @@ try {
 
   const mainPlacements = plan.flowPlacements.filter((candidate) => candidate.flowId === 'main' && candidate.hasContent);
   assert.ok(mainPlacements.length > 0, 'main flow must have planned placements');
+  assert.ok(plan.spacing && plan.spacing.pages.length === plan.pages.length, 'composition plan must expose static page geometry for spacing analysis');
+  assert.ok(plan.spacing.slots.length >= plan.slots.length, 'spacing report must cover every materialized slot');
+  const spacingPage = plan.spacing.pages[0];
+  assert.deepEqual(spacingPage.margins, templateConfig.page.margins, 'spacing report must expose template page margins');
+  const spacingMainSlot = plan.spacing.slots.find((candidate) => candidate.slotId === mainPlacements[0].slotId);
+  assert.ok(spacingMainSlot && Number.isFinite(spacingMainSlot.remainingHeight), 'spacing report must expose slot occupancy and remaining height');
+  assert.ok(spacingMainSlot?.chromeBandGaps && Number.isFinite(spacingMainSlot.chromeBandGaps.toFooter), 'rendered spacing report must expose resolved chrome boundary gaps');
+  assert.ok(spacingMainSlot?.textStyles?.some((style) => style.styleName === 'body' && style.lineHeight > 0), 'spacing report must expose body line-height and text spacing');
+  assert.ok(plan.spacing.textPlacements.some((placement) => placement.flowId === 'header' && placement.spacing.baselineOffset !== undefined), 'spacing report must expose header text metrics');
+  assert.ok(plan.spacing.textPlacements.some((placement) => placement.flowId === 'footer' && placement.gapToFooter !== undefined), 'spacing report must expose footer boundary gaps');
   const mainPage = rendered.pages.find((page) => wordsContaining(page, 'MAIN_CONTENT_ANCHOR').length > 0);
   assert.ok(mainPage, 'main content marker must be rendered');
   assertWordInPlacement(mainPage, 'MAIN_CONTENT_ANCHOR', mainPlacements.find((candidate) => candidate.page === mainPage.page), 'main');
@@ -198,6 +209,7 @@ try {
   const dynamicHeaderSlot = dynamicPlan.slots.find((slot) => slot.id === '1:header');
   assert.ok(dynamicHeaderPlacement && dynamicHeaderSlot && dynamicHeaderSlot.box.height > 0, 'dynamic header must be materialized with measured height');
   assert.ok(dynamicPlan.pages[0].chrome.headerBand.height >= dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height - tolerance, 'dynamic chrome band must contain the measured header box');
+  assert.ok(dynamicPlan.pages[0].chrome.headerRule && dynamicPlan.pages[0].chrome.headerRule.y >= dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height - tolerance, 'dynamic chrome rule must follow the measured header box');
   const dynamicMainPlacement = dynamicPlan.flowPlacements.find((candidate) => candidate.flowId === 'main' && candidate.hasContent && candidate.page === 1);
   assert.ok(dynamicMainPlacement && dynamicHeaderSlot && dynamicMainPlacement.box.y >= dynamicHeaderSlot.box.y + dynamicHeaderSlot.box.height - tolerance, 'main flow must start below dynamic header geometry');
   for (const page of dynamicPlan.pages) {

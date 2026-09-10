@@ -143,6 +143,9 @@ function assertEditorialPlan(result, fixture, renderConfig) {
   assert.deepEqual(incompleteTraceBlocks, [], `every authored block must be present in the final plan: ${JSON.stringify(incompleteTraceBlocks)}`);
   const mainFlowPlacements = (result.plan.flowPlacements ?? []).filter((placement) => placement.flowId === 'main');
   assert.ok(mainFlowPlacements.length > 0, 'plan must register every main-flow placement, including empty capacity');
+  const headerSlots = result.plan.slots.filter((slot) => slot.flowId === 'header');
+  assert.ok(headerSlots.length > 0 && headerSlots.every((slot) => slot.fitContent === true), 'editorial header must remain a fit-content slot');
+  assert.ok((result.plan.flowPlacements ?? []).some((placement) => placement.flowId === 'header' && placement.hasContent), 'editorial header flow must be planned with content');
   assert.ok(mainFlowPlacements.every((placement, index, placements) => index === 0
     || placement.page > placements[index - 1].page
     || placement.page === placements[index - 1].page && placement.routeIndex > placements[index - 1].routeIndex), 'flow placements must be registered in page and route order');

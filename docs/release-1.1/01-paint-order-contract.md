@@ -1,80 +1,79 @@
-# Release 1.1 — jawny paint order
+# Release 1.1 — explicit paint order
 
-Status: propozycja docelowego kontraktu; nie jest jeszcze implementacją.
+Status: target-contract proposal; not an implementation yet.
 
-## Granica względem release 1.0
+## Boundary with Release 1.0
 
-W release 1.0 obowiązują dwa fakty:
+Release 1.0 has two established facts:
 
-1. `priority` służy wyłącznie do wcześniejszej rezerwacji i wyliczania
-   geometrii placementów;
-2. backend zachowuje dotychczasowy porządek komend jako baseline migracji.
+1. `priority` is used only for earlier reservation and geometry calculation for
+   placements;
+2. the backend preserves the existing command order as the migration baseline.
 
-Nie wyciągamy z `priority` kolejności rysowania i nie zmieniamy przez to
-backendu w ramach punktu 12. Ten dokument opisuje osobny kontrakt release 1.1.
+We do not derive drawing order from `priority`, and we do not change the backend
+for that reason as part of item 12. This document describes a separate Release
+1.1 contract.
 
-## Dlaczego potrzebujemy jawnego kontraktu
+## Why an explicit contract is needed
 
-Obecny backend nie posiada pola ani polityki paint order. Kolejność wynika z
-tego, że `render()` przechodzi kolejno po osobnych tablicach planu:
+The current backend has no paint-order field or policy. The order follows from
+`render()` iterating through separate plan arrays in sequence:
 
 ```text
 tablePlacements
 → graphicPlacements
 → blockPlacements
-→ zwykłe linie tekstu
+→ ordinary text lines
 → insertion lines
 → glyphPlacements
 ```
 
-To działa, ponieważ planner i evaluator zazwyczaj zabraniają kolizji. Nie jest
-jednak wystarczająco jawne dla:
+This works because the planner and evaluator generally forbid collisions. It is
+not explicit enough for:
 
-- kontrolowanego nakładania dekoracji i grafik;
-- wielu backendów renderujących ten sam plan;
-- przewidywalnej widoczności glyphów, teł i insertionów;
-- testów, które mają odróżnić poprawny box od poprawnego wyniku wizualnego;
-- świadomego utrzymania kolejności content streamu PDF.
+- controlled overlap of decorations and graphics;
+- multiple backends rendering the same plan;
+- predictable visibility of glyphs, backgrounds, and insertions;
+- tests that distinguish a correct box from a correct visual result;
+- deliberate preservation of PDF content-stream order.
 
-Kolejność pętli jest więc obecnie faktem implementacyjnym, a nie kontraktem
-domenowym. Release 1.1 ma nadać jej nazwę, właściciela i testowalną regułę.
+The loop order is therefore currently an implementation fact, not a domain
+contract. Release 1.1 gives it a name, an owner, and a testable rule.
 
-## Definicje
+## Definitions
 
 ### `priority`
 
-`priority` jest metadanym planera. Wyższa liczba oznacza silniejsze roszczenie
-do wcześniejszego rozwiązania geometrii. Planner może sortować placementy
-malejąco, aby najpierw zarezerwować ich przestrzeń. W okresie migracji brak
-wartości oznacza jawnie `composition_priority.default` z YAML (obecnie `100`)
-— najniższy poziom roszczenia — a nie `0`.
+`priority` is planner metadata. A higher number means a stronger claim to have
+geometry resolved earlier. The planner may sort placements in descending order
+to reserve their space first. During migration, an omitted value explicitly
+means `composition_priority.default` from YAML (currently `100`) — the lowest
+claim level — and not `0`.
 
-`priority` nie odpowiada na pytanie, co ma być wizualnie nad czym. W release 1.0
-nie jest źródłem paint order.
+`priority` does not answer which element should be visually above another. In
+Release 1.0 it is not the source of paint order.
 
 ### Paint order
 
-Paint order to kolejność, w której adapter backendu emituje fizyczne komendy
-rysowania do PDF/PNG/SVG. Jest to porządek wykonania renderera, nie:
+Paint order is the order in which the backend adapter emits physical drawing
+commands to PDF/PNG/SVG. It is renderer execution order, not:
 
-- kolejność flowu i slotów;
-- kolejność authored blocks;
-- kolejność kontynuacji na stronach;
-- kolejność rezerwacji geometrii;
-- automatyczny `z-index`.
+- flow and slot order;
+- authored-block order;
+- continuation order across pages;
+- geometry-reservation order;
+- an automatic `z-index`.
 
 ### `paint phase`
 
-W release 1.1 paint order będzie reprezentowany przez nazwane fazy. Faza jest
-stabilnym kluczem backendu, a nie nowym rodzajem bloku ani publiczną encją
-treści.
+In Release 1.1, paint order is represented by named phases. A phase is a stable
+backend key, not a new block type or public content entity.
 
-## Przyjęty model release 1.1
+## Adopted Release 1.1 model
 
-### Jedna jawna lista faz backendu
+### One explicit backend phase list
 
-Źródłem kolejności będzie konfiguracja renderera, nie przypadkowa kolejność
-tablic planu:
+The source of order is renderer configuration, not accidental plan-array order:
 
 ```yaml
 pdf:
@@ -89,93 +88,93 @@ pdf:
     - debug
 ```
 
-Lista jest uporządkowana od malowania najwcześniejszego do najpóźniejszego.
-Element późniejszej fazy może wizualnie przykryć element wcześniejszej fazy,
-jeżeli kontrakt legalności dopuszcza ich nakładanie. Pozycja na liście jest
-jedyną istotną relacją; nie wprowadzamy osobnych, rozproszonych liczb w kodzie.
+The list is ordered from earliest to latest painting. A later-phase element may
+visually cover an earlier-phase element when the legality contract permits the
+overlap. Position in the list is the only relevant relation; do not introduce
+separate, scattered numbers in code.
 
-Domyślna lista odtwarza obecny backendowy porządek dla faz, które już istnieją.
-`page-background` i `debug` są nazwami przyszłych/otaczających operacji i nie
-mogą być udawane przez zwykłe placementy.
+The default list reproduces the current backend order for phases that already
+exist. `page-background` and `debug` are names for future/outer operations and
+must not be faked by ordinary placements.
 
-### Mapowanie placementów na fazy
+### Mapping placements to phases
 
-Backend albo jego adapter normalizuje każdy renderowalny wynik planu do fazy:
+The backend or its adapter normalises every renderable plan result to a phase:
 
-| Wynik planu | Domyślna faza | Uwagi |
+| Plan result | Default phase | Notes |
 |---|---|---|
-| `tablePlacements` | `table` | renderer tabeli pozostaje atomowy wewnątrz własnego placementu |
-| `graphicPlacements` z `paint !== false` | `graphic` | `paint: false` nie emituje komendy, ale geometria nadal może być obstacle'em |
-| `blockPlacements` | `block` | obejmuje image, metric, chart i przyszły lockup |
-| `CompositionLine` z `layer !== 'insertion'` | `flow-text` | zachowuje zwykły tekst flowów |
-| `CompositionLine` z `layer === 'insertion'` | `insertion-text` | zachowuje rozdzielenie tekstu insertionów |
-| `glyphPlacements` | `glyph` | domyślnie pozostają nad treścią, jeśli ich box może się nakładać |
-| debug overlay | `debug` | obserwacja; nie zmienia planu ani geometrii |
+| `tablePlacements` | `table` | the table renderer remains atomic inside its placement |
+| `graphicPlacements` with `paint !== false` | `graphic` | `paint: false` emits no command, but geometry may still be an obstacle |
+| `blockPlacements` | `block` | includes image, metric, chart, and the future lockup |
+| `CompositionLine` with `layer !== 'insertion'` | `flow-text` | preserves ordinary flow text |
+| `CompositionLine` with `layer === 'insertion'` | `insertion-text` | preserves insertion-text separation |
+| `glyphPlacements` | `glyph` | remains above content by default when boxes may overlap |
+| debug overlay | `debug` | observation; does not change the plan or geometry |
 
-Mapowanie nie zmienia rodzaju bloku, flowu ani route'u. Jest decyzją adaptera
-renderera, który zna możliwości konkretnego backendu.
+Mapping does not change the block type, flow, or route. It is a renderer-adapter
+decision, because the adapter knows the capabilities of its backend.
 
 ### Tie-breaker
 
-Dwa placementy w tej samej fazie są renderowane deterministycznie według:
+Two placements in the same phase are rendered deterministically by:
 
-1. numeru strony;
-2. stabilnej kolejności placementu zapisanej w planie;
-3. technicznego identyfikatora wyłącznie jako ostatniego remisu.
+1. page number;
+2. stable placement order recorded in the plan;
+3. a technical identifier only as the final tie-break.
 
-Nie sortujemy po czasie utworzenia obiektu, kolejności kluczy mapy ani nazwie
-flowu. Zmiana paint orderu musi być widoczna w konfiguracji lub w jawnej
-zmianie stabilnej kolejności planu.
+Do not sort by object-creation time, map-key order, or flow name. A paint-order
+change must be visible in configuration or in an explicit change to the plan's
+stable order.
 
-## Relacja z `priority`
+## Relationship with `priority`
 
-W podstawowym kontrakcie release 1.1 `priority` i paint phase są osobne:
+In the basic Release 1.1 contract, `priority` and paint phase are separate:
 
 ```text
-priority ↓  → wcześniejsza rezerwacja geometrii
-paint phase ↑ → późniejsze wykonanie komendy i potencjalne przykrycie
+priority ↓  → earlier geometry reservation
+paint phase ↑ → later command execution and potential covering
 ```
 
-Nie oznacza to, że nie mogą mieć wspólnego źródła. Adapter może kiedyś
-zbudować obie wartości z jednej polityki semantycznej, ale mapowanie musi być
-jawne i testowalne. Nie wolno uzależniać paint orderu od samej kolejności
-planowania tylko dlatego, że oba przebiegi używają słowa „priority”.
+This does not prevent them from having a shared source. An adapter may eventually
+derive both values from one semantic policy, but the mapping must be explicit
+and testable. Do not make paint order depend on planning order merely because
+both processes use the word “priority”.
 
-Przykład: footer może mieć wysokie `priority`, aby jego dynamiczna geometria
-została rozstrzygnięta przed `main`, ale jego paint phase może pozostać późna
-albo wczesna zależnie od decyzji wizualnej. Przy niekolidujących boxach nie
-zmienia to legalności.
+For example, a footer may have a high `priority` so that its dynamic geometry
+is resolved before `main`, while its paint phase may be late or early depending
+on the visual decision. With non-overlapping boxes this does not change legality.
 
-Jeżeli produkt wybierze jedną wspólną liczbę w przyszłości, musi przyjąć jawne
-mapowanie, np. wyższy `priority` oznacza późniejszy paint i wyższą warstwę.
-Nie jest to jednak kontrakt 1.0 ani wymaganie tego dokumentu.
+If the product chooses one shared number in the future, it must adopt an
+explicit mapping, for example higher `priority` means later paint and a higher
+layer. That is not a 1.0 contract or a requirement of this document.
 
-## Właściciele
+## Owners
 
 ```text
 render-config.yml
-  → adapter konfiguracji renderera
-  → mapowanie placementu do paint phase
-  → backend tworzy komendy i sortuje je fazą + tie-breakerem
-  → evaluator sprawdza legalność nakładania niezależnie od kolejności komend
+  → renderer configuration adapter
+  → placement-to-paint-phase mapping
+  → backend creates commands and sorts them by phase + tie-breaker
+  → evaluator checks overlap legality independently of command order
 ```
 
-- `render-config.yml` jest właścicielem domyślnej listy faz i jej kolejności;
-- adapter może odrzucić nieznaną fazę albo użyć jawnego fallbacku;
-- planner nie importuje konfiguracji ani API PDF;
-- evaluator nie legalizuje kolizji przez sam fakt późniejszego malowania;
-- backend odpowiada za wykonanie komend i stan graficzny PDF;
-- template określa sloty, geometrię i dozwolone rodzaje treści, ale nie musi
-  znać technicznych komend jsPDF.
+- `render-config.yml` owns the default phase list and its order;
+- the adapter may reject an unknown phase or use an explicit fallback;
+- the planner does not import configuration or the PDF API;
+- the evaluator does not legalise a collision merely because an element paints
+  later;
+- the backend executes commands and owns PDF graphic state;
+- the template defines slots, geometry, and allowed content types, but need not
+  know technical jsPDF commands.
 
-Jeśli różne backendy wymagają różnych faz, każdy adapter może mieć własną
-mapę wykonawczą przy zachowaniu tych samych semantycznych kategorii. Nie
-tworzymy publicznego `paintOrder` jako pola tekstowego w każdym bloku.
+If different backends require different phases, each adapter may have its own
+execution map while preserving the same semantic categories. Do not create a
+public `paintOrder` string field on every block.
 
-## Wymagana zmiana techniczna
+## Required technical change
 
-Obecne osobne tablice planu nie wystarczą do dowolnego, jawnego sortowania.
-Backend potrzebuje wewnętrznej listy komend renderera, np.:
+The current separate plan arrays are insufficient for arbitrary explicit
+sorting. The backend needs an internal renderer-command list, for example:
 
 ```text
 RenderCommand {
@@ -186,74 +185,73 @@ RenderCommand {
 }
 ```
 
-To jest typ adaptera, nie nowa encja domenowa. Komenda zachowuje referencję do
-istniejącego placementu i wywołuje jego capability. Nie przenosimy pomiaru,
-routingu ani legalności do backendu.
+This is an adapter type, not a new domain entity. A command keeps a reference to
+an existing placement and invokes its capability. Measurement, routing, and
+legality do not move into the backend.
 
-Renderery atomowe, takie jak tabela albo karta metryki, zachowują własną
-wewnętrzną kolejność rysowania. Paint phase steruje kolejnością placementów,
-nie pojedynczych komórek tabeli lub fragmentów glyphów. Jeżeli kiedyś trzeba
-będzie przeplatać komendy wewnątrz jednego bloku, będzie to osobny kontrakt
-capability.
+Atomic renderers such as a table or metric card retain their own internal draw
+order. Paint phase controls placement order, not individual table cells or
+glyph fragments. Interleaving commands inside one block, if ever needed, is a
+separate capability contract.
 
-## Legalność i nakładanie
+## Legality and overlap
 
-Paint order nie zastępuje evaluatora. Dla każdej pary elementów obowiązuje
-jedna z trzech sytuacji:
+Paint order does not replace the evaluator. Every pair of elements is in one of
+three situations:
 
-1. boxy nie nachodzą na siebie — paint order jest wizualnie obojętny;
-2. nakładanie jest jawnie dozwolone — faza decyduje, który element jest
-   widoczny na wierzchu;
-3. nakładanie jest niedozwolone — plan zostaje odrzucony niezależnie od tego,
-   który element zostałby narysowany później.
+1. boxes do not overlap — paint order is visually irrelevant;
+2. overlap is explicitly allowed — phase decides which element is visible on
+   top;
+3. overlap is forbidden — the plan is rejected regardless of which element
+   would be drawn later.
 
-`paint: false` oznacza brak fizycznej komendy, a nie zgodę na kolizję. Obstacle
-pozostaje częścią geometrii planu i może ograniczać tekst.
+`paint: false` means no physical command, not permission for a collision. The
+obstacle remains part of plan geometry and may constrain text.
 
-## Testy wymagane przed wdrożeniem
+## Tests required before rollout
 
-### Kontrakt konfiguracji
+### Configuration contract
 
-- brak fazy lub powtórzona nazwa kończy się czytelnym błędem konfiguracji;
-- każda renderowalna kategoria ma mapowanie do jednej fazy;
-- domyślna lista daje obecny wynik dla niekolidujących placementów;
-- kolejność jest stabilna między uruchomieniami i backendami.
+- a missing phase or duplicate name produces a clear configuration error;
+- every renderable category maps to exactly one phase;
+- the default list gives the current result for non-overlapping placements;
+- order is stable across runs and backends.
 
-### Nakładanie
+### Overlap
 
-- grafika tła i tekst nad nią;
-- dwa grafiki o różnych fazach;
-- insertion i zwykły tekst w legalnym przypadku nakładania;
-- glyph nad albo pod tekstem, zależnie od fazy;
-- `paint: false` z zachowaną geometrią obstacle'u;
-- niedozwolona kolizja odrzucona niezależnie od paint orderu.
+- a background graphic and text above it;
+- two graphics with different phases;
+- an insertion and ordinary text in a legal overlap case;
+- a glyph above or below text depending on phase;
+- `paint: false` with obstacle geometry preserved;
+- a forbidden collision rejected independently of paint order.
 
-### Artefakty
+### Artifacts
 
-- PDF, PNG/debug i `dry_run` wskazują te same placementy;
-- selectable text zachowuje osobny, semantyczny porządek źródła;
-- zmiana fazy zmienia tylko zweryfikowaną warstwę wizualną, a nie routing ani
-  coverage treści;
-- aktualny corpus nie zmienia się bez jawnej zmiany konfiguracji.
+- PDF, PNG/debug, and `dry_run` identify the same placements;
+- selectable text keeps a separate semantic source order;
+- changing a phase changes only the verified visual layer, not routing or
+  content coverage;
+- the current corpus does not change without an explicit configuration change.
 
-## Kolejność implementacji
+## Implementation order
 
-1. Zinwentaryzować wszystkie komendy obecnego backendu i ustalić, które są
-   placement-level, a które wewnętrzne dla capability.
-2. Dodać walidację listy `pdf.paint_order` w seamie konfiguracji adaptera.
-3. Wprowadzić wewnętrzny `RenderCommand` bez zmiany publicznego
+1. Inventory every command in the current backend and identify which commands
+   are placement-level and which are internal to a capability.
+2. Add validation of `pdf.paint_order` in the adapter configuration seam.
+3. Introduce an internal `RenderCommand` without changing public
    `CompositionPlan`.
-4. Zachować bieżący porządek jako domyślny fallback i porównać PDF/text/bbox/
-   raster z baseline'em.
-5. Dodać kontrolowane przypadki nakładania i testy evaluatorowe.
-6. Dopiero potem rozważyć mapowanie wybranych placementów do niestandardowej
-   fazy lub powiązanie polityki z `priority`.
+4. Keep the current order as the default fallback and compare PDF/text/bbox/
+   raster output with the baseline.
+5. Add controlled overlap cases and evaluator tests.
+6. Only then consider mapping selected placements to a custom phase or linking
+   policy to `priority`.
 
-## Poza zakresem
+## Out of scope
 
-- automatyczny globalny solver geometrii;
-- zmiana polityki `continuation`;
-- zmiana route/slot order albo source/reading order;
-- przenoszenie treści `main` do insertionów;
-- arbitralny CSS `z-index` dla każdego bloku;
-- publiczne pola `readingOrder` i `selectionGroup`.
+- an automatic global geometry solver;
+- changing `continuation` policy;
+- changing route/slot order or source/reading order;
+- moving `main` content into insertions;
+- arbitrary CSS `z-index` for every block;
+- public `readingOrder` and `selectionGroup` fields.

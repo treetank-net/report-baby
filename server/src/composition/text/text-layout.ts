@@ -346,6 +346,19 @@ export function textPadding(metrics: CompositionTextMetrics, block: CompositionB
   return padding;
 }
 
+/** Validate and return the configured margins for one block style. */
+/**
+ * @planner-target composition/text/text-layout.ts
+ * @planner-responsibility Keep the current textMargins implementation intact until its target seam is extracted.
+ */
+export function textMargins(metrics: CompositionTextMetrics, block: CompositionBlock): { before: number; after: number } {
+  const margins = metrics.textMargins?.(styleFor(block)) ?? { before: 0, after: 0 };
+  if (!Number.isFinite(margins.before) || !Number.isFinite(margins.after) || margins.before < 0 || margins.after < 0) {
+    throw new Error(`Text metrics returned invalid margins for '${styleFor(block)}': ${JSON.stringify(margins)}.`);
+  }
+  return margins;
+}
+
 /** Wrap one block against the supplied geometry and obstacles. */
 /**
  * @planner-target composition/text/text-layout.ts
