@@ -170,9 +170,9 @@ function assertEditorialPlan(result, fixture, renderConfig) {
   assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
   const evaluationPhase = result.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
   assert.ok(evaluationPhase?.details?.candidates?.length >= 1, 'editorial fixture must record evaluated planner candidates');
-  const continuationRight = result.plan.slots.find((slot) => slot.id === '2:continuation:segment-2');
-  const firstDriverLine = result.plan.lines.find((line) => line.page === 2 && line.blockId === 'body-drivers-1');
-  assert.ok(continuationRight && firstDriverLine, 'fixture must create both continuation columns and place the drivers block on the continuation page');
+  const firstDriverLine = result.plan.lines.find((line) => line.blockId === 'body-drivers-1');
+  const contentRight = firstDriverLine && result.plan.slots.find((slot) => slot.page === firstDriverLine.page && slot.id.endsWith(':content:segment-2'));
+  assert.ok(contentRight && firstDriverLine && firstDriverLine.page > 1, 'fixture must create both ordinary content columns and place the drivers block after the first page');
   assert.ok(Number.isInteger(firstDriverLine.routeIndex) && firstDriverLine.slotId.includes(':segment-'), 'the drivers block must enter through the main flow route, not by a separate block placement');
   const dieselObstacle = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-diesel');
   const rightColumnBeforeDieselQuote = result.plan.lines.some((line) => line.page === 3

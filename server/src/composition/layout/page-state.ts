@@ -31,7 +31,12 @@ function layoutById(template: CompositionTemplate, id: string): CompositionLayou
  * @planner-responsibility Resolve the layout assigned to one flow page.
  */
 export function routeLayout(route: CompositionFlowRoute, template: CompositionTemplate, page: number): CompositionLayoutTemplate | undefined {
-  const layoutId = route.layouts?.[Math.min(page - 1, route.layouts.length - 1)] ?? template.layouts[0]?.id;
+  const hasSchedule = template.pageTemplateSchedule !== undefined;
+  const scheduledLayoutId = template.pageTemplateSchedule?.find((entry) => {
+    return page >= entry.from && (entry.to === undefined || page <= entry.to);
+  })?.layoutId;
+  if (hasSchedule && scheduledLayoutId === undefined) return undefined;
+  const layoutId = scheduledLayoutId ?? route.layouts?.[Math.min(page - 1, route.layouts.length - 1)] ?? template.layouts[0]?.id;
   const baseLayout = layoutId ? layoutById(template, layoutId) : undefined;
   if (!baseLayout) return undefined;
   const overlays = template.pageSlotOverlays?.[page];
@@ -48,7 +53,9 @@ export function routeLayout(route: CompositionFlowRoute, template: CompositionTe
  * @planner-responsibility Resolve the route slot identifiers for one layout.
  */
 export function routeSlots(route: CompositionFlowRoute, layout: CompositionLayoutTemplate): string[] {
-  return route.slotsByLayout?.[layout.id] ?? route.slots;
+  const candidates = route.slotsByLayout?.[layout.id] ?? route.slots;
+  const available = new Set(layout.slots.map((slot) => slot.id));
+  return candidates.filter((id) => available.has(id));
 }
 
 /**
@@ -75,6 +82,16 @@ export function slotBox(pageState: PageState, definition: CompositionSlotTemplat
 function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
   const slots = new Map<string, CompositionSlot>();
   for (const definition of layout.slots) {
+    const firstPageContentSlot = page === (layout.firstPageNumber ?? 1)
+      && layout.firstPageContentTop !== undefined
+      && layout.firstPageContentSlotIds?.includes(definition.id);
+    const box = firstPageContentSlot
+      ? {
+        ...definition.box,
+        y: layout.firstPageContentTop!,
+        height: Math.max(0, definition.box.y + definition.box.height - layout.firstPageContentTop!),
+      }
+      : { ...definition.box };
     slots.set(definition.id, {
       id: slotId(page, definition.id),
       page,
@@ -86,8 +103,11 @@ function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
       ...(definition.allowedBlockKinds === undefined ? {} : { allowedBlockKinds: [...definition.allowedBlockKinds] }),
       ...(definition.fitContent === undefined ? {} : { fitContent: definition.fitContent }),
       ...(definition.grow?.maxHeight === undefined ? {} : { growthMaxHeight: definition.grow.maxHeight }),
-      box: { ...definition.box },
-      state: 'open',
+      box,
+      state: definition.firstPageOnly
+        && page > (layout.firstPageNumber ?? 1)
+        ? 'exhausted'
+        : 'open',
     });
   }
   return { page, layout, slots };
@@ -196,6 +216,7 @@ function slotMatchesBlock(
   slots?: ReadonlyMap<string, CompositionSlot>,
 ): boolean {
   if (definition.flowId !== undefined && definition.flowId !== flowId) return false;
+  if (definition.firstPageOnly && slots?.get(definition.id)?.state === 'exhausted') return false;
   if (definition.allowedRoles?.includes('quote') && slots?.get(definition.id)?.state === 'exhausted') return false;
   if (definition.allowedRoles && !definition.allowedRoles.includes(block.role)) return false;
   if (definition.allowedBlockIds && !blockMatchesAllowedId(block.id, definition.allowedBlockIds)) return false;

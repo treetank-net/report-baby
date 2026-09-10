@@ -118,7 +118,7 @@ function baseRouteForFlow(template: CompositionTemplate, flowId: string): Compos
 function addRouteSlots(route: CompositionFlowRoute, slotIds: string[], template: CompositionTemplate): CompositionFlowRoute {
   const slots = [...new Set([...route.slots, ...slotIds])];
   const insertionSlots = [...new Set([...(route.insertionSlots ?? []), ...slotIds])];
-  const layoutIds = route.layouts ?? (template.layouts[0] ? [template.layouts[0].id] : []);
+  const layoutIds = route.layouts ?? template.layouts.map((layout) => layout.id);
   const slotsByLayout = Object.fromEntries(layoutIds.map((layoutId) => [layoutId, [...new Set([...(route.slotsByLayout?.[layoutId] ?? []), ...slotIds])]]));
   return { ...route, slots, insertionSlots, layouts: [...layoutIds], slotsByLayout };
 }

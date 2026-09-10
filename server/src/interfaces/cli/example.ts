@@ -8,7 +8,7 @@ import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx, titleLayoutDiagnost
 import { resolveSlideDeck } from '../../presentation/planning/slide-context.js';
 import { slidePlanSummary } from '../../presentation/planning/slide-plan.js';
 import { validateRenderManifest } from '../../artifacts/manifest.js';
-import { compositionInputSchema, placementRequestsSchema, slideDeckSchema } from '../../contracts/input/schema.js';
+import { compositionInputSchema, pageTemplateScheduleSchema, placementRequestsSchema, slideDeckSchema } from '../../contracts/input/schema.js';
 
 export { validateRenderManifest };
 
@@ -139,8 +139,9 @@ function themeSummary(theme: RenderTheme): Record<string, unknown> {
 }
 
 async function renderReportInput(args: CliArgs, input: any): Promise<Record<string, unknown>> {
-  const inputData = input.data ?? Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'placement_requests'));
+  const inputData = input.data ?? Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'placement_requests' && key !== 'page_template_schedule'));
   const placementRequests = input.placement_requests === undefined ? undefined : placementRequestsSchema.parse(input.placement_requests);
+  const pageTemplateSchedule = input.page_template_schedule === undefined ? undefined : pageTemplateScheduleSchema.parse(input.page_template_schedule);
   const template = input.template ?? input.template_ref ?? 'default-report';
   const brandRef = input.brand_ref ?? args.brand;
   const context = await resolveBrandContext(configuredBrandRoot(args), {
@@ -156,7 +157,7 @@ async function renderReportInput(args: CliArgs, input: any): Promise<Record<stri
   let composition: Awaited<ReturnType<typeof renderReportPdfDetailed>>['diagnostics']['composition'];
   if (args.formats.includes('pdf')) {
     const path = join(args.out, 'report.pdf');
-    const rendered = await renderReportPdfDetailed(template, data, context.theme, renderWarnings, context.sourceContext, false, placementRequests);
+    const rendered = await renderReportPdfDetailed(template, data, context.theme, renderWarnings, context.sourceContext, false, placementRequests, pageTemplateSchedule);
     await writeFile(path, rendered.buffer);
     composition = rendered.diagnostics.composition;
     outputs.pdf = manifestPath(args.out, path);

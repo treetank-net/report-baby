@@ -69,6 +69,7 @@ export interface CompositionInsets {
 export interface CompositionPageGeometryReport {
   page: number;
   layoutId: string;
+  templateRef?: string;
   pageBox: CompositionBox;
   margins: CompositionInsets;
   contentBox: CompositionBox;
@@ -138,6 +139,7 @@ export interface CompositionPageChrome {
 export interface CompositionPagePlan {
   page: number;
   layoutId: string;
+  templateRef?: string;
   width: number;
   height: number;
   chrome?: CompositionPageChrome;

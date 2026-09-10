@@ -18,22 +18,14 @@ export function normalizedBox(
   };
 }
 
-export function slotFrame(
-  source: CompiledTemplate['slots'][string],
-  continuation: boolean,
-): { x: number; y: number; width: number; height: number } {
-  return continuation ? source.continuationFrame ?? source.frame : source.frame;
-}
-
 export function slotGrowth(
   source: CompiledTemplate['slots'][string],
   geometry: PageGeometry,
-  continuation = false,
 ): CompositionSlotTemplate['grow'] | undefined {
   if (!source.grow) return undefined;
-  const frame = slotFrame(source, continuation);
+  const frame = source.frame;
   const frameY = frame.y * geometry.height;
-  const pageBottom = geometry.bands.footer?.top ?? geometry.continuationBottom ?? geometry.height - geometry.margins.bottom;
+  const pageBottom = geometry.bands.footer?.top ?? geometry.height - geometry.margins.bottom;
   const maxHeight = source.grow.auto
     ? Math.max(frame.height * geometry.height, pageBottom - frameY)
     : source.grow.maxHeight * geometry.height;
@@ -52,20 +44,20 @@ export function declaredTextSlotsForFlow(
   compiled: CompiledTemplate,
   flowId: string,
   pageGeometry: PageGeometry,
-  continuation = false,
   sourceSlotIds?: string[],
 ): CompositionSlotTemplate[] {
   return sourceSlotIdsForFlow(compiled, flowId, sourceSlotIds).flatMap((slotId) => {
     const source = compiled.slots[slotId];
     if (!source || source.kind !== 'text') return [];
-    const growth = slotGrowth(source, pageGeometry, continuation);
+    const growth = slotGrowth(source, pageGeometry);
     return [{
       id: slotId,
       regionId: source.region ?? flowId,
       flowId,
       kind: 'text' as const,
-      box: normalizedBox(slotFrame(source, continuation), pageGeometry),
+      box: normalizedBox(source.frame, pageGeometry),
       ...(source.role ? { allowedRoles: [source.role as CompositionBlockRole] } : {}),
+      ...(source.role === 'intro' || source.role === 'title' ? { firstPageOnly: true } : {}),
       ...(source.allowedBlockIds ? { allowedBlockIds: source.allowedBlockIds } : {}),
       ...(source.allowedBlockKinds ? { allowedBlockKinds: source.allowedBlockKinds as CompositionBlockKind[] } : {}),
       ...(source.textAlign ? { textAlign: source.textAlign } : {}),
@@ -96,9 +88,8 @@ export function declaredMainTextSlots(
   pageGeometry: PageGeometry,
   sourceSlotIds: string[],
   segments: CompositionSlotTemplate[],
-  continuation = false,
 ): CompositionSlotTemplate[] {
-  return declaredTextSlotsForFlow(compiled, flowId, pageGeometry, continuation, sourceSlotIds)
+  return declaredTextSlotsForFlow(compiled, flowId, pageGeometry, sourceSlotIds)
     .filter((slot) => slot.id !== 'content')
     .map((slot) => {
       const source = compiled.slots[slot.id];
@@ -121,19 +112,19 @@ export function declaredBlockSlotsForFlow(
   flowId: string,
   pageGeometry: PageGeometry,
   sourceSlotIds?: string[],
-  continuation = false,
 ): CompositionSlotTemplate[] {
   return sourceSlotIdsForFlow(compiled, flowId, sourceSlotIds).flatMap((slotId) => {
     const source = compiled.slots[slotId];
     if (!source || !['image', 'metric-card', 'chart', 'table'].includes(source.kind)) return [];
-    const growth = slotGrowth(source, pageGeometry, continuation);
+    const growth = slotGrowth(source, pageGeometry);
     return [{
       id: slotId,
       regionId: source.region ?? flowId,
       flowId,
       kind: 'block' as const,
-      box: normalizedBox(slotFrame(source, continuation), pageGeometry),
+      box: normalizedBox(source.frame, pageGeometry),
       ...(source.role ? { allowedRoles: [source.role as CompositionBlockRole] } : {}),
+      ...(source.role === 'intro' || source.role === 'title' ? { firstPageOnly: true } : {}),
       allowedBlockKinds: (source.allowedBlockKinds as CompositionBlockKind[] | undefined) ?? blockKindsForSource(source.kind),
       ...(growth === undefined ? {} : { grow: growth }),
     }];
@@ -144,7 +135,6 @@ export function declaredLockupSlotsForFlow(
   compiled: CompiledTemplate,
   flowId: string,
   pageGeometry: PageGeometry,
-  continuation = false,
 ): CompositionSlotTemplate[] {
   return (compiled.flows[flowId]?.slots ?? []).flatMap((slotId) => {
     const source = compiled.slots[slotId];
@@ -154,11 +144,12 @@ export function declaredLockupSlotsForFlow(
       regionId: source.region ?? flowId,
       flowId,
       kind: 'block' as const,
-      box: normalizedBox(slotFrame(source, continuation), pageGeometry),
+      box: normalizedBox(source.frame, pageGeometry),
       ...(source.role ? { allowedRoles: [source.role as CompositionBlockRole] } : {}),
+      ...(source.role === 'intro' || source.role === 'title' ? { firstPageOnly: true } : {}),
       allowedBlockKinds: ['lockup' as CompositionBlockKind],
       ...(source.fitContent === undefined ? {} : { fitContent: source.fitContent }),
-      ...(slotGrowth(source, pageGeometry, continuation) === undefined ? {} : { grow: slotGrowth(source, pageGeometry, continuation) }),
+      ...(slotGrowth(source, pageGeometry) === undefined ? {} : { grow: slotGrowth(source, pageGeometry) }),
     }];
   });
 }
@@ -166,7 +157,6 @@ export function declaredLockupSlotsForFlow(
 export function declaredGraphicSlots(
   compiled: CompiledTemplate,
   pageGeometry: PageGeometry,
-  continuation = false,
 ): CompositionSlotTemplate[] {
   return Object.entries(compiled.slots)
     .filter((entry): entry is [string, NonNullable<typeof entry[1]>] => entry[1]?.kind === 'graphic')
@@ -174,7 +164,7 @@ export function declaredGraphicSlots(
       id,
       regionId: source.region ?? 'content',
       kind: 'graphic' as const,
-      box: normalizedBox(slotFrame(source, continuation), pageGeometry),
+    box: normalizedBox(source.frame, pageGeometry),
     }));
 }
 

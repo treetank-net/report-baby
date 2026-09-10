@@ -25,6 +25,7 @@ change the completed 1.0 plan.
 | [04-planner-search-and-evaluator-calibration.md](04-planner-search-and-evaluator-calibration.md) | multiple moving insertions, bounded solver/global constraints, and evaluator calibration | Plans 02–04 and 09 |
 | [05-contract-cleanup-and-test-consolidation.md](05-contract-cleanup-and-test-consolidation.md) | public alias/export audit and further consolidation of expensive tests | 1.0 README, plans 01 and 13 |
 | [06-floats-and-text-direction.md](06-floats-and-text-direction.md) | full floats and RTL/CJK | 1.0 README, 1.0 limitations |
+| [runtime-plan-annotations.md](runtime-plan-annotations.md) | runtime-only plan decisions, traces, diagnostics, and their lifecycle | 02 layout migration |
 
 Each document remains a proposal until a separate decision is made about its
 contract and acceptance criteria. The mere presence of a field in code is not

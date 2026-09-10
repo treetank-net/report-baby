@@ -72,6 +72,8 @@ export interface CompositionSlotTemplate {
   box: CompositionRect;
   /** A non-flow box painted by chrome or another renderer that still reserves space. */
   reserved?: boolean;
+  /** Slot is available only on the first materialized page of its template. */
+  firstPageOnly?: boolean;
   textAlign?: 'left' | 'center' | 'right';
   verticalAlign?: 'top' | 'middle' | 'bottom';
   fitContent?: boolean;
@@ -89,6 +91,14 @@ export interface CompositionSlotTemplate {
 
 export interface CompositionLayoutTemplate {
   id: string;
+  /** Stable template reference that supplied this layout. */
+  templateRef?: string;
+  /** First document page on which this layout is materialised in a schedule. */
+  firstPageNumber?: number;
+  /** First-page content boundary after leading/static blocks are reserved. */
+  firstPageContentTop?: number;
+  /** Slots whose first-page boxes start at `firstPageContentTop`. */
+  firstPageContentSlotIds?: string[];
   width: number;
   height: number;
   slots: CompositionSlotTemplate[];
@@ -109,14 +119,24 @@ export interface CompositionFlowRoute {
   repeat?: 'each-page';
   /** First page on which this flow is allowed to place content. */
   startPage?: number;
+  /** Transitional route metadata for layouts that expose different slot sets. */
   layouts?: string[];
   slotsByLayout?: Record<string, string[]>;
+}
+
+export interface CompositionPageTemplateRange {
+  from: number;
+  to?: number;
+  templateRef: string;
+  layoutId: string;
 }
 
 export interface CompositionTemplate {
   layouts: CompositionLayoutTemplate[];
   routes: Record<string, CompositionFlowRoute>;
   maxPages: number;
+  /** Per-page template selection. An open final range extends to maxPages. */
+  pageTemplateSchedule?: CompositionPageTemplateRange[];
   /**
    * Per-document slots supplied by a request.  These overlays are applied to
    * the selected page layout at materialization time and never mutate the

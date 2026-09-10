@@ -102,8 +102,13 @@ function appendPlacedLines(
   });
 }
 
-function markLinePlacementOccupancy(slot: CompositionSlot, lastBottom: number): void {
-  slot.state = lastBottom >= rectBottom(slot.box) ? 'exhausted' : 'partial';
+function markLinePlacementOccupancy(slot: CompositionSlot, definition: CompositionSlotTemplate, lastBottom: number): void {
+  const slotBottom = rectBottom(slot.box);
+  const maxBottom = definition.grow?.axis === 'y'
+    ? definition.box.y + definition.grow.maxHeight
+    : slotBottom;
+  const canGrowFurther = definition.fitContent === true && maxBottom > slotBottom + Number.EPSILON;
+  slot.state = lastBottom >= slotBottom && !canGrowFurther ? 'exhausted' : 'partial';
 }
 
 /** Place wrapped lines, then update slot occupancy. */
@@ -137,5 +142,5 @@ export function placeLines(
     ...(definition.priority === undefined ? {} : { priority: definition.priority }),
   });
   appendPlacedLines(pageState, definition, block, metrics, flowId, routeIndex, lines, lineHeightValue, padding, geometry.verticalOffset, outputLines, layer);
-  markLinePlacementOccupancy(slot, geometry.lastBottom);
+  markLinePlacementOccupancy(slot, definition, geometry.lastBottom);
 }

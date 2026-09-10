@@ -117,6 +117,24 @@ export const placementRequestsSchema = z.object({
 
 export type PlacementRequests = z.infer<typeof placementRequestsSchema>;
 
+const pageTemplateScheduleCountSchema = z.union([
+  z.number().int().positive(),
+  z.object({ min: z.number().int().positive(), max: z.number().int().positive() }).strict(),
+]);
+
+/** A document-level page range and the built-in page template it selects. */
+export const pageTemplateScheduleEntrySchema = z.object({
+  pages: z.object({
+    from: z.number().int().positive().optional(),
+    to: z.number().int().positive().optional(),
+    count: pageTemplateScheduleCountSchema.optional(),
+  }).strict(),
+  template_ref: z.string().min(1),
+}).strict();
+
+export const pageTemplateScheduleSchema = z.array(pageTemplateScheduleEntrySchema).min(1);
+export type PageTemplateScheduleInput = z.infer<typeof pageTemplateScheduleSchema>;
+
 const compositionGlyphSchema = z.object({
   id: z.string(),
   target: z.object({ kind: z.enum(['block', 'graphic']), id: z.string() }).strict(),

@@ -43,9 +43,7 @@ function firstPageFlowTop(geometry: PageGeometry, hasIntro: boolean, narrative: 
 }
 
 function geometryForPage(geometry: PageGeometry, page: number): PageGeometry {
-  let current = geometry;
-  for (let index = 1; index < page; index += 1) current = current.continuation ?? current;
-  return current;
+  return geometry;
 }
 
 function pageBlocks(input: ResolveReportPlanInput, page: number, document: CompositionDocument): ResolvedReportBlock[] {
@@ -69,7 +67,7 @@ function pageBlocks(input: ResolveReportPlanInput, page: number, document: Compo
     const firstPageFlow: PageSegment = {
       ...narrative,
       top: firstPageFlowTop(geometry, hasIntro, narrative),
-      bottom: geometry.bands.footer?.top ?? geometry.continuationBottom ?? geometry.content.bottom,
+      bottom: geometry.bands.footer?.top ?? geometry.content.bottom,
     };
     blocks.push(block('flow', 'flow', firstPageFlow, undefined, undefined, true));
     blocks.push(...flowBlocks(geometry, 'flow', firstPageFlow.top, firstPageFlow.bottom));
@@ -79,7 +77,7 @@ function pageBlocks(input: ResolveReportPlanInput, page: number, document: Compo
       x: narrative.x,
       top: Math.max(geometry.continuationTop ?? 0, geometry.bands.header?.bottom ?? geometry.content.top),
       width: narrative.width,
-      bottom: Math.min(geometry.continuationBottom ?? Number.POSITIVE_INFINITY, geometry.bands.footer?.top ?? geometry.content.bottom),
+      bottom: Math.min(geometry.bands.footer?.top ?? Number.POSITIVE_INFINITY, geometry.content.bottom),
     };
     blocks.push(block('flow', 'flow', continuation, undefined, undefined, true));
     blocks.push(...flowBlocks(geometry, 'flow', continuation.top, continuation.bottom));
@@ -89,7 +87,7 @@ function pageBlocks(input: ResolveReportPlanInput, page: number, document: Compo
       ? geometry.bands.header?.bottom ?? geometry.content.top
       : Math.max(geometry.continuationTop ?? 0, geometry.bands.header?.bottom ?? geometry.content.top);
     const top = Math.max(baseTop, geometry.segments[0]?.top ?? baseTop);
-    const bottom = geometry.continuationBottom ?? geometry.bands.footer?.top ?? geometry.content.bottom;
+    const bottom = geometry.bands.footer?.top ?? geometry.content.bottom;
     const flow: PageSegment = { x: geometry.content.x, top, width: geometry.content.width, bottom };
     blocks.push(block('flow', 'flow', flow, undefined, undefined, true));
     blocks.push(...flowBlocks(geometry, 'flow', top, bottom));

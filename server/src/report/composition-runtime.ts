@@ -1,10 +1,11 @@
 import type { jsPDF } from 'jspdf';
 import { createHash } from 'node:crypto';
 import type { RenderTheme } from '../contracts/render-theme.js';
-import type { CompositionInput, PlacementRequests } from '../contracts/input/schema.js';
+import type { CompositionInput, PageTemplateScheduleInput, PlacementRequests } from '../contracts/input/schema.js';
 import { readRenderConfig } from '../template/builtins.js';
 import type { PageGeometry } from '../template/geometry.js';
 import type { CompiledTemplate } from '../template/contracts.js';
+import type { PageTemplateSource } from '../composition/adapters/page-template.js';
 import type { ReportCompositionResult } from '../composition/report-composition-entrypoint.js';
 import {
   compositionChartStyleFromRenderConfig,
@@ -64,7 +65,7 @@ function footerTextWidth(doc: jsPDF, geometry: PageGeometry, maxPages: number, t
   doc.setFont(pdfFont(theme), 'normal');
   doc.setFontSize(PDF_CONFIG.footerFontSize);
   const labelWidth = doc.getTextWidth(`${maxPages} / ${maxPages}`);
-  const pages = [geometry, ...(geometry.continuation ? [geometry.continuation] : [])];
+  const pages = [geometry];
   return Math.min(...pages.map((page) => Math.max(1, page.width - page.margins.right - page.margins.left - PDF_CONFIG.footerNumberGap - labelWidth)));
 }
 
@@ -86,6 +87,8 @@ export interface ReportCompositionRuntimeOptions {
   geometry: PageGeometry;
   rejectOnEvaluation?: boolean;
   insertionRequests?: PlacementRequests;
+  pageTemplateSchedule?: PageTemplateScheduleInput;
+  pageTemplateSources?: PageTemplateSource[];
 }
 
 /**
@@ -197,6 +200,7 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
     ...(contrastProvider ? { contrastProvider } : {}),
     inlineFontCoverage,
     ...(options.insertionRequests ? { insertionRequests: options.insertionRequests } : {}),
+    ...(options.pageTemplateSchedule && options.pageTemplateSources ? { pageTemplateSchedule: options.pageTemplateSchedule, pageTemplateSources: options.pageTemplateSources } : {}),
   });
   if (options.rejectOnEvaluation !== false && composition.evaluation.status === 'rejected') {
     const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');

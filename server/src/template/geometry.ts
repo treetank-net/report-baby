@@ -23,7 +23,6 @@ export interface PageGeometry {
   blockGrowth?: Record<string, { axis: 'y'; maxHeight: number; pushes?: string[] }>;
   flow: { align: 'justify' | 'left'; hyphenate: boolean; lead?: string };
   dynamicFlow: boolean;
-  continuation?: PageGeometry;
 }
 
 function physicalFrame(frame: NormalizedFrame, width: number, height: number): PageSegment {
@@ -107,7 +106,6 @@ function pageGeometryFromPage(page: NonNullable<CompiledTemplate['page']>): Page
     maxHeight: growth.maxHeight * page.height,
     ...(growth.pushes === undefined ? {} : { pushes: growth.pushes }),
   }]));
-  const continuation = page.continuation ? pageGeometryFromPage(page.continuation) : undefined;
   return {
     width: page.width,
     height: page.height,
@@ -124,7 +122,6 @@ function pageGeometryFromPage(page: NonNullable<CompiledTemplate['page']>): Page
     blockGrowth,
     flow: page.flow,
     dynamicFlow: true,
-    ...(continuation === undefined ? {} : { continuation }),
   };
 }
 

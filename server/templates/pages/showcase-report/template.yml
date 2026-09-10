@@ -18,19 +18,6 @@ page:
   flow:
     align: left
     hyphenate: false
-  continuation:
-    width: 210
-    height: 297
-    margins: { top: 18, right: 18, bottom: 18, left: 18 }
-    columns:
-      count: 1
-      gutter: 0
-    reserved_bands:
-      header: { x: 0, y: 0, width: 1, height: 0.111 }
-      footer: { x: 0, y: 0.94, width: 1, height: 0.06 }
-    flow:
-      align: left
-      hyphenate: false
 slots:
   title:
     type: text
@@ -58,7 +45,6 @@ slots:
   header-lockup:
     type: lockup
     frame: { x: 0.086, y: 0.024, width: 0.16, height: 0.04 }
-    continuation_frame: { x: 0.086, y: 0.0168, width: 0.16, height: 0.04 }
   header-period:
     type: text
     frame: { x: 0.70, y: 0.0338, width: 0.214, height: 0.04 }
@@ -83,7 +69,6 @@ slots:
   content:
     type: text
     frame: { x: 0.086, y: 0.738, width: 0.828, height: 0.202 }
-    continuation_frame: { x: 0.086, y: 0.116, width: 0.828, height: 0.824 }
     allowed_block_kinds: [heading, paragraph, list-item, image, table, chart, metric]
   footer:
     type: text
@@ -99,7 +84,6 @@ flows:
     continuation: forbidden
   main:
     slots: [intro, metric-1, metric-2, metric-3, chart, content]
-    continuation_slots: [content]
     continuation: allowed
   footer:
     slots: [footer]

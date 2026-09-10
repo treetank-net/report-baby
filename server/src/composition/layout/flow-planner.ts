@@ -126,11 +126,15 @@ function recordFlowResidual(
 function flowReachedTerminalPage(context: FlowPlanningContext, runtime: FlowRuntime): boolean {
   if (runtime.cursor.page > context.template.maxPages) {
     const block = context.blocks[runtime.cursor.blockIndex];
-    context.plan.diagnostics.push(diagnostic('error', 'MAX_PAGES_EXCEEDED', `Flow '${context.flowId}' exceeded the template page limit.`, { flowId: context.flowId, blockId: block.id, page: runtime.cursor.page }));
-    recordFlowResidual(context, runtime, 'max-pages');
+    const code = runtime.hasPlacement ? 'MAX_PAGES_EXCEEDED' : 'FLOW_SLOT_NOT_FOUND';
+    const message = runtime.hasPlacement
+      ? `Flow '${context.flowId}' exceeded the template page limit.`
+      : `Flow '${context.flowId}' has no legal slot in the available page templates.`;
+    context.plan.diagnostics.push(diagnostic('error', code, message, { flowId: context.flowId, blockId: block.id, page: runtime.cursor.page }));
+    recordFlowResidual(context, runtime, runtime.hasPlacement ? 'max-pages' : 'no-legal-slot');
     return true;
   }
-  if (runtime.cursor.page > context.startPage && context.route.continuation === 'forbidden') {
+  if (runtime.hasPlacement && runtime.cursor.page > context.startPage && context.route.continuation === 'forbidden') {
     const block = context.blocks[runtime.cursor.blockIndex];
     context.plan.diagnostics.push(diagnostic('error', 'FLOW_CONTINUATION_FORBIDDEN', `Flow '${context.flowId}' cannot continue beyond its first page.`, { flowId: context.flowId, blockId: block.id, page: runtime.cursor.page }));
     recordFlowResidual(context, runtime, 'flow-continuation-forbidden');
@@ -192,8 +196,8 @@ function resolveUnavailableFlowSlot(
 ): FlowTargetUnavailableResolution {
   const block = context.blocks[runtime.cursor.blockIndex];
   if (selectedSlot === undefined && !hasRoleEligibleSlot(currentPage.layout, availableRouteSlots, runtime.cursor.routeIndex, context.flowId, block, currentPage.slots)) {
-    if (context.route.continuation === 'allowed') {
-      recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_PAGE', runtime, undefined, 'no-eligible-slot-on-page');
+    if (!runtime.hasPlacement || context.route.continuation === 'allowed') {
+      recordFlowDecision(context, 'BLOCK_PUSHED_TO_NEXT_PAGE', runtime, undefined, runtime.hasPlacement ? 'no-eligible-slot-on-page' : 'first-legal-slot-search');
       advanceCursor(runtime.cursor, availableRouteSlots);
       return { kind: 'continue' };
     }
@@ -338,6 +342,7 @@ function commitSelectedTextLines(
   const { flowId, metrics, plan } = context;
   const { leading, slot } = prepared;
   placeLines(currentPage, definition, block, metrics, flowId, selectedSlot.routeIndex, selected, leading, plan.placements, plan.lines);
+  runtime.hasPlacement = true;
   runtime.lastLegalSlotId = slot.id;
   const consumedEnd = selected.at(-1)!.endWord;
   const completed = consumedEnd >= wordsForBlock(block).length;

@@ -48,6 +48,7 @@ function pageGeometryReport(page: CompositionPlan['pages'][number], geometry: Pa
   return {
     page: page.page,
     layoutId: page.layoutId,
+    ...(page.templateRef === undefined ? {} : { templateRef: page.templateRef }),
     pageBox: { x: 0, y: 0, width: geometry.width, height: geometry.height },
     margins: { ...geometry.margins },
     contentBox: boxFromSegment(geometry.content),
@@ -58,7 +59,7 @@ function pageGeometryReport(page: CompositionPlan['pages'][number], geometry: Pa
 }
 
 function pageGeometryFor(page: CompositionPlan['pages'][number], geometry: PageGeometry): PageGeometry {
-  return page.layoutId.endsWith(':continuation') ? geometry.continuation ?? geometry : geometry;
+  return geometry;
 }
 
 function blockMap(document: CompositionDocument): Map<string, CompositionBlock> {

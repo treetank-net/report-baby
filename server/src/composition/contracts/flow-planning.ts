@@ -35,6 +35,8 @@ export interface FlowPlanningContext {
 export interface FlowRuntime {
   cursor: FlowCursor;
   lastLegalSlotId?: string;
+  /** True once at least one block fragment has been materialized. */
+  hasPlacement?: boolean;
 }
 
 /** A route slot selected for the current block. */

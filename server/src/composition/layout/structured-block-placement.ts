@@ -198,6 +198,7 @@ export function placeStructuredBlock(
       return true;
     }
     placeTableFragment(pageState, definition, block, measurement, cursor.startRow, repeatsHeader, routeIndex, plan.tablePlacements, tableTop);
+    runtime.hasPlacement = true;
     const decision = recordFlowDecision(context, 'TABLE_FRAGMENT_PLACED', runtime, target);
     decision.startRow = cursor.startRow;
     decision.endRow = measurement.endRow;
@@ -264,6 +265,7 @@ export function placeStructuredBlock(
     return true;
   }
   placeAtomicBlock(pageState, definition, block, measurement, routeIndex, plan.blockPlacements, plan.graphicPlacements, blockTop);
+  runtime.hasPlacement = true;
   if (measurement.scaled) {
     recordFlowDecision(context, block.kind === 'image' ? 'IMAGE_SCALED_TO_FIT' : 'BLOCK_SCALED_TO_FIT', runtime, target, 'atomic-block-natural-height-exceeds-slot-height');
   }

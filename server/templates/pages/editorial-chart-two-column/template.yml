@@ -28,23 +28,6 @@ page:
     align: justify
     hyphenate: true
     lead: intro
-  continuation:
-    width: 210
-    height: 297
-    margins: { top: 18, right: 17, bottom: 18, left: 17 }
-    columns:
-      count: 2
-      gutter: 6
-      widths: [85, 85]
-    reserved_bands:
-      header: { x: 0, y: 0, width: 1, height: 0.18 }
-      footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
-    flow_obstacles:
-      - id: continuation-chart
-        frame: { x: 0.081, y: 0.18, width: 0.838, height: 0.46 }
-    flow:
-      align: justify
-      hyphenate: true
 slots:
   chart:
     type: chart

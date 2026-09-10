@@ -207,9 +207,9 @@ export function assertQuoteFlowOwnership(result, fixture, renderConfig) {
  */
 export function assertEditorialTemplateContract(result) {
   assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
-  const continuationLayout = result.template.layouts.find((layout) => layout.id.endsWith(':continuation'));
-  const continuationRoute = result.template.routes.main.slotsByLayout?.[continuationLayout?.id ?? ''] ?? [];
-  assert.equal(continuationRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');
+  const ordinaryLayout = result.template.layouts.find((layout) => layout.id === 'pages/editorial-inset-two-column') ?? result.template.layouts[0];
+  const ordinaryRoute = result.template.routes.main.slotsByLayout?.[ordinaryLayout?.id ?? ''] ?? result.template.routes.main.slots;
+  assert.equal(ordinaryRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');
   assert.equal(result.template.routes.main.insertionSlots, undefined, 'main flow must not own quote insertions');
   assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b', 'quote-c'], 'quotes must be declared as a separate obstacle flow with three per-page insertion slots');
   assert.deepEqual(result.template.routes.intro.slots, ['intro'], 'intro Markdown image and lead must share a dedicated flow');

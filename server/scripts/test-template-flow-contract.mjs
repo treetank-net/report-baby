@@ -71,8 +71,11 @@ try {
   assert.equal(compiled.slots.content.verticalAlign, 'middle', 'slot vertical alignment must survive template compilation');
   assert.deepEqual(compiled.flows.main, { id: 'main', slots: ['content'], continuation: 'allowed' });
   assert.deepEqual(compiled.flows.footer, { id: 'footer', slots: ['footer'], continuation: 'forbidden', repeat: 'each-page' });
-  const pageSpecific = compileTemplateSource({ ...structuredClone(source), flows: { main: { slots: ['content'], continuation_slots: ['footer'], continuation: 'allowed' }, footer: { slots: ['footer'], continuation: 'forbidden', repeat: 'each-page' } } });
-  assert.deepEqual(pageSpecific.flows.main, { id: 'main', slots: ['content'], continuationSlots: ['footer'], continuation: 'allowed' });
+  assert.throws(
+    () => compileTemplateSource({ ...structuredClone(source), flows: { main: { slots: ['content'], continuation_slots: ['footer'], continuation: 'allowed' }, footer: { slots: ['footer'], continuation: 'forbidden', repeat: 'each-page' } } }),
+    /continuation_slots.*no longer supported/u,
+    'continuation slots must be rejected in the target contract',
+  );
   const insertionSource = structuredClone(source);
   insertionSource.slots.quote = { type: 'text', frame: { x: 0.1, y: 0.4, width: 0.8, height: 0.1 }, role: 'quote', vertical_align: 'middle' };
   insertionSource.flows.quotes = { slots: ['quote'], insertion_slots: ['quote'], continuation: 'allowed' };
@@ -112,7 +115,7 @@ try {
   );
   assert.throws(
     () => compileTemplateSource({ ...source, flows: { main: { slots: ['content'], continuation_slots: ['missing'], continuation: 'allowed' } } }),
-    /continuation_slots.*references unknown slot 'missing'/u,
+    /continuation_slots.*no longer supported/u,
   );
   assert.throws(
     () => compileTemplateSource({ ...source, page: { ...source.page, flow_obstacles: { invalid: true } } }),

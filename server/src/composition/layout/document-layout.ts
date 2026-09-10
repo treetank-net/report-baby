@@ -88,7 +88,7 @@ function normalizePlanReadingOrder(document: CompositionDocument, plan: Composit
  * @planner-responsibility Keep the current flattenPages implementation intact until its target seam is extracted.
  */
 function flattenPages(pages: PageState[], plan: CompositionPlan, template: CompositionTemplate): void {
-  plan.pages = pages.map((page) => ({ page: page.page, layoutId: page.layout.id, width: page.layout.width, height: page.layout.height }));
+  plan.pages = pages.map((page) => ({ page: page.page, layoutId: page.layout.id, width: page.layout.width, height: page.layout.height, ...(page.layout.templateRef ? { templateRef: page.layout.templateRef } : {}) }));
   for (const page of pages) {
     for (const [flowId, route] of Object.entries(template.routes)) {
       const routeIds = route.slotsByLayout?.[page.layout.id] ?? route.slots;

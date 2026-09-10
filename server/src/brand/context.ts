@@ -231,7 +231,6 @@ function sourcePageFromCompiled(value: unknown): RecordValue | undefined {
     return [id, { frame, ...(growth === undefined ? {} : { grow: growth }) }];
   }));
   const flow = isRecord(value.flow) ? value.flow : {};
-  const continuation = sourcePageFromCompiled(value.continuation);
   return {
     width: value.width,
     height: value.height,
@@ -241,7 +240,6 @@ function sourcePageFromCompiled(value: unknown): RecordValue | undefined {
     flow_obstacles: flowObstacles,
     blocks,
     flow: { align: flow.align, hyphenate: flow.hyphenate, ...(flow.lead === undefined ? {} : { lead: flow.lead }) },
-    ...(continuation === undefined ? {} : { continuation }),
   };
 }
 
@@ -251,7 +249,6 @@ function sourceSlotFromCompiled(value: unknown): RecordValue {
   return {
     type: item.kind,
     frame: item.frame,
-    ...(item.continuationFrame === undefined ? {} : { continuation_frame: item.continuationFrame }),
     ...(item.region === undefined ? {} : { region: item.region }),
     ...(item.role === undefined ? {} : { role: item.role }),
     ...(item.allowedBlockIds === undefined ? {} : { allowed_block_ids: item.allowedBlockIds }),
@@ -270,7 +267,6 @@ function sourceFromCompiledTemplate(compiled: RecordValue): RecordValue {
     const flow = isRecord(value) ? value : {};
     return [id, {
       slots: flow.slots,
-      ...(flow.continuationSlots === undefined ? {} : { continuation_slots: flow.continuationSlots }),
       continuation: flow.continuation,
       ...(flow.repeat === undefined ? {} : { repeat: flow.repeat }),
       ...(flow.startPage === undefined ? {} : { start_page: flow.startPage }),

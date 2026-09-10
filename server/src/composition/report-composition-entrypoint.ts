@@ -1,12 +1,12 @@
 import type { jsPDF } from 'jspdf';
 import type { PageGeometry } from '../template/geometry.js';
-import type { CompositionInput, PlacementRequests } from '../contracts/input/schema.js';
+import type { CompositionInput, PageTemplateScheduleInput, PlacementRequests } from '../contracts/input/schema.js';
 import type { CompiledTemplate } from '../template/contracts.js';
 import type { CompositionTemplate } from './contracts/model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './contracts/engine-contracts.js';
 import type { CompositionContrastProvider } from './evaluation/contrast.js';
 import { compositionDocumentFromInput } from './adapters/input.js';
-import { compositionTemplateFromPageGeometry } from './adapters/page-template.js';
+import { compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, type PageTemplateSource } from './adapters/page-template.js';
 import { createJsPdfTextMetrics } from './adapters/pdf/text.js';
 import type { JsPdfCompositionStyles, JsPdfInlineFontCoverage } from './contracts/pdf.js';
 import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './adapters/text-engine.js';
@@ -15,6 +15,8 @@ import { compositionStylesFromRenderConfig } from './adapters/render-config.js';
 import { applyDynamicInsertionRequests } from './adapters/request-insertion-slots.js';
 import { hasInlineMark, missingInlineCodePointsByStyle, missingInlineGlyphWarning, missingTableGlyphWarning } from './text/inline-runs.js';
 import { attachPlanSpacingReport } from './observability/spacing-report.js';
+import { compareCompositionEvaluations } from './composition-engine.js';
+import { normalizePageTemplateSchedule, type PageTemplateScheduleVariant } from './adapters/page-template-schedule.js';
 
 export {
   compositionChartStyleFromRenderConfig,
@@ -47,6 +49,8 @@ export interface ReportCompositionOptions {
   contrastProvider?: CompositionContrastProvider;
   inlineFontCoverage?: JsPdfInlineFontCoverage;
   insertionRequests?: PlacementRequests;
+  pageTemplateSchedule?: PageTemplateScheduleInput;
+  pageTemplateSources?: PageTemplateSource[];
 }
 
 export interface ReportCompositionResult {
@@ -77,14 +81,39 @@ export function planReportComposition(
   options: ReportCompositionOptions,
 ): ReportCompositionResult {
   const document = compositionDocumentFromInput(data);
-  const baseTemplate = compositionTemplateFromPageGeometry(compiled, geometry, {
+  const pageTemplateSources = options.pageTemplateSources ?? (
+    options.pageTemplateSchedule?.every((entry) => entry.template_ref === compiled.id)
+      ? [{ templateRef: compiled.id, compiled, geometry }]
+      : undefined
+  );
+  if (options.pageTemplateSchedule && !pageTemplateSources) {
+    throw new Error('A page-template schedule with multiple template references requires pageTemplateSources.');
+  }
+  const scheduleVariants: PageTemplateScheduleVariant[] = options.pageTemplateSchedule && pageTemplateSources
+    ? normalizePageTemplateSchedule(options.pageTemplateSchedule.map((entry) => ({
+      pages: {
+        ...(entry.pages.from === undefined ? {} : { from: entry.pages.from }),
+        ...(entry.pages.to === undefined ? {} : { to: entry.pages.to }),
+        ...(entry.pages.count === undefined ? {} : { count: entry.pages.count }),
+      },
+      templateRef: entry.template_ref,
+    })))
+    : [];
+  const templates = scheduleVariants.length > 0 && pageTemplateSources
+    ? scheduleVariants.map((variant) => compositionTemplateFromPageTemplateSchedule(pageTemplateSources, variant, {
+      maxPages: options.maxPages,
+      ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
+      includeHeaderFlow: options.includeHeaderFlow ?? true,
+      ...(options.mainFlowId === undefined ? {} : { mainFlowId: options.mainFlowId }),
+      ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
+    }))
+    : [compositionTemplateFromPageGeometry(compiled, geometry, {
     maxPages: options.maxPages,
     ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
     includeHeaderFlow: options.includeHeaderFlow ?? true,
     ...(options.mainFlowId === undefined ? {} : { mainFlowId: options.mainFlowId }),
     ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
-  });
-  const template = applyDynamicInsertionRequests(baseTemplate, document, options.insertionRequests);
+    })];
   const styles = options.styles ?? compositionStylesFromRenderConfig();
   const metrics = createJsPdfTextMetrics(doc, options.family, styles, { inlineFontCoverage: options.inlineFontCoverage });
   if (options.measureBlock) metrics.measureBlock = options.measureBlock;
@@ -93,7 +122,13 @@ export function planReportComposition(
     ...plannerPolicyFromRenderConfig(),
     ...options.policy,
   };
-  const result = createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics);
+  const planned = templates.map((candidateTemplate) => {
+    const template = applyDynamicInsertionRequests(candidateTemplate, document, options.insertionRequests);
+    return { template, result: createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics) };
+  });
+  const selected = planned.reduce((best, candidate) => compareCompositionEvaluations(candidate.result.evaluation, best.result.evaluation) < 0 ? candidate : best);
+  const template = selected.template;
+  const result = selected.result;
   attachPlanSpacingReport(result.plan, document, metrics, geometry);
   appendInlineDiagnostics(doc, options.family, document, result, options.inlineFontCoverage);
   return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };

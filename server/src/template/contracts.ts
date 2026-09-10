@@ -26,7 +26,6 @@ export interface CompiledTemplateSlot {
   id: string;
   kind: TemplateSlotKind;
   frame: NormalizedFrame;
-  continuationFrame?: NormalizedFrame;
   region?: string;
   role?: string;
   allowedBlockIds?: string[];
@@ -43,7 +42,6 @@ export interface CompiledTemplateSlot {
 export interface CompiledTemplateFlow {
   id: string;
   slots: string[];
-  continuationSlots?: string[];
   insertionSlots?: string[];
   continuation: TemplateFlowContinuation;
   /** Higher values reserve geometry before lower-priority flows. */
@@ -91,7 +89,6 @@ export interface PageGeometry {
   blockFrames: Record<string, NormalizedFrame>;
   blockGrowth: Record<string, PageBlockGrowth>;
   flow: PageFlow;
-  continuation?: PageGeometry;
 }
 
 export interface CompiledTemplateComposition {
@@ -247,13 +244,7 @@ function templateFlowsAt(value: unknown, path: string, slots: Record<string, Com
     for (const slot of rawSlots) {
       if (!slots[slot]) fail(`${path}.${id}.slots`, `references unknown slot '${slot}'.`);
     }
-    const rawContinuationSlots = raw.continuation_slots;
-    if (rawContinuationSlots !== undefined && (!Array.isArray(rawContinuationSlots) || rawContinuationSlots.length === 0 || rawContinuationSlots.some((slot) => typeof slot !== 'string' || slot.length === 0))) {
-      fail(`${path}.${id}.continuation_slots`, 'must contain one or more named slots when provided.');
-    }
-    for (const slot of rawContinuationSlots ?? []) {
-      if (!slots[slot]) fail(`${path}.${id}.continuation_slots`, `references unknown slot '${slot}'.`);
-    }
+    if (raw.continuation_slots !== undefined) fail(`${path}.${id}.continuation_slots`, 'is no longer supported; use ordinary slots in the selected page template.');
     const rawInsertionSlots = raw.insertion_slots;
     if (rawInsertionSlots !== undefined && (!Array.isArray(rawInsertionSlots) || rawInsertionSlots.length === 0 || rawInsertionSlots.some((slot) => typeof slot !== 'string' || slot.length === 0))) {
       fail(`${path}.${id}.insertion_slots`, 'must contain one or more named slots when provided.');
@@ -270,7 +261,7 @@ function templateFlowsAt(value: unknown, path: string, slots: Record<string, Com
     const priority = optionalPriority(raw.priority, `${path}.${id}.priority`);
     const repeat = raw.repeat === undefined ? undefined : raw.repeat === 'each-page' ? raw.repeat : fail(`${path}.${id}.repeat`, "must be 'each-page'.");
     const startPage = optionalPositiveInteger(raw.start_page, `${path}.${id}.start_page`);
-    return [id, { id, slots: [...rawSlots], ...(rawContinuationSlots === undefined ? {} : { continuationSlots: [...rawContinuationSlots] }), ...(rawInsertionSlots === undefined ? {} : { insertionSlots: [...rawInsertionSlots] }), continuation, ...(priority === undefined ? {} : { priority }), ...(repeat === undefined ? {} : { repeat }), ...(startPage === undefined ? {} : { startPage }) }];
+    return [id, { id, slots: [...rawSlots], ...(rawInsertionSlots === undefined ? {} : { insertionSlots: [...rawInsertionSlots] }), continuation, ...(priority === undefined ? {} : { priority }), ...(repeat === undefined ? {} : { repeat }), ...(startPage === undefined ? {} : { startPage }) }];
   }));
 }
 
@@ -338,9 +329,7 @@ function pageGeometryAt(value: unknown, path: string): PageGeometry {
       if (!blockFrames[target]) fail(`${path}.blocks.${id}.grow.pushes`, `references unknown block '${target}'.`);
     }
   }
-  const continuation = value.continuation === undefined
-    ? undefined
-    : pageGeometryAt(value.continuation, `${path}.continuation`);
+  if (value.continuation !== undefined) fail(`${path}.continuation`, 'is no longer supported; use a page-template schedule with ordinary page templates.');
   return {
     width,
     height,
@@ -351,7 +340,6 @@ function pageGeometryAt(value: unknown, path: string): PageGeometry {
     blockFrames,
     blockGrowth,
     flow: { align, hyphenate: flow.hyphenate === true, ...(lead === undefined ? {} : { lead }) },
-    ...(continuation === undefined ? {} : { continuation }),
   };
 }
 
@@ -391,9 +379,7 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
       : region
         ? regions[region]
         : fail(`slots.${slotId}`, 'needs a frame or a region.');
-    const continuationFrame = slot.continuation_frame === undefined
-      ? undefined
-      : frameAt(slot.continuation_frame, `slots.${slotId}.continuation_frame`, fitContent === true);
+    if (slot.continuation_frame !== undefined) fail(`slots.${slotId}.continuation_frame`, 'is no longer supported; use an ordinary slot in the selected page template.');
     const overflow = slot.overflow === undefined || slot.overflow === 'reject' || slot.overflow === 'shrink-to-fit'
       ? slot.overflow
       : fail(`slots.${slotId}.overflow`, "must be 'reject' or 'shrink-to-fit'.");
@@ -406,7 +392,6 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
       id: slotId,
       kind: slotKind,
       frame,
-      ...(continuationFrame === undefined ? {} : { continuationFrame }),
       region,
       role: slot.role === undefined ? undefined : stringAt(slot.role, `slots.${slotId}.role`),
       ...(allowedBlockIds === undefined ? {} : { allowedBlockIds: [...allowedBlockIds] }),

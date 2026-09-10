@@ -24,10 +24,10 @@ await build({
 });
 
 try {
-  const { compositionTemplateFromPageGeometry, compositionDocumentFromInput, createTextCompositionEngine } = await import(compositionBundle);
+  const { compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionDocumentFromInput, createTextCompositionEngine } = await import(compositionBundle);
   const { compileTemplateSource } = await import(templateBundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
-  await runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate });
+  await runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate });
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }
@@ -36,7 +36,7 @@ try {
  * @test-decision plan-fixture-or-assertion
  * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
  */
-async function runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate }) {
+async function runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate }) {
   const source = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
   const compiled = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(compiled);
@@ -66,18 +66,18 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   assert.ok(obstacleGeometry.segments.some((segment) => segment.bottom <= obstacle.frame.top), 'obstacle must leave an upper flow segment');
   assert.ok(obstacleGeometry.segments.some((segment) => segment.top >= obstacle.frame.bottom), 'obstacle must leave a lower flow segment');
   assert.ok(obstacleGeometry.segments.every((segment) => segment.bottom <= obstacle.frame.top || segment.top >= obstacle.frame.bottom), 'flow segments must not overlap the physical obstacle');
-  assert.equal(template.layouts.length, 2);
+  assert.equal(template.layouts.length, 1);
   const introSlot = template.layouts[0].slots.find((slot) => slot.id === 'block:intro');
   assert.deepEqual(introSlot?.allowedBlockIds, ['intro']);
-  assert.deepEqual(introSlot?.grow?.pushes, ['first:segment-1', 'first:segment-2']);
-  assert.equal(template.routes.main.slotsByLayout[template.layouts[1].id].length, geometry.segments.length);
+  assert.deepEqual(introSlot?.grow?.pushes, ['content:segment-1', 'content:segment-2']);
+  assert.equal(template.routes.main.slotsByLayout[template.layouts[0].id].length, geometry.segments.length + 1);
   assert.equal(template.routes.footer.repeat, 'each-page');
   const showcaseSource = parse(await readFile(join(root, 'templates/pages/showcase-report/template.yml'), 'utf8'));
   const showcaseCompiled = compileTemplateSource(showcaseSource);
   const showcaseGeometry = pageGeometryFromTemplate(showcaseCompiled);
-  const showcaseTemplate = compositionTemplateFromPageGeometry(showcaseCompiled, showcaseGeometry, { maxPages: 3, includeHeaderFlow: true });
+  const showcaseTemplate = compositionTemplateFromPageGeometry(showcaseCompiled, showcaseGeometry, { maxPages: 5, includeHeaderFlow: true });
   const lockupSlot = showcaseTemplate.layouts[0].slots.find((slot) => slot.id === 'header-lockup');
-  const headerSlot = showcaseTemplate.layouts[1].slots.find((slot) => slot.id === 'header');
+  const headerSlot = showcaseTemplate.layouts[0].slots.find((slot) => slot.id === 'header');
   assert.equal(lockupSlot?.kind, 'block', 'brand lockup must be a normal block slot');
   assert.ok(headerSlot && lockupSlot && (
     headerSlot.box.x >= lockupSlot.box.x + lockupSlot.box.width
@@ -109,12 +109,38 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   });
   assert.equal(dynamicResult.evaluation.status, 'accepted', JSON.stringify(dynamicResult.evaluation));
   const materializedDynamicHeader = dynamicResult.plan.slots.find((slot) => slot.id === '1:header');
-  const materializedDynamicContent = dynamicResult.plan.slots.find((slot) => slot.id === '1:first:segment-1');
-  const dynamicContentTemplateBox = dynamicTemplate.layouts[0].slots.find((slot) => slot.id === 'first:segment-1')?.box;
+  const materializedDynamicContent = dynamicResult.plan.slots.find((slot) => slot.id === '1:content:segment-1');
+  const dynamicContentTemplateBox = dynamicTemplate.layouts[0].slots.find((slot) => slot.id === 'content:segment-1')?.box;
   assert.ok(materializedDynamicHeader && materializedDynamicHeader.box.height > 0, 'dynamic header must grow to its measured content');
   assert.equal(dynamicResult.plan.lines.find((line) => line.blockId === 'dynamic-header')?.priority, 500, 'header placements must carry geometry priority');
   assert.equal(dynamicResult.plan.lines.find((line) => line.blockId === 'dynamic-main')?.priority, 200, 'main placements must carry geometry priority');
   assert.ok(materializedDynamicContent && dynamicContentTemplateBox && materializedDynamicContent.box.y > dynamicContentTemplateBox.y, 'main content must move below the measured header');
+
+  const scheduledTemplate = compositionTemplateFromPageTemplateSchedule([
+    { templateRef: compiled.id, compiled, geometry },
+    { templateRef: dynamicCompiled.id, compiled: dynamicCompiled, geometry: dynamicGeometry },
+  ], [
+    { pages: { count: 1 }, template_ref: compiled.id },
+    { pages: { from: 2, count: 2 }, template_ref: dynamicCompiled.id },
+  ], { maxPages: 3, includeHeaderFlow: true });
+  assert.deepEqual(scheduledTemplate.pageTemplateSchedule, [
+    { from: 1, to: 1, templateRef: compiled.id, layoutId: compiled.id },
+    { from: 2, to: 3, templateRef: dynamicCompiled.id, layoutId: dynamicCompiled.id },
+  ], 'scheduled pages must retain their ordinary template references and ranges');
+  assert.equal(scheduledTemplate.layouts.find((layout) => layout.id === dynamicCompiled.id)?.firstPageNumber, 2, 'a scheduled template must know the first page on which its first-page-only slots are materialised');
+  const scheduledDocument = compositionDocumentFromInput({
+    flows: {
+      main: { continuation: 'allowed', blocks: [{ id: 'scheduled-body', type: 'text', role: 'body', text: Array.from({ length: 400 }, (_, index) => `scheduled${index}`).join(' ') }] },
+    },
+  });
+  const scheduledResult = createTextCompositionEngine(scheduledTemplate).plan(scheduledDocument, {
+    units: 'mm',
+    measureText(text) { return text.length * 1.2; },
+    lineHeight() { return 5; },
+  });
+  assert.equal(scheduledResult.evaluation.status, 'accepted', JSON.stringify(scheduledResult.evaluation));
+  assert.ok(scheduledResult.plan.pages.some((page) => page.page === 1 && page.templateRef === compiled.id), 'scheduled plan must use the first template on page one');
+  assert.ok(scheduledResult.plan.pages.some((page) => page.page > 1 && page.templateRef === dynamicCompiled.id), 'scheduled plan must switch to the later template range');
   const emptyDynamicResult = createTextCompositionEngine(dynamicTemplate).plan({ flows: { header: { id: 'header', continuation: 'forbidden', blocks: [] }, main: { id: 'main', continuation: 'allowed', blocks: [{ id: 'empty-header-main', kind: 'paragraph', role: 'body', text: 'main content' }] }, footer: { id: 'footer', continuation: 'forbidden', blocks: [] } } }, {
     units: 'mm',
     measureText(text) { return text.length * 1.2; },
@@ -166,9 +192,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   assert.equal(longNarrativeResult.evaluation.status, 'accepted', JSON.stringify(longNarrativeResult.evaluation));
   const narrativeLines = longNarrativeResult.plan.lines.filter((line) => line.blockId === 'narrative-body');
   assert.ok(narrativeLines.length > 3, 'long narrative should continue past its first body slot');
-  assert.ok(narrativeLines.every((line) => line.page === 1
-    ? line.slotId.includes(':first:segment-')
-    : line.slotId.includes(':continuation:segment-')), 'a paragraph must not resume in the highlights or unrelated first-page slot; later pages use the declared continuation content slot');
+  assert.ok(narrativeLines.every((line) => line.slotId.includes(':content:segment-')), 'a paragraph must remain in the ordinary named content slots on every page');
   assert.ok(new Set(narrativeLines.map((line) => line.page)).size > 1, 'long narrative should continue on a later page');
   const titleTemplate = compositionTemplateFromPageGeometry(compiled, geometry, { maxPages: 3, includeTitlePage: true });
   assert.equal(titleTemplate.routes.title.continuation, 'forbidden', 'title flow must not spill past the title page');
@@ -205,38 +229,9 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
 
   const pageSpecificSource = structuredClone(source);
   pageSpecificSource.id = 'pages/editorial-page-specific-continuation';
-  pageSpecificSource.page.continuation = {
-    width: 210,
-    height: 297,
-    margins: { top: 18, right: 17, bottom: 18, left: 17 },
-    columns: { count: 3, gutter: 4, widths: [52, 54, 62] },
-    reserved_bands: structuredClone(source.page.reserved_bands),
-    flow: { align: 'left', hyphenate: false },
-  };
+  pageSpecificSource.page.continuation = structuredClone(source.page);
   pageSpecificSource.slots.content.continuation_frame = { x: 0.081, y: 0.22, width: 0.838, height: 0.71 };
-  const pageSpecificCompiled = compileTemplateSource(pageSpecificSource);
-  const pageSpecificGeometry = pageGeometryFromTemplate(pageSpecificCompiled);
-  assert.equal(pageSpecificGeometry.continuation?.columns.count, 3);
-  const pageSpecificTemplate = compositionTemplateFromPageGeometry(pageSpecificCompiled, pageSpecificGeometry, { maxPages: 3 });
-  assert.equal(pageSpecificTemplate.layouts[1].width, pageSpecificGeometry.continuation?.width);
-  assert.equal(pageSpecificTemplate.layouts[1].slots.filter((slot) => slot.id.startsWith('continuation:segment-')).length, 3);
-  const continuationSegment = pageSpecificGeometry.continuation.segments[0];
-  const continuationBox = pageSpecificTemplate.layouts[1].slots.find((slot) => slot.id === 'continuation:segment-1')?.box;
-  assert.ok(continuationBox);
-  const continuationFrameX = 0.081 * pageSpecificGeometry.continuation.width;
-  const continuationFrameRight = 0.919 * pageSpecificGeometry.continuation.width;
-  assert.ok(Math.abs(continuationBox.x - continuationFrameX) < 0.001);
-  assert.ok(Math.abs(continuationBox.y - 0.22 * pageSpecificGeometry.continuation.height) < 0.001);
-  assert.ok(Math.abs(continuationBox.width - (Math.min(continuationSegment.x + continuationSegment.width, continuationFrameRight) - continuationFrameX)) < 0.001);
-  assert.ok(Math.abs(continuationBox.height - (continuationSegment.bottom - 0.22 * pageSpecificGeometry.continuation.height)) < 0.001);
-  const pageSpecificResult = createTextCompositionEngine(pageSpecificTemplate).plan(document, {
-    units: 'mm',
-    measureText(text) { return text.length * 1.5; },
-    lineHeight() { return 5; },
-  });
-  assert.equal(pageSpecificResult.evaluation.status, 'accepted', JSON.stringify(pageSpecificResult.evaluation));
-  assert.equal(pageSpecificResult.plan.pages[1]?.layoutId, 'pages/editorial-page-specific-continuation:continuation');
-  assert.ok(pageSpecificResult.plan.lines.some((line) => line.page === 2 && line.slotId === '2:continuation:segment-3'), 'page-specific continuation should expose its third text column');
+  assert.throws(() => compileTemplateSource(pageSpecificSource), /continuation|no longer supported/u, 'legacy continuation geometry must be rejected');
 
   const result = createTextCompositionEngine(template).plan(document, {
     units: 'mm',
@@ -245,7 +240,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   });
   assert.notEqual(result.evaluation.status, 'rejected', JSON.stringify(result.evaluation));
   assert.ok(result.plan.lines.some((line) => line.blockId === 'intro' && line.slotId === '1:block:intro'));
-  assert.ok(result.plan.lines.some((line) => line.blockId === 'section-1-body' && line.slotId === '1:first:segment-1'));
+  assert.ok(result.plan.lines.some((line) => line.blockId === 'section-1-body' && line.slotId === '1:content:segment-1'));
   assert.ok(result.plan.lines.every((line) => !(line.blockId === 'section-1-body' && line.slotId === '1:block:intro')));
   assert.ok(result.plan.pages.length >= 2, 'long body should continue onto another page');
   assert.ok(result.plan.lines.some((line) => line.page === 2), 'continuation page should contain body text');
@@ -318,7 +313,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   assert.equal(metricResult.evaluation.status, 'accepted', JSON.stringify(metricResult.evaluation));
   assert.deepEqual(metricResult.plan.blockPlacements.map((placement) => placement.blockId), ['metric-1', 'metric-2']);
   assert.ok(metricResult.plan.lines.every((line) => !line.blockId.startsWith('metric-')));
-  assert.ok(metricResult.plan.lines.some((line) => line.blockId === 'section-1-heading' && line.slotId.startsWith('1:first:')));
+  assert.ok(metricResult.plan.lines.some((line) => line.blockId === 'section-1-heading' && line.slotId.startsWith('1:content:')));
 
   const chartSource = structuredClone(source);
   chartSource.id = 'pages/editorial-chart-slot';
@@ -343,7 +338,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   });
   assert.equal(chartResult.evaluation.status, 'accepted', JSON.stringify(chartResult.evaluation));
   assert.deepEqual(chartResult.plan.blockPlacements.map((placement) => placement.blockId), ['chart-1']);
-  assert.ok(chartResult.plan.lines.some((line) => line.blockId === 'section-1-heading' && line.slotId.startsWith('1:first:')));
+  assert.ok(chartResult.plan.lines.some((line) => line.blockId === 'section-1-heading' && line.slotId.startsWith('1:content:')));
 
   const tableSource = structuredClone(source);
   tableSource.id = 'pages/editorial-table-slot';
