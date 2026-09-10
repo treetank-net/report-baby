@@ -2,6 +2,52 @@
 
 Status: implemented and verified.
 
+> Completion annotation (2026-09-10): the Release 1.1 migration described in
+> this document is complete. The original plan is intentionally retained
+> below as historical evidence; the summary records what was implemented and
+> which cleanup questions remain.
+
+## Implementation summary
+
+- `continuation` is retained as the flow/template annotation that says
+  whether an already-started flow may be split across a page boundary. It is
+  not being removed.
+- Only the special geometry mechanisms `continuation_slots` and
+  `continuation_frame` were removed from the contract. Ordinary slots from the
+  page template selected for each page are the continuation targets.
+- `page_template_schedule` is normalized from explicit or derived
+  `from`/`to`/`count` bounds, including finite `min..max` variants and an open
+  final entry. Each variant is planned and evaluated independently, and only
+  legal variants compete for selection.
+- The planner searches for a first legal placement on later scheduled pages
+  even when `continuation` is `forbidden`; that rule is enforced only after a
+  flow has actually placed content.
+- Dynamic insertion flows are request-owned overlays. Their geometry is
+  checked against the selected page layout and they cannot be used to place
+  `main` content. When no explicit route priority exists, planner ordering
+  uses `composition_priority.default` from YAML (`100`); this is an implicit
+  geometry priority, not paint order.
+- The required verification is plan-level: schedule normalization, page
+  template selection, first legal placement, continuation behavior, overlays,
+  and legacy-field rejection are covered by composition tests. Separate
+  MCP/CLI end-to-end coverage is not required for this contract.
+
+### Remaining cleanup questions
+
+1. `route.layouts` is a legacy low-level per-route layout sequence used by
+   unscheduled composition fixtures and fallback paths. A page schedule takes
+   precedence whenever it exists. Removing `route.layouts` requires migrating
+   those low-level callers and tests; it is not part of the completed schedule
+   migration.
+2. Newly-created request routes currently receive the implicit default during
+   planner ordering, but their route object may omit an explicit `priority`.
+   If plan consumers must see the resolved `100`, normalize it into the route
+   or slot projection in a follow-up without changing ordering.
+3. The public request still exposes `continuation` for flow data and dynamic
+   insertion flows. This is intentional in the current contract: it is the
+   breakability annotation, not continuation geometry. Removing or relocating
+   that annotation would be a separate contract decision.
+
 The migration is complete: page schedules now select ordinary page templates,
 legacy `continuation_slots`/`continuation_frame` fields are rejected, and the
 planner, evaluator, dry-run plan, renderer, and spacing report use the same
