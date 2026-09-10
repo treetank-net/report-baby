@@ -180,10 +180,10 @@
     "rasterDpi": 110,
     "lineChecks": 344,
     "occupiedLines": 344,
-    "slotChecks": 14
+    "slotChecks": 15
   },
   "pdf": {
     "normalization": "pdf-content",
-    "hash": "b0707357f012c419c71b27ef69d2ef4519132155ad01b2c0b2da75f912d31eda"
+    "hash": "254f8db726ceaf1a04a4020f158ca51dad826af11c84385b7d0a93b0d49eb7a8"
   }
 }

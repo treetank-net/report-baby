@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.1
+
+- Completed the scheduled page-template migration: ordinary template slots
+  now carry flow continuation, while the obsolete continuation geometry paths
+  are rejected.
+- Fixed editorial intro planning and dynamic chrome measurement so measured
+  header and lead content push the main flow instead of leaving stale empty
+  bands; evaluator output now reports header/content spacing guidance.
+- Refreshed the editorial parity baseline and documented the next Release 1.1
+  task for replacing the legacy route-level layout path with one document
+  `layout` declaration.
+
 ## 1.0.0
 
 - Finalized the renderer-neutral composition pipeline, domain module layout,
