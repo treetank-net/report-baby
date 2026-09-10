@@ -317,11 +317,23 @@ export function compositionTemplateFromPageGeometry(
   for (const flowId of auxiliaryFlowIds) {
     if (flowId === mainFlowId) continue;
     if (flowId === 'title') continue;
-    const declaredAll = expandGrowthTargets([
+    const declaredSlots = [
       ...declaredLockupSlotsForFlow(compiled, flowId, geometry),
       ...declaredTextSlotsForFlow(compiled, flowId, geometry),
       ...declaredBlockSlotsForFlow(compiled, flowId, geometry),
-    ], segments);
+    ];
+    const declaredById = new Map(declaredSlots.map((slot) => [slot.id, slot]));
+    // Keep the authored flow-slot order.  Mixing text and atomic slots is
+    // legal (for example, an intro image followed by its lead); grouping by
+    // slot kind would silently reverse that lifecycle and advance the flow to
+    // the next page before the following slot can be used.
+    const declaredAll = expandGrowthTargets(
+      (compiled.flows[flowId]?.slots ?? []).flatMap((slotId) => {
+        const slot = declaredById.get(slotId);
+        return slot ? [slot] : [];
+      }),
+      segments,
+    );
     const firstFrame = auxiliaryFrame(flowId, compiled, geometry);
     if (!firstFrame && declaredAll.length === 0) {
       throw new Error(`Template flow '${flowId}' needs a named page band or block frame before it can be adapted.`);
@@ -357,16 +369,19 @@ export function compositionTemplateFromPageGeometry(
     ? [{ from: 1, to: 1, templateRef: compiled.id, layoutId: titleLayoutId }, { from: 2, templateRef: compiled.id, layoutId }]
     : [{ from: 1, templateRef: compiled.id, layoutId }];
   const routes: Record<string, CompositionFlowRoute> = {
-    [mainFlowId]: routeForMain(
-      leadSlot,
-      declaredTextSlots,
-      declaredBlockSlots,
-      segments,
-      mainSourceIds,
-      layoutId,
-      mainFlow.continuation,
-      mainFlow.priority,
-    ),
+    [mainFlowId]: {
+      ...routeForMain(
+        leadSlot,
+        declaredTextSlots,
+        declaredBlockSlots,
+        segments,
+        mainSourceIds,
+        layoutId,
+        mainFlow.continuation,
+        mainFlow.priority,
+      ),
+      ...(mainFlow.startPage === undefined ? {} : { startPage: mainFlow.startPage }),
+    },
   };
   if (!titleLayout && titleSlots.length > 0) {
     routes.title = {
