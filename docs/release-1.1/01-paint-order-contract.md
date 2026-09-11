@@ -247,6 +247,49 @@ obstacle remains part of plan geometry and may constrain text.
 6. Only then consider mapping selected placements to a custom phase or linking
    policy to `priority`.
 
+## Implementation map
+
+### What exists today
+
+- `CompositionPlan` in `server/src/composition/contracts/engine-contracts.ts`
+  stores separate placement arrays and has no paint-phase field.
+- `createJsPdfTextBackend().render()` in
+  `server/src/composition/adapters/pdf/backend.ts` emits those arrays in a
+  fixed loop: tables, graphics, blocks, ordinary lines, insertion lines, then
+  glyphs.
+- `server/src/composition/adapters/render-config.ts` reads typed PDF options,
+  but `server/templates/render-config.yml` has no `pdf.paint_order` list.
+- `server/src/composition/evaluation/legality.ts` and
+  `evaluation/legality-geometry.ts` decide collisions from boxes, not from
+  draw order. This separation is the behaviour to preserve.
+
+### Changes required
+
+1. Add `pdf.paint_order` to `server/templates/render-config.yml` and expose a
+   validated `PaintPhase[]` from `adapters/render-config.ts`. Reject duplicates
+   and unmapped render categories at configuration load time.
+2. Add a renderer-private module (for example
+   `server/src/composition/adapters/pdf/paint-order.ts`) that converts the
+   existing plan arrays into `{ page, phase, stableIndex, render }` commands.
+   Use array insertion order as the stable index and never use map/object order.
+3. Refactor only the PDF adapter loop to sort commands by page, configured
+   phase index, and stable index. Keep capability-internal drawing (table rows,
+   chart labels, glyph runs) inside its existing renderer.
+4. Leave `CompositionPlan`, planner priority, and legality contracts unchanged;
+   expose phase/order only through backend diagnostics when requested.
+5. Add plan-only overlap assertions and one small PDF assertion in
+   `server/scripts/test-js-pdf-adapter.mjs`,
+   `server/scripts/test-report-composition-adapter.mjs`, and the relevant
+   composition contract test. Extend documentation validation with the YAML
+   phase catalogue.
+
+### Resulting ownership and verification
+
+Configuration owns the phase list, the PDF adapter owns command normalisation
+and execution, the planner owns geometry, and the evaluator owns legality. A
+phase change must therefore be observable in a backend test while leaving plan
+boxes, content coverage, and legality identical.
+
 ## Out of scope
 
 - an automatic global geometry solver;

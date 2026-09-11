@@ -57,3 +57,57 @@ configurable.
 The scope comes from deferred items in the geometry, planner–evaluator loop,
 scoring, and structural-continuity plans. This document does not change their
 completed contracts.
+
+## Implementation map
+
+### What exists today
+
+- `server/src/composition/layout/planner-candidates.ts` generates bounded
+  cross-products and local refinement boxes for movable insertions and
+  graphics.
+- `server/src/composition/layout/insertion-planning.ts` and
+  `insertion-placement.ts` measure and reserve insertion obstacles; they do
+  not search globally.
+- `server/src/composition/composition-engine.ts` evaluates initial candidates,
+  optionally runs configured refinement rounds, and records a
+  `CompositionCandidateSearchTrace`. `compareCompositionEvaluations()` already
+  makes legality a hard gate before score comparison.
+- `server/src/composition/evaluation/{evaluator,scoring,legality}.ts` supplies
+  the evaluation and current score components. Some aesthetic evidence is
+  already present, but it is not yet a complete optimisation objective.
+- `composition_search` and `composition_score` values are read from
+  `server/templates/render-config.yml` through
+  `server/src/composition/adapters/render-config.ts`; candidate limits must
+  remain bounded.
+
+### Changes required
+
+1. Freeze the evidence and suggestion contract from the shared 08–10
+   workstream before adding new candidate dimensions. Every candidate must
+   carry its originating placement window and deterministic signature.
+2. Extend `planner-candidates.ts` with a bounded, declarative candidate source
+   for multiple insertions and page ranges. Keep authored positions fixed when
+   no movement window is declared; never synthesise a slot or move `main` into
+   an insertion flow.
+3. Keep complete-plan generation in the existing planner. Add a typed search
+   budget (candidate count, rounds, full-plan recalculations, and wall-clock
+   limit) to `composition_search` and stop with a trace reason when exhausted.
+4. Keep selection in `composition-engine.ts`: evaluate each unique candidate
+   once per round, reject hard violations first, then compare the calibrated
+   soft score and stable candidate order. Do not add a second evaluator.
+5. Calibrate weights in `evaluation/scoring.ts` against the editorial fixture
+   corpus and record the corpus/expected ranking in a plan-only test. A weight
+   change is a contract change, not an incidental refactor.
+6. Add focused tests to `test-text-composition-engine.mjs`,
+   `test-editorial-plan-contract.mjs`, `test-composition-page-limits.mjs`, and
+   `test-dynamic-insertion-slots.mjs` for multiple insertions, no legal
+   candidate, deterministic ties, and each budget stop reason. Keep one small
+   backend artifact only for a selected-candidate rendering proof.
+
+### Resulting ownership and dependencies
+
+`layout/*` generates legal proposals, `composition-engine.ts` owns search and
+selection, `evaluation/*` owns legality and score, and YAML owns limits and
+weights. This item consumes the shared 08–10 metrics and precedes the visual
+calibration candidate (07). Item 05 then measures the cost of the expanded
+search without weakening coverage.

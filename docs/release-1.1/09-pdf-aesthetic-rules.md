@@ -68,3 +68,55 @@ input contract.
   suggestion when an orphan, spacing imbalance, or header gap deficit exists.
 - The CLI/MCP diagnostic response contains these plan/evaluation fields without
   requiring a user-authored inspection script.
+
+## Implementation map
+
+### What exists today
+
+- Dynamic intro/header geometry is declared in
+  `server/templates/pages/editorial-intro-cover/template.yml`,
+  `editorial-inset-two-column/template.yml`, and
+  `editorial-dynamic-chrome/template.yml`.
+- Tunable sizes, gaps, fit-content limits, and score thresholds are in
+  `server/templates/render-config.yml`; `adapters/render-config.ts` is the
+  typed seam. Numeric values must not be copied into planner code or tests.
+- `composition/adapters/page-template.ts` projects template slots into
+  `CompositionPageChrome`; `layout/page-state.ts`,
+  `layout/structured-block-placement.ts`, and
+  `layout/insertion-placement.ts` materialise measured boxes.
+- `observability/spacing-report.ts` already reports slot/text gaps. The
+  evaluator has `scoreHeaderSpacing`, `scoreOrphanLines`, and
+  `scoreInsertionSpacing`, with partial suggestions in `evaluation/evaluator.ts`.
+- `report/renderer.ts` attaches the resolved chrome and
+  `server/scripts/test-report-chrome.mjs`, `test-editorial-plan-contract.mjs`,
+  `test-editorial-parity.mjs`, and `test-editorial-visual-gate.mjs` cover the
+  current baseline.
+
+### Changes required
+
+1. Make the first-page intro flow explicit in the template adapter: measure the
+   cover image and lead as fit-content blocks, reserve their actual height, and
+   expose the remaining main slot and all header/footer gaps in the plan.
+2. Replace header-height heuristics in the spacing projection with measured
+   chrome content plus the configured rule/content gaps. Keep semantic heading
+   styles distinct from body text so the evaluator can explain an unbold title.
+3. Normalise image, quote, table, and chart insertion measurements into one
+   obstacle/occupied-box query. Captions and padding must be included before
+   surrounding flow is evaluated.
+4. Extend `evaluation/scoring.ts` with named, YAML-backed rules for minimum
+   header gap, insertion internal/external balance, orphan fragments, and
+   column fill. Emit a score component even when no PDF is rendered.
+5. Feed the score details into the shared 08–10 suggestion catalogue and
+   expose compact/full summaries through MCP and CLI; do not silently move an
+   authored insertion without a declared movement window.
+6. Add plan-only tests for empty/short/long header, dynamic intro with and
+   without main content on page 1, fit-content image/quote captions, and
+   header/footer gap boundaries. Retain one visual editorial artifact as a
+   smoke/regression proof rather than rendering the whole matrix.
+
+### Resulting ownership and dependencies
+
+Template adapters own slot and chrome geometry, measurement modules own actual
+content height, observability owns gap reports, and evaluator owns aesthetic
+signals. This is the rules layer of the shared 08–10 workstream; item 10 adds
+empty-region optimisation and item 04 later uses its stable scores for search.

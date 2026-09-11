@@ -85,3 +85,57 @@ placement from the plan.
 - creating a new `Header` entity;
 - moving `main` content into insertion slots;
 - automatic layout selection independent of the template schedule.
+
+## Implementation map
+
+### What exists today
+
+- Brand identity and asset discovery are normalised in
+  `server/src/brand/{context,contracts,assets,theme}.ts`.
+- A jsPDF lockup capability already measures and paints a `lockup` block in
+  `server/src/composition/adapters/pdf/lockup.ts`; the runtime registers it in
+  `server/src/report/composition-runtime.ts` only when input already contains
+  such a block.
+- `server/templates/pages/editorial-dynamic-chrome/template.yml` declares
+  fit-content `header-lockup` and `header` slots, so the geometry seam exists.
+- `server/src/report/renderer.ts` still draws a logo/name fallback when a plan
+  has no lockup placement. This is the legacy path to remove, not a second
+  source of planned geometry.
+- Lockup dimensions, logo gaps, and header heights are already YAML-backed in
+  `server/templates/render-config.yml` under `chrome.lockup`, `pdf.header_*`,
+  and the dynamic header settings.
+
+### Changes required
+
+1. Define the brand-to-lockup projection at the adapter boundary: extend the
+   brand context contract with the resolved mark, display name, optional
+   description, and asset reference; do not make the planner read ZIP files.
+2. In `server/src/composition/adapters/input.ts` or a dedicated brand
+   composition adapter, materialise one lockup block only when the selected
+   template's repeating header declares a compatible lockup slot. Preserve an
+   authored lockup as an explicit override and never create one for templates
+   that intentionally omit it.
+3. Pass the materialised block through
+   `report-composition-entrypoint.ts` and `composition-runtime.ts` so the
+   existing lockup capability measures its fit-content height and the ordinary
+   header flow reserves the resulting geometry.
+4. Add a per-template migration registry in the template catalogue. The
+   registry must classify `explicit-lockup`, `intentional-no-lockup`, or
+   `legacy-fallback` and emit a warning for the last category.
+5. After all supported templates have an explicit decision, delete the
+   fallback branch in `drawReportChrome()` and make missing planned chrome a
+   clear diagnostic/error. Do not change page geometry as part of fallback
+   removal.
+6. Update `server/scripts/test-report-chrome.mjs`,
+   `test-brand-contract.mjs`, `test-public-mcp-contract.mjs`, and the plan
+   contract tests. Prove empty, short, and long brand names/descriptions,
+   repeated pages, an intentional no-lockup template, and the final fallback
+   removal with one representative PDF.
+
+### Resulting files and dependencies
+
+The new responsibility belongs to a brand/composition adapter, not a new
+`Header` entity. It depends on the document `layout` selection (item 11),
+fit-content spacing/evidence (items 08–10), and the existing YAML configuration.
+Paint order (item 01) remains independent. The acceptance gate is one identical
+lockup placement in plan-only, CLI/MCP, and PDF paths.

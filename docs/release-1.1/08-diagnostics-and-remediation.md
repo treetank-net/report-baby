@@ -89,3 +89,61 @@ The update must include:
   explicitly changes them.
 - Skill guidance and tests are updated in the same change as the diagnostic
   contract.
+
+## Implementation map
+
+### What exists today
+
+- `CompositionDiagnostic` in
+  `server/src/composition/contracts/engine-contracts.ts` has stable `code`,
+  `severity`, `message`, optional IDs, and an untyped `details` record; it has
+  no first-class `why`, `evidence`, `remedies`, or `retryable` fields.
+- Planner failures are assembled across `composition/layout/*.ts` and
+  `layout/document-layout.ts`; legality checks are centralised in
+  `composition/evaluation/legality.ts` and content checks in
+  `evaluation/content.ts`.
+- `evaluation/evaluator.ts` already creates a partial `CompositionSuggestion`
+  from negative score components, while `evaluation/scoring.ts` supplies the
+  component details. This is the seed for the full contract, not a complete
+  diagnostic catalogue.
+- `server/src/interfaces/mcp/responses.ts`,
+  `interfaces/mcp/render-tools.ts`, and `interfaces/cli/*.ts` format the same
+  plan/evaluation through different wrappers; errors currently risk losing
+  nested evidence. Skills under `skills/` explain operation but do not yet
+  require a remediation payload.
+
+### Changes required
+
+1. Add typed optional fields to `CompositionDiagnostic` and
+   `CompositionSuggestion` (`why`, `scope`, `evidence`, `remedies`,
+   `retryable`) while preserving every existing error code and severity.
+2. Create one remediation catalogue (for example
+   `server/src/composition/evaluation/diagnostic-catalogue.ts`) keyed by stable
+   codes. It should receive measured values and return a concise explanation,
+   ordered remedies, and retryability; planner modules should report facts, not
+   duplicate prose.
+3. Update legality/content/planner call sites to pass structured evidence:
+   selected template and slot, capacity comparison, page/range, residual
+   content, candidate/budget state, and the relevant geometry boxes. Omit
+   unknown values instead of emitting fake zeroes.
+4. Make `evaluation/evaluator.ts` merge hard diagnostics and soft aesthetic
+   suggestions through the same catalogue. Keep legality fail-closed and keep
+   score-based suggestions separate from hard violations.
+5. Preserve the payload through MCP and CLI compact/full serializers in
+   `server/src/interfaces/mcp/responses.ts` and the CLI response path. Compact
+   output may summarise, but `diagnostics: full` must expose the complete
+   evidence and candidate trace.
+6. Update the relevant skills and `AGENTS.md` guidance with the failure
+   interpretation rule and the requirement to show the next safe action. Add
+   plan-only tests for missing slot, overflow, bounds, forbidden continuation,
+   unmet hard requirement, and one negative aesthetic suggestion; add one MCP
+   and one CLI equivalence assertion in
+   `test-public-mcp-contract.mjs`, `test-cli.mjs`,
+   `test-input-errors.mjs`, and `test-editorial-plan-contract.mjs`.
+
+### Resulting ownership and dependencies
+
+Planner/layout modules own factual context, the diagnostic catalogue owns
+wording/remedies, evaluator owns hard-versus-soft classification, and interface
+adapters own serialisation. Items 09–10 consume this contract; item 04 may
+consume its candidate evidence but must not invent a second error format.

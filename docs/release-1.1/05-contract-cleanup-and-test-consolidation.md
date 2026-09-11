@@ -49,3 +49,54 @@ duplication has been demonstrated.
 - removing an assertion without an equivalent proof;
 - removing a complete backend visual test when its property has no cheaper
   equivalent.
+
+## Implementation map
+
+### What exists today
+
+- Public MCP tools live in `server/src/interfaces/mcp/*.ts`; CLI entry points
+  live in `server/src/interfaces/cli/*.ts`. Both forward composition requests
+  into the report adapters, but their aliases and descriptions are maintained
+  separately.
+- The renderer-neutral public types are exported from
+  `server/src/composition/index.ts` and the contract files below it. Legacy
+  report paths remain in `server/src/report/legacy-plan.ts` and
+  `legacy-plan-assertions.ts`.
+- `server/scripts/test-harness.mjs` is the test registry and already records
+  an `artifactDecisions` classification; `test-timings.mjs` and the harness
+  timing output are the cost evidence.
+- Several scripts in `server/scripts/` combine planning, PDF creation,
+  rasterisation, and assertions for the same property. The release gate still
+  starts all registered child-process tests.
+
+### Changes required
+
+1. Generate an export/alias inventory from `server/src/composition/index.ts`,
+   MCP tool schemas, CLI parsing, `dry_run`, and the report entry points. Mark
+   each symbol as public, internal, compatibility-only, or removable and add
+   the result to the contract test.
+2. For every compatibility-only field or alias, add one explicit migration
+   diagnostic and a removal version. Remove code only after the inventory test
+   proves no MCP, CLI, bundle, or fixture path consumes it.
+3. Refactor the test registry so a shared fixture can expose a plan-only
+   assertion and an optional backend proof without starting a renderer for the
+   former. Keep the `not-generated`, `retain`, `split`, and `remove` decision in
+   the registry next to the test name.
+4. Merge tests only when they assert the same contract: e.g. combine repeated
+   plan legality cases behind one fixture, but retain separate assertions for
+   MCP schema, CLI formatting, and PDF text. Delete a render or raster step
+   only when the plan/evaluation assertion is equivalent.
+5. Make `test-timings.mjs` write per-suite and per-script JSONL before and after
+   the change, and make the release gate fail if a required check is silently
+   omitted. Use the YAML `quality.test_feedback` budgets rather than literals.
+6. Re-run focused plan-only tests first, then one representative backend test,
+   then the normal build and release gates in an environment that permits
+   child processes. Do not use a timing improvement as evidence that coverage
+   is preserved; compare the assertion inventory instead.
+
+### Resulting ownership and dependencies
+
+Interface adapters own public names and response shape; composition contracts
+own domain types; the harness owns test classification and timing; individual
+tests own assertions. This workstream follows the layout/chrome and 08–10
+changes so their new fields are audited once, not copied into ad-hoc fixtures.

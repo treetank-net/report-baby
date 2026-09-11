@@ -131,3 +131,56 @@ region. A candidate with a hard violation is never an optimization winner.
   underlying geometry and candidate evidence.
 - The visual showcase remains a single manual regression artifact rather than
   a prerequisite for every composition test.
+
+## Implementation map
+
+### What exists today
+
+- Plan geometry and page/slot projections are defined in
+  `server/src/composition/contracts/engine-contracts.ts` and materialised by
+  `layout/document-layout.ts` and `layout/page-state.ts`.
+- `observability/spacing-report.ts` and
+  `observability/planning-observability.ts` already expose occupied boxes,
+  slot gaps, text gaps, flow placements, and obstacle fragments.
+- Existing score components in `evaluation/scoring.ts` cover column balance,
+  orphan lines, insertion spacing, header spacing, tiny fragments, contrast,
+  and legal-plan status. `evaluation/plan-queries.ts` and
+  `evaluation/legality-geometry.ts` provide reusable box queries.
+- Candidate generation and selected placement refinement live in
+  `layout/planner-candidates.ts`; insertion geometry is prepared by
+  `insertion-planning.ts` and `insertion-placement.ts`; final ranking is in
+  `composition-engine.ts`.
+
+### Changes required
+
+1. Add a renderer-neutral occupancy projection for each page, region, slot, and
+   route: usable box, occupied bounds/area, intentional reservations, and
+   signed neighbouring gaps. Reuse `spacing-report.ts` and plan queries rather
+   than scanning pixels.
+2. Add the stable empty-space findings from this document to the shared
+   diagnostic catalogue (item 08), including thresholds, evidence boxes, score
+   impact, and remedies. Distinguish chrome, explicit reservations, final
+   streams, and template-opted spacing from unexplained whitespace.
+3. Extend `evaluation/scoring.ts` with empty-region, unbalanced-column, unused
+   fit-content envelope, and candidate-improvement components. Keep hard
+   legality separate and never reward a superficially full but illegal page.
+4. Run the quality pass inside the existing `composition-engine.ts` candidate
+   loop after legality and before final selection. Generate alternatives only
+   through the declared movement window in `planner-candidates.ts`; authored
+   positions remain fixed when no window is present.
+5. Return a compact summary by default and full boxes/traces behind
+   `diagnostics: full` through the MCP/CLI adapters. Keep thresholds and
+   penalties in `server/templates/render-config.yml`.
+6. Add plan-only tests to `test-text-composition-engine.mjs`,
+   `test-editorial-plan-contract.mjs`, and `test-structure-scoring.mjs` for
+   intentional versus unexplained whitespace, column imbalance, fit-content
+   envelopes, and a legal improved insertion candidate. Retain one visual
+   showcase test only to verify that the selected plan paints as reported.
+
+### Resulting ownership and dependencies
+
+Observability measures geometry, evaluator scores it, the shared diagnostic
+catalogue explains it, and the existing planner/engine selects among legal
+candidates. This is the optimisation layer of the combined 08–10 workstream;
+it must land after the rules/evidence layer (09 and 08) and before the broader
+search expansion in item 04.
