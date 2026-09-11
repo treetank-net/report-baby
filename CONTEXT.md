@@ -71,15 +71,18 @@ normally contain coordinates.
 
 A layout is the document-level declaration of how one document is assembled
 from page templates. In the current contract it is an ordered array of
-template assignments to page ranges; if layout rules become more complex, the
+template assignments to page spans; if layout rules become more complex, the
 same concept may become an object containing that array and additional rules.
 There is one layout for a document, not a set of competing layouts.
 
 The public declaration uses the singular name `layout`; `layouts` is not a
 second domain concept for the same document arrangement.
 
-Each layout entry combines a page range with a template reference. It is an
-entry in the declaration, not a separate domain entity.
+Each layout entry combines a page span with a template reference. A page span
+is exactly one of: an absolute inclusive range, a number of consecutive pages
+relative to the preceding entry, or the remaining open tail. These forms are
+alternatives and are never combined. A layout entry is part of the declaration,
+not a separate domain entity.
 
 The concrete geometry of a page belongs to its selected template. `pageLayout`
 is not a separate domain concept.

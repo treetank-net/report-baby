@@ -30,9 +30,12 @@ geometry is called a page template.
 - With `layout`, entries are authoritative and must cover pages contiguously
   from page 1. The last entry may be open.
 - Public layout entries use `template`, not `template_ref`.
-- `pages.from`, `pages.to` and `pages.count` retain the exact inclusive range,
-  derived-bound, finite min/max variant and open-tail semantics from completed
-  item 02.
+- `pages` is a closed union: an exact inclusive `{ from, to }` range, a
+  relative `{ count }`, or the literal `"remaining"`. These forms cannot be
+  mixed.
+- Exact and ranged page-count candidate behavior from completed item 02 is
+  retained, but its ambiguous optional-field syntax is not part of the new
+  public contract.
 - No backward-compatible public alias remains. `page_template_schedule` is
   rejected with a migration message.
 - A selected page template is resolved before route slots are queried.
@@ -50,7 +53,7 @@ geometry is called a page template.
   "layout": [
     { "pages": { "count": 1 }, "template": "pages/editorial-cover" },
     { "pages": { "from": 2, "to": 5 }, "template": "pages/editorial-body" },
-    { "pages": { "from": 6 }, "template": "pages/editorial-sidebar" }
+    { "pages": "remaining", "template": "pages/editorial-sidebar" }
   ],
   "data": { "flows": { /* ... */ } }
 }
@@ -80,11 +83,18 @@ const layoutPageCountSchema = z.union([
   }),
 ]);
 
-const layoutPagesSchema = z.object({
-  from: positivePageIntegerSchema.optional(),
-  to: positivePageIntegerSchema.optional(),
-  count: layoutPageCountSchema.optional(),
-}).strict();
+const layoutPagesSchema = z.union([
+  z.object({
+    from: positivePageIntegerSchema,
+    to: positivePageIntegerSchema,
+  }).strict().refine(({ from, to }) => from <= to, {
+    message: 'layout.pages.from must not exceed to.',
+  }),
+  z.object({
+    count: layoutPageCountSchema,
+  }).strict(),
+  z.literal('remaining'),
+]);
 
 export const layoutEntrySchema = z.object({
   pages: layoutPagesSchema,
@@ -95,31 +105,34 @@ export const documentLayoutSchema = z.array(layoutEntrySchema).min(1);
 export type DocumentLayoutInput = z.infer<typeof documentLayoutSchema>;
 ```
 
-All three range fields are optional by design. Their structural meanings are:
+The three union members have non-overlapping meanings:
 
 | `pages` shape | Meaning before positional validation |
 |---|---|
 | `{ from, to }` | exact inclusive range |
-| `{ from, count: n }` | exact `n` pages beginning at `from` |
 | `{ count: n }` | exact `n` pages beginning after the preceding entry, or at page 1 |
-| `{ from, count: { min, max } }` | finite candidate lengths beginning at `from` |
 | `{ count: { min, max } }` | finite candidate lengths beginning after the preceding entry, or at page 1 |
-| `{ from }` | open range beginning at `from`; legal only as the final entry |
-| `{}` | open range beginning after the preceding entry, or at page 1; legal only as the final entry |
-| `{ to }` | structurally valid but rejected by normalization because its start cannot be derived unambiguously |
+| `"remaining"` | open range beginning after the preceding entry, or at page 1; legal only as the final entry |
 
-The entry schema validates types, positivity, strict object keys and local
-`min <= max`. It intentionally does not pretend that one entry can validate
-its position in the array. `normalizeDocumentLayout()` validates and derives:
+`from` and `to` are both required in the absolute form and `to` is inclusive.
+`count` is relative to the preceding normalized entry. The contract does not
+accept `{}`, `{ from }`, `{ to }`, `{ from, count }`, `{ from, to, count }` or
+any other redundant mixture.
 
-- the starting page from `from`, the preceding normalized end, or page 1;
-- `to >= derived from`;
-- agreement of redundant `from`/`to`/numeric `count`;
-- containment of a redundant exact range inside `count: { min, max }`;
-- the illegality of `{ to }` without `from` or `count`;
-- open-range finality;
-- contiguity and absence of overlap across entries; and
-- deterministic expansion of count ranges.
+The entry schema validates the union shape, positivity, strict object keys,
+`from <= to` and `min <= max`. It intentionally does not pretend that one
+entry can validate its position in the array. `normalizeDocumentLayout()`:
+
+- expects the first assignment to begin at page 1;
+- derives the start and end of a `{ count }` entry from each preceding
+  candidate branch;
+- requires an exact `{ from, to }` entry to begin immediately after the
+  preceding branch;
+- expands finite `{ count: { min, max } }` alternatives in ascending order;
+- discards candidate branches that cannot join a following exact range;
+- rejects the layout only when no contiguous candidate remains;
+- permits `"remaining"` only as the final entry; and
+- emits normalized, contiguous assignments without gaps or overlaps.
 
 The parent request schema uses an exclusive union/refinement for `template`
 versus `layout`. The old snake-case field is not accepted.
@@ -189,15 +202,18 @@ pageTemplateAssignmentForPage(
 ): CompositionPageTemplateAssignment
 ```
 
-Normalization preserves the completed item-02 algorithm:
+Normalization preserves the completed item-02 behavior behind the new,
+unambiguous input union:
 
-1. derive omitted `from`, `to` or fixed `count` values;
-2. validate agreement when redundant bounds are supplied;
-3. reject gaps, overlaps, non-positive values and entries following an open
-   tail;
-4. expand finite `count: { min, max }` alternatives in input order;
-5. produce deterministic variants ordered by entry count choices;
-6. retain an open final assignment only as the last range.
+1. accept exactly one page-span form per entry;
+2. require an exact first range to begin at page 1, or derive page 1 for an
+   initial count/remaining entry;
+3. derive relative count assignments separately for every candidate branch;
+4. expand finite `count: { min, max }` alternatives in ascending order;
+5. join a following exact range only to candidate branches that end immediately
+   before its `from` page;
+6. reject the layout when every branch has a gap or overlap;
+7. retain `remaining` only as the final open assignment.
 
 Every normalized variant begins at page 1. A page without an assignment before
 the open tail/materialized limit is a layout error, not a top-level-template
@@ -305,7 +321,7 @@ one name/path only. No public request accepts both contracts.
 
 | Requirement | Proof | Target test |
 |---|---|---|
-| range derivation/variants/open tail unchanged | pure normalization | renamed schedule test cases |
+| exact range, relative count, count variants and remaining tail | pure normalization | union member and mixed-shape rejection cases |
 | gap/overlap/both-input rejection | schema/adapter | `test-input-errors.mjs` |
 | selected template is explicit per page | plan-only pages/slots | `test-page-template-adapter.mjs` |
 | route cannot select a template | low-level negative fixture | `test-text-composition-engine.mjs` |
