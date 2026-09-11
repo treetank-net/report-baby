@@ -65,21 +65,61 @@ The alternative single-template form is:
 }
 ```
 
-Add schemas/types in `contracts/input/schema.ts`:
+Add the complete structural schemas/types in `contracts/input/schema.ts`:
 
 ```ts
-const layoutEntrySchema = z.object({
-  pages: z.object({
-    from: positiveInteger.optional(),
-    to: positiveInteger.optional(),
-    count: pageCountConstraint.optional(),
+const positivePageIntegerSchema = z.number().int().positive();
+
+const layoutPageCountSchema = z.union([
+  positivePageIntegerSchema,
+  z.object({
+    min: positivePageIntegerSchema,
+    max: positivePageIntegerSchema,
+  }).strict().refine(({ min, max }) => min <= max, {
+    message: 'layout.pages.count.min must not exceed max.',
   }),
-  template: nonEmptyTemplateId,
-});
+]);
+
+const layoutPagesSchema = z.object({
+  from: positivePageIntegerSchema.optional(),
+  to: positivePageIntegerSchema.optional(),
+  count: layoutPageCountSchema.optional(),
+}).strict();
+
+export const layoutEntrySchema = z.object({
+  pages: layoutPagesSchema,
+  template: z.string().min(1),
+}).strict();
 
 export const documentLayoutSchema = z.array(layoutEntrySchema).min(1);
 export type DocumentLayoutInput = z.infer<typeof documentLayoutSchema>;
 ```
+
+All three range fields are optional by design. Their structural meanings are:
+
+| `pages` shape | Meaning before positional validation |
+|---|---|
+| `{ from, to }` | exact inclusive range |
+| `{ from, count: n }` | exact `n` pages beginning at `from` |
+| `{ count: n }` | exact `n` pages beginning after the preceding entry, or at page 1 |
+| `{ from, count: { min, max } }` | finite candidate lengths beginning at `from` |
+| `{ count: { min, max } }` | finite candidate lengths beginning after the preceding entry, or at page 1 |
+| `{ from }` | open range beginning at `from`; legal only as the final entry |
+| `{}` | open range beginning after the preceding entry, or at page 1; legal only as the final entry |
+| `{ to }` | structurally valid but rejected by normalization because its start cannot be derived unambiguously |
+
+The entry schema validates types, positivity, strict object keys and local
+`min <= max`. It intentionally does not pretend that one entry can validate
+its position in the array. `normalizeDocumentLayout()` validates and derives:
+
+- the starting page from `from`, the preceding normalized end, or page 1;
+- `to >= derived from`;
+- agreement of redundant `from`/`to`/numeric `count`;
+- containment of a redundant exact range inside `count: { min, max }`;
+- the illegality of `{ to }` without `from` or `count`;
+- open-range finality;
+- contiguity and absence of overlap across entries; and
+- deterministic expansion of count ranges.
 
 The parent request schema uses an exclusive union/refinement for `template`
 versus `layout`. The old snake-case field is not accepted.
