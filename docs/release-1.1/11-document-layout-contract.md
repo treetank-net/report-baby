@@ -1,165 +1,290 @@
-# Release 1.1 — document `layout` and template selection
+# Release 1.1 — one document layout and explicit page templates
 
-Status: proposal; implementation has not started.
+Status: implementation plan.
 
-## Motivation
+## Goal
 
-The current request field `page_template_schedule` expresses one document
-layout: it says which reusable page templates are used for which page ranges.
-The older `route.layouts` path expresses a similar decision at the wrong
-level, inside one flow route. That creates two competing sources of truth and
-allows a flow to carry a positional page-layout fallback that the document
-itself should own.
-
-The domain language should therefore have one singular `layout` for one
-document. A template remains the reusable page-composition contract. We do
-not need a new domain entity for every range entry, and we do not need the
-ambiguous term `pageLayout`.
-
-This change is motivated by four constraints:
-
-- one document must have one authoritative page-template arrangement;
-- a flow route must describe slots, priority, repetition and continuation,
-  not select page templates by page index;
-- a later page must be selected from the document layout before the planner
-  checks whether the selected template exposes a legal slot;
-- the public contract should describe the same concept that the planner and
-  dry-run plan already use, without preserving an obsolete parallel path.
+Expose one public `layout` declaration describing which reusable page template
+is used for each page range. Remove `page_template_schedule` and the competing
+route-level `layouts` selection path while preserving the range/candidate and
+continuation behavior completed in item 02.
 
 ## Canonical vocabulary
 
-| Term | Meaning |
-|---|---|
-| `template` | One reusable page-composition contract: page geometry, chrome, regions, slots, flow routes and template-owned policies. |
-| `layout` | One document's declaration of how its pages are assembled from templates. |
-| `layout` entry | A plain data item containing a page range and the selected template. It is not a separate domain entity. |
-| `route` | The slots and flow rules through which one named flow is planned. It does not contain a page-template sequence. |
-| `continuation` | The existing breakability policy for an already-started flow. It is unrelated to template selection geometry. |
+- **template** — one reusable page-composition contract and its page geometry;
+- **layout** — one document-level ordered declaration assigning templates to
+  page ranges;
+- **layout entry** — plain range + template data, not a domain entity;
+- **route** — ordered compatible slots and flow policies; it never selects a
+  template;
+- **continuation** — whether an already-started flow may cross a page boundary;
+  it does not select page geometry.
 
-`pageLayout` is not a domain term. A concrete geometry record created while a
-template is compiled may have a technical implementation name, but it must
-not become a second public concept.
+There is no public or domain concept named `pageLayout`. Internal compiled page
+geometry is called a page template.
 
-## Proposed request shape
+## Fixed decisions
 
-The simple form is an array because the current contract only needs ordered
-template assignments:
+- A request supplies either top-level `template` or `layout`, never both.
+- With `template`, that template is used for every materialized page.
+- With `layout`, entries are authoritative and must cover pages contiguously
+  from page 1. The last entry may be open.
+- Public layout entries use `template`, not `template_ref`.
+- `pages.from`, `pages.to` and `pages.count` retain the exact inclusive range,
+  derived-bound, finite min/max variant and open-tail semantics from completed
+  item 02.
+- No backward-compatible public alias remains. `page_template_schedule` is
+  rejected with a migration message.
+- A selected page template is resolved before route slots are queried.
+- A compiled route contains the stable union of its named slots across selected
+  templates. Availability on one page is derived by intersecting that union
+  with the already-selected page template; no per-template route map remains.
+- Dynamic request insertion slots remain explicit per-page overlays and cannot
+  accept `main`.
+- `continuation` behavior does not change.
+
+## Public request contract
 
 ```jsonc
 {
-  "template": "editorial-body",
   "layout": [
-    {
-      "pages": { "count": 1 },
-      "template": "editorial-cover"
-    },
-    {
-      "pages": { "from": 2, "to": 5 },
-      "template": "editorial-body"
-    },
-    {
-      "pages": { "from": 6, "to": 8 },
-      "template": "editorial-feature"
-    }
+    { "pages": { "count": 1 }, "template": "pages/editorial-cover" },
+    { "pages": { "from": 2, "to": 5 }, "template": "pages/editorial-body" },
+    { "pages": { "from": 6 }, "template": "pages/editorial-sidebar" }
   ],
-  "data": {
-    "flows": {
-      "main": {
-        "continuation": "allowed",
-        "blocks": [{ "type": "text", "text": "Long article text..." }]
-      }
-    }
-  }
+  "data": { "flows": { /* ... */ } }
 }
 ```
 
-The top-level `template` remains the fallback when no `layout` is supplied.
-When `layout` is present, its entries are authoritative for page-template
-selection. The public entry property should be `template`; the adapter may
-normalize it to the internal identifier `templateRef` where that is useful.
+The alternative single-template form is:
 
-If future rules need more than ranges, the same domain concept may become an
-object containing the template-entry array and additional rules. That is a
-future contract change, not a reason to introduce `layouts` or
-`pageLayout` today.
-
-## Current implementation inventory
-
-The current implementation already contains the correct document-level
-behavior under the older name. The migration is a vocabulary and ownership
-change, not a new planning algorithm.
-
-| Current location | Current responsibility | Required change |
-|---|---|---|
-| `server/src/contracts/input/schema.ts` | Defines `pageTemplateScheduleEntrySchema`, `pageTemplateScheduleSchema` and `PageTemplateScheduleInput`. | Rename the public schema and type to the `layout` contract. Keep the existing inclusive `from`/`to`/`count` validation and min/max candidate semantics. |
-| `server/src/composition/adapters/page-template-schedule.ts` | Normalizes ranges, derives omitted bounds and expands range candidates. | Rename the adapter vocabulary to document-layout normalization. Preserve validation, candidate expansion and open-tail behavior exactly. |
-| `server/src/composition/report-composition-entrypoint.ts` | Builds one composition candidate per normalized schedule variant and evaluates candidates. | Read the normalized `layout` declaration. Do not change candidate ownership or legality rules. |
-| `server/src/report/renderer.ts` | Passes the schedule through render, dry-run and plan-only entry points. | Replace schedule parameters with the document layout declaration and keep the plan/render geometry path identical. |
-| `server/src/report/composition-runtime.ts` | Carries the schedule through composition options. | Rename the option and retain one shared source of page-template selection. |
-| `server/src/interfaces/mcp/render-tools.ts` | Exposes `page_template_schedule` to `render_report`. | Expose `layout` with entries containing `pages` and `template`; update the description and structured request plumbing. Do not keep a second public alias unless a separate compatibility decision is made. |
-| `server/src/interfaces/cli/example.ts` | Parses the CLI request and forwards the schedule. | Parse `layout` with the same schema as MCP and remove the old request path. |
-| `server/src/composition/contracts/model.ts` | Defines compiled templates, routes and the transitional `CompositionFlowRoute.layouts`. | Remove `CompositionFlowRoute.layouts`. Keep `continuation`, `priority`, `repeat`, `startPage`, slots and insertion slots. Treat the compiled geometry collection as an implementation projection, not as a public `pageLayout` concept. |
-| `server/src/composition/layout/page-state.ts` | Selects the page layout from `pageTemplateSchedule`, then falls back to `route.layouts` or the first compiled layout. | Select the template from the normalized document `layout`; delete the positional `route.layouts` fallback. A request without `layout` may continue to use the single top-level `template` default. |
-| `server/src/composition/adapters/request-insertion-slots.ts` | Copies route layout metadata while adding request-owned insertion slots. | Stop copying `route.layouts`. Resolve insertion geometry against the selected document template and keep insertion flows as request-owned overlays. |
-| `server/src/composition/adapters/page-template.ts` | Compiles one or more source templates and currently returns `pageTemplateSchedule` plus route layout maps. | Return the normalized document template selection under the new internal name and remove route-level page selection. Revisit `slotsByLayout` only after confirming whether its keys are compiled geometry IDs or source template IDs; rename it only if it is actually template selection metadata. |
-| `server/scripts/test-*.mjs` | Many low-level fixtures construct `CompositionTemplate.layouts` and `route.layouts` directly. | Migrate single-template fixtures to the top-level template default. Migrate multi-template fixtures to a document `layout` declaration. Add assertions that route metadata cannot select a page template. |
-| `docs/`, examples and tool descriptions | Explain the old schedule name and route fallback. | Use `layout` for the document declaration, `template` for one reusable page template, and document the intentional removal of the old path. |
-
-## Resulting flow
-
-```text
-request.layout
-  → normalize page ranges and candidate lengths
-  → select one template for each materialised page
-  → materialise that template's ordinary slots and chrome
-  → order flows by their resolved geometry priority
-  → check continuation against the next selected template and its named slots
-  → produce the plan and evaluate legality/aesthetics
+```jsonc
+{
+  "template": "pages/editorial-body",
+  "data": { "flows": { /* ... */ } }
+}
 ```
 
-`route.layouts` must not participate in this flow. In particular, a missing
-sidebar slot on the current page is not a reason to throw merely because the
-route has no positional fallback. The planner searches the document layout
-for a legal page/template destination according to the existing flow rules.
+Add schemas/types in `contracts/input/schema.ts`:
 
-## Migration order
+```ts
+const layoutEntrySchema = z.object({
+  pages: z.object({
+    from: positiveInteger.optional(),
+    to: positiveInteger.optional(),
+    count: pageCountConstraint.optional(),
+  }),
+  template: nonEmptyTemplateId,
+});
 
-1. Add the new `layout` schema and adapter names while keeping behavior covered
-   by the current schedule tests.
-2. Migrate MCP and CLI request plumbing and all composition options to the new
-   name.
-3. Remove `CompositionFlowRoute.layouts` and the fallback in `routeLayout()`.
-4. Migrate dynamic insertion adapters and low-level fixtures to document-level
-   template selection.
-5. Rename or remove only those `slotsByLayout` references whose keys are proven
-   to represent the old route-level selection; do not change slot eligibility
-   semantics as part of this task.
-6. Update plan, dry-run and renderer artifacts so they expose the selected
-   template for each page and no route-owned layout sequence.
-7. Run the schedule normalization, late-first-placement, continuation,
-   dynamic-insertion and legacy-field rejection tests, then run the normal
-   build and release checks.
+export const documentLayoutSchema = z.array(layoutEntrySchema).min(1);
+export type DocumentLayoutInput = z.infer<typeof documentLayoutSchema>;
+```
 
-## Acceptance criteria
+The parent request schema uses an exclusive union/refinement for `template`
+versus `layout`. The old snake-case field is not accepted.
 
-- One request has one document `layout` declaration or one fallback template;
-  there is no route-level page-template sequence.
-- `layout` entries select reusable `template` names for inclusive page ranges.
-- Existing range variants, open tails, first legal placement and continuation
-  behavior are unchanged.
-- A route cannot make an otherwise unavailable template appear by supplying a
-  positional `layouts` array.
-- Dynamic insertion flows still use ordinary slots from the selected template,
-  remain overlays, and cannot place `main` content into insertion slots.
-- Plans and dry-run diagnostics identify the selected template by page without
-  exposing `pageLayout` as a public concept.
-- `continuation` and the YAML default geometry priority (`100`) remain
-  unchanged; explicit paint order is outside this task.
+## Internal naming and target types
 
-## Out of scope
+The current names conflate compiled page geometry with document layout. Apply
+this complete rename:
 
-- redefining `continuation`;
-- restoring `continuation_slots` or `continuation_frame`;
-- changing geometry priority or introducing explicit paint order;
-- adding a global solver or new implicit insertion slots;
-- changing the semantics of ordinary slot eligibility.
+| Current | Target | Meaning |
+|---|---|---|
+| `CompositionLayoutTemplate` | `CompositionPageTemplate` | compiled geometry/slots of one reusable page template |
+| `CompositionTemplate` | `CompositionLayout` | compiled planning input for one document-layout candidate |
+| `CompositionTemplate.layouts` | `CompositionLayout.pageTemplates` | referenced compiled page templates |
+| `CompositionPageTemplateRange` | `CompositionPageTemplateAssignment` | normalized inclusive range selecting a page template |
+| `pageTemplateSchedule` | `pageTemplateAssignments` | internal normalized assignments |
+| `layoutId` on page/spacing data | `pageTemplateId` | technical compiled template ID |
+| `templateRef` | retain | stable source/catalogue template reference |
+| `route.layouts` | remove | obsolete competing template selection |
+| `slotsByLayout` | remove | redundant slot eligibility already derivable from the selected template |
+
+When templates expose different slots for the same flow, compilation builds
+`route.slots` as their stable first-appearance union. The selected page
+template's actual slot collection is the only availability filter.
+
+Target internal records:
+
+```ts
+interface CompositionPageTemplateAssignment {
+  from: number;
+  to?: number;
+  templateRef: string;
+  pageTemplateId: string;
+}
+
+interface CompositionLayout {
+  pageTemplates: CompositionPageTemplate[];
+  pageTemplateAssignments?: CompositionPageTemplateAssignment[];
+  routes: Record<string, CompositionFlowRoute>;
+  maxPages: number;
+  pageSlotOverlays?: Record<number, CompositionSlotTemplate[]>;
+  headingKeepWithNextLines?: number;
+}
+
+interface CompositionFlowRoute {
+  slots: string[];
+  insertionSlots?: string[];
+  continuation: 'allowed' | 'forbidden';
+  priority?: number;
+  repeat?: 'each-page';
+  startPage?: number;
+}
+```
+
+These rename existing procedural data. They do not add another planning layer.
+
+## Normalization process
+
+Rename `adapters/page-template-schedule.ts` to
+`adapters/document-layout.ts`. Its public functions become:
+
+```ts
+normalizeDocumentLayout(input: DocumentLayoutInput): DocumentLayoutVariant[]
+pageTemplateAssignmentForPage(
+  assignments: CompositionPageTemplateAssignment[],
+  page: number,
+): CompositionPageTemplateAssignment
+```
+
+Normalization preserves the completed item-02 algorithm:
+
+1. derive omitted `from`, `to` or fixed `count` values;
+2. validate agreement when redundant bounds are supplied;
+3. reject gaps, overlaps, non-positive values and entries following an open
+   tail;
+4. expand finite `count: { min, max }` alternatives in input order;
+5. produce deterministic variants ordered by entry count choices;
+6. retain an open final assignment only as the last range.
+
+Every normalized variant begins at page 1. A page without an assignment before
+the open tail/materialized limit is a layout error, not a top-level-template
+fallback.
+
+## Planning process
+
+```text
+request template/layout
+  -> normalize one or more document-layout variants
+  -> resolve and compile every referenced page template
+  -> build one CompositionLayout per variant
+  -> create page 1 from its assignment
+  -> when a flow searches/continues, ensure the next page from assignments
+  -> materialize selected page template slots and request overlays
+  -> intersect route slots with the selected page template's slots
+  -> apply first-placement and continuation policy
+  -> finish/evaluate the complete candidate
+```
+
+`page-state.ts::layoutForPage` (renamed `pageTemplateForPage`) receives the
+`CompositionLayout` and page number. It performs only assignment lookup and
+compiled-template lookup. Delete this fallback:
+
+```text
+route.layouts[page - 1] -> first compiled layout
+```
+
+For the single top-level-template form, compilation creates one
+`CompositionPageTemplate` and omits assignments; `pageTemplateForPage` returns
+that sole template for every page. More than one compiled page template without
+assignments is an internal error.
+
+After selection, `routeSlots()` filters the route's stable `slots` against the
+selected page template's materialized slots. It never influences template
+selection.
+
+## Dynamic insertion overlays
+
+`adapters/request-insertion-slots.ts` currently copies `route.layouts` and
+builds layout-keyed slot maps. Change it to:
+
+1. validate each request slot against the page template assigned to its page;
+2. append it to `pageSlotOverlays[page]` without mutating compiled templates;
+3. add its name to the owning non-main flow route;
+4. add the slot to the route's stable union; availability still follows from
+   the page overlay on that selected page;
+5. reject `main` ownership and collision with static/reserved slots;
+6. never add a page-template assignment or fallback.
+
+## Public and report plumbing
+
+Migrate the same field through:
+
+- `interfaces/mcp/render-tools.ts` request schema and description;
+- `interfaces/cli/example.ts` request parsing/data-field exclusion;
+- `report/renderer.ts` plan-only, detailed and PDF functions;
+- `report/composition-runtime.ts` options;
+- `composition/report-composition-entrypoint.ts` candidate creation;
+- dry-run/full response descriptions and examples.
+
+Do not keep two optional parameters. Each function receives
+`layout?: DocumentLayoutInput`; top-level `template` remains its existing
+separate template argument at the outer interface boundary.
+
+Plans expose `pages[].templateRef` and technical `pageTemplateId`. They do not
+echo the original unnormalized request.
+
+## Implementation sequence
+
+1. Add target types and pure normalization names alongside old internal names;
+   keep behavior tests green.
+2. Add public `layout` and reject requests containing both `template` and
+   `layout` or the old `page_template_schedule` field.
+3. Migrate MCP, CLI, renderer/runtime and entrypoint parameters.
+4. Rename compiled geometry/container/range fields throughout composition.
+5. Build stable route-slot unions, simplify `routeSlots()` to an intersection
+   and remove `slotsByLayout`.
+6. Remove `CompositionFlowRoute.layouts` and all copying/fallback code.
+7. Migrate request insertion overlays.
+8. Migrate fixtures from low-level `layouts` construction to
+   `CompositionLayout.pageTemplates` and assignments.
+9. Remove old schemas, adapter file, types, parameters, diagnostics and docs.
+10. Run `rg` for every old identifier and allow occurrences only in explicit
+    rejection tests and the unchanged historical item-02 document.
+
+Steps 1–3 may temporarily contain internal aliases but the final 1.1 state has
+one name/path only. No public request accepts both contracts.
+
+## File map
+
+| Area | Required result |
+|---|---|
+| `contracts/input/schema.ts` | `DocumentLayoutInput`; old field rejected |
+| `contracts/model.ts` | target type/field names; no `route.layouts` |
+| `adapters/document-layout.ts` | normalization and assignment lookup |
+| `adapters/page-template.ts` | compile `CompositionLayout` and page templates |
+| `layout/page-state.ts` | select only from assignments or sole template |
+| `layout/page-state.ts::routeSlots` | intersect route slots with selected page-template slots |
+| `adapters/request-insertion-slots.ts` | overlays without template selection |
+| entrypoint/runtime/renderer | one `layout` parameter path |
+| MCP/CLI | one public request name and migration error |
+
+## Test matrix
+
+| Requirement | Proof | Target test |
+|---|---|---|
+| range derivation/variants/open tail unchanged | pure normalization | renamed schedule test cases |
+| gap/overlap/both-input rejection | schema/adapter | `test-input-errors.mjs` |
+| selected template is explicit per page | plan-only pages/slots | `test-page-template-adapter.mjs` |
+| route cannot select a template | low-level negative fixture | `test-text-composition-engine.mjs` |
+| template-specific slot eligibility remains | plan-only late-sidebar fixture | `test-text-composition-engine.mjs` |
+| forbidden continuation still allows late first placement | plan-only fixture | existing late-first-placement test |
+| dynamic insertion uses assigned template only | plan-only overlay fixture | `test-dynamic-insertion-slots.mjs` |
+| MCP/CLI accept `layout`, reject old field | transport schema only, no PDF | public contract tests |
+| PDF uses selected plan unchanged | one mixed-template PDF | `test-editorial-parity.mjs` |
+
+## Completion criteria
+
+- `rg` finds no executable-code occurrence of `page_template_schedule`,
+  `PageTemplateSchedule`, `pageTemplateSchedule`, `route.layouts`,
+  `CompositionLayoutTemplate`, `CompositionTemplate.layouts`, `layoutId` or
+  `slotsByLayout` outside explicit rejection/migration fixtures.
+- A request has exactly one authoritative template-selection path.
+- Every materialized page identifies its selected `templateRef`.
+- Route lookup cannot change the selected template.
+- Item-02 range and continuation behavior remains green without modifying its
+  historical plan document.
+- Dynamic insertion overlays remain explicit and cannot host `main`.
+- Plan-only, dry-run and PDF paths use the same normalized layout variant.

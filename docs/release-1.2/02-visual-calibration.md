@@ -1,11 +1,11 @@
-# Candidate after Release 1.1 — full chrome visual calibration
+# Release 1.2 candidate — full chrome visual calibration
 
-Status: candidate; not an approved Release 1.1 task.
+Status: Release 1.2 candidate; not yet an approved implementation task.
 
 ## Rationale
 
-Release 1.0 provides dynamic-chrome mechanics, and Release 1.1 is intended to
-complete automatic lockup and fallback removal. Only then can appearance be
+Release 1.0 provides dynamic-chrome mechanics, and Release 1.1 completes the
+automatic lockup and fallback-removal contract. Only then can appearance be
 calibrated across the full set of brands and templates without mixing mechanism
 changes with visual assessment.
 

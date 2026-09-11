@@ -1,113 +1,227 @@
-# Release 1.1 — planner search and evaluator calibration
+# Release 1.1 — deterministic bounded placement search
 
-Status: scope proposal; a decision on a full solver has not been approved.
+Status: implementation plan.
 
-## Why this topic is deferred
+## Goal
 
-Release 1.0 has a bounded, deterministic pass: the planner prepares a variant,
-the evaluator scores it, and selection operates on a finite candidate set.
-There is not yet a safe basis for moving multiple insertions, breakpoints, and
-blocks across every page at the same time.
+Make the existing movable insertion/graphic search predictable and capable of
+handling several declared movable placements without unbounded cross-product
+growth. Calibrate the existing evaluator so its ranking agrees with an
+explicitly reviewed editorial corpus.
 
-## Candidates for 1.1
+## Fixed decisions
 
-- optimisation of multiple moving insertions in one pass;
-- explicit, bounded cross-page constraints;
-- a possible global document solver, if a cost budget and deterministic stop
-  criterion can be defined;
-- moving `composition_search` policy into a typed configuration seam once it is
-  part of the production contract;
-- calibrating `composition_score` weights against a real editorial corpus;
-- covering evaluator edge cases, especially orphans, fragments crossing slots,
-  and adjacent obstacles;
-- measuring full-planning cost and setting a reflow/search budget.
+- Release 1.1 does not introduce a global document solver.
+- Search changes only placements for which request/template policy supplies
+  `MovablePlacementBounds`.
+- A candidate is a complete set of insertion and graphic proposals from which
+  the ordinary planner produces a complete `CompositionPlan`.
+- The engine remains the only evaluator/selection loop.
+- Hard legality and content coverage always precede score comparison.
+- Search stopping is based on deterministic count/round budgets. Wall-clock
+  time is recorded for observability but never decides which candidate wins or
+  where search stops.
+- The seed/authored proposal is always a candidate.
+- Equal evaluated candidates preserve deterministic generation order.
+- Item 08–10 defines the stable score evidence before this expansion lands.
 
-## Invariants
+## Current implementation
 
-```text
-generate bounded candidates
-  -> plan each candidate completely
-  -> reject hard violations
-  -> evaluate legal candidates once
-  -> choose the best legal plan deterministically
+- `contracts/planner-policy.ts` defines a map of movement bounds with axis,
+  preferred coordinate, candidate count and refinement settings.
+- `layout/planner-candidates.ts` creates evenly spaced positions per movable
+  item, builds their full cross-product and refines around the selected result.
+- Initial and refinement cross-products are materialized without a global
+  candidate cap.
+- Candidate ordering follows record/object iteration in part of the path.
+- `composition-engine.ts` evaluates all produced plans, deduplicates only for
+  trace counts using a serialized complete plan and can evaluate the same
+  effective proposal in another round.
+- Existing YAML config contains quote-oriented candidate counts and refinement
+  values but no general full-plan budget.
+
+## Target search policy
+
+Replace quote-specific production settings with typed general settings under
+the existing `composition_search` group:
+
+```yaml
+composition_search:
+  max_initial_candidates: <number>
+  max_refinement_rounds: <number>
+  max_candidates_per_refinement: <number>
+  max_full_plan_recalculations: <number>
 ```
 
-A high score cannot legalise collisions, lost words, or out-of-bounds geometry.
-Reflow remains a cost of preparing a concrete candidate, not a separate quality
-candidate.
+Movement-window density remains part of each `MovablePlacementBounds`; the
+global configuration limits combined work. Candidate and recalculation values
+are positive integers; refinement rounds are non-negative integers. They are
+validated in `adapters/render-config.ts`. Existing quote keys are migrated and
+deleted only after all consumers use the general policy.
 
-Do not introduce unbounded search merely because a new solver can produce more
-variants. Candidate count, rounds, and cost must be explicit, measurable, and
-configurable.
+Extend planner policy without introducing an object-oriented solver:
 
-## Acceptance criteria
+```ts
+interface CompositionSearchBudget {
+  maxInitialCandidates: number;
+  maxRefinementRounds: number;
+  maxCandidatesPerRefinement: number;
+  maxFullPlanRecalculations: number;
+}
+```
 
-- candidate order is deterministic;
-- every candidate has a complete plan and at most one evaluation per round;
-- an illegal variant cannot win through a better soft score;
-- the log/trace shows candidate count, reflow, and the reason for selection;
-- tests cover multiple insertions, no legal variant, and budget exhaustion;
-- weight calibration is compared with human assessment, not only a numerical
-  improvement;
-- the current 1.0 path remains the default until the new solver has its own
-  contract and regression gate.
+Pass it through `TextCompositionPlannerPolicy` to the existing candidate
+functions and engine configuration.
 
-## Sources
+## Candidate identity and order
 
-The scope comes from deferred items in the geometry, planner–evaluator loop,
-scoring, and structural-continuity plans. This document does not change their
-completed contracts.
+Introduce a proposal signature, not a serialized-plan signature. It contains
+every selected movable item sorted by stable document order:
 
-## Implementation map
+```text
+kind:id@page:slot:x,y,width,height
+```
 
-### What exists today
+Stable document order means flow declaration order, block order inside a flow,
+then graphic declaration order. It is calculated from `CompositionDocument`;
+lexical IDs are only the final tie-break for malformed duplicate ordering.
 
-- `server/src/composition/layout/planner-candidates.ts` generates bounded
-  cross-products and local refinement boxes for movable insertions and
-  graphics.
-- `server/src/composition/layout/insertion-planning.ts` and
-  `insertion-placement.ts` measure and reserve insertion obstacles; they do
-  not search globally.
-- `server/src/composition/composition-engine.ts` evaluates initial candidates,
-  optionally runs configured refinement rounds, and records a
-  `CompositionCandidateSearchTrace`. `compareCompositionEvaluations()` already
-  makes legality a hard gate before score comparison.
-- `server/src/composition/evaluation/{evaluator,scoring,legality}.ts` supplies
-  the evaluation and current score components. Some aesthetic evidence is
-  already present, but it is not yet a complete optimisation objective.
-- `composition_search` and `composition_score` values are read from
-  `server/templates/render-config.yml` through
-  `server/src/composition/adapters/render-config.ts`; candidate limits must
-  remain bounded.
+The generator operates as follows:
 
-### Changes required
+1. start with the unchanged seed proposal;
+2. enumerate each item's unique positions with preferred/authored position
+   first, then increasing distance from it, then coordinate;
+3. combine items in stable document order;
+4. after adding each dimension, deduplicate by proposal signature and truncate
+   to the configured initial/refinement limit;
+5. never construct the full unbounded cross-product before truncation.
 
-1. Freeze the evidence and suggestion contract from the shared 08–10
-   workstream before adding new candidate dimensions. Every candidate must
-   carry its originating placement window and deterministic signature.
-2. Extend `planner-candidates.ts` with a bounded, declarative candidate source
-   for multiple insertions and page ranges. Keep authored positions fixed when
-   no movement window is declared; never synthesise a slot or move `main` into
-   an insertion flow.
-3. Keep complete-plan generation in the existing planner. Add a typed search
-   budget (candidate count, rounds, full-plan recalculations, and wall-clock
-   limit) to `composition_search` and stop with a trace reason when exhausted.
-4. Keep selection in `composition-engine.ts`: evaluate each unique candidate
-   once per round, reject hard violations first, then compare the calibrated
-   soft score and stable candidate order. Do not add a second evaluator.
-5. Calibrate weights in `evaluation/scoring.ts` against the editorial fixture
-   corpus and record the corpus/expected ranking in a plan-only test. A weight
-   change is a contract change, not an incidental refactor.
-6. Add focused tests to `test-text-composition-engine.mjs`,
-   `test-editorial-plan-contract.mjs`, `test-composition-page-limits.mjs`, and
-   `test-dynamic-insertion-slots.mjs` for multiple insertions, no legal
-   candidate, deterministic ties, and each budget stop reason. Keep one small
-   backend artifact only for a selected-candidate rendering proof.
+This is a deterministic beam over declared coordinates, not a global solver.
+It does not invent pages, slots or movement bounds.
 
-### Resulting ownership and dependencies
+## Planning and evaluation loop
 
-`layout/*` generates legal proposals, `composition-engine.ts` owns search and
-selection, `evaluation/*` owns legality and score, and YAML owns limits and
-weights. This item consumes the shared 08–10 metrics and precedes the visual
-calibration candidate (07). Item 05 then measures the cost of the expanded
-search without weakening coverage.
+Refactor the existing loop procedurally:
+
+```text
+generate unique proposal batch
+  -> skip signatures already evaluated
+  -> stop before exceeding max_full_plan_recalculations
+  -> build one complete plan per remaining proposal
+  -> evaluate each plan once
+  -> retain legal-first best using existing comparison
+  -> refine only around the selected legal proposal
+  -> stop on no improvement, no candidates, round limit or calculation budget
+```
+
+Extend the planner candidate return boundary with one data record:
+
+```ts
+interface CompositionPlanCandidate {
+  signature: string;
+  plan: CompositionPlan;
+}
+```
+
+`planCandidates()` and `planRefinedCandidates()` return these records. The
+single `plan()` fallback is wrapped with the fixed signature `seed`. The engine
+keeps a map from signature to planned/evaluated result for the current request.
+The cache is request-local and is not a new service.
+
+Update trace stop reasons to the closed set:
+
+```ts
+type CompositionSearchStopReason =
+  | 'no-movable-placements'
+  | 'no-new-candidates'
+  | 'no-improvement'
+  | 'round-limit'
+  | 'calculation-budget';
+```
+
+Trace records generated, unique, skipped, planned, legal and selected counts
+per round plus selected proposal signature. `planningTimeMs` remains telemetry.
+
+If budget is exhausted, selection uses only completely planned/evaluated
+candidates. A partially prepared candidate is never returned. If none is
+legal, the normal rejected result is returned with search-exhaustion evidence;
+the engine does not render the best illegal candidate.
+
+## Calibration corpus
+
+Add `server/scripts/fixtures/composition-ranking-corpus.yml`. Each entry names:
+
+- an existing deterministic fixture builder;
+- two or more proposal variants;
+- hard legality expected for every variant;
+- a human-reviewed best-to-worst ordering;
+- the quality reasons that justify the order.
+
+Initial corpus families:
+
+1. quote movement avoiding an isolated line;
+2. image movement balancing two columns;
+3. fit-content insertion leaving avoidable empty space;
+4. two movable insertions whose individually best coordinates conflict;
+5. legal aesthetic candidate versus aesthetically attractive illegal one;
+6. exact tie preserving stable order.
+
+Calibration changes YAML weights only. A test evaluates every corpus entry and
+requires the configured scorer to produce the approved ordering. The corpus
+does not assert an arbitrary absolute score. Any changed ranking requires a
+human-reviewed corpus update in the same commit.
+
+## Implementation sequence
+
+1. Land stable evidence/scoring from item 08–10.
+2. Add the corpus with current rankings and mark mismatches before changing
+   weights.
+3. Add typed search-budget loading while retaining old generator behavior.
+4. Add stable movable-item order and proposal signatures.
+5. Include the seed and preferred positions explicitly; deduplicate positions.
+6. Replace full cross-product construction with bounded incremental expansion.
+7. Pass proposal signatures into the planner result used by the engine.
+8. Add request-local evaluated-result reuse and calculation-budget stopping.
+9. Update trace fields/stop reasons and CLI/MCP full diagnostics.
+10. Calibrate YAML weights against the approved corpus.
+11. Delete quote-specific config keys and obsolete complete-plan signature code.
+
+Every step runs plan-only tests before the next. Rendering is unchanged until
+the final selected plan reaches the existing backend.
+
+## Files changed
+
+| File | Responsibility |
+|---|---|
+| `contracts/planner-policy.ts` | movement bounds and count budget types |
+| `contracts/engine-contracts.ts` | proposal identity and search trace fields |
+| `adapters/render-config.ts` | validate/map YAML search values |
+| `layout/planner-candidates.ts` | ordered, bounded proposal enumeration/refinement |
+| planner entrypoint | associate proposal signature with complete plan |
+| `composition-engine.ts` | request-local dedup, budget and selection |
+| `evaluation/scoring.ts` | existing score formulas; calibrated weights only |
+| ranking corpus fixture | approved relative expectations |
+
+## Test matrix
+
+| Requirement | Proof | Target test |
+|---|---|---|
+| seed is always included | pure proposals | `test-text-composition-engine.mjs` |
+| enumeration is deterministic | repeated pure generation | `test-text-composition-engine.mjs` |
+| cross-product never exceeds cap | three-item policy, no PDF | `test-dynamic-insertion-slots.mjs` |
+| duplicate proposals are planned once | engine counters | `test-text-composition-engine.mjs` |
+| every stop reason is reachable | synthetic planner/evaluator | `test-text-composition-engine.mjs` |
+| illegal plan cannot win | plan-only evaluator | `test-structure-scoring.mjs` |
+| approved rankings hold | corpus runner, no PDF | new ranking-corpus test |
+| selected plan renders unchanged | one selected candidate PDF | `test-editorial-parity.mjs` |
+
+## Completion criteria
+
+- No candidate batch exceeds its configured cap.
+- No proposal signature is fully planned more than once per request.
+- Same input/configuration produces identical candidate order, winner and stop
+  reason independent of machine speed.
+- Search never moves content lacking explicit bounds and never creates slots.
+- Every ranking corpus case matches its human-reviewed order.
+- Full diagnostics expose candidate counts, signatures, scores and stop reason.
+- Routine search/calibration tests do not render PDFs.

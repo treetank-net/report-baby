@@ -1,11 +1,12 @@
-# Release 1.1 — floats and text direction
+# Release 1.2 — floats and text direction
 
-Status: deferred functional scope; detailed contract to be written.
+Status: Release 1.2 discovery; detailed contracts must be written before this
+work becomes an implementation task.
 
 ## Scope
 
 Release 1.0 intentionally does not include full float semantics or RTL/CJK
-support. Release 1.1 may investigate:
+support. Release 1.2 may investigate:
 
 - elements wrapped by text with an explicit obstacle region and a rule for
   returning to full width;
