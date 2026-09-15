@@ -95,7 +95,6 @@ const placementInsertionFlowSchema = z.object({
   flow_id: z.string().min(1),
   start_page: z.number().int().positive().optional(),
   repeat: z.enum(['once', 'each-page']).optional().default('once'),
-  continuation: z.enum(['allowed', 'forbidden']).optional().default('forbidden'),
   slots: z.array(placementSlotSchema).min(1),
 }).strict();
 
@@ -149,27 +148,6 @@ export const layoutEntrySchema = z.object({
 /** The single public document-level template-selection declaration. */
 export const documentLayoutSchema = z.array(layoutEntrySchema).min(1);
 export type DocumentLayoutInput = z.infer<typeof documentLayoutSchema>;
-
-/** @deprecated Internal migration bridge. Public requests use `layout`. */
-const pageTemplateScheduleCountSchema = z.union([
-  positivePageIntegerSchema,
-  z.object({ min: positivePageIntegerSchema, max: positivePageIntegerSchema }).strict(),
-]);
-
-/** @deprecated Internal migration bridge. Public requests use `layout`. */
-export const pageTemplateScheduleEntrySchema = z.object({
-  pages: z.object({
-    from: positivePageIntegerSchema.optional(),
-    to: positivePageIntegerSchema.optional(),
-    count: pageTemplateScheduleCountSchema.optional(),
-  }).strict(),
-  template_ref: z.string().min(1),
-}).strict();
-
-/** @deprecated Internal migration bridge. Public requests use `layout`. */
-export const pageTemplateScheduleSchema = z.array(pageTemplateScheduleEntrySchema).min(1);
-/** @deprecated Internal migration bridge. Public requests use `layout`. */
-export type PageTemplateScheduleInput = z.infer<typeof pageTemplateScheduleSchema>;
 
 const compositionGlyphSchema = z.object({
   id: z.string(),
@@ -278,7 +256,6 @@ export const compositionInputBlockSchema = z.discriminatedUnion('type', [
 const compositionInputCoreSchema = z.object({
   flows: z.record(z.object({
     blocks: z.array(compositionInputBlockSchema),
-    continuation: z.enum(['allowed', 'forbidden']).optional().default('allowed'),
   }).strict()).refine((flows) => Object.keys(flows).length > 0, 'At least one flow is required.'),
   assets: z.array(z.object({
     id: z.string(),

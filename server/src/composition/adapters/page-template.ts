@@ -2,15 +2,13 @@ import type { PageGeometry, PageSegment } from '../../template/geometry.js';
 import type { CompiledTemplate } from '../../template/contracts.js';
 import type {
   CompositionFlowRoute,
-  CompositionLayoutTemplate,
+  CompositionPageTemplate,
   CompositionRect,
   CompositionSlotTemplate,
   CompositionBlockRole,
   CompositionBlockKind,
-  CompositionTemplate,
+  CompositionLayout,
 } from '../contracts/model.js';
-import type { PageTemplateScheduleInput } from '../../contracts/input/schema.js';
-import { normalizePageTemplateSchedule, type PageTemplateScheduleEntryInput, type PageTemplateScheduleVariant } from './page-template-schedule.js';
 import type { DocumentLayoutVariant } from './document-layout.js';
 import {
   declaredBlockSlotsForFlow,
@@ -113,7 +111,7 @@ function layout(
   firstPageNumber = 1,
   firstPageContentTop?: number,
   firstPageContentSlotIds: string[] = [],
-): CompositionLayoutTemplate {
+): CompositionPageTemplate {
   return {
     id,
     templateRef: id,
@@ -201,7 +199,6 @@ function routeForMain(
   blockSlots: CompositionSlotTemplate[],
   flowSegments: CompositionSlotTemplate[],
   sourceSlotIds: string[],
-  layoutId: string,
   continuation: 'allowed' | 'forbidden',
   priority?: number,
 ): CompositionFlowRoute {
@@ -209,7 +206,6 @@ function routeForMain(
   if (leadSlot) slotIds.unshift(leadSlot.id);
   return {
     slots: slotIds,
-    slotsByLayout: { [layoutId]: slotIds },
     continuation,
     ...(priority === undefined ? {} : { priority }),
   };
@@ -219,7 +215,7 @@ function titleLayoutFor(
   compiled: CompiledTemplate,
   geometry: PageGeometry,
   titleLayoutId: string,
-): CompositionLayoutTemplate {
+): CompositionPageTemplate {
   const titleContent = compiled.slots['title-page-content'];
   const titleFooter = compiled.slots['title-page-footer'];
   if (!titleContent || !titleFooter) {
@@ -261,7 +257,7 @@ export function compositionTemplateFromPageGeometry(
   compiled: CompiledTemplate,
   geometry: PageGeometry,
   options: PageTemplateCompositionOptions,
-): CompositionTemplate {
+): CompositionLayout {
   if (!Number.isInteger(options.maxPages) || options.maxPages < 1) {
     throw new Error('Composition template adapter requires a positive integer maxPages value.');
   }
@@ -368,8 +364,8 @@ export function compositionTemplateFromPageGeometry(
     ? titleLayoutFor(compiled, geometry, titleLayoutId)
     : undefined;
   const schedule = titleLayout
-    ? [{ from: 1, to: 1, templateRef: compiled.id, layoutId: titleLayoutId }, { from: 2, templateRef: compiled.id, layoutId }]
-    : [{ from: 1, templateRef: compiled.id, layoutId }];
+    ? [{ from: 1, to: 1, templateRef: compiled.id, pageTemplateId: titleLayoutId }, { from: 2, templateRef: compiled.id, pageTemplateId: layoutId }]
+    : [{ from: 1, templateRef: compiled.id, pageTemplateId: layoutId }];
   const routes: Record<string, CompositionFlowRoute> = {
     [mainFlowId]: {
       ...routeForMain(
@@ -378,7 +374,6 @@ export function compositionTemplateFromPageGeometry(
         declaredBlockSlots,
         segments,
         mainSourceIds,
-        layoutId,
         mainFlow.continuation,
         mainFlow.priority,
       ),
@@ -388,7 +383,6 @@ export function compositionTemplateFromPageGeometry(
   if (!titleLayout && titleSlots.length > 0) {
     routes.title = {
       slots: titleSlots.map((slot) => slot.id),
-      slotsByLayout: { [layoutId]: titleSlots.map((slot) => slot.id) },
       continuation: 'forbidden',
       ...(compiled.flows.title?.priority === undefined ? {} : { priority: compiled.flows.title.priority }),
     };
@@ -397,11 +391,9 @@ export function compositionTemplateFromPageGeometry(
     routes[mainFlowId] = {
       ...routes[mainFlowId],
       startPage: 2,
-      slotsByLayout: { [titleLayoutId]: [], [layoutId]: routes[mainFlowId].slots },
     };
     routes.title = {
       slots: ['title-page-content'],
-      slotsByLayout: { [titleLayoutId]: ['title-page-content'], [layoutId]: [] },
       continuation: 'forbidden',
       ...(compiled.flows.title?.priority === undefined ? {} : { priority: compiled.flows.title.priority }),
     };
@@ -412,7 +404,6 @@ export function compositionTemplateFromPageGeometry(
       if (item.slots.length === 0) throw new Error(`Template flow '${item.flowId}' needs a page frame.`);
       routes.title = {
         slots: item.slots.map((slot) => slot.id),
-        slotsByLayout: { [layoutId]: item.slots.map((slot) => slot.id) },
         continuation: 'forbidden',
         ...(compiled.flows.title?.priority === undefined ? {} : { priority: compiled.flows.title.priority }),
       };
@@ -420,7 +411,6 @@ export function compositionTemplateFromPageGeometry(
     }
     routes[item.flowId] = {
       slots: item.slots.map((slot) => slot.id),
-      slotsByLayout: { [layoutId]: item.slots.map((slot) => slot.id) },
       continuation: compiled.flows[item.flowId]?.continuation ?? 'forbidden',
       ...(compiled.flows[item.flowId]?.priority === undefined ? {} : { priority: compiled.flows[item.flowId]?.priority }),
       ...(compiled.flows[item.flowId]?.insertionSlots === undefined ? {} : { insertionSlots: [...(compiled.flows[item.flowId]?.insertionSlots ?? [])] }),
@@ -431,18 +421,12 @@ export function compositionTemplateFromPageGeometry(
       routes[item.flowId].repeat = 'each-page';
       if (titleLayout || item.slots.length === 0) routes[item.flowId].startPage = 2;
     }
-    if (titleLayout) {
-      routes[item.flowId].slotsByLayout = {
-        [titleLayoutId]: item.flowId === 'footer' ? ['title-page-footer'] : [],
-        [layoutId]: item.slots.map((slot) => slot.id),
-      };
-    }
   }
   return {
-    layouts: [...(titleLayout ? [titleLayout] : []), baseLayout],
+    pageTemplates: [...(titleLayout ? [titleLayout] : []), baseLayout],
     routes,
     maxPages: options.maxPages,
-    pageTemplateSchedule: schedule,
+    pageTemplateAssignments: schedule,
     ...(compiled.composition?.headingKeepWithNextLines === undefined ? {} : { headingKeepWithNextLines: compiled.composition.headingKeepWithNextLines }),
   };
 }
@@ -452,26 +436,17 @@ export function compositionTemplateFromPageGeometry(
  * renderer-neutral composition pass.  Page state resolves the schedule; flow
  * planning only sees the named slots exposed by the selected layout.
  */
-export function compositionTemplateFromPageTemplateSchedule(
+export function compositionTemplateFromDocumentLayout(
   sources: PageTemplateSource[],
-  schedule: PageTemplateScheduleInput | PageTemplateScheduleVariant,
+  variant: DocumentLayoutVariant,
   options: PageTemplateCompositionOptions,
-): CompositionTemplate {
-  if (sources.length === 0) throw new Error('A page-template schedule needs at least one compiled template.');
-  const normalized = !Array.isArray(schedule)
-    ? [schedule]
-    : normalizePageTemplateSchedule(schedule.map((entry): PageTemplateScheduleEntryInput => ({
-      pages: {
-        ...(entry.pages.from === undefined ? {} : { from: entry.pages.from }),
-        ...(entry.pages.to === undefined ? {} : { to: entry.pages.to }),
-        ...(entry.pages.count === undefined ? {} : { count: entry.pages.count }),
-      },
-      templateRef: entry.template_ref,
-    })));
-  if (normalized.length !== 1) throw new Error('A ranged page-template schedule must be expanded into one candidate before composition planning.');
-  const variant = normalized[0];
-  const sourceByRef = new Map(sources.map((source) => [source.templateRef, source]));
-  const layouts: CompositionLayoutTemplate[] = [];
+): CompositionLayout {
+  if (sources.length === 0) throw new Error('A document layout needs at least one compiled template.');
+  const sourceRefs = new Set(sources.map((source) => source.templateRef));
+  for (const entry of variant.entries) {
+    if (!sourceRefs.has(entry.templateRef)) throw new Error(`Document layout references unknown template '${entry.templateRef}'.`);
+  }
+  const pageTemplates: CompositionPageTemplate[] = [];
   const routes: Record<string, CompositionFlowRoute> = {};
   const layoutByRef = new Map<string, string>();
   for (const source of sources) {
@@ -480,56 +455,28 @@ export function compositionTemplateFromPageTemplateSchedule(
       ...options,
       includeTitlePage: Boolean(isTitleSource),
     });
-    const ordinary = adapted.layouts.find((layout) => layout.id === source.compiled.id);
-    if (!ordinary) throw new Error(`Template '${source.templateRef}' did not produce an ordinary page layout.`);
+    const ordinary = adapted.pageTemplates.find((pageTemplate) => pageTemplate.id === source.compiled.id);
+    if (!ordinary) throw new Error(`Template '${source.templateRef}' did not produce an ordinary page template.`);
     const firstPageNumber = variant.entries.find((entry) => entry.templateRef === source.templateRef)?.from ?? 1;
-    layouts.push(...adapted.layouts.map((layout) => ({ ...layout, templateRef: source.templateRef, firstPageNumber: layout.id.endsWith(':title') ? 1 : firstPageNumber })));
-    layoutByRef.set(source.templateRef, isTitleSource && adapted.layouts.some((layout) => layout.id === `${source.compiled.id}:title`) ? `${source.compiled.id}:title` : ordinary.id);
+    pageTemplates.push(...adapted.pageTemplates.map((pageTemplate) => ({ ...pageTemplate, templateRef: source.templateRef, firstPageNumber: pageTemplate.id.endsWith(':title') ? 1 : firstPageNumber })));
+    layoutByRef.set(source.templateRef, isTitleSource && adapted.pageTemplates.some((pageTemplate) => pageTemplate.id === `${source.compiled.id}:title`) ? `${source.compiled.id}:title` : ordinary.id);
     for (const [flowId, route] of Object.entries(adapted.routes)) {
       const existing = routes[flowId];
-      const routeSlots = route.slotsByLayout?.[ordinary.id] ?? route.slots;
       if (!existing) {
-        routes[flowId] = { ...route, slots: routeSlots, slotsByLayout: {} };
+        routes[flowId] = { ...route, slots: [...route.slots] };
       }
       const destination = routes[flowId];
       if (!destination) continue;
-      destination.slotsByLayout = { ...(destination.slotsByLayout ?? {}), [ordinary.id]: routeSlots };
-      const titleId = `${source.compiled.id}:title`;
-      if (route.slotsByLayout?.[titleId]) destination.slotsByLayout[titleId] = route.slotsByLayout[titleId];
+      destination.slots = [...new Set([...destination.slots, ...route.slots])];
     }
   }
-  const pageTemplateSchedule = variant.entries.map((entry) => {
-    const source = sourceByRef.get(entry.templateRef);
-    if (!source) throw new Error(`Page-template schedule references unknown template '${entry.templateRef}'.`);
-    const layoutId = entry.from === 1 ? layoutByRef.get(entry.templateRef) ?? source.templateRef : source.templateRef;
-    return { from: entry.from, ...(entry.to === undefined ? {} : { to: entry.to }), templateRef: entry.templateRef, layoutId };
-  });
   return {
-    layouts,
+    pageTemplates,
     routes,
     maxPages: Math.min(options.maxPages, variant.maxPages ?? options.maxPages),
-    pageTemplateSchedule,
-    ...(options.includeTitlePage ? { } : {}),
+    pageTemplateAssignments: variant.entries.map((entry) => {
+      const pageTemplateId = entry.from === 1 ? layoutByRef.get(entry.templateRef) ?? entry.templateRef : entry.templateRef;
+      return { from: entry.from, ...(entry.to === undefined ? {} : { to: entry.to }), templateRef: entry.templateRef, pageTemplateId };
+    }),
   };
-}
-
-/**
- * Compile one already-normalized canonical document-layout variant. The
- * adapter bridge is intentionally kept here while the renderer migrates away
- * from the legacy schedule-shaped input.
- */
-export function compositionTemplateFromDocumentLayout(
-  sources: PageTemplateSource[],
-  layoutVariant: DocumentLayoutVariant,
-  options: PageTemplateCompositionOptions,
-): CompositionTemplate {
-  const scheduleVariant: PageTemplateScheduleVariant = {
-    entries: layoutVariant.entries.map((entry) => ({
-      from: entry.from,
-      ...(entry.to === undefined ? {} : { to: entry.to }),
-      templateRef: entry.templateRef,
-    })),
-    ...(layoutVariant.maxPages === undefined ? {} : { maxPages: layoutVariant.maxPages }),
-  };
-  return compositionTemplateFromPageTemplateSchedule(sources, scheduleVariant, options);
 }

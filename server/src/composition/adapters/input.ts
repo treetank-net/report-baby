@@ -246,7 +246,10 @@ export function compositionDocumentFromInput(input: CompositionInput): Compositi
     flows[flowId] = {
       id: flowId,
       blocks: flow.blocks.flatMap((block, index) => convertBlock(flowId, block, index)),
-      continuation: flow.continuation,
+      // Continuation is a template-owned route policy, not content input.
+      // Keep the normalized document record structurally complete for
+      // renderer-neutral consumers; planning always reads the compiled route.
+      continuation: 'allowed',
     };
   }
   const assets: CompositionAsset[] = (input.assets ?? []).map((asset) => ({

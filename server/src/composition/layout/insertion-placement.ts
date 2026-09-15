@@ -2,7 +2,7 @@ import type {
   CompositionBlock,
   CompositionDocument,
   CompositionFlowRoute,
-  CompositionTemplate,
+  CompositionLayout,
 } from '../contracts/model.js';
 import type {
   CompositionPlan,
@@ -20,7 +20,7 @@ import { placeAtomicBlock, placeTableFragment } from './structured-block-placeme
 import type { CompositionSlotTemplate } from '../contracts/model.js';
 
 function reserveInsertionObstacle(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   pages: PageState[],
   plan: CompositionPlan,
   proposal: PlannedInsertion,
@@ -58,7 +58,7 @@ function reserveInsertionObstacle(
 }
 
 function collapseUnassignedInsertionSlots(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   pages: PageState[],
   plan: CompositionPlan,
   proposals: Map<string, PlannedInsertion>,
@@ -86,7 +86,7 @@ function collapseUnassignedInsertionSlots(
 
 /** Reserve planned insertion obstacles and collapse unused slots. */
 export function reserveInsertionObstacles(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   pages: PageState[],
   plan: CompositionPlan,
   proposals: Map<string, PlannedInsertion>,
@@ -104,7 +104,7 @@ type InsertionBlockTarget = {
 };
 
 function resolveInsertionBlockTarget(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   plan: CompositionPlan,
   pages: PageState[],
   proposals: Map<string, PlannedInsertion>,
@@ -161,7 +161,7 @@ function synchronizeInsertionObstacle(plan: CompositionPlan, target: InsertionBl
 
 function placeInsertionBlock(
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   plan: CompositionPlan,
   pages: PageState[],
   proposals: Map<string, PlannedInsertion>,
@@ -216,7 +216,7 @@ function placeInsertionBlock(
 export function placeInsertionLayer(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   plan: CompositionPlan,
   pages: PageState[],
   proposals: Map<string, PlannedInsertion>,

@@ -1,7 +1,7 @@
 import type {
   CompositionDocument,
   CompositionFlowRoute,
-  CompositionTemplate,
+  CompositionLayout,
 } from '../contracts/model.js';
 import type {
   CompositionPlan,
@@ -87,11 +87,11 @@ function normalizePlanReadingOrder(document: CompositionDocument, plan: Composit
  * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current flattenPages implementation intact until its target seam is extracted.
  */
-function flattenPages(pages: PageState[], plan: CompositionPlan, template: CompositionTemplate): void {
-  plan.pages = pages.map((page) => ({ page: page.page, layoutId: page.layout.id, width: page.layout.width, height: page.layout.height, ...(page.layout.templateRef ? { templateRef: page.layout.templateRef } : {}) }));
+function flattenPages(pages: PageState[], plan: CompositionPlan, template: CompositionLayout): void {
+  plan.pages = pages.map((page) => ({ page: page.page, pageTemplateId: page.layout.id, width: page.layout.width, height: page.layout.height, ...(page.layout.templateRef ? { templateRef: page.layout.templateRef } : {}) }));
   for (const page of pages) {
     for (const [flowId, route] of Object.entries(template.routes)) {
-      const routeIds = route.slotsByLayout?.[page.layout.id] ?? route.slots;
+      const routeIds = route.slots;
       routeIds.forEach((id, index) => {
         const slot = page.slots.get(id);
         if (!slot || slot.routeIndex !== undefined) return;
@@ -118,7 +118,7 @@ function planHasErrors(plan: CompositionPlan): boolean {
  * @planner-target composition/layout/document-layout.ts
  * @planner-responsibility Keep the current validateInsertionFlowContracts implementation intact until its target seam is extracted.
  */
-function validateInsertionFlowContracts(document: CompositionDocument, template: CompositionTemplate, plan: CompositionPlan): void {
+function validateInsertionFlowContracts(document: CompositionDocument, template: CompositionLayout, plan: CompositionPlan): void {
   if (template.routes.main?.insertionSlots?.length) {
     plan.diagnostics.push(diagnostic('error', 'MAIN_FLOW_INSERTIONS_FORBIDDEN', "The main flow cannot declare insertion slots; use a separate insertion flow.", { flowId: 'main' }));
   }
@@ -142,7 +142,7 @@ function validateInsertionFlowContracts(document: CompositionDocument, template:
  */
 function preparePlanForLayout(
   document: CompositionDocument,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
   insertionProposals: Map<string, PlannedInsertion>,
   graphicProposals: Map<string, PlannedGraphic>,
@@ -154,7 +154,7 @@ function preparePlanForLayout(
   validateMovablePlacementBounds(insertionProposals, policy.movableInsertionBounds ?? {}, plan, 'insertion');
   validateMovablePlacementBounds(graphicProposals, policy.movableGraphicBounds ?? {}, plan, 'graphic');
   validateGrowthPolicies(template, plan);
-  recordPlanningPhase(plan, 'preflight', planHasErrors(plan) ? 'failed' : 'completed', { layoutCount: template.layouts.length, flowCount: Object.keys(document.flows).length });
+  recordPlanningPhase(plan, 'preflight', planHasErrors(plan) ? 'failed' : 'completed', { layoutCount: template.pageTemplates.length, flowCount: Object.keys(document.flows).length });
 }
 
 /** Create the first document page and reserve planned insertion obstacles. */
@@ -164,7 +164,7 @@ function preparePlanForLayout(
  */
 function reserveDocumentObstacles(
   document: CompositionDocument,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   plan: CompositionPlan,
   insertionProposals: Map<string, PlannedInsertion>,
   graphicProposals: Map<string, PlannedGraphic>,
@@ -186,7 +186,7 @@ function reserveDocumentObstacles(
 function placeDocumentInsertions(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   plan: CompositionPlan,
   pages: PageState[],
   insertionProposals: Map<string, PlannedInsertion>,
@@ -198,7 +198,7 @@ function placeDocumentInsertions(
 type DocumentFlowPlanningContext = {
   document: CompositionDocument;
   metrics: CompositionTextMetrics;
-  template: CompositionTemplate;
+  template: CompositionLayout;
   policy: TextCompositionPlannerPolicy;
   pages: PageState[];
   plan: CompositionPlan;
@@ -253,7 +253,7 @@ function planOrdinaryFlow(context: DocumentFlowPlanningContext, flowId: string, 
 function planDocumentFlow(context: DocumentFlowPlanningContext, flowId: string, flow: CompositionDocument['flows'][string]): void {
   const route = context.template.routes[flowId];
   if (!route) {
-    if (flow.blocks.length > 0) context.plan.diagnostics.push(diagnostic('error', 'FLOW_ROUTE_NOT_FOUND', `Flow '${flowId}' has no route in template '${context.template.layouts[0]?.id ?? ''}'.`, { flowId }));
+    if (flow.blocks.length > 0) context.plan.diagnostics.push(diagnostic('error', 'FLOW_ROUTE_NOT_FOUND', `Flow '${flowId}' has no route in template '${context.template.pageTemplates[0]?.id ?? ''}'.`, { flowId }));
     return;
   }
   if (route.repeat === 'each-page') {
@@ -271,7 +271,7 @@ function planDocumentFlow(context: DocumentFlowPlanningContext, flowId: string, 
 function planDocumentFlows(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
   pages: PageState[],
   plan: CompositionPlan,
@@ -322,7 +322,7 @@ function planDocumentFlows(
 function finalizeDocumentPlan(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   pages: PageState[],
   plan: CompositionPlan,
 ): void {
@@ -343,7 +343,7 @@ function finalizeDocumentPlan(
 export function planDocumentOnce(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
   insertionProposals: Map<string, PlannedInsertion>,
   graphicProposals: Map<string, PlannedGraphic>,

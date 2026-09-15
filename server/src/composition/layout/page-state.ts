@@ -1,10 +1,10 @@
 import type {
   CompositionBlock,
   CompositionFlowRoute,
-  CompositionLayoutTemplate,
+  CompositionPageTemplate,
   CompositionRect,
   CompositionSlotTemplate,
-  CompositionTemplate,
+  CompositionLayout,
 } from '../contracts/model.js';
 import type {
   CompositionDiagnostic,
@@ -22,22 +22,22 @@ export type { PageState } from '../contracts/layout-state.js';
  * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Find one compiled layout by identifier.
  */
-function layoutById(template: CompositionTemplate, id: string): CompositionLayoutTemplate | undefined {
-  return template.layouts.find((layout) => layout.id === id);
+function pageTemplateById(template: CompositionLayout, id: string): CompositionPageTemplate | undefined {
+  return template.pageTemplates.find((pageTemplate) => pageTemplate.id === id);
 }
 
 /**
  * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Resolve the layout assigned to one flow page.
  */
-export function routeLayout(route: CompositionFlowRoute, template: CompositionTemplate, page: number): CompositionLayoutTemplate | undefined {
-  const hasSchedule = template.pageTemplateSchedule !== undefined;
-  const scheduledLayoutId = template.pageTemplateSchedule?.find((entry) => {
+export function routeLayout(_route: CompositionFlowRoute, template: CompositionLayout, page: number): CompositionPageTemplate | undefined {
+  const hasAssignments = template.pageTemplateAssignments !== undefined;
+  const assignedPageTemplateId = template.pageTemplateAssignments?.find((entry) => {
     return page >= entry.from && (entry.to === undefined || page <= entry.to);
-  })?.layoutId;
-  if (hasSchedule && scheduledLayoutId === undefined) return undefined;
-  const layoutId = scheduledLayoutId ?? route.layouts?.[Math.min(page - 1, route.layouts.length - 1)] ?? template.layouts[0]?.id;
-  const baseLayout = layoutId ? layoutById(template, layoutId) : undefined;
+  })?.pageTemplateId;
+  if (hasAssignments && assignedPageTemplateId === undefined) return undefined;
+  const pageTemplateId = assignedPageTemplateId ?? (template.pageTemplates.length === 1 ? template.pageTemplates[0]?.id : undefined);
+  const baseLayout = pageTemplateId ? pageTemplateById(template, pageTemplateId) : undefined;
   if (!baseLayout) return undefined;
   const overlays = template.pageSlotOverlays?.[page];
   if (!overlays || overlays.length === 0) return baseLayout;
@@ -52,8 +52,8 @@ export function routeLayout(route: CompositionFlowRoute, template: CompositionTe
  * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Resolve the route slot identifiers for one layout.
  */
-export function routeSlots(route: CompositionFlowRoute, layout: CompositionLayoutTemplate): string[] {
-  const candidates = route.slotsByLayout?.[layout.id] ?? route.slots;
+export function routeSlots(route: CompositionFlowRoute, layout: CompositionPageTemplate): string[] {
+  const candidates = route.slots;
   const available = new Set(layout.slots.map((slot) => slot.id));
   return candidates.filter((id) => available.has(id));
 }
@@ -79,7 +79,7 @@ export function slotBox(pageState: PageState, definition: CompositionSlotTemplat
  * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Materialize the mutable slots for one compiled layout.
  */
-function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
+function newPage(page: number, layout: CompositionPageTemplate): PageState {
   const slots = new Map<string, CompositionSlot>();
   for (const definition of layout.slots) {
     const firstPageContentSlot = page === (layout.firstPageNumber ?? 1)
@@ -119,7 +119,7 @@ function newPage(page: number, layout: CompositionLayoutTemplate): PageState {
  */
 export function ensurePage(
   pages: PageState[],
-  template: CompositionTemplate,
+  template: CompositionLayout,
   route: CompositionFlowRoute,
   page: number,
   diagnostics: CompositionDiagnostic[],
@@ -143,9 +143,9 @@ export { rectBottom, rectsOverlap } from '../geometry/rectangles.js';
  * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Validate all configured vertical slot-growth targets.
  */
-export function validateGrowthPolicies(template: CompositionTemplate, plan: CompositionPlan): void {
+export function validateGrowthPolicies(template: CompositionLayout, plan: CompositionPlan): void {
   const checked = new Set<string>();
-  const validateLayout = (layout: CompositionLayoutTemplate, page?: number): void => {
+  const validateLayout = (layout: CompositionPageTemplate, page?: number): void => {
     const key = `${page ?? 'template'}:${layout.id}`;
     if (checked.has(key)) return;
     checked.add(key);
@@ -154,16 +154,16 @@ export function validateGrowthPolicies(template: CompositionTemplate, plan: Comp
       const growth = slot.grow;
       if (!growth) continue;
       if (growth.axis !== 'y' || !Number.isFinite(growth.maxHeight) || growth.maxHeight < slot.box.height) {
-        plan.diagnostics.push(diagnostic('error', 'GROW_POLICY_INVALID', `Slot '${slot.id}' has an invalid vertical growth limit.`, { slotId: slot.id, details: { layoutId: layout.id, page } }));
+        plan.diagnostics.push(diagnostic('error', 'GROW_POLICY_INVALID', `Slot '${slot.id}' has an invalid vertical growth limit.`, { slotId: slot.id, details: { pageTemplateId: layout.id, page } }));
       }
       for (const pushedId of growth.pushes ?? []) {
         if (!slotIds.has(pushedId) || pushedId === slot.id) {
-          plan.diagnostics.push(diagnostic('error', 'GROW_TARGET_NOT_FOUND', `Slot '${slot.id}' cannot push '${pushedId}' in layout '${layout.id}'.`, { slotId: slot.id, details: { pushedId, layoutId: layout.id, page } }));
+          plan.diagnostics.push(diagnostic('error', 'GROW_TARGET_NOT_FOUND', `Slot '${slot.id}' cannot push '${pushedId}' in page template '${layout.id}'.`, { slotId: slot.id, details: { pushedId, pageTemplateId: layout.id, page } }));
         }
       }
     }
   };
-  for (const layout of template.layouts) validateLayout(layout);
+  for (const layout of template.pageTemplates) validateLayout(layout);
   for (const page of Object.keys(template.pageSlotOverlays ?? {}).map(Number).filter(Number.isInteger)) {
     const route = template.routes.main ?? Object.values(template.routes)[0];
     const layout = route ? routeLayout(route, template, page) : undefined;
@@ -200,7 +200,7 @@ function blockMatchesAllowedId(blockId: string, allowedIds: string[]): boolean {
  * @planner-target composition/layout/page-state.ts
  * @planner-responsibility Keep the current routeHasBlockSlot implementation intact until its target seam is extracted.
  */
-function routeHasBlockSlot(layout: CompositionLayoutTemplate, slotIds: string[]): boolean {
+function routeHasBlockSlot(layout: CompositionPageTemplate, slotIds: string[]): boolean {
   return slotIds.some((id) => layout.slots.some((slot) => slot.id === id && slot.kind === 'block'));
 }
 
@@ -232,7 +232,7 @@ function slotMatchesBlock(
  * @planner-responsibility Keep the current slotFor implementation intact until its target seam is extracted.
  */
 export function slotFor(
-  layout: CompositionLayoutTemplate,
+  layout: CompositionPageTemplate,
   slotIds: string[],
   routeIndex: number,
   flowId: string,
@@ -253,7 +253,7 @@ export function slotFor(
  * @planner-responsibility Keep the current hasRoleEligibleSlot implementation intact until its target seam is extracted.
  */
 export function hasRoleEligibleSlot(
-  layout: CompositionLayoutTemplate,
+  layout: CompositionPageTemplate,
   slotIds: string[],
   routeIndex: number,
   flowId: string,

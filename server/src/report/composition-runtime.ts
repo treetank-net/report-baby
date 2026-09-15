@@ -1,7 +1,7 @@
 import type { jsPDF } from 'jspdf';
 import { createHash } from 'node:crypto';
 import type { RenderTheme } from '../contracts/render-theme.js';
-import type { CompositionInput, DocumentLayoutInput, PageTemplateScheduleInput, PlacementRequests } from '../contracts/input/schema.js';
+import type { CompositionInput, DocumentLayoutInput, PlacementRequests } from '../contracts/input/schema.js';
 import { readRenderConfig } from '../template/builtins.js';
 import type { PageGeometry } from '../template/geometry.js';
 import type { CompiledTemplate } from '../template/contracts.js';
@@ -88,7 +88,6 @@ export interface ReportCompositionRuntimeOptions {
   rejectOnEvaluation?: boolean;
   insertionRequests?: PlacementRequests;
   layout?: DocumentLayoutInput;
-  pageTemplateSchedule?: PageTemplateScheduleInput;
   pageTemplateSources?: PageTemplateSource[];
 }
 
@@ -200,8 +199,7 @@ export async function prepareReportComposition(options: ReportCompositionRuntime
     ...(contrastProvider ? { contrastProvider } : {}),
     inlineFontCoverage,
     ...(options.insertionRequests ? { insertionRequests: options.insertionRequests } : {}),
-    ...(options.layout ? { layout: options.layout } : {}),
-    ...(options.pageTemplateSchedule && options.pageTemplateSources ? { pageTemplateSchedule: options.pageTemplateSchedule, pageTemplateSources: options.pageTemplateSources } : {}),
+    ...(options.layout && options.pageTemplateSources ? { layout: options.layout, pageTemplateSources: options.pageTemplateSources } : {}),
   });
   if (options.rejectOnEvaluation !== false && composition.evaluation.status === 'rejected') {
     const details = composition.evaluation.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ');

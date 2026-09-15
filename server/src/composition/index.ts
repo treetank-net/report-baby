@@ -12,15 +12,15 @@ export type {
   CompositionInlineMark,
   CompositionInlineRun,
   CompositionFlowRoute,
-  CompositionLayoutTemplate,
+  CompositionPageTemplate,
+  CompositionPageTemplateAssignment,
   CompositionMetric,
   CompositionLockup,
-  CompositionPageTemplateRange,
+  CompositionLayout,
   CompositionRect,
   CompositionSlotKind,
   CompositionSlotTemplate,
   CompositionTable,
-  CompositionTemplate,
 } from './contracts/model.js';
 export type {
   CompositionBackend,
@@ -66,9 +66,8 @@ export { compareCompositionEvaluations, createCompositionEngine, renderCompositi
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
 export { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './evaluation/structure-scoring.js';
 export { compositionDocumentFromInput } from './adapters/input.js';
-export { compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionTemplateFromDocumentLayout, type PageTemplateCompositionOptions, type PageTemplateSource } from './adapters/page-template.js';
-export { normalizePageTemplateSchedule, templateRefAtPage, type PageTemplateScheduleCount, type PageTemplateScheduleCountRange, type PageTemplateScheduleEntryInput, type NormalizedPageTemplateRange, type PageTemplateScheduleVariant } from './adapters/page-template-schedule.js';
-export { documentLayoutVariantsWithinPageLimit, normalizeDocumentLayout, pageTemplateAssignmentForPage, type CompositionPageTemplateAssignment, type DocumentLayoutVariant } from './adapters/document-layout.js';
+export { compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, type PageTemplateCompositionOptions, type PageTemplateSource } from './adapters/page-template.js';
+export { documentLayoutVariantsWithinPageLimit, normalizeDocumentLayout, pageTemplateAssignmentForPage, type DocumentLayoutVariant } from './adapters/document-layout.js';
 export { applyDynamicInsertionRequests } from './adapters/request-insertion-slots.js';
 export { createTextCompositionPlanner } from './layout/text-planner.js';
 export type { MovableGraphicPolicy, MovableInsertionBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';

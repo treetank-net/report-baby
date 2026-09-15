@@ -1,7 +1,7 @@
 import { createCompositionEngine } from '../composition-engine.js';
 import type { CompositionEngine, CompositionPlan } from '../contracts/engine-contracts.js';
 import { readRenderConfig } from '../../template/builtins.js';
-import type { CompositionTemplate } from '../contracts/model.js';
+import type { CompositionLayout } from '../contracts/model.js';
 import { evaluateCompositionPlan, type CompositionEvaluationOptions } from '../evaluation/evaluator.js';
 import { createTextCompositionPlanner } from '../layout/text-planner.js';
 import type { TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
@@ -44,7 +44,7 @@ export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
  * @planner-responsibility Keep the current createTextCompositionEngine implementation intact until its target seam is extracted.
  */
 export function createTextCompositionEngine(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy = {},
   options: TextCompositionEngineOptions = {},
 ): CompositionEngine {

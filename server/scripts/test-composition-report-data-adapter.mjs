@@ -86,7 +86,7 @@ try {
   assert.match(document.diagnostics[0], /Unsupported raw HTML/);
   assert.equal(document.flows.main.blocks[6].atomic, undefined);
   assert.equal(document.flows.main.blocks[10].text, 'Second highlight');
-  assert.equal(document.flows.footer.continuation, 'forbidden');
+  assert.equal(document.flows.footer.continuation, 'allowed', 'normalized content does not own continuation policy');
 
   const publicGraphicInput = compositionInputSchema.parse({
     flows: { main: { blocks: [{ type: 'text', id: 'graphic-body', text: 'Text around the authored graphic.' }] } },
@@ -110,7 +110,7 @@ try {
     'public input must put quotes in a separate flow',
   );
 
-  const empty = compositionDocumentFromInput({ flows: { main: { blocks: [], continuation: 'allowed' } } });
+  const empty = compositionDocumentFromInput({ flows: { main: { blocks: [] } } });
   assert.deepEqual(Object.keys(empty.flows), ['main']);
   assert.deepEqual(empty.flows.main.blocks, []);
   const nestedImage = compositionDocumentFromInput(legacyFixtureToCompositionInput({

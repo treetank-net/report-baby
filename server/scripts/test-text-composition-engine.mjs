@@ -29,6 +29,28 @@ function crc32(buffer) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+// Keep historical fixtures readable while the production contract uses
+// pageTemplates and stable route slot unions. This adapter is test-only and
+// intentionally does not reintroduce the removed runtime compatibility path.
+function canonicalizeTemplate(template) {
+  if (template.pageTemplates) return template;
+  const pageTemplates = template.layouts ?? [];
+  const pageTemplateAssignments = pageTemplates.map((pageTemplate, index) => ({
+    from: index + 1,
+    ...(index === pageTemplates.length - 1 ? {} : { to: index + 1 }),
+    templateRef: pageTemplate.templateRef ?? pageTemplate.id,
+    pageTemplateId: pageTemplate.id,
+  }));
+  const routes = Object.fromEntries(Object.entries(template.routes ?? {}).map(([flowId, route]) => {
+    const union = [...new Set([
+      ...(route.slots ?? []),
+      ...Object.values(route.slotsByLayout ?? {}).flat(),
+    ])];
+    return [flowId, { ...route, slots: union }];
+  }));
+  return { ...template, pageTemplates, pageTemplateAssignments, routes };
+}
+
 /**
  * @test-decision visual-gate
  * @test-action Move to one showcase/visual-QA gate; keep only a representative backend smoke in the fast npm run test path.
@@ -588,7 +610,9 @@ const numberedFlowArtifactDirectory = debugArtifactRoot
   : undefined;
 
 try {
-  const { createCompositionContrastProvider, createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, createTextCompositionPlanner, evaluateCompositionPlan, fitContainBox, imagePixelAtPoint, renderComposition, sampleCompositionContrast } = await import(bundle);
+  const { createCompositionContrastProvider, createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine: rawCreateTextCompositionEngine, createTextCompositionPlanner: rawCreateTextCompositionPlanner, evaluateCompositionPlan, fitContainBox, imagePixelAtPoint, renderComposition, sampleCompositionContrast } = await import(bundle);
+  const createTextCompositionEngine = (template, ...args) => rawCreateTextCompositionEngine(canonicalizeTemplate(template), ...args);
+  const createTextCompositionPlanner = (template, ...args) => rawCreateTextCompositionPlanner(canonicalizeTemplate(template), ...args);
   const { newPdf } = await import(primitivesBundle);
   const compositionRenderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
   let randomState = 0x5eed;
@@ -1687,7 +1711,7 @@ try {
   }, { ...imageMetrics, measureBlock() { return { height: 20 }; } });
   assert.equal(imageContinuation.evaluation.status, 'accepted', JSON.stringify(imageContinuation.evaluation));
   assert.equal(imageContinuation.plan.pages.length, 2);
-  assert.deepEqual(imageContinuation.plan.blockPlacements.map((placement) => [placement.blockId, placement.page, placement.slotId]), [['image', 2, '2:image']]);
+  assert.deepEqual(imageContinuation.plan.blockPlacements.map((placement) => [placement.blockId, placement.page, placement.slotId]), [['image', 2, '2:body']], 'slot availability comes from the selected page template; route order remains the stable union order');
   assert.ok(imageContinuation.plan.lines.some((line) => line.blockId === 'before' && line.page === 1));
   assert.ok(imageContinuation.plan.lines.some((line) => line.blockId === 'after' && line.page === 2 && line.slotId === '2:body'));
   assert.equal(imageContinuation.plan.residualContent.length, 0);

@@ -24,10 +24,10 @@ await build({
 });
 
 try {
-  const { compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine } = await import(compositionBundle);
+  const { compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine } = await import(compositionBundle);
   const { compileTemplateSource } = await import(templateBundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
-  await runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate });
+  await runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate });
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }
@@ -36,7 +36,7 @@ try {
  * @test-decision plan-fixture-or-assertion
  * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
  */
-async function runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate }) {
+async function runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate }) {
   const source = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
   const compiled = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(compiled);
@@ -48,9 +48,9 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const canonicalTemplate = compositionTemplateFromDocumentLayout([
     { templateRef: compiled.id, compiled, geometry },
   ], canonicalVariant, { maxPages: 3 });
-  assert.deepEqual(canonicalTemplate.pageTemplateSchedule, [
-    { from: 1, to: 1, templateRef: compiled.id, layoutId: compiled.id },
-    { from: 2, templateRef: compiled.id, layoutId: compiled.id },
+  assert.deepEqual(canonicalTemplate.pageTemplateAssignments, [
+    { from: 1, to: 1, templateRef: compiled.id, pageTemplateId: compiled.id },
+    { from: 2, templateRef: compiled.id, pageTemplateId: compiled.id },
   ], 'canonical document layout must compile through the same template adapter');
   assert.deepEqual(geometry.content, {
     x: compiled.page.margins.left,
@@ -77,18 +77,18 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   assert.ok(obstacleGeometry.segments.some((segment) => segment.bottom <= obstacle.frame.top), 'obstacle must leave an upper flow segment');
   assert.ok(obstacleGeometry.segments.some((segment) => segment.top >= obstacle.frame.bottom), 'obstacle must leave a lower flow segment');
   assert.ok(obstacleGeometry.segments.every((segment) => segment.bottom <= obstacle.frame.top || segment.top >= obstacle.frame.bottom), 'flow segments must not overlap the physical obstacle');
-  assert.equal(template.layouts.length, 1);
-  const introSlot = template.layouts[0].slots.find((slot) => slot.id === 'block:intro');
+  assert.equal(template.pageTemplates.length, 1);
+  const introSlot = template.pageTemplates[0].slots.find((slot) => slot.id === 'block:intro');
   assert.deepEqual(introSlot?.allowedBlockIds, ['intro']);
   assert.deepEqual(introSlot?.grow?.pushes, ['content:segment-1', 'content:segment-2']);
-  assert.equal(template.routes.main.slotsByLayout[template.layouts[0].id].length, geometry.segments.length + 1);
+  assert.equal(template.routes.main.slots.length, geometry.segments.length + 1, 'main route exposes one stable slot union');
   assert.equal(template.routes.footer.repeat, 'each-page');
   const showcaseSource = parse(await readFile(join(root, 'templates/pages/showcase-report/template.yml'), 'utf8'));
   const showcaseCompiled = compileTemplateSource(showcaseSource);
   const showcaseGeometry = pageGeometryFromTemplate(showcaseCompiled);
   const showcaseTemplate = compositionTemplateFromPageGeometry(showcaseCompiled, showcaseGeometry, { maxPages: 5, includeHeaderFlow: true });
-  const lockupSlot = showcaseTemplate.layouts[0].slots.find((slot) => slot.id === 'header-lockup');
-  const headerSlot = showcaseTemplate.layouts[0].slots.find((slot) => slot.id === 'header');
+  const lockupSlot = showcaseTemplate.pageTemplates[0].slots.find((slot) => slot.id === 'header-lockup');
+  const headerSlot = showcaseTemplate.pageTemplates[0].slots.find((slot) => slot.id === 'header');
   assert.equal(lockupSlot?.kind, 'block', 'brand lockup must be a normal block slot');
   assert.ok(headerSlot && lockupSlot && (
     headerSlot.box.x >= lockupSlot.box.x + lockupSlot.box.width
@@ -101,16 +101,16 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const dynamicCompiled = compileTemplateSource(dynamicSource);
   const dynamicGeometry = pageGeometryFromTemplate(dynamicCompiled);
   const dynamicTemplate = compositionTemplateFromPageGeometry(dynamicCompiled, dynamicGeometry, { maxPages: 3, includeHeaderFlow: true });
-  const dynamicHeaderSlot = dynamicTemplate.layouts[0].slots.find((slot) => slot.id === 'header');
+  const dynamicHeaderSlot = dynamicTemplate.pageTemplates[0].slots.find((slot) => slot.id === 'header');
   assert.equal(dynamicHeaderSlot?.fitContent, true, 'dynamic chrome header must opt into fit-content sizing');
   assert.equal(dynamicHeaderSlot?.box.height, 0, 'dynamic chrome header must allow a zero-height empty state');
   assert.equal(dynamicTemplate.routes.header.priority, 500, 'header geometry must carry its explicit priority');
   assert.equal(dynamicTemplate.routes.main.priority, 200, 'main geometry must carry its explicit priority');
   const dynamicDocument = compositionDocumentFromInput({
     flows: {
-      header: { continuation: 'forbidden', blocks: [{ id: 'dynamic-header', type: 'text', role: 'header', text: 'A deliberately long repeated header that needs more than one line in the narrow dynamic chrome slot.' }] },
-      main: { continuation: 'allowed', blocks: [{ id: 'dynamic-main', type: 'text', role: 'body', text: Array.from({ length: 140 }, (_, index) => `main${index}`).join(' ') }] },
-      footer: { continuation: 'forbidden', blocks: [] },
+      header: { blocks: [{ id: 'dynamic-header', type: 'text', role: 'header', text: 'A deliberately long repeated header that needs more than one line in the narrow dynamic chrome slot.' }] },
+      main: { blocks: [{ id: 'dynamic-main', type: 'text', role: 'body', text: Array.from({ length: 140 }, (_, index) => `main${index}`).join(' ') }] },
+      footer: { blocks: [] },
     },
   });
   const dynamicResult = createTextCompositionEngine(dynamicTemplate).plan(dynamicDocument, {
@@ -121,27 +121,27 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   assert.equal(dynamicResult.evaluation.status, 'accepted', JSON.stringify(dynamicResult.evaluation));
   const materializedDynamicHeader = dynamicResult.plan.slots.find((slot) => slot.id === '1:header');
   const materializedDynamicContent = dynamicResult.plan.slots.find((slot) => slot.id === '1:content:segment-1');
-  const dynamicContentTemplateBox = dynamicTemplate.layouts[0].slots.find((slot) => slot.id === 'content:segment-1')?.box;
+  const dynamicContentTemplateBox = dynamicTemplate.pageTemplates[0].slots.find((slot) => slot.id === 'content:segment-1')?.box;
   assert.ok(materializedDynamicHeader && materializedDynamicHeader.box.height > 0, 'dynamic header must grow to its measured content');
   assert.equal(dynamicResult.plan.lines.find((line) => line.blockId === 'dynamic-header')?.priority, 500, 'header placements must carry geometry priority');
   assert.equal(dynamicResult.plan.lines.find((line) => line.blockId === 'dynamic-main')?.priority, 200, 'main placements must carry geometry priority');
   assert.ok(materializedDynamicContent && dynamicContentTemplateBox && materializedDynamicContent.box.y > dynamicContentTemplateBox.y, 'main content must move below the measured header');
 
-  const scheduledTemplate = compositionTemplateFromPageTemplateSchedule([
+  const scheduledTemplate = compositionTemplateFromDocumentLayout([
     { templateRef: compiled.id, compiled, geometry },
     { templateRef: dynamicCompiled.id, compiled: dynamicCompiled, geometry: dynamicGeometry },
-  ], [
-    { pages: { count: 1 }, template_ref: compiled.id },
-    { pages: { from: 2, count: 2 }, template_ref: dynamicCompiled.id },
-  ], { maxPages: 3, includeHeaderFlow: true });
-  assert.deepEqual(scheduledTemplate.pageTemplateSchedule, [
-    { from: 1, to: 1, templateRef: compiled.id, layoutId: compiled.id },
-    { from: 2, to: 3, templateRef: dynamicCompiled.id, layoutId: dynamicCompiled.id },
+  ], normalizeDocumentLayout([
+    { pages: { count: 1 }, template: compiled.id },
+    { pages: { from: 2, to: 3 }, template: dynamicCompiled.id },
+  ])[0], { maxPages: 3, includeHeaderFlow: true });
+  assert.deepEqual(scheduledTemplate.pageTemplateAssignments, [
+    { from: 1, to: 1, templateRef: compiled.id, pageTemplateId: compiled.id },
+    { from: 2, to: 3, templateRef: dynamicCompiled.id, pageTemplateId: dynamicCompiled.id },
   ], 'scheduled pages must retain their ordinary template references and ranges');
-  assert.equal(scheduledTemplate.layouts.find((layout) => layout.id === dynamicCompiled.id)?.firstPageNumber, 2, 'a scheduled template must know the first page on which its first-page-only slots are materialised');
+  assert.equal(scheduledTemplate.pageTemplates.find((layout) => layout.id === dynamicCompiled.id)?.firstPageNumber, 2, 'a scheduled template must know the first page on which its first-page-only slots are materialised');
   const scheduledDocument = compositionDocumentFromInput({
     flows: {
-      main: { continuation: 'allowed', blocks: [{ id: 'scheduled-body', type: 'text', role: 'body', text: Array.from({ length: 400 }, (_, index) => `scheduled${index}`).join(' ') }] },
+      main: { blocks: [{ id: 'scheduled-body', type: 'text', role: 'body', text: Array.from({ length: 400 }, (_, index) => `scheduled${index}`).join(' ') }] },
     },
   });
   const scheduledResult = createTextCompositionEngine(scheduledTemplate).plan(scheduledDocument, {
@@ -152,7 +152,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   assert.equal(scheduledResult.evaluation.status, 'accepted', JSON.stringify(scheduledResult.evaluation));
   assert.ok(scheduledResult.plan.pages.some((page) => page.page === 1 && page.templateRef === compiled.id), 'scheduled plan must use the first template on page one');
   assert.ok(scheduledResult.plan.pages.some((page) => page.page > 1 && page.templateRef === dynamicCompiled.id), 'scheduled plan must switch to the later template range');
-  const emptyDynamicResult = createTextCompositionEngine(dynamicTemplate).plan({ flows: { header: { id: 'header', continuation: 'forbidden', blocks: [] }, main: { id: 'main', continuation: 'allowed', blocks: [{ id: 'empty-header-main', kind: 'paragraph', role: 'body', text: 'main content' }] }, footer: { id: 'footer', continuation: 'forbidden', blocks: [] } } }, {
+  const emptyDynamicResult = createTextCompositionEngine(dynamicTemplate).plan({ flows: { header: { id: 'header', continuation: 'allowed', blocks: [] }, main: { id: 'main', continuation: 'allowed', blocks: [{ id: 'empty-header-main', kind: 'paragraph', role: 'body', text: 'main content' }] }, footer: { id: 'footer', continuation: 'allowed', blocks: [] } } }, {
     units: 'mm',
     measureText(text) { return text.length * 1.2; },
     lineHeight() { return 5; },
@@ -208,7 +208,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const titleTemplate = compositionTemplateFromPageGeometry(compiled, geometry, { maxPages: 3, includeTitlePage: true });
   assert.equal(titleTemplate.routes.title.continuation, 'forbidden', 'title flow must not spill past the title page');
   assert.equal(titleTemplate.routes.main.startPage, 2, 'main flow must begin after the title page');
-  assert.deepEqual(titleTemplate.layouts[0].slots.find((slot) => slot.id === 'title-page-content')?.box, {
+  assert.deepEqual(titleTemplate.pageTemplates[0].slots.find((slot) => slot.id === 'title-page-content')?.box, {
     x: compiled.slots['title-page-content'].frame.x * geometry.width,
     y: compiled.slots['title-page-content'].frame.y * geometry.height,
     width: compiled.slots['title-page-content'].frame.width * geometry.width,
@@ -292,7 +292,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
     lineHeight() { return 5; },
   });
   assert.equal(genericResult.evaluation.status, 'accepted', JSON.stringify(genericResult.evaluation));
-  assert.deepEqual(genericTemplate.layouts[0].slots.find((slot) => slot.id === 'block:intro')?.allowedBlockIds, ['intro']);
+  assert.deepEqual(genericTemplate.pageTemplates[0].slots.find((slot) => slot.id === 'block:intro')?.allowedBlockIds, ['intro']);
   assert.ok(genericResult.plan.lines.some((line) => line.blockId === 'intro' && line.slotId === '1:block:intro'));
   assert.ok(genericResult.plan.lines.every((line) => !(line.blockId === 'body' && line.slotId === '1:block:intro')));
 
@@ -304,7 +304,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const metricCompiled = compileTemplateSource(metricSource);
   const metricGeometry = pageGeometryFromTemplate(metricCompiled);
   const metricTemplate = compositionTemplateFromPageGeometry(metricCompiled, metricGeometry, { maxPages: 2 });
-  assert.deepEqual(metricTemplate.layouts[0].slots.filter((slot) => slot.kind === 'block').map((slot) => [slot.id, slot.allowedBlockKinds]), [
+  assert.deepEqual(metricTemplate.pageTemplates[0].slots.filter((slot) => slot.kind === 'block').map((slot) => [slot.id, slot.allowedBlockKinds]), [
     ['metric-1', ['metric']],
     ['metric-2', ['metric']],
   ]);
@@ -334,7 +334,7 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const chartCompiled = compileTemplateSource(chartSource);
   const chartGeometry = pageGeometryFromTemplate(chartCompiled);
   const chartTemplate = compositionTemplateFromPageGeometry(chartCompiled, chartGeometry, { maxPages: 2 });
-  assert.deepEqual(chartTemplate.layouts[0].slots.filter((slot) => slot.kind === 'block').map((slot) => [slot.id, slot.allowedBlockKinds]), [
+  assert.deepEqual(chartTemplate.pageTemplates[0].slots.filter((slot) => slot.kind === 'block').map((slot) => [slot.id, slot.allowedBlockKinds]), [
     ['chart', ['chart', 'image']],
   ]);
   const chartDocument = compositionDocumentFromInput(legacyFixtureToCompositionInput({
@@ -358,8 +358,8 @@ async function runFixture({ compileTemplateSource, compositionTemplateFromPageGe
   const tableCompiled = compileTemplateSource(tableSource);
   const tableGeometry = pageGeometryFromTemplate(tableCompiled);
   const tableTemplate = compositionTemplateFromPageGeometry(tableCompiled, tableGeometry, { maxPages: 2 });
-  assert.deepEqual(tableTemplate.layouts[0].slots.filter((slot) => slot.kind === 'block').map((slot) => [slot.id, slot.allowedBlockKinds]), [
+  assert.deepEqual(tableTemplate.pageTemplates[0].slots.filter((slot) => slot.kind === 'block').map((slot) => [slot.id, slot.allowedBlockKinds]), [
     ['table', ['table']],
   ]);
-  console.log(JSON.stringify({ status: 'passed', layouts: template.layouts.map((item) => item.id), pages: result.plan.pages.length, lines: result.plan.lines.length }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', pageTemplates: template.pageTemplates.map((item) => item.id), pages: result.plan.pages.length, lines: result.plan.lines.length }, null, 2));
 }

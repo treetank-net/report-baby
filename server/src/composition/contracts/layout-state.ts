@@ -1,10 +1,10 @@
-import type { CompositionLayoutTemplate } from './model.js';
+import type { CompositionPageTemplate } from './model.js';
 import type { CompositionSlot } from './engine-contracts.js';
 
 /** Mutable page state shared by page, flow and placement operations. */
 export interface PageState {
   page: number;
-  layout: CompositionLayoutTemplate;
+  layout: CompositionPageTemplate;
   slots: Map<string, CompositionSlot>;
 }
 

@@ -48,7 +48,7 @@ function columnBoxes(geometry: PageGeometry): CompositionBox[] {
 function pageGeometryReport(page: CompositionPlan['pages'][number], geometry: PageGeometry): CompositionPageGeometryReport {
   return {
     page: page.page,
-    layoutId: page.layoutId,
+    pageTemplateId: page.pageTemplateId,
     ...(page.templateRef === undefined ? {} : { templateRef: page.templateRef }),
     pageBox: { x: 0, y: 0, width: geometry.width, height: geometry.height },
     margins: { ...geometry.margins },

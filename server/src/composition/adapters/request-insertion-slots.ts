@@ -2,9 +2,9 @@ import type { PlacementRequests } from '../../contracts/input/schema.js';
 import type {
   CompositionBlock,
   CompositionFlowRoute,
-  CompositionLayoutTemplate,
+  CompositionPageTemplate,
   CompositionSlotTemplate,
-  CompositionTemplate,
+  CompositionLayout,
 } from '../contracts/model.js';
 import { rectsOverlap } from '../geometry/rectangles.js';
 import { routeLayout } from '../layout/page-state.js';
@@ -19,7 +19,6 @@ function requestFlows(requests: PlacementRequests): PlacementFlow[] {
       flow_id: insertion.flow_id,
       start_page: insertion.page,
       repeat: 'once',
-      continuation: 'forbidden',
       slots: [{
         id: `request:${insertion.flow_id}:${insertion.block_id}:${insertion.page}`,
         frame: insertion.frame,
@@ -56,7 +55,7 @@ function validateFrame(slot: PlacementSlot, flowId: string): void {
   }
 }
 
-function pageContentBottom(layout: CompositionLayoutTemplate): number {
+function pageContentBottom(layout: CompositionPageTemplate): number {
   const contentSlots = layout.slots.filter((slot) => slot.flowId === 'main' || slot.regionId === 'content');
   return contentSlots.reduce((bottom, slot) => Math.max(bottom, slot.box.y + slot.box.height), 0) || layout.height;
 }
@@ -64,7 +63,7 @@ function pageContentBottom(layout: CompositionLayoutTemplate): number {
 function physicalSlot(
   slot: PlacementSlot,
   flowId: string,
-  layout: CompositionLayoutTemplate,
+  layout: CompositionPageTemplate,
 ): CompositionSlotTemplate {
   const sizing = slot.sizing;
   const fitContent = sizing?.mode !== 'fixed' || slot.frame.height === 'auto' || slot.frame.height === undefined;
@@ -102,7 +101,7 @@ function slotPages(flow: PlacementFlow, maxPages: number, defaultStartPage: numb
   return [start];
 }
 
-function baseRouteForFlow(template: CompositionTemplate, flowId: string): CompositionFlowRoute {
+function baseRouteForFlow(template: CompositionLayout, flowId: string): CompositionFlowRoute {
   const existing = template.routes[flowId];
   if (existing) return existing;
   const main = template.routes.main ?? Object.values(template.routes)[0];
@@ -110,28 +109,16 @@ function baseRouteForFlow(template: CompositionTemplate, flowId: string): Compos
   return {
     slots: [],
     continuation: 'forbidden',
-    ...(main.layouts ? { layouts: [...main.layouts] } : {}),
-    ...(main.slotsByLayout ? { slotsByLayout: Object.fromEntries(Object.keys(main.slotsByLayout).map((id) => [id, []])) } : {}),
   };
 }
 
-function addRouteSlots(route: CompositionFlowRoute, slotIds: string[], template: CompositionTemplate, pages: number[]): CompositionFlowRoute {
+function addRouteSlots(route: CompositionFlowRoute, slotIds: string[]): CompositionFlowRoute {
   const slots = [...new Set([...route.slots, ...slotIds])];
   const insertionSlots = [...new Set([...(route.insertionSlots ?? []), ...slotIds])];
-  const scheduleLayoutIds = template.pageTemplateSchedule?.map((entry) => entry.layoutId) ?? [];
-  const layoutIds = [...new Set([
-    ...(route.layouts ?? []),
-    ...(scheduleLayoutIds.length > 0 ? scheduleLayoutIds : route.layouts ? [] : template.layouts.map((layout) => layout.id)),
-  ])];
-  const selectedLayoutIds = new Set(pages.map((page) => routeLayout(route, template, page)?.id).filter((id): id is string => id !== undefined));
-  const slotsByLayout = Object.fromEntries(layoutIds.map((layoutId) => [layoutId, [
-    ...(route.slotsByLayout?.[layoutId] ?? []),
-    ...(selectedLayoutIds.has(layoutId) ? slotIds : []),
-  ].filter((id, index, values) => values.indexOf(id) === index)]));
-  return { ...route, slots, insertionSlots, layouts: [...layoutIds], slotsByLayout };
+  return { ...route, slots, insertionSlots };
 }
 
-function validateStaticOverlaps(template: CompositionTemplate, dynamic: CompositionSlotTemplate, page: number, route: CompositionFlowRoute): void {
+function validateStaticOverlaps(template: CompositionLayout, dynamic: CompositionSlotTemplate, page: number, route: CompositionFlowRoute): void {
   const layout = routeLayout(route, template, page);
   if (!layout) return;
   for (const existing of layout.slots) {
@@ -168,10 +155,10 @@ function assignDefaultPushes(slots: PlacementSlot[]): PlacementSlot[] {
  * reusable and the content document remains unaware of layout geometry.
  */
 export function applyDynamicInsertionRequests(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   document: { flows?: Record<string, { blocks?: CompositionBlock[] }> },
   requests: PlacementRequests | undefined,
-): CompositionTemplate {
+): CompositionLayout {
   if (!requests) return template;
   const flows = requestFlows(requests);
   if (flows.length === 0) return template;
@@ -181,7 +168,7 @@ export function applyDynamicInsertionRequests(
     if (oneOffAssignments.has(key)) throw new Error(`Block '${insertion.block_id}' in flow '${insertion.flow_id}' is assigned by more than one one-off insertion request.`);
     oneOffAssignments.add(key);
   }
-  const staticIds = new Set(template.layouts.flatMap((layout) => layout.slots.map((slot) => slot.id)));
+  const staticIds = new Set(template.pageTemplates.flatMap((pageTemplate) => pageTemplate.slots.map((slot) => slot.id)));
   const dynamicIds = new Set<string>();
   const overlays: Record<number, CompositionSlotTemplate[]> = Object.fromEntries(Object.entries(template.pageSlotOverlays ?? {}).map(([page, slots]) => [Number(page), [...slots]]));
   let routes = { ...template.routes };
@@ -202,7 +189,7 @@ export function applyDynamicInsertionRequests(
       }
       if (staticIds.has(slot.id) || dynamicIds.has(slot.id)) throw new Error(`Insertion slot id '${slot.id}' is already in use.`);
       dynamicIds.add(slot.id);
-      const firstLayout = routeLayout(route, template, pages[0] ?? defaultStartPage) ?? template.layouts[0];
+      const firstLayout = routeLayout(route, template, pages[0] ?? defaultStartPage) ?? template.pageTemplates[0];
       if (!firstLayout) throw new Error(`Insertion flow '${flow.flow_id}' has no page layout.`);
       const firstDefinition = physicalSlot(slot, flow.flow_id, firstLayout);
       if (firstDefinition.grow?.pushes?.some((id) => !normalizedSlots.some((candidate) => candidate.id === id))) {
@@ -225,8 +212,8 @@ export function applyDynamicInsertionRequests(
       }
     }
     routes[flow.flow_id] = {
-      ...addRouteSlots(route, normalizedSlots.map((slot) => slot.id), template, pages),
-      continuation: flow.continuation ?? route.continuation,
+      ...addRouteSlots(route, normalizedSlots.map((slot) => slot.id)),
+      continuation: route.continuation,
       ...(flow.repeat === 'each-page' ? { repeat: 'each-page' as const } : {}),
       ...(flow.start_page === undefined ? {} : { startPage: flow.start_page }),
     };

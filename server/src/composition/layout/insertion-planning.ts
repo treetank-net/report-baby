@@ -3,7 +3,7 @@ import type {
   CompositionDocument,
   CompositionFlowRoute,
   CompositionRect,
-  CompositionTemplate,
+  CompositionLayout,
 } from '../contracts/model.js';
 import type {
   CompositionPlan,
@@ -36,7 +36,7 @@ function blockMatchesAllowedId(blockId: string, allowedIds: string[]): boolean {
  * the block is painted as an obstacle rather than as an ordinary flow.
  */
 export function insertionSlotAcceptsBlock(
-  definition: CompositionTemplate['layouts'][number]['slots'][number],
+  definition: CompositionLayout['pageTemplates'][number]['slots'][number],
   flowId: string,
   block: CompositionBlock,
 ): boolean {
@@ -50,10 +50,10 @@ export function insertionSlotAcceptsBlock(
 }
 
 function insertionSlotDefinitions(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   route: CompositionFlowRoute,
-): CompositionTemplate['layouts'][number]['slots'] {
-  const definitions = new Map<string, CompositionTemplate['layouts'][number]['slots'][number]>();
+): CompositionLayout['pageTemplates'][number]['slots'] {
+  const definitions = new Map<string, CompositionLayout['pageTemplates'][number]['slots'][number]>();
   const firstPage = route.startPage ?? 1;
   for (let page = firstPage; page <= template.maxPages; page += 1) {
     const layout = routeLayout(route, template, page);
@@ -67,7 +67,7 @@ function insertionSlotDefinitions(
 
 /** Return blocks explicitly claimed by insertion slots in a named flow. */
 export function insertionBlocksForFlow(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   flowId: string,
   blocks: CompositionBlock[],
 ): CompositionBlock[] {
@@ -79,7 +79,7 @@ export function insertionBlocksForFlow(
 }
 
 function insertionSlotCandidates(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   route: CompositionFlowRoute,
   flowId: string,
   block?: CompositionBlock,
@@ -99,7 +99,7 @@ function insertionSlotCandidates(
 }
 
 function candidateSupportsBlock(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   route: CompositionFlowRoute,
   flowId: string,
   candidate: InsertionSlotCandidate,
@@ -113,7 +113,7 @@ function candidateSupportsBlock(
 function fitInsertionProposal(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   proposal: PlannedInsertion,
 ): PlannedInsertion {
   const flow = document.flows[proposal.flowId];
@@ -144,7 +144,7 @@ function fitInsertionProposal(
 /** Reconstruct insertion proposals from a previous plan. */
 export function insertionProposalsFromPlan(
   document: CompositionDocument,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   plan: CompositionPlan,
   metrics: CompositionTextMetrics,
 ): Map<string, PlannedInsertion> {
@@ -210,7 +210,7 @@ export function insertionProposalsFromPlan(
 /** Seed hard insertion proposals in authored reading order. */
 export function seedInsertionProposals(
   document: CompositionDocument,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   metrics: CompositionTextMetrics,
 ): Map<string, PlannedInsertion> {
   const proposals = new Map<string, PlannedInsertion>();

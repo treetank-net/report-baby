@@ -69,7 +69,7 @@ export interface CompositionInsets {
 /** Static page geometry projected into the plan report. */
 export interface CompositionPageGeometryReport {
   page: number;
-  layoutId: string;
+  pageTemplateId: string;
   templateRef?: string;
   pageBox: CompositionBox;
   margins: CompositionInsets;
@@ -155,7 +155,7 @@ export interface CompositionPageChrome {
 
 export interface CompositionPagePlan {
   page: number;
-  layoutId: string;
+  pageTemplateId: string;
   templateRef?: string;
   width: number;
   height: number;

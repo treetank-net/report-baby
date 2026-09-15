@@ -2,8 +2,8 @@ import type {
   CompositionBlock,
   CompositionDocument,
   CompositionFlowRoute,
-  CompositionLayoutTemplate,
-  CompositionTemplate,
+  CompositionPageTemplate,
+  CompositionLayout,
 } from '../contracts/model.js';
 import type {
   CompositionPlan,
@@ -58,7 +58,7 @@ type FlowTargetUnavailableResolution = Exclude<FlowTargetResolution, { kind: 're
 function createFlowPlanningContext(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
   flowId: string,
   route: CompositionFlowRoute,
@@ -417,7 +417,7 @@ function planTextBlockAttempt(
 export function planFlow(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
   flowId: string,
   route: CompositionFlowRoute,

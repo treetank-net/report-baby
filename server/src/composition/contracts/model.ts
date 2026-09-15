@@ -89,7 +89,7 @@ export interface CompositionSlotTemplate {
   };
 }
 
-export interface CompositionLayoutTemplate {
+export interface CompositionPageTemplate {
   id: string;
   /** Stable template reference that supplied this layout. */
   templateRef?: string;
@@ -119,24 +119,21 @@ export interface CompositionFlowRoute {
   repeat?: 'each-page';
   /** First page on which this flow is allowed to place content. */
   startPage?: number;
-  /** Transitional route metadata for layouts that expose different slot sets. */
-  layouts?: string[];
-  slotsByLayout?: Record<string, string[]>;
 }
 
-export interface CompositionPageTemplateRange {
+export interface CompositionPageTemplateAssignment {
   from: number;
   to?: number;
   templateRef: string;
-  layoutId: string;
+  pageTemplateId: string;
 }
 
-export interface CompositionTemplate {
-  layouts: CompositionLayoutTemplate[];
+export interface CompositionLayout {
+  pageTemplates: CompositionPageTemplate[];
   routes: Record<string, CompositionFlowRoute>;
   maxPages: number;
   /** Per-page template selection. An open final range extends to maxPages. */
-  pageTemplateSchedule?: CompositionPageTemplateRange[];
+  pageTemplateAssignments?: CompositionPageTemplateAssignment[];
   /**
    * Per-document slots supplied by a request.  These overlays are applied to
    * the selected page layout at materialization time and never mutate the
@@ -239,7 +236,7 @@ export interface CompositionDocument {
   assets?: CompositionAsset[];
   graphics?: CompositionGraphic[];
   glyphs?: CompositionGlyphDefinition[];
-  template?: CompositionTemplate;
+  template?: CompositionLayout;
   diagnostics?: string[];
   titlePage?: {
     eyebrow?: string;

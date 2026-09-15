@@ -30,10 +30,11 @@ function fixture() {
   return {
     template: {
       maxPages: 5,
-      layouts: [{ id: 'article', width: 100, height: 100, slots: [
+      pageTemplates: [{ id: 'article', width: 100, height: 100, slots: [
         { id: 'main', regionId: 'main', flowId: 'main', kind: 'text', box: { x: 5, y: 5, width: 90, height: 90 }, allowedRoles: ['body'] },
       ] }],
-      routes: { main: { slots: ['main'], layouts: ['article'], continuation: 'allowed' } },
+      pageTemplateAssignments: [{ from: 1, templateRef: 'article', pageTemplateId: 'article' }],
+      routes: { main: { slots: ['main'], continuation: 'allowed' } },
     },
     document: {
       flows: {
@@ -53,7 +54,6 @@ function fixture() {
         flow_id: 'quotes',
         start_page: 1,
         repeat: 'each-page',
-        continuation: 'forbidden',
         slots: [
           { id: 'quote-top', frame: { x: 0.1, y: 0.2, width: 0.8, height: 'auto' }, allowed_roles: ['quote'] },
           { id: 'quote-bottom', frame: { x: 0.1, y: 0.55, width: 0.8, height: 'auto' }, allowed_roles: ['quote'] },
@@ -91,20 +91,19 @@ try {
 
   const scheduledTemplate = {
     ...template,
-    layouts: [
-      template.layouts[0],
-      { id: 'sidebar-page', width: 100, height: 100, slots: [...template.layouts[0].slots, { id: 'sidebar', regionId: 'sidebar', kind: 'text', box: { x: 5, y: 5, width: 30, height: 30 } }] },
+    pageTemplates: [
+      template.pageTemplates[0],
+      { id: 'sidebar-page', width: 100, height: 100, slots: [...template.pageTemplates[0].slots, { id: 'sidebar', regionId: 'sidebar', kind: 'text', box: { x: 5, y: 5, width: 30, height: 30 } }] },
     ],
-    pageTemplateSchedule: [
-      { from: 1, to: 2, templateRef: 'article', layoutId: 'article' },
-      { from: 3, templateRef: 'sidebar-page', layoutId: 'sidebar-page' },
+    pageTemplateAssignments: [
+      { from: 1, to: 2, templateRef: 'article', pageTemplateId: 'article' },
+      { from: 3, templateRef: 'sidebar-page', pageTemplateId: 'sidebar-page' },
     ],
   };
   const scheduledOverlay = applyDynamicInsertionRequests(scheduledTemplate, document, {
     insertion_flows: [{ flow_id: 'quotes', start_page: 3, slots: [{ id: 'scheduled-quote', frame: { x: 0.45, y: 0.2, width: 0.45, height: 'auto' }, allowed_roles: ['quote'] }] }],
   });
-  assert.deepEqual(scheduledOverlay.routes.quotes?.slotsByLayout?.article, [], 'a page-3 overlay must not be advertised on earlier template layouts');
-  assert.deepEqual(scheduledOverlay.routes.quotes?.slotsByLayout?.['sidebar-page'], ['scheduled-quote'], 'a page-3 overlay must be advertised on the selected template layout');
+  assert.deepEqual(scheduledOverlay.routes.quotes?.slots, ['scheduled-quote'], 'the request route exposes one stable slot union');
   const scheduledResult = createTextCompositionEngine(scheduledOverlay).plan(document, metrics);
   assert.ok(scheduledResult.plan.insertionLines?.some((line) => line.blockId === 'quote-1' && line.page === 3 && line.slotId === '3:scheduled-quote'), 'the page-3 overlay must be available on its selected page');
   assert.ok(!scheduledResult.plan.insertionLines?.some((line) => line.slotId === '1:scheduled-quote' || line.slotId === '2:scheduled-quote'), 'the page-3 overlay must not be available before its selected page');
@@ -179,7 +178,7 @@ try {
   assert.equal(oneOff.routes.quotes?.insertionSlots?.length, 2, 'multiple one-off requests for one flow must accumulate rather than overwrite their route');
   const protectedTemplate = {
     ...template,
-    layouts: [{ ...template.layouts[0], slots: [...template.layouts[0].slots, { id: 'ad', regionId: 'chrome', kind: 'graphic', reserved: true, box: { x: 10, y: 20, width: 80, height: 10 } }] }],
+    pageTemplates: [{ ...template.pageTemplates[0], slots: [...template.pageTemplates[0].slots, { id: 'ad', regionId: 'chrome', kind: 'graphic', reserved: true, box: { x: 10, y: 20, width: 80, height: 10 } }] }],
   };
   assert.throws(
     () => applyDynamicInsertionRequests(protectedTemplate, document, { insertion_flows: [{ flow_id: 'quotes', slots: [{ id: 'over-ad', frame: { x: 0.1, y: 0.2, width: 0.8, height: 0.1 } }] }] }),

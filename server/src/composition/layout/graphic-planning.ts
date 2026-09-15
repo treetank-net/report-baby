@@ -2,7 +2,7 @@ import type {
   CompositionDocument,
   CompositionRect,
   CompositionSlotTemplate,
-  CompositionTemplate,
+  CompositionLayout,
 } from '../contracts/model.js';
 import type {
   CompositionGraphicPlacement,
@@ -152,7 +152,7 @@ export function placeGraphicsForPage(
  * @planner-target composition/layout/graphic-planning.ts
  * @planner-responsibility Keep the current seedGraphicProposals implementation intact until its target seam is extracted.
  */
-export function seedGraphicProposals(document: CompositionDocument, template: CompositionTemplate): Map<string, PlannedGraphic> {
+export function seedGraphicProposals(document: CompositionDocument, template: CompositionLayout): Map<string, PlannedGraphic> {
   const proposals = new Map<string, PlannedGraphic>();
   const route = template.routes.main ?? Object.values(template.routes)[0];
   if (!route) return proposals;
@@ -183,7 +183,7 @@ function absoluteGraphicPoints(graphic: { points?: Array<{ x: number; y: number 
  */
 export function materializeGraphicPages(
   document: CompositionDocument,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   pages: PageState[],
   plan: CompositionPlan,
   graphicProposals: Map<string, PlannedGraphic> = new Map(),

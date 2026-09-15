@@ -1,4 +1,4 @@
-import type { CompositionDocument, CompositionTemplate } from '../contracts/model.js';
+import type { CompositionDocument, CompositionLayout } from '../contracts/model.js';
 import type {
   CompositionPlan,
   CompositionPlanCandidate,
@@ -48,7 +48,7 @@ function proposalSignature(
 function planCandidateRecords(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
 ): CompositionPlanCandidate[] {
   const maxIterations = policy.maxPlanningIterations ?? 1;
@@ -108,7 +108,7 @@ function planCandidateRecords(
 function planCandidates(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
 ): CompositionPlan[] {
   return planCandidateRecords(document, metrics, template, policy).map(({ plan }) => plan);
@@ -122,7 +122,7 @@ function planCandidates(
 function planRefinedCandidateRecords(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
   selected: CompositionPlan,
   round: number,
@@ -155,7 +155,7 @@ function planRefinedCandidateRecords(
 function planRefinedCandidates(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
   selected: CompositionPlan,
   round: number,
@@ -169,7 +169,7 @@ function planRefinedCandidates(
  * @planner-responsibility Expose candidate planning while retaining the existing planner contract.
  */
 export function createTextCompositionPlanner(
-  template: CompositionTemplate,
+  template: CompositionLayout,
   policy: TextCompositionPlannerPolicy = {},
 ): CompositionPlanner {
   return {

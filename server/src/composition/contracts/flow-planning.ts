@@ -4,7 +4,7 @@ import type {
   CompositionFlowRoute,
   CompositionRect,
   CompositionSlotTemplate,
-  CompositionTemplate,
+  CompositionLayout,
 } from './model.js';
 import type {
   CompositionPlan,
@@ -20,7 +20,7 @@ import type { WrappedLine } from '../text/text-layout.js';
 export interface FlowPlanningContext {
   document: CompositionDocument;
   metrics: CompositionTextMetrics;
-  template: CompositionTemplate;
+  template: CompositionLayout;
   policy: TextCompositionPlannerPolicy;
   flowId: string;
   route: CompositionFlowRoute;

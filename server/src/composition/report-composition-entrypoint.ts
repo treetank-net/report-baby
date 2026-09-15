@@ -1,12 +1,12 @@
 import type { jsPDF } from 'jspdf';
 import type { PageGeometry } from '../template/geometry.js';
-import type { CompositionInput, DocumentLayoutInput, PageTemplateScheduleInput, PlacementRequests } from '../contracts/input/schema.js';
+import type { CompositionInput, DocumentLayoutInput, PlacementRequests } from '../contracts/input/schema.js';
 import type { CompiledTemplate } from '../template/contracts.js';
-import type { CompositionTemplate } from './contracts/model.js';
+import type { CompositionLayout } from './contracts/model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './contracts/engine-contracts.js';
 import type { CompositionContrastProvider } from './evaluation/contrast.js';
 import { compositionDocumentFromInput } from './adapters/input.js';
-import { compositionTemplateFromDocumentLayout, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, type PageTemplateSource } from './adapters/page-template.js';
+import { compositionTemplateFromDocumentLayout, compositionTemplateFromPageGeometry, type PageTemplateSource } from './adapters/page-template.js';
 import { createJsPdfTextMetrics } from './adapters/pdf/text.js';
 import type { JsPdfCompositionStyles, JsPdfInlineFontCoverage } from './contracts/pdf.js';
 import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './adapters/text-engine.js';
@@ -16,7 +16,6 @@ import { applyDynamicInsertionRequests } from './adapters/request-insertion-slot
 import { hasInlineMark, missingInlineCodePointsByStyle, missingInlineGlyphWarning, missingTableGlyphWarning } from './text/inline-runs.js';
 import { attachPlanSpacingReport } from './observability/spacing-report.js';
 import { compareCompositionEvaluations } from './composition-engine.js';
-import { normalizePageTemplateSchedule, type PageTemplateScheduleVariant } from './adapters/page-template-schedule.js';
 import { documentLayoutVariantsWithinPageLimit, normalizeDocumentLayout, type DocumentLayoutVariant } from './adapters/document-layout.js';
 
 export {
@@ -51,14 +50,13 @@ export interface ReportCompositionOptions {
   inlineFontCoverage?: JsPdfInlineFontCoverage;
   insertionRequests?: PlacementRequests;
   layout?: DocumentLayoutInput;
-  pageTemplateSchedule?: PageTemplateScheduleInput;
   pageTemplateSources?: PageTemplateSource[];
   headerBottomGap?: number;
 }
 
 export interface ReportCompositionResult {
   document: ReturnType<typeof compositionDocumentFromInput>;
-  template: CompositionTemplate;
+  template: CompositionLayout;
   metrics: CompositionTextMetrics;
   plan: CompositionPlan;
   evaluation: CompositionEvaluation;
@@ -84,43 +82,19 @@ export function planReportComposition(
   options: ReportCompositionOptions,
 ): ReportCompositionResult {
   const document = compositionDocumentFromInput(data);
-  if (options.layout && options.pageTemplateSchedule) {
-    throw new Error('A composition run accepts `layout` or the legacy page-template schedule, not both.');
-  }
   const pageTemplateSources = options.pageTemplateSources ?? (
     options.layout?.every((entry) => entry.template === compiled.id)
       ? [{ templateRef: compiled.id, compiled, geometry }]
-      : options.pageTemplateSchedule?.every((entry) => entry.template_ref === compiled.id)
-      ? [{ templateRef: compiled.id, compiled, geometry }]
       : undefined
   );
-  if ((options.layout || options.pageTemplateSchedule) && !pageTemplateSources) {
-    throw new Error('A page-template schedule with multiple template references requires pageTemplateSources.');
+  if (options.layout && !pageTemplateSources) {
+    throw new Error('A document layout with multiple template references requires pageTemplateSources.');
   }
   const layoutVariants: DocumentLayoutVariant[] = options.layout && pageTemplateSources
     ? documentLayoutVariantsWithinPageLimit(normalizeDocumentLayout(options.layout), options.maxPages)
     : [];
-  const scheduleVariants: PageTemplateScheduleVariant[] = options.pageTemplateSchedule && pageTemplateSources
-    ? normalizePageTemplateSchedule(options.pageTemplateSchedule.map((entry) => ({
-      pages: {
-        ...(entry.pages.from === undefined ? {} : { from: entry.pages.from }),
-        ...(entry.pages.to === undefined ? {} : { to: entry.pages.to }),
-        ...(entry.pages.count === undefined ? {} : { count: entry.pages.count }),
-      },
-      templateRef: entry.template_ref,
-    })))
-    : [];
   const templates = layoutVariants.length > 0 && pageTemplateSources
     ? layoutVariants.map((variant) => compositionTemplateFromDocumentLayout(pageTemplateSources, variant, {
-      maxPages: options.maxPages,
-      ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
-      includeHeaderFlow: options.includeHeaderFlow ?? true,
-      ...(options.headerBottomGap === undefined ? {} : { headerBottomGap: options.headerBottomGap }),
-      ...(options.mainFlowId === undefined ? {} : { mainFlowId: options.mainFlowId }),
-      ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
-    }))
-    : scheduleVariants.length > 0 && pageTemplateSources
-    ? scheduleVariants.map((variant) => compositionTemplateFromPageTemplateSchedule(pageTemplateSources, variant, {
       maxPages: options.maxPages,
       ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
       includeHeaderFlow: options.includeHeaderFlow ?? true,

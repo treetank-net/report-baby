@@ -21,7 +21,14 @@ const build = runProcess('npx', [
 if (build.status !== 0) throw new Error(`soft insertion test bundle failed: ${build.stderr || build.stdout}`);
 
 try {
-  const { createTextCompositionEngine, createTextCompositionPlanner, evaluateCompositionPlan } = await import(bundle);
+  const { createTextCompositionEngine: rawCreateTextCompositionEngine, createTextCompositionPlanner: rawCreateTextCompositionPlanner, evaluateCompositionPlan } = await import(bundle);
+  const canonicalizeTemplate = (input) => input.pageTemplates ? input : {
+    ...input,
+    pageTemplates: input.layouts ?? [],
+    pageTemplateAssignments: (input.layouts ?? []).map((pageTemplate, index, pages) => ({ from: index + 1, ...(index === pages.length - 1 ? {} : { to: index + 1 }), templateRef: pageTemplate.templateRef ?? pageTemplate.id, pageTemplateId: pageTemplate.id })),
+  };
+  const createTextCompositionEngine = (template, ...args) => rawCreateTextCompositionEngine(canonicalizeTemplate(template), ...args);
+  const createTextCompositionPlanner = (template, ...args) => rawCreateTextCompositionPlanner(canonicalizeTemplate(template), ...args);
   const template = {
     maxPages: 1,
     layouts: [{ id: 'atomic-insertions', width: 100, height: 140, slots: [
