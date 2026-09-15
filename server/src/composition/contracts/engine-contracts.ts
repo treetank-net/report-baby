@@ -10,6 +10,7 @@ import type {
   CompositionGraphicShape,
   CompositionSlotKind,
 } from './model.js';
+import type { CompositionSearchBudget } from './planner-policy.js';
 
 export interface CompositionTextMetrics {
   units: string;
@@ -422,12 +423,14 @@ export interface CompositionCandidateSearchRound {
   round: number;
   generatedCandidates: number;
   uniqueCandidates: number;
+  skippedCandidates?: number;
+  plannedCandidates?: number;
   evaluatedCandidates: number;
   legalCandidates: number;
   bestScore?: number;
   improved: boolean;
   reflowPasses: number;
-  stopReason?: 'no-improvement' | 'limit' | 'no-candidates';
+  stopReason?: 'no-movable-placements' | 'no-new-candidates' | 'no-improvement' | 'round-limit' | 'calculation-budget';
 }
 
 export interface CompositionCandidateSearchTrace {
@@ -437,6 +440,7 @@ export interface CompositionCandidateSearchTrace {
   fullPlanRecalculations: number;
   planningTimeMs: number;
   selectedCandidate: number;
+  selectedProposalSignature?: string;
 }
 
 export interface CompositionPlan {
@@ -461,6 +465,12 @@ export interface CompositionPlan {
   spacing?: CompositionPlanSpacingReport;
   trace?: CompositionPlanTrace;
   suggestions?: CompositionSuggestion[];
+}
+
+/** A complete plan paired with the deterministic proposal identity that produced it. */
+export interface CompositionPlanCandidate {
+  signature: string;
+  plan: CompositionPlan;
 }
 
 export interface CompositionEvaluation {
@@ -496,8 +506,11 @@ export interface CompositionScoreComponent {
 export interface CompositionPlanner {
   plan(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan;
   planCandidates?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan[];
+  planCandidatesWithSignatures?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlanCandidate[];
   candidateRefinementRounds?: number;
+  searchBudget?: CompositionSearchBudget;
   planRefinedCandidates?(document: CompositionDocument, metrics: CompositionTextMetrics, selected: CompositionPlan, round: number): CompositionPlan[];
+  planRefinedCandidatesWithSignatures?(document: CompositionDocument, metrics: CompositionTextMetrics, selected: CompositionPlan, round: number): CompositionPlanCandidate[];
 }
 
 export interface CompositionEvaluator {

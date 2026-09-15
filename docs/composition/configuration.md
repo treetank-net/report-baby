@@ -159,6 +159,10 @@ than its slot; otherwise there is no meaningful position to vary.
 
 | Field | Meaning and interactions |
 |---|---|
+| `composition_search.max_initial_candidates` | Maximum number of complete candidates produced by the initial bounded expansion. The seed remains first; the cap limits the combined insertion/graphic proposal product before evaluation. |
+| `composition_search.max_refinement_rounds` | Maximum number of local refinement rounds after the initial candidates. It is intersected with per-placement refinement policy and cannot make an authored fixed placement movable. |
+| `composition_search.max_candidates_per_refinement` | Maximum complete candidates retained from one refinement batch. It limits combined insertion/graphic alternatives while preserving deterministic generation order. |
+| `composition_search.max_full_plan_recalculations` | Request-local budget for complete plan evaluations. Once exhausted, the engine stops with `calculation-budget` evidence and selects only candidates already planned and evaluated. |
 | `composition_search.movable_quote_window_ratio` | Relative vertical movement window around a quote’s preferred position. It interacts with page height and candidate count. |
 | `composition_search.movable_quote_candidate_count` | Number of coarse positions sampled in the movement window. It interacts with the window ratio and evaluator score. |
 | `composition_search.movable_quote_refinement_rounds` | Number of local refinement passes after coarse candidates are evaluated. It interacts with refinement candidate count and deterministic candidate ordering. |

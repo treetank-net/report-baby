@@ -6,6 +6,7 @@ import type {
   CompositionCandidateSearchTrace,
   CompositionEvaluator,
   CompositionPlan,
+  CompositionPlanCandidate,
   CompositionPlanResult,
   CompositionPlanner,
 } from './contracts/engine-contracts.js';
@@ -51,6 +52,29 @@ function uniquePlanCount(plans: CompositionPlan[]): number {
   return new Set(plans.map(candidateSignature)).size;
 }
 
+function uniquePlans(plans: CompositionPlan[]): { plans: CompositionPlan[]; duplicateCount: number } {
+  // A planner may deliberately return structurally identical plans whose
+  // evaluator-visible context differs (for example a synthetic test planner).
+  // Proposal-level deduplication belongs in the candidate generator; the
+  // engine only applies the calculation budget at this compatibility seam.
+  return { plans: [...plans], duplicateCount: 0 };
+}
+
+function uniqueCandidateRecords(records: CompositionPlanCandidate[]): { records: CompositionPlanCandidate[]; duplicateCount: number } {
+  const seen = new Set<string>();
+  const unique: CompositionPlanCandidate[] = [];
+  for (const record of records) {
+    if (seen.has(record.signature)) continue;
+    seen.add(record.signature);
+    unique.push(record);
+  }
+  return { records: unique, duplicateCount: records.length - unique.length };
+}
+
+function positiveBudget(value: number | undefined): number {
+  return Number.isInteger(value) && (value as number) > 0 ? value as number : Number.MAX_SAFE_INTEGER;
+}
+
 function reflowPassCount(plan: CompositionPlan): number {
   return plan.trace?.phases.filter((phase) => phase.name === 'reflow').length ?? 0;
 }
@@ -62,6 +86,7 @@ function candidateRound(
   evaluations: CompositionEvaluation[],
   improved: boolean,
   stopReason?: CompositionCandidateSearchRound['stopReason'],
+  skippedCandidates = 0,
 ): CompositionCandidateSearchRound {
   const legalCandidates = evaluations.filter(evaluationIsLegal).length;
   const legalScores = evaluations.filter(evaluationIsLegal).map((evaluation) => evaluation.score);
@@ -69,6 +94,8 @@ function candidateRound(
     round,
     generatedCandidates,
     uniqueCandidates: uniquePlanCount(candidates),
+    ...(skippedCandidates > 0 ? { skippedCandidates } : {}),
+    plannedCandidates: candidates.length,
     evaluatedCandidates: evaluations.length,
     legalCandidates,
     ...(legalScores.length > 0 ? { bestScore: Math.max(...legalScores) } : {}),
@@ -135,28 +162,88 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
      */
     plan(document, metrics) {
       const startedAt = Date.now();
-      const generatedCandidates = planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)];
-      if (generatedCandidates.length === 0) throw new Error('Composition planner returned no candidates.');
-      const candidates = [...generatedCandidates];
+      const generatedRecords = planner.planCandidatesWithSignatures?.(document, metrics)
+        ?? (planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)]).map((plan, index) => ({ signature: `${candidateSignature(plan)}#compat-${index}`, plan }));
+      if (generatedRecords.length === 0) throw new Error('Composition planner returned no candidates.');
+      const initialUnique = uniqueCandidateRecords(generatedRecords);
+      const maxRecalculations = positiveBudget(planner.searchBudget?.maxFullPlanRecalculations);
+      const initialRecords = initialUnique.records.slice(0, maxRecalculations);
+      const initialCandidates = initialRecords.map(({ plan }) => plan);
+      if (initialCandidates.length === 0) throw new Error('Composition planner returned no candidates within its calculation budget.');
+      const candidates = [...initialCandidates];
+      const candidateSignatures = initialRecords.map(({ signature }) => signature);
       const candidateRounds = candidates.map(() => 0);
       const evaluations = candidates.map((candidate) => evaluator.evaluate(document, candidate));
+      const evaluatedSignatures = new Set(initialRecords.map(({ signature }) => signature));
       let selectedCandidate = 0;
       for (let index = 1; index < evaluations.length; index += 1) {
         if (compareCompositionEvaluations(evaluations[index], evaluations[selectedCandidate]) < 0) selectedCandidate = index;
       }
-      const refinementRounds = planner.candidateRefinementRounds ?? 0;
-      const searchRounds: CompositionCandidateSearchRound[] = [candidateRound(0, generatedCandidates.length, candidates, evaluations, true)];
+      const configuredRefinementRounds = planner.candidateRefinementRounds ?? 0;
+      const refinementRounds = Math.min(
+        configuredRefinementRounds,
+        planner.searchBudget?.maxRefinementRounds ?? Number.MAX_SAFE_INTEGER,
+      );
+      const initialBudgetExhausted = initialUnique.records.length > initialRecords.length;
+      const searchRounds: CompositionCandidateSearchRound[] = [candidateRound(
+        0,
+        generatedRecords.length,
+        candidates,
+        evaluations,
+        true,
+        initialBudgetExhausted ? 'calculation-budget' : undefined,
+        initialUnique.duplicateCount + Math.max(0, initialUnique.records.length - initialRecords.length),
+      )];
+      if (initialBudgetExhausted) {
+        const plan = candidates[selectedCandidate];
+        const evaluation = evaluations[selectedCandidate];
+        const candidateSearch: CompositionCandidateSearchTrace = {
+          rounds: searchRounds,
+          generatedCandidates: generatedRecords.length,
+          evaluatedCandidates: evaluations.length,
+          fullPlanRecalculations: evaluations.length,
+          planningTimeMs: Math.max(0, Date.now() - startedAt),
+          selectedCandidate,
+          selectedProposalSignature: initialRecords[selectedCandidate]?.signature ?? candidateSignature(plan),
+        };
+        plan.trace?.phases.push({
+          name: 'evaluation',
+          status: evaluation.status === 'rejected' ? 'failed' : 'completed',
+          details: {
+            diagnosticCount: evaluation.diagnostics.length,
+            errorCount: evaluation.diagnostics.filter((item) => item.severity === 'error').length,
+            candidates: evaluations.map((candidateEvaluation, index) => candidateDetails(candidates[index]!, candidateEvaluation, index, candidateRounds[index]!)),
+            selectedCandidate,
+          },
+        });
+        if (plan.trace) plan.trace.candidateSearch = candidateSearch;
+        return { plan, evaluation };
+      }
       for (let round = 1; round <= refinementRounds; round += 1) {
-        const refinedGenerated = planner.planRefinedCandidates?.(document, metrics, candidates[selectedCandidate], round) ?? [];
+        const refinedGenerated = planner.planRefinedCandidatesWithSignatures?.(document, metrics, candidates[selectedCandidate], round)
+          ?? (planner.planRefinedCandidates?.(document, metrics, candidates[selectedCandidate], round) ?? []).map((plan, index) => ({ signature: `${candidateSignature(plan)}#compat-${round}-${index}`, plan }));
         if (refinedGenerated.length === 0) {
-          searchRounds.push(candidateRound(round, 0, [], [], false, 'no-candidates'));
+          searchRounds.push(candidateRound(round, 0, [], [], false, 'no-new-candidates'));
           break;
         }
-        const refined = [...refinedGenerated];
+        const refinedUnique = uniqueCandidateRecords(refinedGenerated).records.filter((candidate) => {
+          if (evaluatedSignatures.has(candidate.signature)) return false;
+          evaluatedSignatures.add(candidate.signature);
+          return true;
+        });
+        const remainingBudget = Math.max(0, maxRecalculations - evaluations.length);
+        const refinedRecords = refinedUnique.slice(0, remainingBudget);
+        const refined = refinedRecords.map(({ plan }) => plan);
+        const skippedRefined = refinedGenerated.length - refined.length;
+        if (refined.length === 0) {
+          searchRounds.push(candidateRound(round, refinedGenerated.length, [], [], false, remainingBudget === 0 ? 'calculation-budget' : 'no-new-candidates', skippedRefined));
+          break;
+        }
         const refinedEvaluations = refined.map((candidate) => evaluator.evaluate(document, candidate));
         const previousSelected = selectedCandidate;
         for (let index = 0; index < refined.length; index += 1) {
           candidates.push(refined[index]);
+          candidateSignatures.push(refinedRecords[index]!.signature);
           evaluations.push(refinedEvaluations[index]);
           candidateRounds.push(round);
           const candidateIndex = evaluations.length - 1;
@@ -164,11 +251,15 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         }
         const improved = selectedCandidate !== previousSelected
           && compareCompositionEvaluations(evaluations[selectedCandidate], evaluations[previousSelected]) < 0;
-        const stopReason = improved
-          ? round === refinementRounds ? 'limit' : undefined
-          : 'no-improvement';
-        searchRounds.push(candidateRound(round, refinedGenerated.length, refined, refinedEvaluations, improved, stopReason));
+        const budgetExhausted = evaluations.length >= maxRecalculations;
+        const stopReason = budgetExhausted
+          ? 'calculation-budget'
+          : improved
+            ? round === refinementRounds ? 'round-limit' : undefined
+            : 'no-improvement';
+        searchRounds.push(candidateRound(round, refinedGenerated.length, refined, refinedEvaluations, improved, stopReason, skippedRefined));
         if (!improved) break;
+        if (budgetExhausted) break;
       }
       const plan = candidates[selectedCandidate];
       const evaluation = evaluations[selectedCandidate];
@@ -176,9 +267,10 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         rounds: searchRounds,
         generatedCandidates: searchRounds.reduce((total, round) => total + round.generatedCandidates, 0),
         evaluatedCandidates: searchRounds.reduce((total, round) => total + round.evaluatedCandidates, 0),
-        fullPlanRecalculations: searchRounds.reduce((total, round) => total + round.generatedCandidates, 0),
+        fullPlanRecalculations: evaluations.length,
         planningTimeMs: Math.max(0, Date.now() - startedAt),
         selectedCandidate,
+        selectedProposalSignature: candidateSignatures[selectedCandidate] ?? candidateSignature(plan),
       };
       plan.trace?.phases.push({
         name: 'evaluation',

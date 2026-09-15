@@ -19,7 +19,9 @@ export type TextCompositionEngineOptions = CompositionEvaluationOptions;
  * @planner-responsibility Keep the current plannerPolicyFromRenderConfig implementation intact until its target seam is extracted.
  */
 export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
-  const pdf = readRenderConfig().pdf;
+  const config = readRenderConfig();
+  const pdf = config.pdf;
+  const search = config.compositionSearch;
   return {
     headingKeepWithNextLines: pdfNumber(pdf, 'headingKeepWithNextLines'),
     minimumLinesAtStart: pdfNumber(pdf, 'widowMinLines'),
@@ -28,6 +30,12 @@ export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
     minimumFragmentLines: pdfNumber(pdf, 'plannerMinimumFragmentLines'),
     geometryTolerance: pdfNumber(pdf, 'compositionGeometryTolerance'),
     keepListItemsTogether: pdfNumber(pdf, 'listItemKeepTogether') === 1,
+    searchBudget: {
+      maxInitialCandidates: search.maxInitialCandidates,
+      maxRefinementRounds: search.maxRefinementRounds,
+      maxCandidatesPerRefinement: search.maxCandidatesPerRefinement,
+      maxFullPlanRecalculations: search.maxFullPlanRecalculations,
+    },
   };
 }
 
@@ -45,6 +53,7 @@ export function createTextCompositionEngine(
     maxPlanningIterations: configPolicy.maxPlanningIterations,
     minimumFragmentLines: configPolicy.minimumFragmentLines,
     geometryTolerance: configPolicy.geometryTolerance,
+    searchBudget: configPolicy.searchBudget,
     ...policy,
     ...(template.headingKeepWithNextLines === undefined ? {} : { headingKeepWithNextLines: template.headingKeepWithNextLines }),
   };

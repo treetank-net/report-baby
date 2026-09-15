@@ -18,6 +18,16 @@ export interface RenderConfig {
   quality: { pptxTextRegionMaxChangedPixelRatio: number };
   compositionScore: Record<string, number>;
   compositionPriority: { default: number };
+  compositionSearch: {
+    maxInitialCandidates: number;
+    maxRefinementRounds: number;
+    maxCandidatesPerRefinement: number;
+    maxFullPlanRecalculations: number;
+    movableQuoteWindowRatio?: number;
+    movableQuoteCandidateCount?: number;
+    movableQuoteRefinementRounds?: number;
+    movableQuoteRefinementCandidateCount?: number;
+  };
   assets: Record<string, number>;
   sources: { zipMaxEntries: number; zipMaxFileBytes: number; zipMaxTotalBytes: number; zipMaxCompressionRatio: number; zipMaxNestedArchives: number };
   images: { maxAssetBytes: number; maxDecodedPixels: number; maxDimensionPx: number; maxPerDocument: number; remoteTimeoutMs: number; remoteMaxRedirects: number; decoderTimeoutMs: number };
@@ -168,6 +178,7 @@ export function readRenderConfig(): RenderConfig {
     quality: { pptxTextRegionMaxChangedPixelRatio: get(quality, 'pptx_text_region_max_changed_pixel_ratio') },
     compositionScore: camelDictionary('composition_score'),
     compositionPriority: { default: get(compositionPriority, 'default') },
+    compositionSearch: camelDictionary('composition_search') as RenderConfig['compositionSearch'],
     assets: camelDictionary('assets'),
     sources: { zipMaxEntries: get(sources, 'zip_max_entries'), zipMaxFileBytes: get(sources, 'zip_max_file_bytes'), zipMaxTotalBytes: get(sources, 'zip_max_total_bytes'), zipMaxCompressionRatio: get(sources, 'zip_max_compression_ratio'), zipMaxNestedArchives: get(sources, 'zip_max_nested_archives') },
     images: { maxAssetBytes: get(images, 'max_asset_bytes'), maxDecodedPixels: get(images, 'max_decoded_pixels'), maxDimensionPx: get(images, 'max_dimension_px'), maxPerDocument: get(images, 'max_per_document'), remoteTimeoutMs: get(images, 'remote_timeout_ms'), remoteMaxRedirects: get(images, 'remote_max_redirects'), decoderTimeoutMs: get(images, 'decoder_timeout_ms') },

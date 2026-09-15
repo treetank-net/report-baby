@@ -15,6 +15,14 @@ export type MovableInsertionBounds = MovablePlacementBounds;
 export type MovableInsertionPolicy = Record<string, MovableInsertionBounds>;
 export type MovableGraphicPolicy = Record<string, MovablePlacementBounds>;
 
+/** Deterministic limits for proposal generation and complete-plan evaluation. */
+export interface CompositionSearchBudget {
+  maxInitialCandidates: number;
+  maxRefinementRounds: number;
+  maxCandidatesPerRefinement: number;
+  maxFullPlanRecalculations: number;
+}
+
 /** Configuration knobs shared by document and flow planning. */
 export interface TextCompositionPlannerPolicy {
   minimumLinesAtStart?: number;
@@ -30,6 +38,8 @@ export interface TextCompositionPlannerPolicy {
   minimumFragmentLines?: number;
   /** Tolerance for renderer-neutral geometry comparisons, in planner units. */
   geometryTolerance?: number;
+  /** Global count/round budget shared by candidate planning and evaluation. */
+  searchBudget?: CompositionSearchBudget;
   /** Optional legal frame for an insertion. */
   movableInsertionBounds?: MovableInsertionPolicy;
   /** Optional legal frames for authored graphics with an explicit size. */

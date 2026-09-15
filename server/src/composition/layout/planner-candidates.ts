@@ -101,6 +101,30 @@ type PlannedPlacement = { box: CompositionRect };
 type SelectedPlacement = { id: string; page: number; slotId: string; box: CompositionRect };
 type MovablePlacementPolicy = Record<string, MovablePlacementBounds>;
 
+function boundedCandidateLimit(limit: number | undefined): number {
+  return Number.isInteger(limit) && (limit as number) > 0 ? limit as number : Number.MAX_SAFE_INTEGER;
+}
+
+function orderedPolicyEntries<T extends PlannedPlacement>(
+  seed: Map<string, T>,
+  policies: MovablePlacementPolicy,
+): Array<[string, MovablePlacementBounds]> {
+  const seedOrder = new Map([...seed.keys()].map((key, index) => [key, index]));
+  return Object.entries(policies)
+    .filter(([key]) => seed.has(key))
+    .sort(([left], [right]) => {
+      const leftIndex = seedOrder.get(left) ?? Number.MAX_SAFE_INTEGER;
+      const rightIndex = seedOrder.get(right) ?? Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex || left.localeCompare(right);
+    });
+}
+
+function defaultPlacementSignature<T extends PlannedPlacement>(proposal: Map<string, T>): string {
+  return [...proposal.entries()]
+    .map(([key, value]) => `${key}@${value.box.x},${value.box.y},${value.box.width},${value.box.height}`)
+    .join('|');
+}
+
 /**
  * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movablePlacementProposalCandidates implementation intact until its target seam is extracted.
@@ -108,19 +132,32 @@ type MovablePlacementPolicy = Record<string, MovablePlacementBounds>;
 function movablePlacementProposalCandidates<T extends PlannedPlacement>(
   seed: Map<string, T>,
   policies: MovablePlacementPolicy,
+  maxCandidates?: number,
+  signature: (proposal: Map<string, T>) => string = defaultPlacementSignature,
 ): Map<string, T>[] {
-  const movableEntries = Object.entries(policies).filter(([key]) => seed.has(key));
+  const movableEntries = orderedPolicyEntries(seed, policies);
   if (movableEntries.length === 0) return [seed];
+  const limit = boundedCandidateLimit(maxCandidates);
   let variants: Map<string, T>[] = [seed];
   for (const [key, bounds] of movableEntries) {
     const proposal = seed.get(key)!;
     const boxes = movablePlacementBoxes(proposal, bounds);
     if (boxes.length === 0) continue;
-    variants = variants.flatMap((variant) => boxes.map((box) => {
-      const next = new Map(variant);
-      next.set(key, { ...proposal, box: { ...box } } as T);
-      return next;
-    }));
+    const nextVariants: Map<string, T>[] = [];
+    const seen = new Set<string>();
+    for (const variant of variants) {
+      for (const box of boxes) {
+        const next = new Map(variant);
+        next.set(key, { ...proposal, box: { ...box } } as T);
+        const nextSignature = signature(next);
+        if (seen.has(nextSignature)) continue;
+        seen.add(nextSignature);
+        nextVariants.push(next);
+        if (nextVariants.length >= limit) break;
+      }
+      if (nextVariants.length >= limit) break;
+    }
+    variants = nextVariants;
   }
   return variants;
 }
@@ -135,9 +172,13 @@ function movablePlacementProposalRefinements<T extends PlannedPlacement>(
   policies: MovablePlacementPolicy,
   round: number,
   selectedIdForKey: (key: string, proposal: T) => string,
+  maxCandidates?: number,
+  signature: (proposal: Map<string, T>) => string = defaultPlacementSignature,
 ): Map<string, T>[] {
-  const movableEntries = Object.entries(policies).filter(([, bounds]) => (bounds.refinementRounds ?? 0) >= round);
+  const movableEntries = orderedPolicyEntries(seeded, policies)
+    .filter(([, bounds]) => (bounds.refinementRounds ?? 0) >= round);
   if (movableEntries.length === 0) return [];
+  const limit = boundedCandidateLimit(maxCandidates);
   let variants: Map<string, T>[] = [seeded];
   for (const [key, bounds] of movableEntries) {
     const seededProposal = seeded.get(key);
@@ -153,11 +194,21 @@ function movablePlacementProposalRefinements<T extends PlannedPlacement>(
     } as T;
     const boxes = movablePlacementRefinementBoxes(anchoredProposal, bounds, round);
     if (boxes.length === 0) return [];
-    variants = variants.flatMap((variant) => boxes.map((box) => {
-      const next = new Map(variant);
-      next.set(key, { ...anchoredProposal, box: { ...box } } as T);
-      return next;
-    }));
+    const nextVariants: Map<string, T>[] = [];
+    const seen = new Set<string>();
+    for (const variant of variants) {
+      for (const box of boxes) {
+        const next = new Map(variant);
+        next.set(key, { ...anchoredProposal, box: { ...box } } as T);
+        const nextSignature = signature(next);
+        if (seen.has(nextSignature)) continue;
+        seen.add(nextSignature);
+        nextVariants.push(next);
+        if (nextVariants.length >= limit) break;
+      }
+      if (nextVariants.length >= limit) break;
+    }
+    variants = nextVariants;
   }
   return variants;
 }
@@ -173,8 +224,9 @@ function movablePlacementProposalRefinements<T extends PlannedPlacement>(
 export function movableInsertionProposalCandidates(
   seed: Map<string, PlannedInsertion>,
   policies: MovableInsertionPolicy,
+  maxCandidates?: number,
 ): Map<string, PlannedInsertion>[] {
-  return movablePlacementProposalCandidates(seed, policies);
+  return movablePlacementProposalCandidates(seed, policies, maxCandidates, movableInsertionProposalSignature);
 }
 
 /**
@@ -191,6 +243,7 @@ export function movableInsertionProposalRefinements(
   selectedPlacements: readonly SelectedInsertionPlacement[],
   policies: MovableInsertionPolicy,
   round: number,
+  maxCandidates?: number,
 ): Map<string, PlannedInsertion>[] {
   return movablePlacementProposalRefinements(
     seeded,
@@ -198,6 +251,8 @@ export function movableInsertionProposalRefinements(
     policies,
     round,
     (_key, proposal) => `insertion:${proposal.blockId}`,
+    maxCandidates,
+    movableInsertionProposalSignature,
   );
 }
 
@@ -208,8 +263,9 @@ export function movableInsertionProposalRefinements(
 export function movableGraphicProposalCandidates(
   seed: Map<string, PlannedGraphic>,
   policies: MovableGraphicPolicy,
+  maxCandidates?: number,
 ): Map<string, PlannedGraphic>[] {
-  return movablePlacementProposalCandidates(seed, policies);
+  return movablePlacementProposalCandidates(seed, policies, maxCandidates, movableGraphicProposalSignature);
 }
 
 export interface SelectedGraphicPlacement {
@@ -232,6 +288,7 @@ export function movableGraphicProposalRefinements(
   selectedPlacements: readonly SelectedGraphicPlacement[],
   policies: MovableGraphicPolicy,
   round: number,
+  maxCandidates?: number,
 ): Map<string, PlannedGraphic>[] {
   return movablePlacementProposalRefinements(
     seeded,
@@ -239,6 +296,8 @@ export function movableGraphicProposalRefinements(
     policies,
     round,
     (key) => key,
+    maxCandidates,
+    movableGraphicProposalSignature,
   );
 }
 
@@ -251,4 +310,33 @@ export function movableInsertionProposalSignature(proposals: Map<string, Planned
     .sort((left, right) => insertionKey(left.flowId, left.blockId).localeCompare(insertionKey(right.flowId, right.blockId)))
     .map((proposal) => `${insertionKey(proposal.flowId, proposal.blockId)}@${proposal.page}:${proposal.slotId}:${proposal.box.x},${proposal.box.y},${proposal.box.width},${proposal.box.height}`)
     .join('|');
+}
+
+/** Stable identity for a set of movable graphic proposals. */
+export function movableGraphicProposalSignature(proposals: Map<string, PlannedGraphic>): string {
+  return [...proposals.entries()]
+    .map(([key, proposal]) => `${key}@${proposal.page}:${proposal.slotId}:${proposal.box.x},${proposal.box.y},${proposal.box.width},${proposal.box.height}`)
+    .join('|');
+}
+
+/** Combine two already-bounded proposal dimensions without materialising an unbounded product. */
+export function combineProposalCandidates<T extends PlannedPlacement, U extends PlannedPlacement>(
+  left: Map<string, T>[],
+  right: Map<string, U>[],
+  maxCandidates: number | undefined,
+  signature: (left: Map<string, T>, right: Map<string, U>) => string,
+): Array<{ left: Map<string, T>; right: Map<string, U> }> {
+  const limit = boundedCandidateLimit(maxCandidates);
+  const combinations: Array<{ left: Map<string, T>; right: Map<string, U> }> = [];
+  const seen = new Set<string>();
+  for (const leftProposal of left) {
+    for (const rightProposal of right) {
+      const proposalSignature = signature(leftProposal, rightProposal);
+      if (seen.has(proposalSignature)) continue;
+      seen.add(proposalSignature);
+      combinations.push({ left: leftProposal, right: rightProposal });
+      if (combinations.length >= limit) return combinations;
+    }
+  }
+  return combinations;
 }

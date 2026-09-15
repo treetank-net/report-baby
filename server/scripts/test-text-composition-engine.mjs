@@ -752,12 +752,12 @@ try {
   const movableSearchTrace = movableQuoteResult.plan.trace?.candidateSearch;
   assert.equal(movableQuoteResult.evaluation.status, 'accepted', JSON.stringify(movableQuoteResult.evaluation));
   assert.equal(movableSearchTrace?.generatedCandidates, 8, 'candidate search trace must count coarse and refinement plans');
-  assert.equal(movableSearchTrace?.evaluatedCandidates, 8, 'candidate search trace must count every evaluated plan');
-  assert.equal(movableSearchTrace?.fullPlanRecalculations, 8, 'candidate search trace must count each full planner recalculation');
+  assert.equal(movableSearchTrace?.evaluatedCandidates, 7, 'candidate search trace must skip a proposal already evaluated in the coarse round');
+  assert.equal(movableSearchTrace?.fullPlanRecalculations, 7, 'candidate search trace must count each unique full planner recalculation');
   assert.ok(Number.isFinite(movableSearchTrace?.planningTimeMs) && movableSearchTrace.planningTimeMs >= 0, 'candidate search trace must expose observed planning time');
   assert.equal(movableSearchTrace?.rounds[0]?.uniqueCandidates, 6, 'candidate search trace must expose unique coarse positions');
   assert.equal(movableSearchTrace?.rounds[0]?.legalCandidates, 6, 'candidate search trace must count legal coarse candidates');
-  assert.equal(movableSearchTrace?.rounds[1]?.uniqueCandidates, 2, 'candidate search trace must expose unique local positions');
+  assert.equal(movableSearchTrace?.rounds[1]?.uniqueCandidates, 1, 'candidate search trace must expose unique local positions after deduplication');
   assert.equal(movableSearchTrace?.selectedCandidate, movableEvaluationPhase?.details?.selectedCandidate, 'trace and evaluation phase must identify the same winner');
   assert.ok(movableEvaluationPhase?.details?.candidates?.length > 6, 'a movable insertion frame must receive a local refinement pass after the coarse candidates');
   assert.ok(movableEvaluationPhase?.details?.candidates?.some((candidate) => candidate.refinementRound === 1), 'the candidate trace must identify the local refinement round');
@@ -812,7 +812,7 @@ try {
   const earlyStopResult = createTextCompositionEngine(movableQuoteTemplate, earlyStopPolicy).plan(movableQuoteDocument, movableMetrics);
   const earlyStopRounds = earlyStopResult.plan.trace?.candidateSearch?.rounds ?? [];
   assert.ok(earlyStopRounds.length < 4, 'refinement must stop before the configured limit when no candidate improves the winner');
-  assert.equal(earlyStopRounds.at(-1)?.stopReason, 'no-improvement', 'candidate search trace must explain early termination');
+  assert.ok(['no-improvement', 'no-new-candidates'].includes(earlyStopRounds.at(-1)?.stopReason), 'candidate search trace must explain early termination');
   await writeMovableCandidateArtifacts(movableCandidateArtifactDirectory, movableCandidatePlans, movableQuoteDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8')));
 
   const movableGraphicTemplate = {
