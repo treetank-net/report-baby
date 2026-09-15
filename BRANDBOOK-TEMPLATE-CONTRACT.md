@@ -212,9 +212,62 @@ constraints:
 
 `frame` is normalized source geometry, not a renderer-specific position. It is
 allowed because the template is the brand-owned source composition. Geometry is
-not allowed in profiles, MCP requests, or one-off overrides. Grids and anchors
-such as `top-end`, `region.right`, or `columns: 3` are allowed. CSS, SVG code,
-PPTX XML, and DPI-dependent values are not.
+not allowed in profiles or ordinary content requests. The explicit
+`placement_requests` overlay form is the one exception: it may provide a
+per-run `frame` as an anchor when the author deliberately creates a slot that
+does not exist in the selected template. That request-owned frame is still
+measured and constrained by the planner; it does not carry renderer-specific
+pixels, duplicated padding or an independent push/collision policy. Grids and
+anchors such as `top-end`, `region.right`, or `columns: 3` are allowed. CSS,
+SVG code, PPTX XML, and DPI-dependent values are not.
+
+### Structural envelopes versus measured content
+
+The frame of a content slot is an anchor or legal envelope, not a promise that
+the content will occupy the entire rectangle. Page size, outer margins, column
+tracks, gutters, decorative bands and safe areas are structural geometry and
+may be fixed. Content-dependent height is resolved after the planner measures
+the actual text, image, caption, table, chart or lockup.
+
+For ordinary content slots, prefer the following contract:
+
+```yaml
+frame: { x: 0.08, y: 0.18, width: 0.84, height: 0 }
+fit_content: true
+grow:
+  axis: y
+  max_height: 0.70
+```
+
+For a template slot, use the current parser's zero-height baseline with
+`fit_content: true` (`height: 0`); request-owned overlays may use
+`height: auto`. Both forms mean that the occupied box follows measured
+content. `grow.max_height` is a legal ceiling, not a default height.
+Named `grow.pushes` or `relations` move dependent slots; they do not require
+the author to calculate a new coordinate for every text length.
+
+Widths follow the same rule. A fixed width is appropriate for a column track or
+grid measure. A block inside that track inherits the available width unless a
+declared relation or legal movement window permits another size. The template
+must not contain a separate hard-coded width for every content variant.
+
+An insertion is intentionally content-first. Its author normally supplies the
+flow and block; the block kind is derived from content, with an optional kind
+hint and preferred slot or region. The author does not repeat the template's
+padding, max height, push graph, collision rules or movement candidates. The
+planner finds a compatible insertion capability,
+measures the block (including captions and intrinsic aspect ratio), resolves
+fit-content growth, and reports the resulting box and spacing. Explicit
+insertion geometry remains an escape hatch for a deliberate special
+composition, not the default authoring path.
+
+Quality is evaluated from the resolved plan, not from how many fixed numbers a
+template contains. Unexplained empty regions, accidental gaps, column
+imbalance, orphan fragments and avoidable insertion whitespace can lower a
+candidate's score. Whitespace explained by a relation, reserved decoration,
+safe area or the end of content is not penalized. Thresholds and penalties
+belong to the renderer's configuration; they are not copied into each
+template.
 
 ## 5. Template behavior
 

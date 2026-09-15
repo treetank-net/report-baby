@@ -86,10 +86,11 @@ object. It runs before `compositionDocumentFromInput()` and asset resolution.
 The generated IDs are reserved adapter IDs. Authored input using either ID is
 rejected so it cannot impersonate generated content.
 
-When the declared flow does not exist in input, the materializer creates it
-with `continuation: forbidden` and the generated block. When it exists, the
-generated lockup is prepended so the existing authored title/metadata blocks
-retain their order after it.
+When the declared flow does not exist in input, the materializer creates the
+flow with the generated block. The selected page template supplies that flow's
+continuation policy; the materializer must not invent, copy or override a
+`continuation` value. When the flow exists, the generated lockup is prepended so
+the existing authored title/metadata blocks retain their order after it.
 
 ### Footer page-number rules
 
@@ -109,8 +110,10 @@ flow has no authored page-number block, materialization appends one block:
 An authored footer block containing the page variables is the override. The
 adapter detects it from normalized text and does not append a duplicate.
 Templates without a generated page-number declaration receive none.
-When the declared footer flow does not exist, the materializer creates it with
-`continuation: forbidden` before appending the generated block.
+When the declared footer flow does not exist, the materializer creates the flow
+before appending the generated block. The selected template supplies the
+footer route's continuation policy; generated-content materialization does not
+set it.
 
 ### Header text
 

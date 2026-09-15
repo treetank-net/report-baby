@@ -46,7 +46,16 @@ geometry is called a page template.
   with the already-selected page template; no per-template route map remains.
 - Dynamic request insertion slots remain explicit per-page overlays and cannot
   accept `main`.
-- `continuation` behavior does not change.
+- `continuation` remains a route annotation, but its owner is made explicit:
+  the selected page template supplies whether a flow may cross a page
+  boundary. The document content input does not choose that policy. The
+  migration removes `data.flows.<flow>.continuation` as a public control and
+  rejects it with an actionable migration error instead of silently letting
+  content override a template route.
+- Dynamic insertion requests declare the content and optional placement
+  preference, not a second continuation policy. Their route is derived from
+  the selected template; an insertion request cannot make a template-local
+  flow cross pages by setting `continuation`.
 
 ## Public request contract
 
@@ -202,6 +211,11 @@ interface CompositionFlowRoute {
 }
 ```
 
+`continuation` in this internal record is compiled from the selected template,
+never copied from `data.flows` or from an insertion request. A request may still
+identify a one-page insertion (`repeat: once`) or a repeated insertion flow,
+but that controls placement instances, not cross-page breakability.
+
 These rename existing procedural data. They do not add another planning layer.
 
 ## Normalization process
@@ -323,6 +337,18 @@ builds layout-keyed slot maps. Change it to:
 5. reject `main` ownership and collision with static/reserved slots;
 6. never add a page-template assignment or fallback.
 
+The same adapter also owns the simplified content-first insertion form. A
+request that names only `flow_id` and `block_id` (with an optional semantic
+`kind` hint derived from the block when omitted) searches compatible slots in
+the selected page-template assignments and inherits their fit-content, growth,
+overflow and relation defaults. `preferred_region`, `slot_id` and `page` narrow
+that search when supplied. Only an explicit request `frame`
+materializes a new per-run overlay when no persistent capability is suitable;
+the overlay still receives sizing defaults from the selected template. This
+keeps template selection and insertion geometry separate: an insertion cannot
+create a new page-template assignment, and a missing capability is reported as
+an actionable planning error rather than rescued by invented geometry.
+
 ## Public and report plumbing
 
 Migrate the same field through:
@@ -355,7 +381,10 @@ echo the original unnormalized request.
 7. Migrate request insertion overlays.
 8. Migrate fixtures from low-level `layouts` construction to
    `CompositionLayout.pageTemplates` and assignments.
-9. Remove old schemas, adapter file, types, parameters, diagnostics and docs.
+9. Remove old schemas, adapter file, types, parameters, diagnostics and docs,
+   including the public `data.flows[*].continuation` and
+   `placement_requests.insertion_flows[*].continuation` controls. Keep the
+   internal route annotation compiled from the selected template.
 10. Run `rg` for every old identifier and allow occurrences only in explicit
     rejection tests and the unchanged historical item-02 document.
 

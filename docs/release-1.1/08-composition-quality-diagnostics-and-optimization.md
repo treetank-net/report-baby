@@ -76,6 +76,178 @@ search loop. It extends the existing functions and data structures.
   re-evaluate equivalent refinements. Item 04 owns improving that search
   mechanism; this task only supplies stable quality components.
 
+## Template contract: capacity, not content dimensions
+
+The template is the source of structural intent. It must not guess the final
+height of a paragraph, title, quote, image caption, lockup or insertion before
+the content has been measured.
+
+Keep these responsibilities separate:
+
+| Concern | Owner | What it may contain |
+|---|---|---|
+| page structure | page template | page size, margins, column tracks, gutter, reserved decoration and safe areas |
+| slot capacity | page template | an anchor/envelope, accepted kinds/roles, min/max capacity, fit-content or growth policy and named relations |
+| content geometry | planner and renderer-neutral metrics | measured line count, intrinsic block height, caption height, image ratio and resulting occupied box |
+| aesthetic objective | evaluator and render configuration | gap thresholds, balance tolerances, fragmentation penalties, empty-region penalties and weights |
+
+`frame` on a content slot is an initial anchor or legal envelope. It is not
+automatically the occupied content box. A dynamic template slot uses the
+existing `fit_content: true` convention; the current template parser permits
+its frame height to be `0` as an empty baseline. A request-owned overlay may
+also use `height: auto`. In both forms, the measured content determines the
+occupied height. A slot may declare a `grow` ceiling; the ceiling is a bound,
+never a default height. `grow.pushes` names affected slots or segments. It must
+not be replaced with a second hard-coded `y` value for every possible text
+length.
+
+Fixed dimensions remain valid where they express real structure: page size,
+outer margins, column width/gutter, a fixed ad or logo frame, or a deliberate
+maximum capacity. A text slot's fixed height is valid only when the template
+explicitly wants a fixed-capacity region and its overflow policy says what
+happens next. Ordinary editorial text, intro lead, quote, caption, lockup and
+insertion slots default to measured height.
+
+Widths follow the same distinction. Column tracks and gutters are structural
+and may be fixed. A content block uses the width of its selected slot or named
+column relation; the planner must not invent per-content widths merely to make
+one candidate fit. An insertion may vary within a legal movement window, but
+its width changes only when the template or request explicitly exposes a legal
+size range.
+
+### Insertions have a simple authoring contract
+
+An insertion is content first, geometry second. The public request keeps the
+existing `placement_requests` boundary, but the ordinary form contains only
+the flow and block. The block's semantic kind is derived from `data.flows`; an
+optional `kind` hint may narrow capability matching but must agree with that
+block. A slot, page, region, frame or sizing override is optional. The author
+does not repeat the template's dimensions, padding, max height, push graph or
+collision rules.
+
+```yaml
+placement_requests:
+  insertions:
+    - flow_id: quote
+      block_id: quote-07
+      preferred_region: body
+    - flow_id: article-media
+      block_id: image-03
+      preferred_region: body
+```
+
+The target request shape uses the following precedence:
+
+| Request fields | Meaning | Required geometry supplied by |
+|---|---|---|
+| `flow_id`, `block_id` and optional `kind` hint | find the first legal compatible insertion capacity across the selected page-template assignments | the selected template and measured content |
+| the above plus `slot_id` or `preferred_region` | prefer compatible capacity in the named place; fail with evidence if it is explicitly required and unavailable | the selected template and measured content |
+| the above plus `page` | constrain the insertion to that materialized page; this is a deliberate hard location | the selected template and measured content |
+| the above plus `frame` | create a request-owned overlay when no persistent slot is suitable | the request supplies the anchor; the planner supplies measured height and template defaults |
+
+`sizing` is an optional escape hatch for a deliberate fixed-capacity or
+explicitly bounded overlay. When it is absent, the adapter inherits
+`fit_content`, growth ceiling, overflow and named push relations from the
+compatible template capability. `frame` is therefore not required for a
+normal quote, image, table or chart insertion; it is required only when the
+request intentionally creates a new per-run slot. A request-owned frame still
+does not require a hand-written `max_height`, `pushes` list or movement window.
+
+The migration makes `page`, `frame` and `sizing` optional in the simple
+`insertions` form while preserving the explicit overlay form for existing
+special compositions. A request must not mix a partial frame with a template
+slot preference in a way that leaves the anchor ambiguous; preflight returns a
+diagnostic naming the missing or conflicting field.
+
+This is a contract change in the input adapter, not a new insertion entity.
+`contracts/input/schema.ts` accepts the content-first form, while
+`adapters/request-insertion-slots.ts` resolves a compatible static capability
+before it considers a request-owned overlay. The adapter copies the selected
+template's sizing defaults into the in-memory slot; it does not copy those
+defaults into the request or into a second configuration file. The plan then
+records both the source (`template` or `request-overlay`) and the resolved
+occupied box so diagnostics can explain the result.
+
+The planner resolves this request in order:
+
+1. find compatible insertion slots declared by the selected template;
+2. measure the block, including caption and intrinsic aspect ratio;
+3. derive the occupied height (and a declared legal width range, if any);
+4. apply the slot's fit-content and overflow policy;
+5. place the insertion in the first legal candidate position;
+6. reflow or push lower-priority content using named template relations; and
+7. report the measured box, gaps and any quality penalty.
+
+Explicit coordinates and fixed dimensions remain available for a deliberate
+special composition, but they are the exception. A normal quote or image must
+be usable without a hand-written `frame`, `max_height`, `pushes` list and
+movement window. If no compatible template slot exists, the planner returns a
+diagnostic with the missing capability and remediation. It silently invents
+neither a slot nor a geometry fallback. A request-owned overlay is created only
+when the author provided its explicit `frame`; the normal content-first form
+never creates implicit slots as a rescue path.
+
+The template expresses relationships, not a pixel choreography:
+
+```yaml
+slots:
+  header-lockup:
+    frame: { x: 0.08, y: 0.02, width: 0.34, height: 0 }
+    fit_content: true
+    grow: { axis: y, max_height: 0.16, pushes: [header-title, main] }
+  header-title:
+    frame: { x: 0.08, y: 0.06, width: 0.84, height: 0 }
+    fit_content: true
+    grow: { axis: y, max_height: 0.16, pushes: [main] }
+  main:
+    frame: { x: 0.08, y: 0.18, width: 0.84, height: 0 }
+    fit_content: true
+
+relations:
+  - { from: header-lockup, to: header-title, relation: after, gap: header-content }
+  - { from: header-title, to: main, relation: after, gap: header-content }
+```
+
+The numeric frames establish initial envelopes and safe maxima; they do not
+prescribe final header height. The planner measures the lockup/title, resolves
+the relations, pushes `main`, and reports the actual gaps.
+
+### Template-to-quality lifecycle
+
+Every candidate follows the same sequence:
+
+```text
+template structure and slot envelopes
+  -> materialize selected page slots and insertion capabilities
+  -> measure each block with renderer-neutral metrics
+  -> resolve fit-content growth and named push relations
+  -> place/reflow content while checking hard constraints
+  -> attach occupied boxes, gaps and obstacle evidence to the plan
+  -> score soft composition quality from those measured facts
+  -> compare only complete legal candidates
+```
+
+The evaluator does not ask the template for a preferred final height and the
+template does not receive a score to mutate itself. A template declares
+capacity and relationships; the evaluator judges the resulting composition.
+
+### Numeric ownership
+
+- Template YAML owns intentional structural geometry and named relation tokens.
+- `server/templates/render-config.yml` owns renderer-wide thresholds, penalties,
+  tolerances and tunable defaults.
+- Planner code owns no visual constants or fallback dimensions.
+- The plan records resolved values, so diagnostics can explain which measured
+  gap or occupied box caused a score change.
+- A threshold is not duplicated in a template, TypeScript constant and test.
+  Tests load the same configuration seam as production.
+
+The objective is not to fill every square millimetre. Unexplained empty space,
+unbalanced columns and accidental gaps are penalized; whitespace explained by
+the template's relation, reserved decoration, safe area or end-of-content is
+neutral. This prevents the optimizer from producing a denser but less readable
+document.
+
 ## Target diagnostic contract
 
 Do not add a generic `Finding` hierarchy. Extend the two existing public
@@ -335,15 +507,22 @@ but may not drop hard violations or change codes.
 
 ### Stage A — freeze plan facts
 
-1. Add region and obstacle spacing types to `engine-contracts.ts`.
-2. Extract shared rectangle clipping, union-area and interval calculations into
+1. Inventory every built-in page template's structural envelope, fit-content
+   flag, growth ceiling, push relation and overflow policy. Mark content-
+   dependent dimensions that are currently hard-coded.
+2. Define the content-first insertion input and migration rules above, then
+   add schema/adapter fixtures for static-capability and explicit-overlay
+   requests.
+3. Add region and obstacle spacing types to `engine-contracts.ts`.
+4. Extract shared rectangle clipping, union-area and interval calculations into
    the existing composition geometry directory.
-3. Extend `attachPlanSpacingReport()` to create region/obstacle records from
+5. Extend `attachPlanSpacingReport()` to create region/obstacle records from
    already-materialized placements.
-4. Add plan-only fixtures proving deduplication, clipping, reserved bands,
+6. Add plan-only fixtures proving deduplication, clipping, reserved bands,
    fit-content shrinkage and final-content gaps.
 
-No scoring or candidate selection changes in this stage.
+The inventory and fixtures must distinguish a structural frame from measured
+occupied content. No scoring or candidate selection changes in this stage.
 
 ### Stage B — actionable hard diagnostics
 
@@ -403,6 +582,8 @@ query and retains the old behavior assertion.
 | `evaluation/evaluator.ts` | assemble legality, score and suggestions once |
 | `composition-engine.ts` | compare candidates and record selection trace |
 | `layout/planner-candidates.ts` | generate declared movable-placement proposals |
+| `contracts/input/schema.ts` | validate the simple insertion form and explicit-overlay escape hatch |
+| `adapters/request-insertion-slots.ts` | resolve template capability, inherit defaults and materialize per-run overlays |
 | MCP/CLI adapters | preserve and format the same result |
 
 ## Test matrix
@@ -410,6 +591,8 @@ query and retains the old behavior assertion.
 | Requirement | Cheapest sufficient proof | Target test |
 |---|---|---|
 | region union area does not double-count overlap | plan-only synthetic geometry | `test-structure-scoring.mjs` |
+| dynamic template height follows measured content | plan-only template/slot fixture | `test-editorial-plan-contract.mjs` |
+| fixed structural dimensions remain stable while content dimensions grow | plan-only two-content-length fixture | `test-report-chrome.mjs` |
 | chrome/reserved area is intentional | plan-only template fixture | planning section of `test-report-chrome.mjs` |
 | unused fit-content envelope is visible | plan-only measured block fixture | `test-editorial-plan-contract.mjs` |
 | caption is included in an insertion obstacle | plan-only placement boxes | `test-dynamic-insertion-slots.mjs` |
@@ -422,6 +605,13 @@ query and retains the old behavior assertion.
 ## Completion criteria
 
 - All listed facts are available from plan-only output.
+- Template frames are reported as envelopes/anchors, while occupied content
+  boxes reflect measured content rather than copied fixed heights.
+- Ordinary insertions work from content plus a compatible template capability;
+  authors are not required to repeat template dimensions, push relations or
+  movement rules for every quote/image.
+- No content-dependent width or height is introduced as a renderer constant or
+  duplicated between template, code and test configuration.
 - Hard-violation code, severity and ordering remain unchanged for existing
   fixtures.
 - Every negative quality component points to measured evidence and an

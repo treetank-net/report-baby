@@ -55,22 +55,31 @@ Ownership remains procedural:
 1. **Document layout contract (11).** Rename the public schedule, remove
    `route.layouts`, and make selected templates explicit per page. This removes
    the competing template-selection path before later work adds fields.
-2. **Composition-quality evidence and diagnostics (08–10, stages A–C).** Make
-   the current spacing and placement facts complete and expose actionable
-   diagnostics without changing candidate positions.
-3. **Chrome content migration (03).** Materialize lockup/header/footer blocks
+2. **Bounded-search safety slice (04).** Cap proposal counts, deduplicate
+   equivalent signatures and expose search exhaustion before adding any new
+   movement dimensions. This keeps the existing planner behavior while making
+   its cost finite.
+3. **Composition-quality facts and hard diagnostics (08–10, stages A–B).**
+   Inventory structural versus content-sized template values, make spacing and
+   obstacle evidence complete, and expose actionable hard failures without
+   changing candidate positions.
+4. **Chrome content migration (03).** Materialize lockup/header/footer blocks
    through the normal flow path and remove renderer-authored content once all
    built-in page templates are classified.
-4. **Paint order (01).** Normalize existing backend operations to explicit
-   phases, preserving the old order as YAML configuration.
-5. **Quality scoring and existing-candidate comparison (08–10, stages D–E).**
-   Turn the measured facts into score components and prove the existing moving
-   insertion path can select the better legal candidate.
-6. **Bounded search expansion and calibration (04).** Add candidate dimensions
-   only after their score/evidence contract is stable.
-7. **Contract and test consolidation (05).** This is a final removal pass, but
-   its inventory and timing checks run during every preceding item. Public
-   behavior is not left unaudited until the end.
+5. **Quality scoring and existing-candidate comparison (08–10, stages C–E).**
+   Measure dynamic intro/chrome/insertion geometry, turn the facts into score
+   components and prove the existing moving insertion path can select the
+   better legal candidate. This stage starts only after the chrome boxes it
+   measures are part of the plan.
+6. **Paint order (01).** Normalize existing backend operations to explicit
+   phases, preserving the old order as YAML configuration. Implement this only
+   where a concrete layering requirement exists.
+7. **Bounded search expansion and calibration (04).** Add candidate dimensions
+   only after their score/evidence contract is stable and the safety slice has
+   bounded their cost.
+8. **Contract and test consolidation (05).** The inventory and timing checks
+   run during every preceding item; the final pass removes redundant tests and
+   keeps one representative rendered-artifact check.
 
 ## Definition of ready for implementation
 

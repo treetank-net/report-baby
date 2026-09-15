@@ -115,6 +115,12 @@ A frame is the capacity of a slot in the layout selected for a page. The same
 slot name may have different geometry in different templates, but geometry is
 owned by the selected template rather than by a continuation-specific override.
 
+The frame is an envelope or anchor, not necessarily the final occupied box. A
+content block contributes measured intrinsic geometry; the layout resolves that
+measurement within the slot's capacity and relationships. This distinction is
+especially important for text, captions, lockups and insertions, which normally
+grow to their content instead of receiving an author-supplied fixed height.
+
 ## Region
 
 A region is a named area definition in a layout. It can describe a column, a
@@ -127,6 +133,12 @@ A slot is a named place made available by a template within a region. It may
 be empty or accept one or more pieces of content. A planned slot references a
 region and adds the page, selected flow or content, and the behavior needed by
 the planner. For example: `page: 2`, `region: main-column-1`, `flow: main`.
+
+An insertion is authored as content that needs a compatible slot capability;
+the template supplies the slot envelope, sizing behavior and relationships.
+The author should not have to repeat those layout rules for each quote, image
+or other inserted block. Explicit geometry is an exception for deliberate
+special compositions, not the normal insertion contract.
 
 A slot is a valid target only while its capacity and constraints allow another
 placement. A placement consumes space; the slot can remain open, become
