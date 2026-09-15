@@ -2,6 +2,7 @@ import type { CompositionDocument } from '../contracts/model.js';
 import type { CompositionDiagnostic, CompositionEvaluation, CompositionPlan, CompositionScoreComponent, CompositionSuggestion } from '../contracts/engine-contracts.js';
 import type { CompositionContrastAssessment, CompositionContrastProvider } from './contrast.js';
 import { scoreLegalPlan } from './scoring.js';
+import { decorateCompositionDiagnostics, suggestionFromScore } from './diagnostic-catalogue.js';
 import {
   appendDocumentDiagnostics,
   checkEarlyRouteTransitions,
@@ -32,22 +33,13 @@ function suggestionsFromScore(breakdown: CompositionScoreComponent[]): Compositi
   return breakdown.flatMap((component): CompositionSuggestion[] => {
     if (component.points >= 0) return [];
     if (component.code === 'header-spacing') return [{
-      code: 'HEADER_GAP_TOO_SMALL',
-      message: 'Header content is too close to the first page content on at least one page.',
-      evidence: component.details,
-      remedies: ['Increase the configured header/content gap.', 'Use a shorter header or a template with a larger chrome band.'],
+      ...suggestionFromScore('HEADER_GAP_TOO_SMALL', 'Header content is too close to the first page content on at least one page.', component.details, ['Increase the configured header/content gap.', 'Use a shorter header or a template with a larger chrome band.'], 'The measured header-to-content gap is below the configured spacing target.'),
     }];
     if (component.code === 'orphan-lines') return [{
-      code: 'ORPHAN_FRAGMENT',
-      message: 'A wrapped paragraph leaves an isolated fragment beside an insertion.',
-      evidence: component.details,
-      remedies: ['Move the insertion within its legal movement window.', 'Reduce the insertion width or place it on a page with more continuous text.'],
+      ...suggestionFromScore('ORPHAN_FRAGMENT', 'A wrapped paragraph leaves an isolated fragment beside an insertion.', component.details, ['Move the insertion within its legal movement window.', 'Reduce the insertion width or place it on a page with more continuous text.'], 'An insertion obstacle leaves an isolated text fragment.'),
     }];
     if (component.code === 'insertion-spacing') return [{
-      code: 'INSERTION_SPACING_IMBALANCE',
-      message: 'Insertion spacing is visibly imbalanced around the surrounding text streams.',
-      evidence: component.details,
-      remedies: ['Evaluate a nearby insertion candidate.', 'Adjust the insertion position or measured content height.'],
+      ...suggestionFromScore('INSERTION_SPACING_IMBALANCE', 'Insertion spacing is visibly imbalanced around the surrounding text streams.', component.details, ['Evaluate a nearby insertion candidate.', 'Adjust the insertion position or measured content height.'], 'The measured gaps around one or more insertion obstacles are asymmetric.'),
     }];
     return [];
   });
@@ -103,5 +95,7 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
   validateGraphicPlacements(document, plan, diagnostics);
   validateResidualContent(plan, diagnostics);
   validateContentCoverage(document, plan, repeatedFlows, diagnostics);
-  return buildCompositionEvaluation(document, plan, diagnostics, contrastAssessments);
+  const decoratedDiagnostics = decorateCompositionDiagnostics(diagnostics);
+  plan.diagnostics = decoratedDiagnostics;
+  return buildCompositionEvaluation(document, plan, decoratedDiagnostics, contrastAssessments);
 }

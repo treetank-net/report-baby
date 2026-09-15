@@ -586,6 +586,42 @@ The evaluator applies these rules:
 6. An exact geometric tie is unnecessary. Tolerances and penalties come from
    render configuration and the plan reports the measured delta.
 
+#### Beauty rules for multiple insertions
+
+When a page contains two or more insertions, visual quality is a relationship
+between the whole group and its surrounding page—not a collection of
+independent slot checks. The planner/evaluator therefore also applies these
+rules:
+
+1. The insertion group should be balanced against both usable-region edges.
+   The top/bottom (or left/right for a horizontal group) outer gaps should be
+   approximately symmetric after excluding documented chrome, reserved bands
+   and content boundaries.
+2. Gaps between neighbouring insertions should use the same spacing scale as
+   the gaps from the group to the surrounding text. A narrow rhythm favours
+   narrow outer and inner gaps; a wide rhythm favours wide outer and inner
+   gaps. Mixing a narrow insertion gap with a wide page margin is penalized
+   unless a hard boundary explains it.
+3. The reference gap is the template/brand spacing token resolved for the
+   selected profile (for example, the header-to-rule distance). Text-to-
+   insertion, insertion-to-insertion and insertion-to-region-edge gaps should
+   be close to that reference within the configured tolerance. The evaluator
+   reports the reference token and each measured delta; it does not infer a
+   new numeric constant from one candidate.
+4. Symmetry is measured in the same coordinate system as the usable region,
+   not from the paper edge. A page with a dynamic header or footer is not
+   penalized merely because its physical edge distance differs from another
+   page; it is penalized when the unexplained usable-region gaps are uneven.
+5. If several legal candidates satisfy content coverage, prefer the candidate
+   with lower group asymmetry, lower spacing-profile deviation and fewer
+   narrow text intervals. These are soft ranking signals and never override a
+   hard placement, keep, continuation or page-capacity rule.
+
+For an insertion group, the plan must expose the measured outer gaps, every
+neighbour gap, the resolved reference token/profile, and the reason for any
+intentional asymmetry. This makes a dense page explainable without requiring a
+rendered-PDF inspection script.
+
 Required score evidence includes:
 
 ```ts
@@ -839,6 +875,8 @@ query and retains the old behavior assertion.
 | insertion capacity exhaustion reports requested, achievable and remaining blocks | plan-only illegal fixture | `test-dynamic-insertion-slots.mjs` |
 | symmetric insertion spacing outranks an otherwise equivalent asymmetric candidate | two plan-only candidates | `test-structure-scoring.mjs` |
 | compact and open spacing profiles favour their corresponding gap scale | plan-only profile pairs | `test-structure-scoring.mjs` |
+| multi-insertion outer/inner gaps stay symmetric and follow the same reference rhythm | two- and three-insertion plan-only candidates | `test-structure-scoring.mjs` |
+| intentional asymmetry is explained by chrome or a reserved boundary | plan-only boundary fixture | `test-structure-scoring.mjs` |
 | chrome/reserved area is intentional | plan-only template fixture | planning section of `test-report-chrome.mjs` |
 | unused fit-content envelope is visible | plan-only measured block fixture | `test-editorial-plan-contract.mjs` |
 | caption is included in an insertion obstacle | plan-only placement boxes | `test-dynamic-insertion-slots.mjs` |

@@ -312,11 +312,14 @@ export interface CompositionDiagnostic {
   severity: 'warning' | 'error';
   code: string;
   message: string;
+  why?: string;
   flowId?: string;
   blockId?: string;
   page?: number;
   slotId?: string;
   details?: Record<string, unknown>;
+  remedies?: string[];
+  retryable?: boolean;
 }
 
 export interface CompositionWordRange {
@@ -474,11 +477,13 @@ export interface CompositionEvaluation {
 export interface CompositionSuggestion {
   code: string;
   message: string;
+  why?: string;
   page?: number;
   flowId?: string;
   blockId?: string;
   evidence?: Record<string, unknown>;
   remedies?: string[];
+  retryable?: boolean;
 }
 
 export interface CompositionScoreComponent {
