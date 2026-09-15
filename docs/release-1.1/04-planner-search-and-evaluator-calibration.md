@@ -1,6 +1,8 @@
 # Release 1.1 — deterministic bounded placement search
 
-Status: implementation plan.
+Status: bounded search and corpus calibration are implemented in the 1.0.2
+composition checkpoint. Fluid slot materialization is implemented; deriving
+additional movement bounds from those capabilities remains follow-up work.
 
 ## Goal
 
@@ -33,20 +35,19 @@ explicitly reviewed editorial corpus.
 - `contracts/planner-policy.ts` defines a map of movement bounds with axis,
   preferred coordinate, candidate count and refinement settings.
 - `layout/planner-candidates.ts` creates evenly spaced positions per movable
-  item, builds their full cross-product and refines around the selected result.
-- Initial and refinement cross-products are materialized without a global
-  candidate cap.
-- Candidate ordering follows record/object iteration in part of the path.
-- `composition-engine.ts` evaluates all produced plans, deduplicates only for
-  trace counts using a serialized complete plan and can evaluate the same
-  effective proposal in another round.
-- Existing YAML config contains quote-oriented candidate counts and refinement
-  values but no general full-plan budget.
+  item and incrementally expands the bounded product, truncating each
+  dimension before another one is added.
+- Initial and refinement batches are bounded by the typed global search budget.
+- Proposal identity and document order are deterministic; repeated effective
+  proposals are planned once per request.
+- `composition-engine.ts` evaluates complete candidates only, applies legal-
+  first ordering, and records budget/round stop reasons.
+- General search limits and generic movable-placement defaults are loaded from
+  YAML; no quote-specific production configuration is required.
 
 ## Target search policy
 
-Replace quote-specific production settings with typed general settings under
-the existing `composition_search` group:
+Use typed general settings under the existing `composition_search` group:
 
 ```yaml
 composition_search:
@@ -54,13 +55,18 @@ composition_search:
   max_refinement_rounds: <number>
   max_candidates_per_refinement: <number>
   max_full_plan_recalculations: <number>
+  movable_window_ratio: <number>
+  movable_candidate_count: <number>
+  movable_refinement_rounds: <number>
+  movable_refinement_candidate_count: <number>
 ```
 
 Movement-window density remains part of each `MovablePlacementBounds`; the
 global configuration limits combined work. Candidate and recalculation values
 are positive integers; refinement rounds are non-negative integers. They are
-validated in `adapters/render-config.ts`. Existing quote keys are migrated and
-deleted only after all consumers use the general policy.
+validated in `adapters/render-config.ts`. The movable defaults are shared by
+insertion and graphic fixtures; a deliberate authored placement may still
+provide an explicit `MovablePlacementBounds`.
 
 Extend planner policy without introducing an object-oriented solver:
 
@@ -76,11 +82,13 @@ interface CompositionSearchBudget {
 Pass it through `TextCompositionPlannerPolicy` to the existing candidate
 functions and engine configuration.
 
-The page-template adapter converts each materialized fluid insertion
-capability into `MovablePlacementBounds` after dynamic chrome and reserved
-regions are known. Alternative width or column forms are separate named slot
-capabilities, so the search combines a finite capability choice with a bounded
-position choice instead of sampling an arbitrary continuous width.
+The page-template adapter materializes each fluid insertion capability into a
+bounded, deterministic set of page-local slots after the selected region is
+known. Explicit `MovablePlacementBounds` still control candidate movement;
+the search does not silently invent additional movement windows. Alternative
+width or column forms are separate named slot capabilities, so the search can
+combine a finite capability choice with a bounded position choice instead of
+sampling an arbitrary continuous width.
 
 ## Candidate identity and order
 
@@ -193,7 +201,8 @@ human-reviewed corpus update in the same commit.
 8. Add request-local evaluated-result reuse and calculation-budget stopping.
 9. Update trace fields/stop reasons and CLI/MCP full diagnostics.
 10. Calibrate YAML weights against the approved corpus.
-11. Delete quote-specific config keys and obsolete complete-plan signature code.
+11. Keep proposal signatures as the sole candidate identity and delete any
+    obsolete complete-plan serialization signature code.
 
 Every step runs plan-only tests before the next. Rendering is unchanged until
 the final selected plan reaches the existing backend.

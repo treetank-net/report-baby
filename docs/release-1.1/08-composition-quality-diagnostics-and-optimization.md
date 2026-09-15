@@ -1,7 +1,11 @@
 # Release 1.1 — composition quality, diagnostics and placement optimization
 
-Status: implementation plan. This document replaces the former items 08, 09
-and 10. They are one process, not three independently implemented features.
+Status: implementation slice in the 1.0.2 composition checkpoint (with
+calibration follow-up tracked in item 04). This document replaces the former
+items 08, 09 and 10. They are one process, not three independently implemented
+features. Quality evidence and the closed slot-placement contract are wired;
+remaining brand defaults and richer capability search stay explicit follow-up
+work.
 
 ## Goal
 
@@ -63,8 +67,10 @@ search loop. It extends the existing functions and data structures.
 - `evaluation/scoring.ts` already scores column balance, heading continuity,
   paragraph/list/table fragmentation, orphan fragments, insertion spacing,
   header spacing and contrast.
-- Fit-content blocks are measured during placement, but the plan does not yet
-  explain unused envelopes or aggregate occupied/empty regions consistently.
+- Fit-content blocks are measured during placement and spacing reports now
+  expose occupied/empty area derived from rectangle unions. The evaluator uses
+  those facts when available and retains the height-ratio fallback for legacy
+  synthetic plans.
 
 ### Candidate selection
 
@@ -783,6 +789,21 @@ The existing `diagnostics` request mode remains the control surface:
 `interfaces/mcp/responses.ts`, `interfaces/mcp/render-tools.ts` and the CLI
 response path serialize the same evaluation. They may format it differently
 but may not drop hard violations or change codes.
+
+## Implementation status (1.0.2)
+
+Stages A-D are wired through the existing planner/evaluator seam. The plan
+exposes region, obstacle and insertion-rhythm observations; scoring reads
+those observations for empty regions, sibling-column imbalance, insertion
+symmetry/distribution, spacing rhythm, narrow intervals, fit-content envelopes
+and footer gaps. Thresholds and penalties are loaded from
+`server/templates/render-config.yml`. Slot-declared `spacing_profile` values
+resolve to the shared compact/normal/open targets; an absent profile uses the
+normal target. The closed `fixed`, `anchored-fit-content` and `fluid-y` slot
+placement union is validated and fluid capabilities are materialized into
+bounded deterministic page-local instances. Negative quality components
+produce actionable suggestions without changing hard legality. Ranking
+calibration is maintained by item 04.
 
 ## Implementation sequence
 

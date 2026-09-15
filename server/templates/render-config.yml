@@ -71,6 +71,26 @@ composition_score:
   contrast_severe_ratio: 1.5
   contrast_affected_glyph_saturation: 10
   contrast_quality_response: 0.25
+  empty_region_ratio_threshold: 0.35
+  empty_region_height_threshold_mm: 12
+  empty_region_penalty: 2
+  column_imbalance_threshold: 0.20
+  column_imbalance_penalty: 4
+  insertion_symmetry_tolerance_mm: 2
+  insertion_symmetry_penalty: 1
+  insertion_distribution_tolerance_mm: 3
+  insertion_distribution_penalty: 1
+  spacing_profile_compact_target_mm: 4
+  spacing_profile_normal_target_mm: 6
+  spacing_profile_open_target_mm: 10
+  spacing_profile_tolerance_mm: 2
+  spacing_profile_penalty: 1
+  narrow_text_interval_min_mm: 18
+  narrow_text_interval_penalty: 1
+  fit_content_unused_ratio_threshold: 0.35
+  fit_content_unused_penalty: 1
+  footer_content_gap_min_mm: 8
+  footer_content_gap_penalty: 1
 composition_priority:
   default: 100
 composition_search:
@@ -78,10 +98,10 @@ composition_search:
   max_refinement_rounds: 2
   max_candidates_per_refinement: 16
   max_full_plan_recalculations: 128
-  movable_quote_window_ratio: 0.02
-  movable_quote_candidate_count: 5
-  movable_quote_refinement_rounds: 1
-  movable_quote_refinement_candidate_count: 3
+  movable_window_ratio: 0.02
+  movable_candidate_count: 5
+  movable_refinement_rounds: 1
+  movable_refinement_candidate_count: 3
 assets:
   report_header_band_width_px: 640
   report_header_band_height_px: 154

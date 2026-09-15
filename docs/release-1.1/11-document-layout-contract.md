@@ -1,6 +1,6 @@
 # Release 1.1 — one document layout and explicit page templates
 
-Status: implementation plan.
+Status: implemented in the 1.0.2 composition checkpoint.
 
 ## Goal
 

@@ -102,6 +102,8 @@ function newPage(page: number, layout: CompositionPageTemplate): PageState {
       ...(definition.allowedBlockIds === undefined ? {} : { allowedBlockIds: [...definition.allowedBlockIds] }),
       ...(definition.allowedBlockKinds === undefined ? {} : { allowedBlockKinds: [...definition.allowedBlockKinds] }),
       ...(definition.fitContent === undefined ? {} : { fitContent: definition.fitContent }),
+      ...(definition.spacingProfile === undefined ? {} : { spacingProfile: definition.spacingProfile }),
+      ...(definition.placement === undefined ? {} : { placement: definition.placement }),
       ...(definition.grow?.maxHeight === undefined ? {} : { growthMaxHeight: definition.grow.maxHeight }),
       box,
       state: definition.firstPageOnly

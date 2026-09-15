@@ -34,3 +34,38 @@ export function rectsOverlap(first: CompositionRect, second: CompositionRect): b
   const scale = Math.max(1, Math.abs(first.x), Math.abs(first.y), Math.abs(first.width), Math.abs(first.height), Math.abs(second.x), Math.abs(second.y), Math.abs(second.width), Math.abs(second.height));
   return horizontal > Number.EPSILON * scale * 32 && vertical > Number.EPSILON * scale * 32;
 }
+
+/** Return the area covered by a rectangle union without double-counting overlaps. */
+export function rectUnionArea(rectangles: CompositionRect[]): number {
+  const valid = rectangles.filter((rect) => rect.width > 0 && rect.height > 0);
+  if (valid.length === 0) return 0;
+  const xEdges = [...new Set(valid.flatMap((rect) => [rect.x, rect.x + rect.width]))].sort((left, right) => left - right);
+  let area = 0;
+  for (let index = 0; index < xEdges.length - 1; index += 1) {
+    const left = xEdges[index];
+    const right = xEdges[index + 1];
+    if (right <= left) continue;
+    const intervals = valid
+      .filter((rect) => rect.x < right && rect.x + rect.width > left)
+      .map((rect) => [rect.y, rect.y + rect.height] as const)
+      .sort((first, second) => first[0] - second[0]);
+    let covered = 0;
+    let start = Number.NaN;
+    let end = Number.NaN;
+    for (const [top, bottom] of intervals) {
+      if (Number.isNaN(start)) {
+        start = top;
+        end = bottom;
+      } else if (top > end) {
+        covered += end - start;
+        start = top;
+        end = bottom;
+      } else {
+        end = Math.max(end, bottom);
+      }
+    }
+    if (!Number.isNaN(start)) covered += end - start;
+    area += (right - left) * covered;
+  }
+  return area;
+}

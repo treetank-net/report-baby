@@ -26,14 +26,18 @@ try {
   const { createJsPdfChartBlockCapabilities, createJsPdfImageBlockCapabilities, createJsPdfMetricBlockCapabilities, createJsPdfTableBlockCapabilities, createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, renderComposition } = await import(bundle);
   const template = {
     maxPages: 2,
-    layouts: [
+    pageTemplates: [
       { id: 'first', width: 100, height: 100, slots: [
         { id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 8, width: 42, height: 24 } },
         { id: 'graphic', regionId: 'main', kind: 'graphic', box: { x: 25, y: 8, width: 10, height: 10 } },
       ] },
       { id: 'continuation', width: 100, height: 100, slots: [{ id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 8, width: 42, height: 24 } }] },
     ],
-    routes: { main: { slots: ['body'], layouts: ['first', 'continuation'], continuation: 'allowed' } },
+    pageTemplateAssignments: [
+      { from: 1, to: 1, templateRef: 'first', pageTemplateId: 'first' },
+      { from: 2, templateRef: 'continuation', pageTemplateId: 'continuation' },
+    ],
+    routes: { main: { slots: ['body'], continuation: 'allowed' } },
   };
   const document = {
     flows: {
@@ -93,8 +97,9 @@ try {
   const inlineMetrics = createJsPdfTextMetrics(inlinePdf, 'helvetica', inlineStyles);
   const inlineResult = createTextCompositionEngine({
     maxPages: 1,
-    layouts: [{ id: 'inline', width: 100, height: 100, slots: [{ id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 8, width: 84, height: 80 } }] }],
-    routes: { main: { slots: ['body'], layouts: ['inline'], continuation: 'forbidden' } },
+    pageTemplates: [{ id: 'inline', width: 100, height: 100, slots: [{ id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 8, width: 84, height: 80 } }] }],
+    pageTemplateAssignments: [{ from: 1, templateRef: 'inline', pageTemplateId: 'inline' }],
+    routes: { main: { slots: ['body'], continuation: 'forbidden' } },
   }).plan(inlineDocument, inlineMetrics);
   assert.equal(inlineResult.evaluation.status, 'accepted', JSON.stringify(inlineResult.evaluation));
   assert.ok(inlineResult.plan.lines.some((line) => line.inlineRuns?.some((run) => run.marks.includes('strong'))), 'planned lines must retain strong marks');
@@ -168,11 +173,12 @@ try {
 
   const atomicTemplate = {
     maxPages: 1,
-    layouts: [{ id: 'atomic', width: 100, height: 100, slots: [
+    pageTemplates: [{ id: 'atomic', width: 100, height: 100, slots: [
       { id: 'metric', regionId: 'metrics', kind: 'block', allowedBlockKinds: ['metric'], box: { x: 8, y: 8, width: 42, height: 24 } },
       { id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 38, width: 84, height: 50 } },
     ] }],
-    routes: { main: { slots: ['metric', 'body'], layouts: ['atomic'], continuation: 'forbidden' } },
+    pageTemplateAssignments: [{ from: 1, templateRef: 'atomic', pageTemplateId: 'atomic' }],
+    routes: { main: { slots: ['metric', 'body'], continuation: 'forbidden' } },
   };
   const atomicDocument = {
     flows: { main: { id: 'main', continuation: 'forbidden', blocks: [
@@ -239,11 +245,12 @@ try {
 
   const chartTemplate = {
     maxPages: 3,
-    layouts: [{ id: 'chart', width: 100, height: 100, slots: [
+    pageTemplates: [{ id: 'chart', width: 100, height: 100, slots: [
       { id: 'chart', regionId: 'chart', kind: 'block', allowedBlockKinds: ['chart'], box: { x: 8, y: 8, width: 84, height: 58 } },
       { id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 70, width: 84, height: 22 } },
     ] }],
-    routes: { main: { slots: ['chart', 'body'], layouts: ['chart'], continuation: 'allowed' } },
+    pageTemplateAssignments: [{ from: 1, templateRef: 'chart', pageTemplateId: 'chart' }],
+    routes: { main: { slots: ['chart', 'body'], continuation: 'allowed' } },
   };
   const chartDocument = {
     flows: { main: { id: 'main', continuation: 'allowed', blocks: [
@@ -289,9 +296,9 @@ try {
   assert.match(chartText.stdout, /Reach over time/u);
   assert.match(chartText.stdout, /Reach mix/u);
   const smallChartTemplate = structuredClone(chartTemplate);
-  smallChartTemplate.layouts[0].slots[0].box.height = 20;
-  smallChartTemplate.layouts[0].slots[1].box.y = 32;
-  smallChartTemplate.layouts[0].slots[1].box.height = 60;
+  smallChartTemplate.pageTemplates[0].slots[0].box.height = 20;
+  smallChartTemplate.pageTemplates[0].slots[1].box.y = 32;
+  smallChartTemplate.pageTemplates[0].slots[1].box.height = 60;
   const smallChartResult = createTextCompositionEngine(smallChartTemplate).plan(chartDocument, chartMetrics);
   assert.equal(smallChartResult.evaluation.status, 'accepted', JSON.stringify(smallChartResult.evaluation));
   assert.ok(smallChartResult.plan.blockPlacements[0].box.height <= 20);
@@ -303,14 +310,18 @@ try {
 
   const tablePdfTemplate = {
     maxPages: 2,
-    layouts: [
+    pageTemplates: [
       { id: 'table-opening', width: 100, height: 100, slots: [{ id: 'table', regionId: 'table', kind: 'block', allowedBlockKinds: ['table'], box: { x: 8, y: 8, width: 84, height: 25 } }] },
       { id: 'table-continuation', width: 100, height: 100, slots: [
         { id: 'table', regionId: 'table', kind: 'block', allowedBlockKinds: ['table'], box: { x: 8, y: 8, width: 84, height: 25 } },
         { id: 'body', regionId: 'main', kind: 'text', box: { x: 8, y: 38, width: 84, height: 50 } },
       ] },
     ],
-    routes: { main: { slots: ['table'], slotsByLayout: { 'table-continuation': ['table', 'body'] }, layouts: ['table-opening', 'table-continuation'], continuation: 'allowed' } },
+    pageTemplateAssignments: [
+      { from: 1, to: 1, templateRef: 'table-opening', pageTemplateId: 'table-opening' },
+      { from: 2, templateRef: 'table-continuation', pageTemplateId: 'table-continuation' },
+    ],
+    routes: { main: { slots: ['table', 'body'], continuation: 'allowed' } },
   };
   const tableDocument = {
     flows: { main: { id: 'main', continuation: 'allowed', blocks: [

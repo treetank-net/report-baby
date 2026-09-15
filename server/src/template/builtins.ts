@@ -23,10 +23,10 @@ export interface RenderConfig {
     maxRefinementRounds: number;
     maxCandidatesPerRefinement: number;
     maxFullPlanRecalculations: number;
-    movableQuoteWindowRatio?: number;
-    movableQuoteCandidateCount?: number;
-    movableQuoteRefinementRounds?: number;
-    movableQuoteRefinementCandidateCount?: number;
+    movableWindowRatio?: number;
+    movableCandidateCount?: number;
+    movableRefinementRounds?: number;
+    movableRefinementCandidateCount?: number;
   };
   assets: Record<string, number>;
   sources: { zipMaxEntries: number; zipMaxFileBytes: number; zipMaxTotalBytes: number; zipMaxCompressionRatio: number; zipMaxNestedArchives: number };

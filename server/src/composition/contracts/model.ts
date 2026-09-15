@@ -8,6 +8,11 @@ export interface CompositionRect {
 }
 
 export type CompositionSlotKind = 'text' | 'graphic' | 'block';
+export type CompositionSpacingProfile = 'compact' | 'normal' | 'open';
+export type CompositionSlotPlacement =
+  | { mode: 'fixed' }
+  | { mode: 'anchored-fit-content' }
+  | { mode: 'fluid-y'; region: string; maxInstancesPerPage: number; distribution?: 'free' | 'balanced' };
 export type CompositionGraphicShape = 'rectangle' | 'ellipse' | 'triangle' | 'star' | 'polygon';
 
 export interface CompositionGraphic {
@@ -82,6 +87,9 @@ export interface CompositionSlotTemplate {
   allowedBlockKinds?: CompositionBlockKind[];
   /** Higher values reserve this slot's geometry before lower-priority slots. */
   priority?: number;
+  /** Shared visual rhythm used when evaluating gaps around this capability. */
+  spacingProfile?: CompositionSpacingProfile;
+  placement?: CompositionSlotPlacement;
   grow?: {
     axis: 'y';
     maxHeight: number;

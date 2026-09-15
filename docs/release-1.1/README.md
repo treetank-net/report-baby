@@ -1,7 +1,7 @@
 # Release 1.1 — implementation plan
 
-Status: planned. Item 02 was implemented and released in 1.0.1. The remaining
-items are implementation work for Release 1.1.
+Status: implementation checkpoint completed in 1.0.2 for items 04, 08–10 and
+11. Items 01, 03 and 05 remain planned work for the later 1.1 release.
 
 Release 1.1 changes existing procedural composition processes. It does not add
 service classes or parallel planner/evaluator abstractions. New TypeScript
@@ -15,10 +15,10 @@ needs to become explicit.
 | [01](01-paint-order-contract.md) | explicit PDF paint phases while preserving the current default result | planned |
 | [02](02-layout-variants-and-continuation.md) | page-template scheduling without `continuation_*` geometry | complete in 1.0.1; historical plan remains unchanged |
 | [03](03-brand-lockup-and-legacy-chrome.md) | planned lockup/header/footer content and removal of implicit renderer content | planned |
-| [04](04-planner-search-and-evaluator-calibration.md) | deterministic bounded search over existing movable-placement policies | planned |
+| [04](04-planner-search-and-evaluator-calibration.md) | deterministic bounded search over existing movable-placement policies | implemented in 1.0.2; corpus maintained |
 | [05](05-contract-cleanup-and-test-consolidation.md) | public-contract inventory and cheaper equivalent tests | planned |
-| [08–10](08-composition-quality-diagnostics-and-optimization.md) | reusable insertion capabilities plus one evidence, scoring and candidate-comparison process | planned |
-| [11](11-document-layout-contract.md) | one public document `layout`; removal of route-owned template selection | planned |
+| [08–10](08-composition-quality-diagnostics-and-optimization.md) | reusable insertion capabilities plus one evidence, scoring and candidate-comparison process | implemented in 1.0.2 |
+| [11](11-document-layout-contract.md) | one public document `layout`; removal of route-owned template selection | implemented in 1.0.2 |
 
 Floats, RTL/CJK and broad visual calibration are deferred to
 [`docs/release-1.2`](../release-1.2/README.md). Runtime planner telemetry has no

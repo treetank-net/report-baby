@@ -124,6 +124,36 @@ function layout(
   };
 }
 
+/** Materialize bounded page-local instances for a template fluid-y capability. */
+function materializeFluidCapabilities(
+  pageTemplate: CompositionPageTemplate,
+  routes: Record<string, CompositionFlowRoute>,
+): { pageTemplate: CompositionPageTemplate; routes: Record<string, CompositionFlowRoute> } {
+  const replacements = new Map<string, string[]>();
+  const slots = pageTemplate.slots.flatMap((slot) => {
+    const capability = slot.placement;
+    if (capability?.mode !== 'fluid-y') return [slot];
+    const count = capability.maxInstancesPerPage;
+    const height = slot.box.height / count;
+    const ids = Array.from({ length: count }, (_, index) => `${slot.id}#${index + 1}`);
+    replacements.set(slot.id, ids);
+    return ids.map((id, index) => ({
+      ...slot,
+      id,
+      box: { ...slot.box, y: slot.box.y + height * index, height },
+      placement: { mode: 'fixed' as const },
+    }));
+  });
+  if (replacements.size === 0) return { pageTemplate, routes };
+  const replaceIds = (ids: string[] | undefined): string[] | undefined => ids?.flatMap((id) => replacements.get(id) ?? [id]);
+  const expandedRoutes = Object.fromEntries(Object.entries(routes).map(([flowId, route]) => [flowId, {
+    ...route,
+    slots: replaceIds(route.slots) ?? [],
+    ...(route.insertionSlots === undefined ? {} : { insertionSlots: replaceIds(route.insertionSlots) ?? [] }),
+  }]));
+  return { pageTemplate: { ...pageTemplate, slots }, routes: expandedRoutes };
+}
+
 /**
  * @planner-target composition/adapters/page-template.ts
  * @planner-responsibility Keep the current auxiliaryFrame implementation intact until its target seam is extracted.
@@ -366,7 +396,7 @@ export function compositionTemplateFromPageGeometry(
   const schedule = titleLayout
     ? [{ from: 1, to: 1, templateRef: compiled.id, pageTemplateId: titleLayoutId }, { from: 2, templateRef: compiled.id, pageTemplateId: layoutId }]
     : [{ from: 1, templateRef: compiled.id, pageTemplateId: layoutId }];
-  const routes: Record<string, CompositionFlowRoute> = {
+  let routes: Record<string, CompositionFlowRoute> = {
     [mainFlowId]: {
       ...routeForMain(
         leadSlot,
@@ -422,8 +452,10 @@ export function compositionTemplateFromPageGeometry(
       if (titleLayout || item.slots.length === 0) routes[item.flowId].startPage = 2;
     }
   }
+  const expandedBase = materializeFluidCapabilities(baseLayout, routes);
+  routes = expandedBase.routes;
   return {
-    pageTemplates: [...(titleLayout ? [titleLayout] : []), baseLayout],
+    pageTemplates: [...(titleLayout ? [titleLayout] : []), expandedBase.pageTemplate],
     routes,
     maxPages: options.maxPages,
     pageTemplateAssignments: schedule,
@@ -458,16 +490,24 @@ export function compositionTemplateFromDocumentLayout(
     const ordinary = adapted.pageTemplates.find((pageTemplate) => pageTemplate.id === source.compiled.id);
     if (!ordinary) throw new Error(`Template '${source.templateRef}' did not produce an ordinary page template.`);
     const firstPageNumber = variant.entries.find((entry) => entry.templateRef === source.templateRef)?.from ?? 1;
-    pageTemplates.push(...adapted.pageTemplates.map((pageTemplate) => ({ ...pageTemplate, templateRef: source.templateRef, firstPageNumber: pageTemplate.id.endsWith(':title') ? 1 : firstPageNumber })));
+    const adaptedTemplates = adapted.pageTemplates.map((pageTemplate) => ({ ...pageTemplate, templateRef: source.templateRef, firstPageNumber: pageTemplate.id.endsWith(':title') ? 1 : firstPageNumber }));
+    const expandedTemplates = adaptedTemplates.map((pageTemplate) => {
+      const expanded = materializeFluidCapabilities(pageTemplate, adapted.routes);
+      pageTemplates.push(expanded.pageTemplate);
+      return expanded;
+    });
     layoutByRef.set(source.templateRef, isTitleSource && adapted.pageTemplates.some((pageTemplate) => pageTemplate.id === `${source.compiled.id}:title`) ? `${source.compiled.id}:title` : ordinary.id);
-    for (const [flowId, route] of Object.entries(adapted.routes)) {
-      const existing = routes[flowId];
-      if (!existing) {
-        routes[flowId] = { ...route, slots: [...route.slots] };
+    for (const expanded of expandedTemplates) {
+      for (const [flowId, route] of Object.entries(expanded.routes)) {
+        const existing = routes[flowId];
+        if (!existing) {
+          routes[flowId] = { ...route, slots: [...route.slots], ...(route.insertionSlots === undefined ? {} : { insertionSlots: [...route.insertionSlots] }) };
+        }
+        const destination = routes[flowId];
+        if (!destination) continue;
+        destination.slots = [...new Set([...destination.slots, ...route.slots])];
+        if (route.insertionSlots) destination.insertionSlots = [...new Set([...(destination.insertionSlots ?? []), ...route.insertionSlots])];
       }
-      const destination = routes[flowId];
-      if (!destination) continue;
-      destination.slots = [...new Set([...destination.slots, ...route.slots])];
     }
   }
   return {

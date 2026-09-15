@@ -63,6 +63,8 @@ export function declaredTextSlotsForFlow(
       ...(source.textAlign ? { textAlign: source.textAlign } : {}),
       ...(source.verticalAlign ? { verticalAlign: source.verticalAlign } : {}),
       ...(source.fitContent === undefined ? {} : { fitContent: source.fitContent }),
+      ...(source.spacingProfile === undefined ? {} : { spacingProfile: source.spacingProfile }),
+      ...(source.placement === undefined ? {} : { placement: source.placement }),
       ...(growth === undefined ? {} : { grow: growth }),
     }];
   });
@@ -131,6 +133,8 @@ export function declaredBlockSlotsForFlow(
       ...(source.role ? { allowedRoles: [source.role as CompositionBlockRole] } : {}),
       ...(source.role === 'intro' || source.role === 'title' ? { firstPageOnly: true } : {}),
       allowedBlockKinds: (source.allowedBlockKinds as CompositionBlockKind[] | undefined) ?? blockKindsForSource(source.kind),
+      ...(source.spacingProfile === undefined ? {} : { spacingProfile: source.spacingProfile }),
+      ...(source.placement === undefined ? {} : { placement: source.placement }),
       ...(growth === undefined ? {} : { grow: growth }),
     }];
   });
@@ -154,6 +158,8 @@ export function declaredLockupSlotsForFlow(
       ...(source.role === 'intro' || source.role === 'title' ? { firstPageOnly: true } : {}),
       allowedBlockKinds: ['lockup' as CompositionBlockKind],
       ...(source.fitContent === undefined ? {} : { fitContent: source.fitContent }),
+      ...(source.spacingProfile === undefined ? {} : { spacingProfile: source.spacingProfile }),
+      ...(source.placement === undefined ? {} : { placement: source.placement }),
       ...(slotGrowth(source, pageGeometry) === undefined ? {} : { grow: slotGrowth(source, pageGeometry) }),
     }];
   });
@@ -169,7 +175,9 @@ export function declaredGraphicSlots(
       id,
       regionId: source.region ?? 'content',
       kind: 'graphic' as const,
-    box: normalizedBox(source.frame, pageGeometry),
+      box: normalizedBox(source.frame, pageGeometry),
+      ...(source.spacingProfile === undefined ? {} : { spacingProfile: source.spacingProfile }),
+      ...(source.placement === undefined ? {} : { placement: source.placement }),
     }));
 }
 

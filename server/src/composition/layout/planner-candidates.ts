@@ -307,7 +307,6 @@ export function movableGraphicProposalRefinements(
  */
 export function movableInsertionProposalSignature(proposals: Map<string, PlannedInsertion>): string {
   return [...proposals.values()]
-    .sort((left, right) => insertionKey(left.flowId, left.blockId).localeCompare(insertionKey(right.flowId, right.blockId)))
     .map((proposal) => `${insertionKey(proposal.flowId, proposal.blockId)}@${proposal.page}:${proposal.slotId}:${proposal.box.x},${proposal.box.y},${proposal.box.width},${proposal.box.height}`)
     .join('|');
 }

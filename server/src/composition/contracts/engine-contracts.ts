@@ -9,6 +9,7 @@ import type {
   CompositionGlyphTargetMode,
   CompositionGraphicShape,
   CompositionSlotKind,
+  CompositionSpacingProfile,
 } from './model.js';
 import type { CompositionSearchBudget } from './planner-policy.js';
 
@@ -97,6 +98,8 @@ export interface CompositionSlotSpacingReport {
   flowId?: string;
   box: CompositionBox;
   occupiedBox?: CompositionBox;
+  occupiedArea?: number;
+  emptyArea?: number;
   occupiedHeight: number;
   remainingHeight: number;
   gapBefore: number;
@@ -104,6 +107,7 @@ export interface CompositionSlotSpacingReport {
   staticBandGaps?: { fromHeader?: number; toFooter?: number };
   chromeBandGaps?: { fromHeader?: number; toFooter?: number };
   textStyles?: CompositionTextSpacingReport[];
+  profile?: CompositionSpacingProfile;
 }
 
 /** Actual text placement spacing, including gaps to neighboring content. */
@@ -173,6 +177,7 @@ export interface CompositionSlot {
   allowedBlockIds?: string[];
   allowedBlockKinds?: CompositionBlockKind[];
   priority?: number;
+  spacingProfile?: CompositionSpacingProfile;
   fitContent?: boolean;
   growthMaxHeight?: number;
   box: CompositionBox;

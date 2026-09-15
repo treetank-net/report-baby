@@ -36,30 +36,6 @@ function evaluationIsLegal(evaluation: CompositionEvaluation): boolean {
     && (evaluation.residualContent?.length ?? 0) === 0;
 }
 
-function candidateSignature(plan: CompositionPlan): string {
-  return JSON.stringify({
-    pages: plan.pages,
-    lines: plan.lines,
-    insertionLines: plan.insertionLines,
-    placements: plan.placements,
-    blockPlacements: plan.blockPlacements,
-    tablePlacements: plan.tablePlacements,
-    graphicPlacements: plan.graphicPlacements,
-  });
-}
-
-function uniquePlanCount(plans: CompositionPlan[]): number {
-  return new Set(plans.map(candidateSignature)).size;
-}
-
-function uniquePlans(plans: CompositionPlan[]): { plans: CompositionPlan[]; duplicateCount: number } {
-  // A planner may deliberately return structurally identical plans whose
-  // evaluator-visible context differs (for example a synthetic test planner).
-  // Proposal-level deduplication belongs in the candidate generator; the
-  // engine only applies the calculation budget at this compatibility seam.
-  return { plans: [...plans], duplicateCount: 0 };
-}
-
 function uniqueCandidateRecords(records: CompositionPlanCandidate[]): { records: CompositionPlanCandidate[]; duplicateCount: number } {
   const seen = new Set<string>();
   const unique: CompositionPlanCandidate[] = [];
@@ -87,13 +63,14 @@ function candidateRound(
   improved: boolean,
   stopReason?: CompositionCandidateSearchRound['stopReason'],
   skippedCandidates = 0,
+  signatures: string[] = candidates.map((_candidate, index) => index === 0 ? 'seed' : `compat-${index}`),
 ): CompositionCandidateSearchRound {
   const legalCandidates = evaluations.filter(evaluationIsLegal).length;
   const legalScores = evaluations.filter(evaluationIsLegal).map((evaluation) => evaluation.score);
   return {
     round,
     generatedCandidates,
-    uniqueCandidates: uniquePlanCount(candidates),
+    uniqueCandidates: new Set(signatures).size,
     ...(skippedCandidates > 0 ? { skippedCandidates } : {}),
     plannedCandidates: candidates.length,
     evaluatedCandidates: evaluations.length,
@@ -163,7 +140,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
     plan(document, metrics) {
       const startedAt = Date.now();
       const generatedRecords = planner.planCandidatesWithSignatures?.(document, metrics)
-        ?? (planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)]).map((plan, index) => ({ signature: `${candidateSignature(plan)}#compat-${index}`, plan }));
+        ?? (planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)]).map((plan, index) => ({ signature: index === 0 ? 'seed' : `compat-${index}`, plan }));
       if (generatedRecords.length === 0) throw new Error('Composition planner returned no candidates.');
       const initialUnique = uniqueCandidateRecords(generatedRecords);
       const maxRecalculations = positiveBudget(planner.searchBudget?.maxFullPlanRecalculations);
@@ -193,6 +170,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         true,
         initialBudgetExhausted ? 'calculation-budget' : undefined,
         initialUnique.duplicateCount + Math.max(0, initialUnique.records.length - initialRecords.length),
+        initialRecords.map(({ signature }) => signature),
       )];
       if (initialBudgetExhausted) {
         const plan = candidates[selectedCandidate];
@@ -204,7 +182,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
           fullPlanRecalculations: evaluations.length,
           planningTimeMs: Math.max(0, Date.now() - startedAt),
           selectedCandidate,
-          selectedProposalSignature: initialRecords[selectedCandidate]?.signature ?? candidateSignature(plan),
+          selectedProposalSignature: initialRecords[selectedCandidate]?.signature ?? 'seed',
         };
         plan.trace?.phases.push({
           name: 'evaluation',
@@ -221,7 +199,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
       }
       for (let round = 1; round <= refinementRounds; round += 1) {
         const refinedGenerated = planner.planRefinedCandidatesWithSignatures?.(document, metrics, candidates[selectedCandidate], round)
-          ?? (planner.planRefinedCandidates?.(document, metrics, candidates[selectedCandidate], round) ?? []).map((plan, index) => ({ signature: `${candidateSignature(plan)}#compat-${round}-${index}`, plan }));
+          ?? (planner.planRefinedCandidates?.(document, metrics, candidates[selectedCandidate], round) ?? []).map((plan, index) => ({ signature: `compat-${round}-${index}`, plan }));
         if (refinedGenerated.length === 0) {
           searchRounds.push(candidateRound(round, 0, [], [], false, 'no-new-candidates'));
           break;
@@ -236,7 +214,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         const refined = refinedRecords.map(({ plan }) => plan);
         const skippedRefined = refinedGenerated.length - refined.length;
         if (refined.length === 0) {
-          searchRounds.push(candidateRound(round, refinedGenerated.length, [], [], false, remainingBudget === 0 ? 'calculation-budget' : 'no-new-candidates', skippedRefined));
+          searchRounds.push(candidateRound(round, refinedGenerated.length, [], [], false, remainingBudget === 0 ? 'calculation-budget' : 'no-new-candidates', skippedRefined, []));
           break;
         }
         const refinedEvaluations = refined.map((candidate) => evaluator.evaluate(document, candidate));
@@ -257,7 +235,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
           : improved
             ? round === refinementRounds ? 'round-limit' : undefined
             : 'no-improvement';
-        searchRounds.push(candidateRound(round, refinedGenerated.length, refined, refinedEvaluations, improved, stopReason, skippedRefined));
+        searchRounds.push(candidateRound(round, refinedGenerated.length, refined, refinedEvaluations, improved, stopReason, skippedRefined, refinedRecords.map(({ signature }) => signature)));
         if (!improved) break;
         if (budgetExhausted) break;
       }
@@ -270,7 +248,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         fullPlanRecalculations: evaluations.length,
         planningTimeMs: Math.max(0, Date.now() - startedAt),
         selectedCandidate,
-        selectedProposalSignature: candidateSignatures[selectedCandidate] ?? candidateSignature(plan),
+        selectedProposalSignature: candidateSignatures[selectedCandidate] ?? 'seed',
       };
       plan.trace?.phases.push({
         name: 'evaluation',

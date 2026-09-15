@@ -1,6 +1,7 @@
 # Release 1.2 — editable composition drafts
 
-Status: discovery input. This task is deliberately outside the Release 1.1
+Status: portable draft contract implemented as an early 1.2 seam; persistence
+and MCP/CLI CRUD operations remain discovery work outside the Release 1.1
 acceptance gate.
 
 ## Motivation
@@ -15,6 +16,12 @@ Release 1.1 supplies the prerequisite: plan-only output with complete legality,
 quality, geometry, insertion-capability and candidate-selection evidence. It
 remains a stateless planning operation. Release 1.2 may give that result a
 durable editable identity.
+
+The early portable seam is `composition/drafts/draft-contract.ts`. It stores
+complete candidate/evaluation records, tracks optimistic revisions,
+invalidates derived plans after semantic edits, freezes an accepted candidate,
+and rejects stale renders when source fingerprints change. It deliberately
+does not choose a storage backend or add network operations yet.
 
 ## Proposed workflow
 

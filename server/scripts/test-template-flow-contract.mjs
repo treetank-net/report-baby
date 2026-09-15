@@ -9,18 +9,21 @@ import { build } from 'esbuild';
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-template-flow-'));
 const bundle = join(temporary, 'contracts.cjs');
 const geometryBundle = join(temporary, 'geometry.cjs');
+const compositionAdapterBundle = join(temporary, 'page-template.cjs');
 await build({
-  entryPoints: ['src/template/contracts.ts', 'src/template/geometry.ts'],
+  entryPoints: ['src/template/contracts.ts'],
   bundle: true,
   platform: 'node',
   format: 'cjs',
-  outdir: temporary,
-  outExtension: { '.js': '.cjs' },
+  outfile: bundle,
 });
+await build({ entryPoints: ['src/template/geometry.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: geometryBundle });
+await build({ entryPoints: ['src/composition/adapters/page-template.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: compositionAdapterBundle });
 
 try {
   const { compileTemplateSource, resolvePlan } = await import(bundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
+  const { compositionTemplateFromPageGeometry } = await import(compositionAdapterBundle);
   const source = {
     schema_version: 1,
     id: 'pages/flow-contract',
@@ -61,6 +64,19 @@ try {
   assert.equal(dynamicHeaderCompiled.slots.dynamic.frame.height, 0, 'fit-content slots may start with no reserved height');
   assert.equal(dynamicHeaderCompiled.slots.dynamic.fitContent, true);
   assert.equal(dynamicHeaderCompiled.flows.header.priority, 500, 'flow priority must survive template compilation');
+  const capabilitySource = structuredClone(source);
+  capabilitySource.id = 'pages/capability-contract';
+  capabilitySource.regions = { body: { x: 0.1, y: 0.2, width: 0.8, height: 0.7 } };
+  capabilitySource.slots.quote = { type: 'text', region: 'body', frame: { x: 0.1, width: 0.8 }, fit_content: true, placement: { mode: 'fluid-y', region: 'body', max_instances_per_page: 2, distribution: 'balanced' }, role: 'quote' };
+  capabilitySource.flows.quotes = { slots: ['quote'], insertion_slots: ['quote'], continuation: 'allowed' };
+  const capabilityCompiled = compileTemplateSource(capabilitySource);
+  assert.deepEqual(capabilityCompiled.slots.quote.placement, { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'balanced' });
+  assert.equal(resolvePlan(capabilityCompiled).slotRules.quote.placement.mode, 'fluid-y');
+  const capabilityGeometry = pageGeometryFromTemplate(capabilityCompiled);
+  const capabilityLayout = compositionTemplateFromPageGeometry(capabilityCompiled, capabilityGeometry, { maxPages: 3 });
+  assert.deepEqual(capabilityLayout.routes.quotes?.insertionSlots, ['quote#1', 'quote#2'], 'fluid capabilities must materialize bounded page-local slots');
+  assert.deepEqual(capabilityLayout.pageTemplates.find((item) => item.id === capabilityCompiled.id)?.slots.filter((slot) => slot.id.startsWith('quote#')).map((slot) => slot.id), ['quote#1', 'quote#2']);
+  assert.throws(() => compileTemplateSource({ ...capabilitySource, slots: { ...capabilitySource.slots, quote: { ...capabilitySource.slots.quote, placement: { mode: 'fluid-y', region: 'body', max_instances_per_page: 0 } } } }), /max_instances_per_page.*positive integer/u);
   assert.throws(
     () => compileTemplateSource({ ...structuredClone(source), slots: { ...source.slots, zero: { type: 'text', frame: { x: 0.1, y: 0.1, width: 0.8, height: 0 } } } }),
     /height must be greater than zero/u,

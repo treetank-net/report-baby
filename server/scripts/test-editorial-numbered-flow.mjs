@@ -354,7 +354,7 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
     const flowLines = result.plan.lines.filter((line) => line.page === page.page);
     const insertionLines = (result.plan.insertionLines ?? []).filter((line) => line.page === page.page);
     const lines = [...flowLines, ...insertionLines];
-    const layout = result.template.layouts.find((candidate) => candidate.id === page.layoutId);
+    const layout = result.template.pageTemplates.find((candidate) => candidate.id === page.pageTemplateId);
     const slotInfo = slots.map((slot) => {
       const rawId = slot.id.replace(/^\d+:/u, '');
       const definition = layout?.slots.find((candidate) => candidate.id === rawId);
@@ -372,7 +372,7 @@ async function writeDebugArtifacts(directory, result, fixture, artifact) {
     });
     await writeFile(join(directory, `debug-page-${page.page}.json`), JSON.stringify({
       page: page.page,
-      layoutId: page.layoutId,
+      pageTemplateId: page.pageTemplateId,
       slots: slotInfo,
       flowPlacements: (result.plan.flowPlacements ?? []).filter((placement) => placement.page === page.page),
     }, null, 2));
@@ -464,7 +464,7 @@ try {
   assert.ok(shortIntroContentSlot && shortIntroContentSlot.box.y < template.slots.content.frame.y * geometry.height, 'shrinking intro must release space to the main flow');
   const fixedQuote = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(fixedQuote, 'editorial fixture must expose the quote selected for movable-position search');
-  const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_quote_window_ratio;
+  const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_window_ratio;
   const movableQuotePolicy = {
     movableInsertionBounds: {
       'quotes:quote-market': {
@@ -476,9 +476,9 @@ try {
         },
         axis: 'y',
         preferred: { y: fixedQuote.box.y },
-        candidateCount: renderConfig.composition_search.movable_quote_candidate_count,
-        refinementRounds: renderConfig.composition_search.movable_quote_refinement_rounds,
-        refinementCandidateCount: renderConfig.composition_search.movable_quote_refinement_candidate_count,
+        candidateCount: renderConfig.composition_search.movable_candidate_count,
+        refinementRounds: renderConfig.composition_search.movable_refinement_rounds,
+        refinementCandidateCount: renderConfig.composition_search.movable_refinement_candidate_count,
       },
     },
   };
@@ -498,7 +498,7 @@ try {
   const movableCandidates = movableEvaluationPhase?.details?.candidates ?? [];
   const movableSearchTrace = movableResult.plan.trace?.candidateSearch;
   assert.equal(movableResult.evaluation.status, 'accepted', JSON.stringify(movableResult.evaluation));
-  assert.ok(movableCandidates.length >= renderConfig.composition_search.movable_quote_candidate_count, 'movable quote search must evaluate its configured coarse candidates');
+  assert.ok(movableCandidates.length >= renderConfig.composition_search.movable_candidate_count, 'movable quote search must evaluate its configured coarse candidates');
   assert.ok(movableCandidates.some((candidate) => candidate.refinementRound === 1), 'movable quote search must evaluate a local refinement round');
   assert.ok((movableSearchTrace?.generatedCandidates ?? 0) >= movableCandidates.length, 'editorial candidate trace must account for every generated candidate');
   assert.equal(movableSearchTrace?.evaluatedCandidates, movableCandidates.length, 'editorial candidate trace must account for every evaluated candidate');
@@ -579,8 +579,8 @@ try {
     await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote-candidates-debug.pdf'), Buffer.from(debugPdf.output('arraybuffer')));
   }
   assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
-  const ordinaryLayout = result.template.layouts.find((layout) => layout.id === 'pages/editorial-inset-two-column') ?? result.template.layouts[0];
-  const ordinaryRoute = result.template.routes.main.slotsByLayout?.[ordinaryLayout?.id ?? ''] ?? result.template.routes.main.slots;
+  const ordinaryLayout = result.template.pageTemplates.find((layout) => layout.id === 'pages/editorial-inset-two-column') ?? result.template.pageTemplates[0];
+  const ordinaryRoute = result.template.routes.main.slots;
   assert.equal(ordinaryRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');
   assert.equal(result.template.routes.main.insertionSlots, undefined, 'main flow must not own quote insertions');
   assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b', 'quote-c'], 'quotes must be declared as a separate obstacle flow with three per-page insertion slots');

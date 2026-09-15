@@ -74,7 +74,7 @@ function editorialStyles(compositionStylesFromRenderConfig) {
 function assertMovableQuoteCandidateSearch(result, fixedResult, geometry, renderConfig, planReportComposition, newPdf, compiled, fixture, styles) {
   const fixedQuote = fixedResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(fixedQuote, 'editorial fixture must expose the quote selected for movable-position search');
-  const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_quote_window_ratio;
+  const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_window_ratio;
   const movableQuotePolicy = {
     movableInsertionBounds: {
       'quotes:quote-market': {
@@ -89,7 +89,7 @@ function assertMovableQuoteCandidateSearch(result, fixedResult, geometry, render
         // The engine contract owns the full coarse/refinement matrix. The
         // real-editorial integration only needs two legal alternatives to
         // prove that the template route carries candidate search correctly.
-        candidateCount: Math.min(2, renderConfig.composition_search.movable_quote_candidate_count),
+        candidateCount: Math.min(2, renderConfig.composition_search.movable_candidate_count),
         refinementRounds: 0,
         refinementCandidateCount: 0,
       },

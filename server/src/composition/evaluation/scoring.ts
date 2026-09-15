@@ -8,6 +8,7 @@ import type { CompositionLine, CompositionPlan, CompositionScoreComponent } from
 
 import { allLines } from './plan-queries.js';
 import { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './structure-scoring.js';
+import type { CompositionSpacingObservation } from '../contracts/engine-contracts.js';
 
 /**
  * @planner-target composition/evaluation/scoring.ts
@@ -50,6 +51,121 @@ function saturatingQuality(signal: number, response: number): number {
  */
 function normalizeContrastQuality(ratio: number, targetRatio: number, response: number): number {
   return saturatingQuality(Math.max(0, (ratio - 1) / (targetRatio - 1)), response);
+}
+
+function spacingObservations(plan: CompositionPlan): CompositionSpacingObservation[] {
+  return plan.spacing?.observations ?? [];
+}
+
+function negativeComponent(code: string, value: number, penalty: number, details: Record<string, unknown>): CompositionScoreComponent {
+  return { code, value, points: -Math.max(0, value) * penalty, details };
+}
+
+/** Penalize unexplained empty material regions in otherwise occupied slots. */
+export function scoreEmptyRegions(plan: CompositionPlan): CompositionScoreComponent {
+  const threshold = scoreConfigNumber('emptyRegionRatioThreshold');
+  const heightThreshold = scoreConfigNumber('emptyRegionHeightThresholdMm');
+  const regions = (plan.spacing?.slots ?? [])
+    .filter((slot) => slot.occupiedHeight > 0 && slot.box.height >= heightThreshold)
+    .map((slot) => {
+      const envelopeArea = slot.box.width * slot.box.height;
+      const ratio = slot.emptyArea !== undefined
+        ? slot.emptyArea / Math.max(1, envelopeArea)
+        : slot.remainingHeight / Math.max(1, slot.box.height);
+      return { page: slot.page, slotId: slot.slotId, ratio, gap: slot.gapAfter };
+    })
+    .filter((slot) => slot.gap > heightThreshold);
+  const excess = regions.reduce((sum, region) => sum + Math.max(0, region.ratio - threshold), 0);
+  return negativeComponent('empty-regions', excess, scoreConfigNumber('emptyRegionPenalty'), { threshold, heightThreshold, regions });
+}
+
+/** Penalize uneven occupied heights among sibling text slots in one region. */
+export function scoreSiblingColumnImbalance(plan: CompositionPlan): CompositionScoreComponent {
+  const threshold = scoreConfigNumber('columnImbalanceThreshold');
+  const groups = new Map<string, number[]>();
+  for (const slot of plan.spacing?.slots ?? []) {
+    if (slot.flowId !== 'main' || slot.occupiedHeight <= 0) continue;
+    const key = `${slot.page}:${slot.regionId}`;
+    groups.set(key, [...(groups.get(key) ?? []), slot.occupiedHeight]);
+  }
+  const records = [...groups.entries()].filter(([, heights]) => heights.length > 1).map(([key, heights]) => {
+    const maximum = Math.max(...heights);
+    return { key, heights, imbalance: maximum > 0 ? 1 - Math.min(...heights) / maximum : 0 };
+  });
+  const excess = records.reduce((sum, record) => sum + Math.max(0, record.imbalance - threshold), 0);
+  return negativeComponent('sibling-column-imbalance', excess, scoreConfigNumber('columnImbalancePenalty'), { threshold, records });
+}
+
+/** Penalize asymmetric text gaps around insertion obstacles. */
+export function scoreInsertionSymmetry(plan: CompositionPlan): CompositionScoreComponent {
+  const tolerance = scoreConfigNumber('insertionSymmetryToleranceMm');
+  const records = spacingObservations(plan).filter((observation) => observation.kind === 'insertion-rhythm' && observation.metrics.textGapAsymmetry !== undefined).map((observation) => ({ page: observation.page, slotId: observation.slotId, asymmetry: observation.metrics.textGapAsymmetry ?? 0 }));
+  const excess = records.reduce((sum, record) => sum + Math.max(0, record.asymmetry - tolerance), 0);
+  return negativeComponent('insertion-symmetry', excess, scoreConfigNumber('insertionSymmetryPenalty'), { tolerance, records });
+}
+
+/** Penalize uneven outer and inter-insertion gaps within one page region. */
+export function scoreInsertionDistribution(plan: CompositionPlan): CompositionScoreComponent {
+  const tolerance = scoreConfigNumber('insertionDistributionToleranceMm');
+  const groups = new Map<string, number[]>();
+  for (const observation of spacingObservations(plan).filter((item) => item.kind === 'insertion-rhythm')) {
+    const values = [observation.metrics.regionStartGap, observation.metrics.regionEndGap, observation.metrics.previousInsertionGap, observation.metrics.nextInsertionGap].filter((value): value is number => value !== undefined);
+    if (values.length > 1) groups.set(`${observation.page}:${observation.regionId ?? ''}`, [...(groups.get(`${observation.page}:${observation.regionId ?? ''}`) ?? []), ...values]);
+  }
+  const records = [...groups.entries()].map(([key, values]) => {
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    return { key, mean, dispersion: values.reduce((sum, value) => sum + Math.abs(value - mean), 0) / values.length };
+  });
+  const excess = records.reduce((sum, record) => sum + Math.max(0, record.dispersion - tolerance), 0);
+  return negativeComponent('insertion-distribution', excess, scoreConfigNumber('insertionDistributionPenalty'), { tolerance, records });
+}
+
+/** Penalize insertion gaps that deviate from the configured normal rhythm. */
+export function scoreSpacingRhythm(plan: CompositionPlan): CompositionScoreComponent {
+  const defaultTarget = scoreConfigNumber('spacingProfileNormalTargetMm');
+  const tolerance = scoreConfigNumber('spacingProfileToleranceMm');
+  const records = spacingObservations(plan).filter((observation) => observation.kind === 'insertion-rhythm').flatMap((observation) => {
+    const target = observation.metrics.referenceGap ?? defaultTarget;
+    return [
+      observation.metrics.beforeTextGap,
+      observation.metrics.afterTextGap,
+      observation.metrics.previousInsertionGap,
+      observation.metrics.nextInsertionGap,
+    ].filter((value): value is number => value !== undefined).map((gap) => ({ page: observation.page, slotId: observation.slotId, profile: observation.profile ?? 'normal', target, gap, deviation: Math.abs(gap - target) }));
+  });
+  const excess = records.reduce((sum, record) => sum + Math.max(0, record.deviation - tolerance), 0);
+  return negativeComponent('spacing-rhythm', excess, scoreConfigNumber('spacingProfilePenalty'), { profile: records[0]?.profile ?? 'normal', target: records[0]?.target ?? defaultTarget, tolerance, records });
+}
+
+/** Penalize text intervals that become too narrow beside an insertion. */
+export function scoreNarrowTextIntervals(plan: CompositionPlan): CompositionScoreComponent {
+  const minimum = scoreConfigNumber('narrowTextIntervalMinMm');
+  const records = spacingObservations(plan).filter((observation) => observation.kind === 'insertion-rhythm').flatMap((observation) => (observation.intervals ?? []).map((interval) => ({ page: observation.page, slotId: observation.slotId, width: interval.width, deficit: Math.max(0, minimum - interval.width) }))).filter((record) => record.deficit > 0);
+  const deficit = records.reduce((sum, record) => sum + record.deficit, 0);
+  return negativeComponent('narrow-text-interval', deficit, scoreConfigNumber('narrowTextIntervalPenalty'), { minimum, records });
+}
+
+/** Penalize fit-content slots that reserve a large unused envelope. */
+export function scoreFitContentEnvelope(plan: CompositionPlan): CompositionScoreComponent {
+  const threshold = scoreConfigNumber('fitContentUnusedRatioThreshold');
+  const records = (plan.spacing?.slots ?? []).filter((slot) => {
+    const envelope = plan.slots.find((candidate) => candidate.id === slot.slotId)?.growthMaxHeight;
+    return envelope !== undefined && envelope > 0 && slot.occupiedHeight > 0;
+  }).map((slot) => {
+    const envelope = plan.slots.find((candidate) => candidate.id === slot.slotId)?.growthMaxHeight ?? slot.box.height;
+    const ratio = Math.max(0, envelope - slot.occupiedHeight) / envelope;
+    return { page: slot.page, slotId: slot.slotId, envelope, occupiedHeight: slot.occupiedHeight, ratio };
+  });
+  const excess = records.reduce((sum, record) => sum + Math.max(0, record.ratio - threshold), 0);
+  return negativeComponent('fit-content-envelope', excess, scoreConfigNumber('fitContentUnusedPenalty'), { threshold, records });
+}
+
+/** Penalize content that ends too close to the footer rule. */
+export function scoreFooterGap(plan: CompositionPlan): CompositionScoreComponent {
+  const minimum = scoreConfigNumber('footerContentGapMinMm');
+  const records = (plan.spacing?.textPlacements ?? []).filter((placement) => placement.flowId !== 'footer' && placement.gapToFooter !== undefined).map((placement) => ({ page: placement.page, blockId: placement.blockId, gap: placement.gapToFooter ?? 0, deficit: Math.max(0, minimum - (placement.gapToFooter ?? 0)) })).filter((record) => record.deficit > 0);
+  const deficit = records.reduce((sum, record) => sum + record.deficit, 0);
+  return negativeComponent('footer-gap', deficit, scoreConfigNumber('footerContentGapPenalty'), { minimum, records });
 }
 
 
@@ -464,7 +580,7 @@ export function scoreContrast(assessments: CompositionContrastAssessment[]): Com
  * @planner-responsibility Keep the current scoreLegalPlan implementation intact until its target seam is extracted.
  */
 export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreHeaderSpacing(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
+  const breakdown = [scoreColumnBalance(plan), scoreSiblingColumnImbalance(plan), scoreEmptyRegions(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreInsertionSymmetry(plan), scoreInsertionDistribution(plan), scoreSpacingRhythm(plan), scoreNarrowTextIntervals(plan), scoreFitContentEnvelope(plan), scoreHeaderSpacing(plan), scoreFooterGap(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
   return {
     score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
     breakdown,

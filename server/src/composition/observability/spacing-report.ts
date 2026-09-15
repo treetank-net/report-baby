@@ -13,6 +13,8 @@ import type {
 } from '../contracts/engine-contracts.js';
 import { plannedLines } from '../layout/plan-lines.js';
 import { lineHeight, styleFor, textMargins, textPadding } from '../text/text-layout.js';
+import { readRenderConfig } from '../../template/builtins.js';
+import { rectUnionArea } from '../geometry/rectangles.js';
 
 function boxFromSegment(segment: PageSegment): CompositionBox {
   return { x: segment.x, y: segment.top, width: segment.width, height: segment.bottom - segment.top };
@@ -105,7 +107,15 @@ function slotSpacingReport(
   geometry: PageGeometry,
   linesBySlot: Map<string, CompositionTextSpacingReport[]>,
 ): CompositionSlotSpacingReport {
-  const occupiedBox = unionBoxes(slotContentBoxes(plan, slot.id));
+  const contentBoxes = slotContentBoxes(plan, slot.id);
+  const occupiedBox = unionBoxes(contentBoxes);
+  const occupiedArea = Math.min(slot.box.width * slot.box.height, rectUnionArea(contentBoxes.map((box) => ({
+    x: Math.max(slot.box.x, box.x),
+    y: Math.max(slot.box.y, box.y),
+    width: Math.max(0, Math.min(slot.box.x + slot.box.width, box.x + box.width) - Math.max(slot.box.x, box.x)),
+    height: Math.max(0, Math.min(slot.box.y + slot.box.height, box.y + box.height) - Math.max(slot.box.y, box.y)),
+  }))));
+  const emptyArea = Math.max(0, slot.box.width * slot.box.height - occupiedArea);
   const occupiedHeight = occupiedBox ? Math.max(0, bottom(occupiedBox) - slot.box.y) : 0;
   const remainingHeight = Math.max(0, slot.box.height - occupiedHeight);
   const styles = linesBySlot.get(slot.id) ?? [];
@@ -117,10 +127,13 @@ function slotSpacingReport(
     ...(slot.flowId === undefined ? {} : { flowId: slot.flowId }),
     box: { ...slot.box },
     ...(occupiedBox ? { occupiedBox } : {}),
+    occupiedArea,
+    emptyArea,
     occupiedHeight,
     remainingHeight,
     gapBefore: occupiedBox ? occupiedBox.y - slot.box.y : 0,
     gapAfter: occupiedBox ? bottom(slot.box) - bottom(occupiedBox) : slot.box.height,
+    ...(slot.spacingProfile === undefined ? {} : { profile: slot.spacingProfile }),
     ...(bandGaps ? { staticBandGaps: bandGaps } : {}),
     ...(styles.length > 0 ? { textStyles: styles } : {}),
   };
@@ -311,11 +324,19 @@ function buildInsertionRhythmReport(
   const neighbourGaps = insertionNeighbourGaps(placement, insertionsInRegion(plan, placement, slot.regionId));
   const explanations = insertionExplanations(placement, geometry, textGaps);
   const intervals = textIntervalsBeside(plan, placement.page, placement.box);
+  const profile = slot.spacingProfile ?? 'normal';
+  const profileTargets = readRenderConfig().compositionScore;
+  const referenceGap = profile === 'compact'
+    ? profileTargets.spacingProfileCompactTargetMm
+    : profile === 'open'
+      ? profileTargets.spacingProfileOpenTargetMm
+      : profileTargets.spacingProfileNormalTargetMm;
   return {
     kind: 'insertion-rhythm',
     page: placement.page,
     slotId: placement.slotId,
     regionId: slot.regionId,
+    profile,
     box: { ...placement.box },
     metrics: {
       ...(textGaps.before === undefined ? {} : { beforeTextGap: textGaps.before }),
@@ -325,6 +346,7 @@ function buildInsertionRhythmReport(
       regionEndGap: Math.max(0, bottom(region) - bottom(placement.box)),
       ...(neighbourGaps.previous === undefined ? {} : { previousInsertionGap: neighbourGaps.previous }),
       ...(neighbourGaps.next === undefined ? {} : { nextInsertionGap: neighbourGaps.next }),
+      referenceGap,
     },
     ...(explanations === undefined ? {} : { reasons: explanations }),
     ...(intervals.length === 0 ? {} : { intervals }),
@@ -353,6 +375,36 @@ function insertionRhythmReports(
     .filter((report): report is CompositionSpacingObservation => report !== undefined);
 }
 
+function regionSpacingObservations(slots: CompositionSlotSpacingReport[]): CompositionSpacingObservation[] {
+  return slots.map((slot) => ({
+    kind: 'region' as const,
+    page: slot.page,
+    regionId: slot.regionId,
+    slotId: slot.slotId,
+    ...(slot.box ? { box: { ...slot.box } } : {}),
+    metrics: {
+      occupiedHeight: slot.occupiedHeight,
+      remainingHeight: slot.remainingHeight,
+      gapBefore: slot.gapBefore,
+      gapAfter: slot.gapAfter,
+    },
+    ...(slot.profile === undefined ? {} : { profile: slot.profile }),
+    ...(slot.flowId === 'header' || slot.flowId === 'footer' ? { reasons: ['chrome'] } : {}),
+  }));
+}
+
+function obstacleSpacingObservations(plan: CompositionPlan): CompositionSpacingObservation[] {
+  return plan.graphicPlacements.filter((placement) => !placement.graphicId.startsWith('insertion:')).map((placement) => ({
+    kind: 'obstacle' as const,
+    page: placement.page,
+    slotId: placement.slotId,
+    graphicId: placement.graphicId,
+    box: { ...placement.box },
+    metrics: { width: placement.box.width, height: placement.box.height },
+    reasons: ['graphic-obstacle'],
+  }));
+}
+
 /** Attach static geometry and measured spacing facts to a report composition plan. */
 export function attachPlanSpacingReport(
   plan: CompositionPlan,
@@ -369,7 +421,11 @@ export function attachPlanSpacingReport(
     pages,
     slots,
     textPlacements: textPlacementReports(plan, document, metrics, geometryByPage),
-    observations: insertionRhythmReports(plan, geometryByPage),
+    observations: [
+      ...regionSpacingObservations(slots),
+      ...obstacleSpacingObservations(plan),
+      ...insertionRhythmReports(plan, geometryByPage),
+    ],
   } satisfies CompositionPlanSpacingReport;
 }
 

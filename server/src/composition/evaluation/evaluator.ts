@@ -41,6 +41,30 @@ function suggestionsFromScore(breakdown: CompositionScoreComponent[]): Compositi
     if (component.code === 'insertion-spacing') return [{
       ...suggestionFromScore('INSERTION_SPACING_IMBALANCE', 'Insertion spacing is visibly imbalanced around the surrounding text streams.', component.details, ['Evaluate a nearby insertion candidate.', 'Adjust the insertion position or measured content height.'], 'The measured gaps around one or more insertion obstacles are asymmetric.'),
     }];
+    if (component.code === 'insertion-symmetry') return [{
+      ...suggestionFromScore('INSERTION_SPACING_IMBALANCE', 'Insertion gaps are asymmetric around the surrounding text.', component.details, ['Evaluate a nearby legal insertion candidate.', 'Adjust the insertion position or content height.'], 'The before and after text gaps differ beyond the configured tolerance.'),
+    }];
+    if (component.code === 'insertion-distribution') return [{
+      ...suggestionFromScore('INSERTION_DISTRIBUTION_IMBALANCE', 'Multiple insertions are unevenly distributed in their usable region.', component.details, ['Choose a candidate with more even outer and inter-insertion gaps.', 'Allow another page or insertion capability.'], 'Outer and inter-insertion gaps have excessive dispersion.'),
+    }];
+    if (component.code === 'spacing-rhythm') return [{
+      ...suggestionFromScore('INSERTION_RHYTHM_DEVIATION', 'Insertion spacing deviates from the selected spacing rhythm.', component.details, ['Use a candidate closer to the configured spacing profile.', 'Adjust the template spacing profile.'], 'Measured insertion gaps exceed the configured profile tolerance.'),
+    }];
+    if (component.code === 'narrow-text-interval') return [{
+      ...suggestionFromScore('NARROW_TEXT_INTERVAL', 'An insertion leaves a text interval narrower than the usable-line threshold.', component.details, ['Reduce insertion width.', 'Place the insertion where both text intervals remain readable.'], 'The remaining text interval is below the configured minimum width.'),
+    }];
+    if (component.code === 'footer-gap') return [{
+      ...suggestionFromScore('FOOTER_GAP_TOO_SMALL', 'Content ends too close to the footer boundary.', component.details, ['Increase the footer/content gap.', 'Use a template with more bottom breathing room.'], 'The measured gap to the footer is below the configured minimum.'),
+    }];
+    if (component.code === 'empty-regions') return [{
+      ...suggestionFromScore('EMPTY_REGION', 'A material page region contains a large unexplained empty area.', component.details, ['Move or resize nearby content.', 'Choose a template with a better content envelope.'], 'The measured unused region exceeds the configured threshold.'),
+    }];
+    if (component.code === 'sibling-column-imbalance') return [{
+      ...suggestionFromScore('COLUMN_FILL_IMBALANCE', 'Sibling text columns have noticeably different fill heights.', component.details, ['Evaluate a candidate with better column balance.', 'Adjust insertion placement or content flow.'], 'Sibling columns differ beyond the configured fill tolerance.'),
+    }];
+    if (component.code === 'fit-content-envelope') return [{
+      ...suggestionFromScore('UNUSED_FIT_CONTENT_ENVELOPE', 'A fit-content slot retains a large unused growth envelope.', component.details, ['Use a more compact fit-content capability.', 'Place the next content block in the freed space.'], 'Measured content uses only a small part of the available fit-content envelope.'),
+    }];
     return [];
   });
 }

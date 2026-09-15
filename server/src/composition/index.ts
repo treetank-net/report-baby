@@ -19,6 +19,8 @@ export type {
   CompositionLayout,
   CompositionRect,
   CompositionSlotKind,
+  CompositionSpacingProfile,
+  CompositionSlotPlacement,
   CompositionSlotTemplate,
   CompositionTable,
 } from './contracts/model.js';
@@ -65,6 +67,7 @@ export type {
 export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './composition-engine.js';
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
 export { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './evaluation/structure-scoring.js';
+export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreLegalPlan } from './evaluation/scoring.js';
 export { compositionDocumentFromInput } from './adapters/input.js';
 export { compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, type PageTemplateCompositionOptions, type PageTemplateSource } from './adapters/page-template.js';
 export { documentLayoutVariantsWithinPageLimit, normalizeDocumentLayout, pageTemplateAssignmentForPage, type DocumentLayoutVariant } from './adapters/document-layout.js';
@@ -73,7 +76,17 @@ export { createTextCompositionPlanner } from './layout/text-planner.js';
 export type { MovableGraphicPolicy, MovableInsertionBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 export { createTextCompositionEngine, type TextCompositionEngineOptions } from './adapters/text-engine.js';
 export { fitContainBox, imagePixelAtPoint } from './geometry/visual-geometry.js';
+export { rectBottom, rectFitsInside, rectsOverlap, rectUnionArea } from './geometry/rectangles.js';
 export { resolvePagePlaceholders } from './text/page-placeholders.js';
+export {
+  assertCompositionDraftRenderable,
+  createCompositionDraft,
+  selectCompositionDraftCandidate,
+  updateCompositionDraft,
+  type CompositionDraft,
+  type CompositionDraftCandidate,
+  type CompositionDraftSources,
+} from './drafts/draft-contract.js';
 export {
   contrastRatio,
   createCompositionContrastProvider,

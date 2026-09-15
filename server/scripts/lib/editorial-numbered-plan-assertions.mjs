@@ -87,9 +87,9 @@ export function assertOrdinaryLinesRespectFlowBarrierBoxCandidates(result) {
  */
 export function assertNoInternalRouteGaps(result) {
   for (const page of result.plan.pages) {
-    const layout = result.template.layouts.find((candidate) => candidate.id === page.layoutId);
+    const layout = result.template.pageTemplates.find((candidate) => candidate.id === page.pageTemplateId);
     const route = result.template.routes.main;
-    const slots = route.slotsByLayout?.[layout?.id ?? ''] ?? route.slots;
+    const slots = route.slots;
     const occupied = new Set(result.plan.lines
       .filter((line) => line.flowId === 'main' && line.page === page.page && line.routeIndex !== undefined)
       .map((line) => line.routeIndex));
@@ -207,8 +207,8 @@ export function assertQuoteFlowOwnership(result, fixture, renderConfig) {
  */
 export function assertEditorialTemplateContract(result) {
   assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
-  const ordinaryLayout = result.template.layouts.find((layout) => layout.id === 'pages/editorial-inset-two-column') ?? result.template.layouts[0];
-  const ordinaryRoute = result.template.routes.main.slotsByLayout?.[ordinaryLayout?.id ?? ''] ?? result.template.routes.main.slots;
+  const ordinaryLayout = result.template.pageTemplates.find((layout) => layout.id === 'pages/editorial-inset-two-column') ?? result.template.pageTemplates[0];
+  const ordinaryRoute = result.template.routes.main.slots;
   assert.equal(ordinaryRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');
   assert.equal(result.template.routes.main.insertionSlots, undefined, 'main flow must not own quote insertions');
   assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b', 'quote-c'], 'quotes must be declared as a separate obstacle flow with three per-page insertion slots');

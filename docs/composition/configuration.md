@@ -102,6 +102,26 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.insertion_cross_stream_spacing_penalty` | Weight for unequal gaps between insertion streams or columns. It interacts with same-page stream geometry and the other insertion-spacing weights. |
 | `composition_score.header_content_gap_min_mm` | Minimum preferred gap, in millimetres, between the measured bottom of repeated header content and the first ordinary content line. It produces a soft score deficit when a legal plan leaves less room. |
 | `composition_score.header_content_gap_penalty` | Penalty multiplier applied to the header/content gap deficit. It changes candidate ranking only; slot containment and overlap remain hard planner checks. |
+| `composition_score.empty_region_ratio_threshold` | Maximum unexplained empty-area ratio before a material region contributes a soft penalty. It interacts with `empty_region_height_threshold_mm` and `empty_region_penalty`. |
+| `composition_score.empty_region_height_threshold_mm` | Minimum unexplained vertical gap considered material for empty-region scoring. It prevents tiny rounding gaps from affecting ranking. |
+| `composition_score.empty_region_penalty` | Penalty multiplier for empty-region excess above the configured ratio threshold. |
+| `composition_score.column_imbalance_threshold` | Maximum relative height difference between sibling main columns before a soft penalty is applied. |
+| `composition_score.column_imbalance_penalty` | Penalty multiplier for sibling-column imbalance above its threshold. |
+| `composition_score.insertion_symmetry_tolerance_mm` | Allowed absolute difference between insertion before/after text gaps before a soft asymmetry penalty. |
+| `composition_score.insertion_symmetry_penalty` | Penalty multiplier for insertion text-gap asymmetry above tolerance. |
+| `composition_score.insertion_distribution_tolerance_mm` | Allowed mean absolute dispersion among insertion outer and neighbour gaps. |
+| `composition_score.insertion_distribution_penalty` | Penalty multiplier for insertion-group distribution dispersion above tolerance. |
+| `composition_score.spacing_profile_compact_target_mm` | Reference gap used by the compact spacing profile. |
+| `composition_score.spacing_profile_normal_target_mm` | Reference gap used by the normal spacing profile and the default when no profile is declared. |
+| `composition_score.spacing_profile_open_target_mm` | Reference gap used by the open spacing profile. |
+| `composition_score.spacing_profile_tolerance_mm` | Allowed deviation from a resolved spacing-profile target before a soft penalty. |
+| `composition_score.spacing_profile_penalty` | Penalty multiplier for spacing-profile deviation above tolerance. |
+| `composition_score.narrow_text_interval_min_mm` | Minimum usable text interval beside a wrapped insertion. It interacts with `narrow_text_interval_penalty`. |
+| `composition_score.narrow_text_interval_penalty` | Penalty multiplier for each narrow interval deficit. |
+| `composition_score.fit_content_unused_ratio_threshold` | Maximum unused fraction of a fit-content growth envelope before a soft penalty. |
+| `composition_score.fit_content_unused_penalty` | Penalty multiplier for unused fit-content envelope excess. |
+| `composition_score.footer_content_gap_min_mm` | Minimum preferred distance from ordinary content to the resolved footer boundary. |
+| `composition_score.footer_content_gap_penalty` | Penalty multiplier for footer/content gap deficits. |
 | `composition_score.contrast_penalty` | Maximum normalized penalty for measured text contrast across the complete corpus, including the supplied page background and variable graphic backgrounds. It interacts with normalized contrast quality and is part of the general plan score, not a separate legality gate. |
 | `composition_score.contrast_mean_quality_weight` | Weight for diffuse contrast quality across sampled glyphs. It interacts with the worst-point and affected-glyph terms; the three weights should normally sum to 1. |
 | `composition_score.contrast_worst_glyph_weight` | Weight that keeps one glyph with a severely affected sampled point visible in the score even when the document contains thousands of good glyphs. Despite the historical field name, it applies to the worst sampled point. It is continuous, not a rejection rule. |
@@ -163,10 +183,10 @@ than its slot; otherwise there is no meaningful position to vary.
 | `composition_search.max_refinement_rounds` | Maximum number of local refinement rounds after the initial candidates. It is intersected with per-placement refinement policy and cannot make an authored fixed placement movable. |
 | `composition_search.max_candidates_per_refinement` | Maximum complete candidates retained from one refinement batch. It limits combined insertion/graphic alternatives while preserving deterministic generation order. |
 | `composition_search.max_full_plan_recalculations` | Request-local budget for complete plan evaluations. Once exhausted, the engine stops with `calculation-budget` evidence and selects only candidates already planned and evaluated. |
-| `composition_search.movable_quote_window_ratio` | Relative vertical movement window around a quote’s preferred position. It interacts with page height and candidate count. |
-| `composition_search.movable_quote_candidate_count` | Number of coarse positions sampled in the movement window. It interacts with the window ratio and evaluator score. |
-| `composition_search.movable_quote_refinement_rounds` | Number of local refinement passes after coarse candidates are evaluated. It interacts with refinement candidate count and deterministic candidate ordering. |
-| `composition_search.movable_quote_refinement_candidate_count` | Number of local positions sampled during each refinement pass. It interacts with refinement rounds and geometry tolerance used to compare positions. |
+| `composition_search.movable_window_ratio` | Relative vertical movement window around a quote’s preferred position. It interacts with page height and candidate count. |
+| `composition_search.movable_candidate_count` | Number of coarse positions sampled in the movement window. It interacts with the window ratio and evaluator score. |
+| `composition_search.movable_refinement_rounds` | Number of local refinement passes after coarse candidates are evaluated. It interacts with refinement candidate count and deterministic candidate ordering. |
+| `composition_search.movable_refinement_candidate_count` | Number of local positions sampled during each refinement pass. It interacts with refinement rounds and geometry tolerance used to compare positions. |
 
 ## PDF values that implement composition rules
 

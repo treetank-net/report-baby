@@ -9,6 +9,11 @@ export type TemplateOverflow = 'reject' | 'shrink-to-fit';
 export type TemplateFlowContinuation = 'allowed' | 'forbidden';
 export type TemplateVerticalAlign = 'top' | 'middle' | 'bottom';
 export type TemplateLengthUnit = 'percent' | 'px' | 'mm';
+export type TemplateSpacingProfile = 'compact' | 'normal' | 'open';
+export type TemplateSlotPlacement =
+  | { mode: 'fixed' }
+  | { mode: 'anchored-fit-content' }
+  | { mode: 'fluid-y'; region: string; maxInstancesPerPage: number; distribution?: 'free' | 'balanced' };
 
 export interface TemplateLength {
   value: number;
@@ -33,6 +38,8 @@ export interface CompiledTemplateSlot {
   textAlign?: 'left' | 'center' | 'right';
   verticalAlign?: TemplateVerticalAlign;
   fitContent?: boolean;
+  spacingProfile?: TemplateSpacingProfile;
+  placement?: TemplateSlotPlacement;
   gap?: TemplateLength;
   maxLines?: number;
   overflow?: TemplateOverflow;
@@ -121,7 +128,7 @@ export interface ResolvedTemplatePlan {
   direction: 'ltr' | 'rtl';
   regions: Record<string, NormalizedFrame>;
   slots: Record<string, NormalizedFrame>;
-  slotRules: Record<string, { maxLines?: number; overflow?: TemplateOverflow; verticalAlign?: TemplateVerticalAlign }>;
+  slotRules: Record<string, { maxLines?: number; overflow?: TemplateOverflow; verticalAlign?: TemplateVerticalAlign; placement?: TemplateSlotPlacement }>;
   flows: Record<string, CompiledTemplateFlow>;
   constraints: CompiledTemplate['constraints'];
 }
@@ -191,6 +198,21 @@ function optionalPriority(value: unknown, path: string): number | undefined {
     fail(path, 'must be a non-negative integer.');
   }
   return value;
+}
+
+function slotPlacementAt(value: unknown, path: string): TemplateSlotPlacement | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) fail(path, 'must be an object.');
+  if (value.mode === 'fixed') return { mode: 'fixed' };
+  if (value.mode === 'anchored-fit-content') return { mode: 'anchored-fit-content' };
+  if (value.mode !== 'fluid-y') fail(`${path}.mode`, "must be 'fixed', 'anchored-fit-content' or 'fluid-y'.");
+  const region = stringAt(value.region, `${path}.region`);
+  const maxInstancesPerPage = optionalPositiveInteger(value.max_instances_per_page, `${path}.max_instances_per_page`);
+  if (maxInstancesPerPage === undefined) fail(`${path}.max_instances_per_page`, 'is required for fluid-y placement.');
+  const distribution = value.distribution === undefined || value.distribution === 'free' || value.distribution === 'balanced'
+    ? value.distribution
+    : fail(`${path}.distribution`, "must be 'free' or 'balanced'.");
+  return { mode: 'fluid-y', region, maxInstancesPerPage, ...(distribution === undefined ? {} : { distribution }) };
 }
 
 function positiveNumberAt(value: unknown, path: string): number {
@@ -374,11 +396,32 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
     const fitContent = slot.fit_content === undefined || typeof slot.fit_content === 'boolean'
       ? slot.fit_content
       : fail(`slots.${slotId}.fit_content`, 'must be boolean.');
-    const frame = slot.frame !== undefined
-      ? frameAt(slot.frame, `slots.${slotId}.frame`, fitContent === true)
-      : region
-        ? regions[region]
-        : fail(`slots.${slotId}`, 'needs a frame or a region.');
+    const spacingProfile = slot.spacing_profile === undefined || slot.spacing_profile === 'compact' || slot.spacing_profile === 'normal' || slot.spacing_profile === 'open'
+      ? slot.spacing_profile
+      : fail(`slots.${slotId}.spacing_profile`, "must be 'compact', 'normal' or 'open'.");
+    const placement = slotPlacementAt(slot.placement, `slots.${slotId}.placement`);
+    if (placement?.mode === 'fluid-y' && !regions[placement.region]) fail(`slots.${slotId}.placement.region`, `references unknown region '${placement.region}'.`);
+    const frame = (() => {
+      if (placement?.mode === 'anchored-fit-content' || placement?.mode === 'fluid-y') {
+        if (!isRecord(slot.frame)) fail(`slots.${slotId}.frame`, 'must provide an object for dynamic placement.');
+        const source = slot.frame;
+        const fallback = placement.mode === 'fluid-y' ? regions[placement.region] : undefined;
+        const x = numberAt(source.x, `slots.${slotId}.frame.x`);
+        const y = source.y === undefined ? fallback?.y ?? fail(`slots.${slotId}.frame.y`, 'is required for anchored-fit-content placement.') : numberAt(source.y, `slots.${slotId}.frame.y`);
+        const width = numberAt(source.width, `slots.${slotId}.frame.width`);
+        const height = source.height === undefined
+          ? fallback?.height ?? (placement.mode === 'anchored-fit-content' ? 0 : fail(`slots.${slotId}.frame.height`, 'is required when no placement region supplies a height.'))
+          : numberAt(source.height, `slots.${slotId}.frame.height`);
+        return frameAt({ x, y, width, height }, `slots.${slotId}.frame`, placement.mode === 'anchored-fit-content' || fitContent === true);
+      }
+      return slot.frame !== undefined
+        ? frameAt(slot.frame, `slots.${slotId}.frame`, fitContent === true)
+        : region
+          ? regions[region]
+          : fail(`slots.${slotId}`, 'needs a frame or a region.');
+    })();
+    if (placement?.mode === 'anchored-fit-content' && fitContent !== true) fail(`slots.${slotId}.placement`, 'anchored-fit-content requires fit_content: true.');
+    if (placement?.mode === 'fluid-y' && fitContent !== true) fail(`slots.${slotId}.placement`, 'fluid-y requires fit_content: true.');
     if (slot.continuation_frame !== undefined) fail(`slots.${slotId}.continuation_frame`, 'is no longer supported; use an ordinary slot in the selected page template.');
     const overflow = slot.overflow === undefined || slot.overflow === 'reject' || slot.overflow === 'shrink-to-fit'
       ? slot.overflow
@@ -401,6 +444,8 @@ export function compileTemplateSource(source: unknown): CompiledTemplate {
         : fail(`slots.${slotId}.align`, "must be 'left', 'center' or 'right'."),
       ...(verticalAlign === undefined ? {} : { verticalAlign }),
       ...(fitContent === undefined ? {} : { fitContent }),
+      ...(spacingProfile === undefined ? {} : { spacingProfile }),
+      ...(placement === undefined ? {} : { placement }),
       ...(gap === undefined ? {} : { gap }),
       maxLines: optionalPositiveInteger(slot.max_lines, `slots.${slotId}.max_lines`),
       overflow,
@@ -482,7 +527,7 @@ export function resolvePlan(
     direction,
     regions: Object.fromEntries(Object.entries(compiledTemplate.regions).map(([id, frame]) => [id, mirror(frame, direction)])),
     slots: Object.fromEntries(Object.entries(compiledTemplate.slots).map(([id, slot]) => [id, mirror(slot.frame, direction)])),
-    slotRules: Object.fromEntries(Object.entries(compiledTemplate.slots).map(([id, slot]) => [id, { maxLines: slot.maxLines, overflow: slot.overflow, verticalAlign: slot.verticalAlign }])),
+    slotRules: Object.fromEntries(Object.entries(compiledTemplate.slots).map(([id, slot]) => [id, { maxLines: slot.maxLines, overflow: slot.overflow, verticalAlign: slot.verticalAlign, ...(slot.placement === undefined ? {} : { placement: slot.placement }) }])),
     flows: compiledTemplate.flows,
     constraints: compiledTemplate.constraints,
   };

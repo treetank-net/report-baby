@@ -34,6 +34,8 @@ const suites = {
     ['contrast evaluation prototype', 'scripts/test-contrast-evaluation-prototype.mjs'],
     ['editorial plan contract', 'scripts/test-editorial-plan-contract.mjs'],
     ['composition page limits', 'scripts/test-composition-page-limits.mjs'],
+    ['composition ranking corpus', 'scripts/test-composition-ranking-corpus.mjs'],
+    ['composition drafts', 'scripts/test-composition-drafts.mjs'],
     ['structure scoring', 'scripts/test-structure-scoring.mjs'],
   ],
   artifacts: [
@@ -91,6 +93,8 @@ const artifactDecisions = new Map([
   ['scripts/test-editorial-plan-contract.mjs', 'not-generated'],
   ['scripts/test-editorial-visual-gate.mjs', 'retain'],
   ['scripts/test-composition-page-limits.mjs', 'not-generated'],
+  ['scripts/test-composition-ranking-corpus.mjs', 'not-generated'],
+  ['scripts/test-composition-drafts.mjs', 'not-generated'],
   ['scripts/test-public-mcp-contract.mjs', 'retain'],
   ['scripts/test-dynamic-insertion-public.mjs', 'not-generated'],
   ['scripts/test-cli.mjs', 'split'],
