@@ -93,10 +93,15 @@ continuation-specific slot or frame.
 
 ## Template selection
 
-The layout maps page numbers or page ranges to template identifiers. For
-example, page 1 may use template X, pages 2–5 template Y, and pages 6–8
-template Z. The selected template supplies the page geometry, chrome, regions
-and slot geometry for that page.
+The layout maps page spans to template identifiers. An absolute span names its
+inclusive first and last page. A relative count begins immediately after the
+preceding span. The remaining span is an open final tail. For example, page 1
+may use template X, pages 2–5 template Y, and every remaining page template Z.
+The selected template supplies the page geometry, chrome, regions and slot
+geometry for that page.
+
+A page span selects a template for a page when the planner needs that page; it
+does not require otherwise unused pages to be created.
 
 A flow continues into a later page when its continuation policy permits the
 move and the selected template exposes the same named destination slot. There

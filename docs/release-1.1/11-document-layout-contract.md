@@ -5,16 +5,18 @@ Status: implementation plan.
 ## Goal
 
 Expose one public `layout` declaration describing which reusable page template
-is used for each page range. Remove `page_template_schedule` and the competing
-route-level `layouts` selection path while preserving the range/candidate and
+is used for each page span. Remove `page_template_schedule` and the competing
+route-level `layouts` selection path while preserving the candidate and
 continuation behavior completed in item 02.
 
 ## Canonical vocabulary
 
 - **template** — one reusable page-composition contract and its page geometry;
 - **layout** — one document-level ordered declaration assigning templates to
-  page ranges;
-- **layout entry** — plain range + template data, not a domain entity;
+  page spans;
+- **page span** — exactly one absolute inclusive range, relative page count or
+  remaining open tail;
+- **layout entry** — plain page-span + template data, not a domain entity;
 - **route** — ordered compatible slots and flow policies; it never selects a
   template;
 - **continuation** — whether an already-started flow may cross a page boundary;
@@ -64,6 +66,19 @@ The alternative single-template form is:
 ```jsonc
 {
   "template": "pages/editorial-body",
+  "data": { "flows": { /* ... */ } }
+}
+```
+
+A layout with candidate lengths is explicit about the relative form:
+
+```jsonc
+{
+  "layout": [
+    { "pages": { "count": 1 }, "template": "pages/editorial-cover" },
+    { "pages": { "count": { "min": 2, "max": 5 } }, "template": "pages/editorial-body" },
+    { "pages": "remaining", "template": "pages/editorial-sidebar" }
+  ],
   "data": { "flows": { /* ... */ } }
 }
 ```
@@ -219,6 +234,50 @@ Every normalized variant begins at page 1. A page without an assignment before
 the open tail/materialized limit is a layout error, not a top-level-template
 fallback.
 
+## Page creation and bounds
+
+A page span selects the template for a page if that page is materialized. It
+does not create empty pages by itself. Pages are still materialized lazily when
+a flow or an explicit page-owned insertion needs them. Consequently:
+
+- a finite final assignment sets that candidate's maximum page to its inclusive
+  `to`;
+- `remaining` extends only to the existing configured composition page limit;
+- a finite assignment beyond that configured limit is an illegal candidate and
+  is never silently truncated;
+- count-range branches beyond the configured limit are discarded, while legal
+  shorter branches remain candidates;
+- the request fails when no branch remains within the configured limit; and
+- a requirement that content appear on a later page must still be expressed by
+  a flow/slot requirement; an unused assignment does not manufacture that page.
+
+The configured composition page limit remains owned by
+`server/templates/render-config.yml`. The public layout contract does not copy
+or override that numeric limit.
+
+## Validation failures
+
+Schema and normalization failures use the normal CLI/MCP error path, but their
+messages must be actionable without an ad-hoc debug script. Each failure names
+the layout entry, includes the received and expected page information and says
+which input field can fix it.
+
+| Failure | Required evidence and remediation |
+|---|---|
+| invalid union member | entry index, received keys/value, and the three accepted `pages` forms |
+| invalid absolute range | `from`, `to`, inclusive semantics, and the required ordering |
+| gap or overlap | entry index, expected next page, actual `from`, and whether to change the range or preceding count |
+| non-final `remaining` | entry index and instruction to move it to the final entry or replace it with a finite span |
+| no count variant joins an exact range | tested count interval, resulting end-page interval, next `from`, and the compatible count/range change |
+| configured page limit exceeded | candidate end page, configured limit, and instruction to shorten the span or change the owning YAML configuration |
+| no legal variant | rejected branch summary rather than only a generic `no plan` message |
+| removed `page_template_schedule` | replacement field `layout`, `template` entry key, and accepted `pages` forms |
+
+When some count branches are discarded but another remains legal, detailed
+plan/search output records the rejected branch reason and the surviving
+normalized assignments through the existing diagnostics/search output. Do not
+introduce a second layout-debug report.
+
 ## Planning process
 
 ```text
@@ -322,7 +381,9 @@ one name/path only. No public request accepts both contracts.
 | Requirement | Proof | Target test |
 |---|---|---|
 | exact range, relative count, count variants and remaining tail | pure normalization | union member and mixed-shape rejection cases |
+| finite and remaining bounds obey configured maximum | pure normalization/compilation | below-limit, filtered-branch and no-legal-branch cases |
 | gap/overlap/both-input rejection | schema/adapter | `test-input-errors.mjs` |
+| failures explain evidence and remediation | returned CLI/MCP error payload | table-driven error assertions without PDF rendering |
 | selected template is explicit per page | plan-only pages/slots | `test-page-template-adapter.mjs` |
 | route cannot select a template | low-level negative fixture | `test-text-composition-engine.mjs` |
 | template-specific slot eligibility remains | plan-only late-sidebar fixture | `test-text-composition-engine.mjs` |
@@ -339,6 +400,10 @@ one name/path only. No public request accepts both contracts.
   `slotsByLayout` outside explicit rejection/migration fixtures.
 - A request has exactly one authoritative template-selection path.
 - Every materialized page identifies its selected `templateRef`.
+- Finite layouts are not silently truncated and `remaining` cannot exceed the
+  configured composition page limit.
+- Every invalid layout response identifies the failing entry, relevant values
+  and a concrete remediation.
 - Route lookup cannot change the selected template.
 - Item-02 range and continuation behavior remains green without modifying its
   historical plan document.
