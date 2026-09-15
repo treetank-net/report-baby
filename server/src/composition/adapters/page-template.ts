@@ -11,6 +11,7 @@ import type {
 } from '../contracts/model.js';
 import type { PageTemplateScheduleInput } from '../../contracts/input/schema.js';
 import { normalizePageTemplateSchedule, type PageTemplateScheduleEntryInput, type PageTemplateScheduleVariant } from './page-template-schedule.js';
+import type { DocumentLayoutVariant } from './document-layout.js';
 import {
   declaredBlockSlotsForFlow,
   declaredGraphicSlots,
@@ -510,4 +511,25 @@ export function compositionTemplateFromPageTemplateSchedule(
     pageTemplateSchedule,
     ...(options.includeTitlePage ? { } : {}),
   };
+}
+
+/**
+ * Compile one already-normalized canonical document-layout variant. The
+ * adapter bridge is intentionally kept here while the renderer migrates away
+ * from the legacy schedule-shaped input.
+ */
+export function compositionTemplateFromDocumentLayout(
+  sources: PageTemplateSource[],
+  layoutVariant: DocumentLayoutVariant,
+  options: PageTemplateCompositionOptions,
+): CompositionTemplate {
+  const scheduleVariant: PageTemplateScheduleVariant = {
+    entries: layoutVariant.entries.map((entry) => ({
+      from: entry.from,
+      ...(entry.to === undefined ? {} : { to: entry.to }),
+      templateRef: entry.templateRef,
+    })),
+    ...(layoutVariant.maxPages === undefined ? {} : { maxPages: layoutVariant.maxPages }),
+  };
+  return compositionTemplateFromPageTemplateSchedule(sources, scheduleVariant, options);
 }

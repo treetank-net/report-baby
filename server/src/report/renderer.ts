@@ -4,7 +4,7 @@ import { defaultRenderTheme } from '../brand/context.js';
 import { readBuiltinPageTemplateSource, readRenderConfig } from '../template/builtins.js';
 import type { RenderTheme } from '../contracts/render-theme.js';
 import type { ResolvedReportPlan } from '../contracts/resolved-report-plan.js';
-import type { CompositionInput, PageTemplateScheduleInput, PlacementRequests } from '../contracts/input/schema.js';
+import type { CompositionInput, DocumentLayoutInput, PageTemplateScheduleInput, PlacementRequests } from '../contracts/input/schema.js';
 import { pageGeometryFromTemplate, type PageGeometry } from '../template/geometry.js';
 import { resolveReportPlan } from './legacy-plan.js';
 import type { ReportCompositionResult } from '../composition/report-composition-entrypoint.js';
@@ -19,6 +19,7 @@ import type { SourceContext } from '../source/context.js';
 import { prepareReportComposition } from './composition-runtime.js';
 import type { PageTemplateSource } from '../composition/adapters/page-template.js';
 import { normalizePageTemplateSchedule, templateRefAtPage } from '../composition/adapters/page-template-schedule.js';
+import { normalizeDocumentLayout, pageTemplateAssignmentForPage } from '../composition/adapters/document-layout.js';
 import { resolvePagePlaceholders } from '../composition/text/page-placeholders.js';
 import { attachResolvedChromeSpacingReport } from '../composition/observability/spacing-report.js';
 
@@ -79,6 +80,18 @@ function compositionGeometryForSchedule(name: string, schedule?: PageTemplateSch
   return { template: primary.compiled, geometry: primary.geometry, sources };
 }
 
+function compositionGeometryForLayout(name: string, layout?: DocumentLayoutInput): { template: CompiledTemplate; geometry: PageGeometry; sources?: PageTemplateSource[] } {
+  if (!layout) return compositionGeometry(name);
+  const references = [...new Set(layout.map((entry) => entry.template))];
+  const sources = references.map((templateRef): PageTemplateSource => {
+    const resolved = compositionGeometry(templateRef);
+    return { templateRef, compiled: resolved.template, geometry: resolved.geometry };
+  });
+  const primary = sources[0];
+  if (!primary) throw new Error('A document layout needs at least one template.');
+  return { template: primary.compiled, geometry: primary.geometry, sources };
+}
+
 function scheduledPageTemplateResolver(
   schedule: PageTemplateScheduleInput | undefined,
   sources: PageTemplateSource[] | undefined,
@@ -96,6 +109,20 @@ function scheduledPageTemplateResolver(
   return (page: number) => {
     const templateRef = templateRefAtPage(variant, page);
     const source = templateRef === undefined ? undefined : sources.find((candidate) => candidate.templateRef === templateRef);
+    return source ? { templateRef: source.templateRef, geometry: source.geometry } : undefined;
+  };
+}
+
+function documentLayoutPageTemplateResolver(
+  layout: DocumentLayoutInput | undefined,
+  sources: PageTemplateSource[] | undefined,
+): ((page: number) => { templateRef: string; geometry: PageGeometry } | undefined) | undefined {
+  if (!layout || !sources) return undefined;
+  const variant = normalizeDocumentLayout(layout)[0];
+  if (!variant) return undefined;
+  return (page: number) => {
+    const assignment = pageTemplateAssignmentForPage(variant.entries, page);
+    const source = assignment ? sources.find((candidate) => candidate.templateRef === assignment.templateRef) : undefined;
     return source ? { templateRef: source.templateRef, geometry: source.geometry } : undefined;
   };
 }
@@ -306,10 +333,10 @@ export interface ReportRenderDiagnostics {
   composition?: ReportCompositionResult;
 }
 
-export async function renderReportPdfDetailed(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, compositionDebug = false, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
-  const planned = await renderReportCompositionPdf(name, data, theme, sourceContext, compositionDebug, insertionRequests, pageTemplateSchedule);
+export async function renderReportPdfDetailed(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, compositionDebug = false, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput, layout?: DocumentLayoutInput): Promise<{ buffer: Buffer; diagnostics: ReportRenderDiagnostics }> {
+  const planned = await renderReportCompositionPdf(name, data, theme, sourceContext, compositionDebug, insertionRequests, pageTemplateSchedule, layout);
   for (const diagnostic of planned.composition.evaluation.diagnostics) if (diagnostic.severity === 'warning') warnings.push(diagnostic.message);
-  const resolved = compositionGeometryForSchedule(name, pageTemplateSchedule);
+  const resolved = layout ? compositionGeometryForLayout(name, layout) : compositionGeometryForSchedule(name, pageTemplateSchedule);
   const pageTemplateForPage = (page: number) => {
     const compositionPage = planned.composition.plan.pages.find((candidate) => candidate.page === page);
     const templateRef = compositionPage?.templateRef;
@@ -321,8 +348,8 @@ export async function renderReportPdfDetailed(name: string, data: CompositionInp
   return { buffer: planned.buffer, diagnostics: { plan, drawings: planned.drawings, composition: planned.composition } };
 }
 
-export async function renderReportPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput): Promise<Buffer> {
-  return (await renderReportPdfDetailed(name, data, theme, warnings, sourceContext, false, insertionRequests, pageTemplateSchedule)).buffer;
+export async function renderReportPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), warnings: string[] = [], sourceContext?: SourceContext, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput, layout?: DocumentLayoutInput): Promise<Buffer> {
+  return (await renderReportPdfDetailed(name, data, theme, warnings, sourceContext, false, insertionRequests, pageTemplateSchedule, layout)).buffer;
 }
 
 function footerTextWidth(doc: jsPDF, geometry: PageGeometry, maxPages: number, theme: RenderTheme): number {
@@ -379,9 +406,10 @@ function attachPageChrome(doc: jsPDF, composition: ReportCompositionResult, geom
   attachResolvedChromeSpacingReport(composition.plan);
 }
 
-export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
-  const resolved = compositionGeometryForSchedule(name, pageTemplateSchedule);
-  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template: resolved.template, geometry: resolved.geometry, ...(resolved.sources ? { pageTemplateSources: resolved.sources } : {}), ...(pageTemplateSchedule ? { pageTemplateSchedule } : {}), ...(insertionRequests ? { insertionRequests } : {}) });
+export async function renderReportCompositionPdf(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, compositionDebug = false, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput, layout?: DocumentLayoutInput): Promise<{ buffer: Buffer; composition: ReportCompositionResult; drawings: ReportDrawing[] }> {
+  if (layout && pageTemplateSchedule) throw new Error('A report render accepts `layout` or the legacy page-template schedule, not both.');
+  const resolved = layout ? compositionGeometryForLayout(name, layout) : compositionGeometryForSchedule(name, pageTemplateSchedule);
+  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template: resolved.template, geometry: resolved.geometry, ...(resolved.sources ? { pageTemplateSources: resolved.sources } : {}), ...(layout ? { layout } : {}), ...(pageTemplateSchedule ? { pageTemplateSchedule } : {}), ...(insertionRequests ? { insertionRequests } : {}) });
   const geometryForPage = (page: CompositionPlan['pages'][number]): PageGeometry => resolved.sources?.find((source) => source.templateRef === page.templateRef)?.geometry ?? prepared.geometry;
   attachPageChrome(prepared.doc, prepared.composition, prepared.geometry, theme, geometryForPage);
   const { doc, geometry, template, composition, drawings } = prepared;
@@ -406,9 +434,12 @@ export async function renderReportCompositionPdf(name: string, data: Composition
   return { buffer: Buffer.from(doc.output('arraybuffer')), composition, drawings };
 }
 
-export function resolveReportPlanOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), pageTemplateSchedule?: PageTemplateScheduleInput): ResolvedReportPlan {
-  const resolved = compositionGeometryForSchedule(name, pageTemplateSchedule);
-  const pageTemplateForPage = scheduledPageTemplateResolver(pageTemplateSchedule, resolved.sources);
+export function resolveReportPlanOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), pageTemplateSchedule?: PageTemplateScheduleInput, layout?: DocumentLayoutInput): ResolvedReportPlan {
+  if (layout && pageTemplateSchedule) throw new Error('A report plan accepts `layout` or the legacy page-template schedule, not both.');
+  const resolved = layout ? compositionGeometryForLayout(name, layout) : compositionGeometryForSchedule(name, pageTemplateSchedule);
+  const pageTemplateForPage = layout
+    ? documentLayoutPageTemplateResolver(layout, resolved.sources)
+    : scheduledPageTemplateResolver(pageTemplateSchedule, resolved.sources);
   const plan = resolveReportPlan({ templateRef: name, theme, geometry: resolved.geometry, pageCount: 1, compositionDocument: compositionDocumentFromInput(data), ...(pageTemplateForPage ? { pageTemplateForPage } : {}) });
   assertReportPlan(plan, { requireCoverage: resolved.geometry.dynamicFlow, maxCoverageGap: PDF_CONFIG.planCoverageMaxGap });
   return plan;
@@ -420,9 +451,10 @@ export function resolveReportPlanOnly(name: string, data: CompositionInput, them
  * jsPDF instance exists only to provide the real font metrics used by the
  * planner.
  */
-export async function resolveReportCompositionOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput): Promise<ReportCompositionResult> {
-  const resolved = compositionGeometryForSchedule(name, pageTemplateSchedule);
-  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template: resolved.template, geometry: resolved.geometry, rejectOnEvaluation: false, ...(resolved.sources ? { pageTemplateSources: resolved.sources } : {}), ...(pageTemplateSchedule ? { pageTemplateSchedule } : {}), ...(insertionRequests ? { insertionRequests } : {}) });
+export async function resolveReportCompositionOnly(name: string, data: CompositionInput, theme = defaultRenderTheme(), sourceContext?: SourceContext, insertionRequests?: PlacementRequests, pageTemplateSchedule?: PageTemplateScheduleInput, layout?: DocumentLayoutInput): Promise<ReportCompositionResult> {
+  if (layout && pageTemplateSchedule) throw new Error('A report composition accepts `layout` or the legacy page-template schedule, not both.');
+  const resolved = layout ? compositionGeometryForLayout(name, layout) : compositionGeometryForSchedule(name, pageTemplateSchedule);
+  const prepared = await prepareReportComposition({ name, data, theme, sourceContext, template: resolved.template, geometry: resolved.geometry, rejectOnEvaluation: false, ...(resolved.sources ? { pageTemplateSources: resolved.sources } : {}), ...(layout ? { layout } : {}), ...(pageTemplateSchedule ? { pageTemplateSchedule } : {}), ...(insertionRequests ? { insertionRequests } : {}) });
   const geometryForPage = (page: CompositionPlan['pages'][number]): PageGeometry => resolved.sources?.find((source) => source.templateRef === page.templateRef)?.geometry ?? prepared.geometry;
   attachPageChrome(prepared.doc, prepared.composition, prepared.geometry, theme, geometryForPage);
   return prepared.composition;

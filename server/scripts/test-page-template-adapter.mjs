@@ -24,10 +24,10 @@ await build({
 });
 
 try {
-  const { compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionDocumentFromInput, createTextCompositionEngine } = await import(compositionBundle);
+  const { compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine } = await import(compositionBundle);
   const { compileTemplateSource } = await import(templateBundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
-  await runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate });
+  await runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate });
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }
@@ -36,11 +36,22 @@ try {
  * @test-decision plan-fixture-or-assertion
  * @test-action Keep as a plan fixture or assertion; merge duplicate document builders into shared plan fixtures.
  */
-async function runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate }) {
+async function runFixture({ compileTemplateSource, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, compositionTemplateFromDocumentLayout, normalizeDocumentLayout, compositionDocumentFromInput, createTextCompositionEngine, pageGeometryFromTemplate }) {
   const source = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
   const compiled = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(compiled);
   const template = compositionTemplateFromPageGeometry(compiled, geometry, { maxPages: 3 });
+  const canonicalVariant = normalizeDocumentLayout([
+    { pages: { count: 1 }, template: compiled.id },
+    { pages: 'remaining', template: compiled.id },
+  ])[0];
+  const canonicalTemplate = compositionTemplateFromDocumentLayout([
+    { templateRef: compiled.id, compiled, geometry },
+  ], canonicalVariant, { maxPages: 3 });
+  assert.deepEqual(canonicalTemplate.pageTemplateSchedule, [
+    { from: 1, to: 1, templateRef: compiled.id, layoutId: compiled.id },
+    { from: 2, templateRef: compiled.id, layoutId: compiled.id },
+  ], 'canonical document layout must compile through the same template adapter');
   assert.deepEqual(geometry.content, {
     x: compiled.page.margins.left,
     top: compiled.page.margins.top,

@@ -1,12 +1,12 @@
 import type { jsPDF } from 'jspdf';
 import type { PageGeometry } from '../template/geometry.js';
-import type { CompositionInput, PageTemplateScheduleInput, PlacementRequests } from '../contracts/input/schema.js';
+import type { CompositionInput, DocumentLayoutInput, PageTemplateScheduleInput, PlacementRequests } from '../contracts/input/schema.js';
 import type { CompiledTemplate } from '../template/contracts.js';
 import type { CompositionTemplate } from './contracts/model.js';
 import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './contracts/engine-contracts.js';
 import type { CompositionContrastProvider } from './evaluation/contrast.js';
 import { compositionDocumentFromInput } from './adapters/input.js';
-import { compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, type PageTemplateSource } from './adapters/page-template.js';
+import { compositionTemplateFromDocumentLayout, compositionTemplateFromPageGeometry, compositionTemplateFromPageTemplateSchedule, type PageTemplateSource } from './adapters/page-template.js';
 import { createJsPdfTextMetrics } from './adapters/pdf/text.js';
 import type { JsPdfCompositionStyles, JsPdfInlineFontCoverage } from './contracts/pdf.js';
 import { createTextCompositionEngine, plannerPolicyFromRenderConfig } from './adapters/text-engine.js';
@@ -17,6 +17,7 @@ import { hasInlineMark, missingInlineCodePointsByStyle, missingInlineGlyphWarnin
 import { attachPlanSpacingReport } from './observability/spacing-report.js';
 import { compareCompositionEvaluations } from './composition-engine.js';
 import { normalizePageTemplateSchedule, type PageTemplateScheduleVariant } from './adapters/page-template-schedule.js';
+import { documentLayoutVariantsWithinPageLimit, normalizeDocumentLayout, type DocumentLayoutVariant } from './adapters/document-layout.js';
 
 export {
   compositionChartStyleFromRenderConfig,
@@ -49,6 +50,7 @@ export interface ReportCompositionOptions {
   contrastProvider?: CompositionContrastProvider;
   inlineFontCoverage?: JsPdfInlineFontCoverage;
   insertionRequests?: PlacementRequests;
+  layout?: DocumentLayoutInput;
   pageTemplateSchedule?: PageTemplateScheduleInput;
   pageTemplateSources?: PageTemplateSource[];
   headerBottomGap?: number;
@@ -82,14 +84,22 @@ export function planReportComposition(
   options: ReportCompositionOptions,
 ): ReportCompositionResult {
   const document = compositionDocumentFromInput(data);
+  if (options.layout && options.pageTemplateSchedule) {
+    throw new Error('A composition run accepts `layout` or the legacy page-template schedule, not both.');
+  }
   const pageTemplateSources = options.pageTemplateSources ?? (
-    options.pageTemplateSchedule?.every((entry) => entry.template_ref === compiled.id)
+    options.layout?.every((entry) => entry.template === compiled.id)
+      ? [{ templateRef: compiled.id, compiled, geometry }]
+      : options.pageTemplateSchedule?.every((entry) => entry.template_ref === compiled.id)
       ? [{ templateRef: compiled.id, compiled, geometry }]
       : undefined
   );
-  if (options.pageTemplateSchedule && !pageTemplateSources) {
+  if ((options.layout || options.pageTemplateSchedule) && !pageTemplateSources) {
     throw new Error('A page-template schedule with multiple template references requires pageTemplateSources.');
   }
+  const layoutVariants: DocumentLayoutVariant[] = options.layout && pageTemplateSources
+    ? documentLayoutVariantsWithinPageLimit(normalizeDocumentLayout(options.layout), options.maxPages)
+    : [];
   const scheduleVariants: PageTemplateScheduleVariant[] = options.pageTemplateSchedule && pageTemplateSources
     ? normalizePageTemplateSchedule(options.pageTemplateSchedule.map((entry) => ({
       pages: {
@@ -100,7 +110,16 @@ export function planReportComposition(
       templateRef: entry.template_ref,
     })))
     : [];
-  const templates = scheduleVariants.length > 0 && pageTemplateSources
+  const templates = layoutVariants.length > 0 && pageTemplateSources
+    ? layoutVariants.map((variant) => compositionTemplateFromDocumentLayout(pageTemplateSources, variant, {
+      maxPages: options.maxPages,
+      ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
+      includeHeaderFlow: options.includeHeaderFlow ?? true,
+      ...(options.headerBottomGap === undefined ? {} : { headerBottomGap: options.headerBottomGap }),
+      ...(options.mainFlowId === undefined ? {} : { mainFlowId: options.mainFlowId }),
+      ...(options.auxiliaryTextWidths === undefined ? {} : { auxiliaryTextWidths: options.auxiliaryTextWidths }),
+    }))
+    : scheduleVariants.length > 0 && pageTemplateSources
     ? scheduleVariants.map((variant) => compositionTemplateFromPageTemplateSchedule(pageTemplateSources, variant, {
       maxPages: options.maxPages,
       ...(options.includeTitlePage === undefined ? {} : { includeTitlePage: options.includeTitlePage }),
@@ -125,17 +144,23 @@ export function planReportComposition(
     ...plannerPolicyFromRenderConfig(),
     ...options.policy,
   };
-  const planned = templates.map((candidateTemplate) => {
-    const template = applyDynamicInsertionRequests(candidateTemplate, document, options.insertionRequests);
-    return { template, result: createTextCompositionEngine(template, policy, options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}).plan(document, metrics) };
-  });
-  const selected = planned.reduce((best, candidate) => compareCompositionEvaluations(candidate.result.evaluation, best.result.evaluation) < 0 ? candidate : best);
-  const template = selected.template;
-  const result = selected.result;
   const geometryForPage = (page: CompositionPlan['pages'][number]): PageGeometry => {
     if (!pageTemplateSources || page.templateRef === undefined) return geometry;
     return pageTemplateSources.find((source) => source.templateRef === page.templateRef)?.geometry ?? geometry;
   };
+  const planned = templates.map((candidateTemplate) => {
+    const template = applyDynamicInsertionRequests(candidateTemplate, document, options.insertionRequests);
+    return {
+      template,
+      result: createTextCompositionEngine(template, policy, {
+        ...(options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}),
+        beforeEvaluate: (_document, candidatePlan) => attachPlanSpacingReport(candidatePlan, document, metrics, geometry, geometryForPage),
+      }).plan(document, metrics),
+    };
+  });
+  const selected = planned.reduce((best, candidate) => compareCompositionEvaluations(candidate.result.evaluation, best.result.evaluation) < 0 ? candidate : best);
+  const template = selected.template;
+  const result = selected.result;
   attachPlanSpacingReport(result.plan, document, metrics, geometry, geometryForPage);
   appendInlineDiagnostics(doc, options.family, document, result, options.inlineFontCoverage);
   return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };

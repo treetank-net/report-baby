@@ -68,6 +68,8 @@ function buildCompositionEvaluation(document: CompositionDocument, plan: Composi
  */
 export interface CompositionEvaluationOptions {
   contrastProvider?: CompositionContrastProvider;
+  /** Populate renderer-neutral plan evidence before score components run. */
+  beforeEvaluate?: (document: CompositionDocument, plan: CompositionPlan) => void;
 }
 
 /**
@@ -97,5 +99,6 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
   validateContentCoverage(document, plan, repeatedFlows, diagnostics);
   const decoratedDiagnostics = decorateCompositionDiagnostics(diagnostics);
   plan.diagnostics = decoratedDiagnostics;
+  options.beforeEvaluate?.(document, plan);
   return buildCompositionEvaluation(document, plan, decoratedDiagnostics, contrastAssessments);
 }

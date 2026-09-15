@@ -122,11 +122,27 @@ export interface CompositionTextPlacementSpacingReport {
   gapToFooter?: number;
 }
 
+/** Explainable, extensible facts derived from one plan region or obstacle. */
+export interface CompositionSpacingObservation {
+  kind: 'region' | 'obstacle' | 'insertion-rhythm';
+  page: number;
+  regionId?: string;
+  slotId?: string;
+  blockId?: string;
+  graphicId?: string;
+  box?: CompositionBox;
+  metrics: Record<string, number>;
+  profile?: 'compact' | 'normal' | 'open';
+  reasons?: string[];
+  intervals?: Array<{ x: number; width: number }>;
+}
+
 /** Explainable geometry and spacing projection attached to a composition plan. */
 export interface CompositionPlanSpacingReport {
   pages: CompositionPageGeometryReport[];
   slots: CompositionSlotSpacingReport[];
   textPlacements: CompositionTextPlacementSpacingReport[];
+  observations?: CompositionSpacingObservation[];
 }
 
 export interface CompositionPageChrome {

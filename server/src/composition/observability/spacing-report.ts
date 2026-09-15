@@ -9,6 +9,7 @@ import type {
   CompositionTextPlacementSpacingReport,
   CompositionTextSpacingReport,
   CompositionTextMetrics,
+  CompositionSpacingObservation,
 } from '../contracts/engine-contracts.js';
 import { plannedLines } from '../layout/plan-lines.js';
 import { lineHeight, styleFor, textMargins, textPadding } from '../text/text-layout.js';
@@ -214,6 +215,144 @@ function textStylesBySlot(plan: CompositionPlan, document: CompositionDocument, 
   return styles;
 }
 
+function verticalGapBefore(box: CompositionBox, lines: ReturnType<typeof plannedLines>): number | undefined {
+  const candidates = lines
+    .filter((line) => bottom(line.box) <= box.y && horizontalOverlap(line.box, box))
+    .map((line) => box.y - bottom(line.box));
+  return candidates.length > 0 ? Math.min(...candidates) : undefined;
+}
+
+function verticalGapAfter(box: CompositionBox, lines: ReturnType<typeof plannedLines>): number | undefined {
+  const candidates = lines
+    .filter((line) => line.box.y >= bottom(box) && horizontalOverlap(line.box, box))
+    .map((line) => line.box.y - bottom(box));
+  return candidates.length > 0 ? Math.min(...candidates) : undefined;
+}
+
+function horizontalOverlap(first: CompositionBox, second: CompositionBox): boolean {
+  return Math.min(right(first), right(second)) > Math.max(first.x, second.x);
+}
+
+function textIntervalsBeside(
+  plan: CompositionPlan,
+  page: number,
+  obstacle: CompositionBox,
+): Array<{ x: number; width: number }> {
+  const intervals: Array<{ x: number; width: number }> = [];
+  for (const slot of plan.slots.filter((candidate) => candidate.page === page && candidate.kind === 'text' && horizontalOverlap(candidate.box, obstacle))) {
+    const leftWidth = Math.max(0, obstacle.x - slot.box.x);
+    const rightWidth = Math.max(0, right(slot.box) - right(obstacle));
+    if (leftWidth > 0) intervals.push({ x: slot.box.x, width: leftWidth });
+    if (rightWidth > 0) intervals.push({ x: right(obstacle), width: rightWidth });
+  }
+  return intervals;
+}
+
+type InsertionPlacement = CompositionPlan['graphicPlacements'][number];
+
+function insertionPlacements(plan: CompositionPlan): InsertionPlacement[] {
+  return plan.graphicPlacements.filter((graphic) => graphic.graphicId.startsWith('insertion:'));
+}
+
+function slotForInsertion(plan: CompositionPlan, placement: InsertionPlacement): CompositionPlan['slots'][number] | undefined {
+  return plan.slots.find((slot) => slot.id === placement.slotId);
+}
+
+function insertionsInRegion(plan: CompositionPlan, placement: InsertionPlacement, regionId: string): InsertionPlacement[] {
+  return insertionPlacements(plan)
+    .filter((candidate) => candidate.page === placement.page && slotForInsertion(plan, candidate)?.regionId === regionId)
+    .sort((left, right) => left.box.y - right.box.y || left.box.x - right.box.x);
+}
+
+function insertionIndex(placements: InsertionPlacement[], placement: InsertionPlacement): number {
+  return placements.findIndex((candidate) => candidate.graphicId === placement.graphicId
+    && candidate.slotId === placement.slotId
+    && candidate.box.x === placement.box.x
+    && candidate.box.y === placement.box.y);
+}
+
+function insertionTextGaps(placement: InsertionPlacement, ordinaryLines: ReturnType<typeof plannedLines>): { before?: number; after?: number } {
+  const pageLines = ordinaryLines.filter((line) => line.page === placement.page);
+  return {
+    before: verticalGapBefore(placement.box, pageLines),
+    after: verticalGapAfter(placement.box, pageLines),
+  };
+}
+
+function insertionNeighbourGaps(
+  placement: InsertionPlacement,
+  peers: InsertionPlacement[],
+): { previous?: number; next?: number } {
+  const index = insertionIndex(peers, placement);
+  const previous = index > 0 ? peers[index - 1] : undefined;
+  const next = index >= 0 && index + 1 < peers.length ? peers[index + 1] : undefined;
+  return {
+    ...(previous ? { previous: placement.box.y - bottom(previous.box) } : {}),
+    ...(next ? { next: next.box.y - bottom(placement.box) } : {}),
+  };
+}
+
+function insertionExplanations(placement: InsertionPlacement, geometry: PageGeometry, gaps: { before?: number; after?: number }): string[] | undefined {
+  const explanations: string[] = [];
+  if (gaps.before === undefined || gaps.after === undefined) explanations.push('content-boundary');
+  if (geometry.bands.header && placement.box.y <= geometry.bands.header.bottom) explanations.push('chrome');
+  return explanations.length > 0 ? [...new Set(explanations)] : undefined;
+}
+
+function buildInsertionRhythmReport(
+  plan: CompositionPlan,
+  placement: InsertionPlacement,
+  slot: CompositionPlan['slots'][number],
+  geometry: PageGeometry,
+  ordinaryLines: ReturnType<typeof plannedLines>,
+): CompositionSpacingObservation {
+  const region = boxFromSegment(geometry.content);
+  const textGaps = insertionTextGaps(placement, ordinaryLines);
+  const neighbourGaps = insertionNeighbourGaps(placement, insertionsInRegion(plan, placement, slot.regionId));
+  const explanations = insertionExplanations(placement, geometry, textGaps);
+  const intervals = textIntervalsBeside(plan, placement.page, placement.box);
+  return {
+    kind: 'insertion-rhythm',
+    page: placement.page,
+    slotId: placement.slotId,
+    regionId: slot.regionId,
+    box: { ...placement.box },
+    metrics: {
+      ...(textGaps.before === undefined ? {} : { beforeTextGap: textGaps.before }),
+      ...(textGaps.after === undefined ? {} : { afterTextGap: textGaps.after }),
+      ...(textGaps.before === undefined || textGaps.after === undefined ? {} : { textGapAsymmetry: Math.abs(textGaps.before - textGaps.after) }),
+      regionStartGap: Math.max(0, placement.box.y - region.y),
+      regionEndGap: Math.max(0, bottom(region) - bottom(placement.box)),
+      ...(neighbourGaps.previous === undefined ? {} : { previousInsertionGap: neighbourGaps.previous }),
+      ...(neighbourGaps.next === undefined ? {} : { nextInsertionGap: neighbourGaps.next }),
+    },
+    ...(explanations === undefined ? {} : { reasons: explanations }),
+    ...(intervals.length === 0 ? {} : { intervals }),
+  };
+}
+
+function insertionRhythmForPlacement(
+  plan: CompositionPlan,
+  placement: InsertionPlacement,
+  geometryByPage: Map<number, PageGeometry>,
+  ordinaryLines: ReturnType<typeof plannedLines>,
+): CompositionSpacingObservation | undefined {
+  const slot = slotForInsertion(plan, placement);
+  const geometry = geometryByPage.get(placement.page);
+  if (!slot || !geometry) return undefined;
+  return buildInsertionRhythmReport(plan, placement, slot, geometry, ordinaryLines);
+}
+
+function insertionRhythmReports(
+  plan: CompositionPlan,
+  geometryByPage: Map<number, PageGeometry>,
+): CompositionSpacingObservation[] {
+  const ordinaryLines = plannedLines(plan).filter((line) => line.layer !== 'insertion');
+  return insertionPlacements(plan)
+    .map((placement) => insertionRhythmForPlacement(plan, placement, geometryByPage, ordinaryLines))
+    .filter((report): report is CompositionSpacingObservation => report !== undefined);
+}
+
 /** Attach static geometry and measured spacing facts to a report composition plan. */
 export function attachPlanSpacingReport(
   plan: CompositionPlan,
@@ -230,6 +369,7 @@ export function attachPlanSpacingReport(
     pages,
     slots,
     textPlacements: textPlacementReports(plan, document, metrics, geometryByPage),
+    observations: insertionRhythmReports(plan, geometryByPage),
   } satisfies CompositionPlanSpacingReport;
 }
 

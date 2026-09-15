@@ -117,22 +117,58 @@ export const placementRequestsSchema = z.object({
 
 export type PlacementRequests = z.infer<typeof placementRequestsSchema>;
 
-const pageTemplateScheduleCountSchema = z.union([
-  z.number().int().positive(),
-  z.object({ min: z.number().int().positive(), max: z.number().int().positive() }).strict(),
+const positivePageIntegerSchema = z.number().int().positive();
+
+const layoutPageCountSchema = z.union([
+  positivePageIntegerSchema,
+  z.object({
+    min: positivePageIntegerSchema,
+    max: positivePageIntegerSchema,
+  }).strict().refine(({ min, max }) => min <= max, {
+    message: 'layout.pages.count.min must not exceed max.',
+  }),
 ]);
 
-/** A document-level page range and the built-in page template it selects. */
+const layoutPagesSchema = z.union([
+  z.object({
+    from: positivePageIntegerSchema,
+    to: positivePageIntegerSchema,
+  }).strict().refine(({ from, to }) => from <= to, {
+    message: 'layout.pages.from must not exceed to.',
+  }),
+  z.object({ count: layoutPageCountSchema }).strict(),
+  z.literal('remaining'),
+]);
+
+/** One canonical document-layout assignment. */
+export const layoutEntrySchema = z.object({
+  pages: layoutPagesSchema,
+  template: z.string().min(1),
+}).strict();
+
+/** The single public document-level template-selection declaration. */
+export const documentLayoutSchema = z.array(layoutEntrySchema).min(1);
+export type DocumentLayoutInput = z.infer<typeof documentLayoutSchema>;
+
+/** @deprecated Internal migration bridge. Public requests use `layout`. */
+const pageTemplateScheduleCountSchema = z.union([
+  positivePageIntegerSchema,
+  z.object({ min: positivePageIntegerSchema, max: positivePageIntegerSchema }).strict(),
+]);
+
+/** @deprecated Internal migration bridge. Public requests use `layout`. */
 export const pageTemplateScheduleEntrySchema = z.object({
   pages: z.object({
-    from: z.number().int().positive().optional(),
-    to: z.number().int().positive().optional(),
+    from: positivePageIntegerSchema.optional(),
+    to: positivePageIntegerSchema.optional(),
     count: pageTemplateScheduleCountSchema.optional(),
   }).strict(),
   template_ref: z.string().min(1),
 }).strict();
 
+/** @deprecated Internal migration bridge. Public requests use `layout`. */
 export const pageTemplateScheduleSchema = z.array(pageTemplateScheduleEntrySchema).min(1);
+/** @deprecated Internal migration bridge. Public requests use `layout`. */
 export type PageTemplateScheduleInput = z.infer<typeof pageTemplateScheduleSchema>;
 
 const compositionGlyphSchema = z.object({

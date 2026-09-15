@@ -452,41 +452,61 @@ window exists in candidate evidence.
 
 ## Target spacing contract
 
-Extend `CompositionPlanSpacingReport` with region and obstacle facts:
+### Data-shape policy
+
+Not every value emitted by a planner is a new domain contract. The following
+boundary keeps the data model small:
+
+- document input, template geometry, slot compatibility, hard diagnostics and
+  candidate identity remain typed because they control legality or selection;
+- score components keep their stable `code`, `value` and `points`, while their
+  rule-specific measurements remain in the existing `details` map;
+- spacing, region and obstacle measurements use one small identity envelope
+  (`kind`, page and optional placement identifiers) plus dedicated numeric,
+  categorical and geometric channels;
+- a producer emits only facts it can establish. It does not fill unavailable
+  values with zero or create an interface containing every possible future
+  metric;
+- tests are the contract for rule-specific facts: each scoring case asserts
+  the keys it needs, and missing facts make that rule not measurable rather
+  than silently producing a penalty;
+- decisions and phase trace entries already use key/value details and do not
+  need another wrapper.
+
+This is deliberately a hybrid model. It avoids a hierarchy of one-off report
+interfaces without turning legality, candidate ordering or renderer geometry
+into unvalidated dictionaries.
+
+Extend `CompositionPlanSpacingReport` with one extensible observation stream
+for facts that are derived from the current plan. Do not create a separate
+interface for every scoring rule or insertion variant:
 
 ```ts
-interface CompositionRegionSpacingReport {
+interface CompositionSpacingObservation {
+  kind: 'region' | 'obstacle' | 'insertion-rhythm';
   page: number;
-  regionId: string;
-  usableBoxes: CompositionBox[];
-  occupiedBoxes: CompositionBox[];
-  reservedBoxes: CompositionBox[];
-  occupiedArea: number;
-  usableArea: number;
-  emptyArea: number;
-  emptyAreaRatio: number;
-  verticalGaps: Array<{
-    from: number;
-    to: number;
-    size: number;
-    explainedBy?: 'chrome' | 'reserved-slot' | 'obstacle' | 'end-of-content';
-  }>;
-}
-
-interface CompositionObstacleSpacingReport {
-  page: number;
+  regionId?: string;
+  slotId?: string;
   blockId?: string;
   graphicId?: string;
-  slotId: string;
-  box: CompositionBox;
-  intersectingSlotIds: string[];
-  gapsBySlot: Array<{ slotId: string; before?: number; after?: number }>;
+  box?: CompositionBox;
+  metrics: Record<string, number>;
+  profile?: 'compact' | 'normal' | 'open';
+  reasons?: string[];
+  intervals?: Array<{ x: number; width: number }>;
 }
 ```
 
-The exact property names may follow existing naming conventions while editing
-`engine-contracts.ts`, but one fact must have one representation. Score details
-and suggestions reference these records instead of recalculating boxes.
+Metrics are numeric by construction. Labels/reasons and geometric intervals
+have separate fields, so one key cannot change between a number and an object
+depending on the producer.
+
+The identity envelope is deliberately small. A producer emits only the facts
+that it can establish for that observation; a missing fact is not silently
+replaced with zero. Tests define the required keys for each scoring case, and
+the evaluator treats an absent key as “not measurable” rather than inventing a
+penalty. Score details and suggestions reference these records instead of
+recalculating boxes.
 
 ## Measurement rules
 
@@ -622,29 +642,32 @@ neighbour gap, the resolved reference token/profile, and the reason for any
 intentional asymmetry. This makes a dense page explainable without requiring a
 rendered-PDF inspection script.
 
-Required score evidence includes:
+Insertion-rhythm evidence uses the same observation shape:
 
 ```ts
-interface CompositionInsertionRhythmReport {
-  page: number;
-  slotId: string;
-  regionId: string;
-  beforeTextGap?: number;
-  afterTextGap?: number;
-  textGapAsymmetry?: number;
-  regionStartGap: number;
-  regionEndGap: number;
-  previousInsertionGap?: number;
-  nextInsertionGap?: number;
-  spacingProfile: 'compact' | 'normal' | 'open';
-  targetGap: number;
-  narrowTextIntervals: Array<{ x: number; width: number }>;
-  explainedBy?: Array<'chrome' | 'reserved-slot' | 'obstacle' | 'content-boundary'>;
+{
+  kind: 'insertion-rhythm',
+  page: 2,
+  slotId: 'quote-auto-1',
+  regionId: 'main',
+  metrics: {
+    beforeTextGap: 4.2,
+    afterTextGap: 5.1,
+    textGapAsymmetry: 0.9,
+    regionStartGap: 18,
+    regionEndGap: 22,
+    previousInsertionGap: 6
+  },
+  profile: 'normal',
+  intervals: [{ x: 18, width: 32 }],
+  reasons: ['content-boundary']
 }
 ```
 
 One spacing fact is calculated once in `spacing-report.ts`. Scoring and
-diagnostics reference that record rather than reconstructing neighbour boxes.
+diagnostics reference the observation and its named facts rather than
+reconstructing neighbour boxes. New rules may add facts without expanding the
+central contract; their tests must document the keys they require.
 Candidate comparison may favour a more symmetric arrangement only after both
 candidates are complete and legal.
 
@@ -898,8 +921,10 @@ query and retains the old behavior assertion.
   instances without creating persistent template records.
 - Template-declared wide, half-width and column alternatives remain discrete
   legal choices; the planner does not invent an undeclared visual form.
-- Multiple insertions expose before/after, neighbour and usable-region edge
-  gaps, and the evaluator can explain spacing-profile and symmetry penalties.
+- Multiple insertions expose the relevant before/after, neighbour and
+  usable-region edge facts through spacing observations, and the evaluator can
+  explain spacing-profile and symmetry penalties without requiring every
+  observation to contain every possible field.
 - No content-dependent width or height is introduced as a renderer constant or
   duplicated between template, code and test configuration.
 - Hard-violation code, severity and ordering remain unchanged for existing
