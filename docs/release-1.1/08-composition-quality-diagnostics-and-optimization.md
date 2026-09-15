@@ -140,10 +140,18 @@ The target request shape uses the following precedence:
 
 | Request fields | Meaning | Required geometry supplied by |
 |---|---|---|
-| `flow_id`, `block_id` and optional `kind` hint | find the first legal compatible insertion capacity across the selected page-template assignments | the selected template and measured content |
-| the above plus `slot_id` or `preferred_region` | prefer compatible capacity in the named place; fail with evidence if it is explicitly required and unavailable | the selected template and measured content |
+| `flow_id`, `block_id` and optional `kind` hint | enumerate legal compatible insertion capabilities across the selected page-template assignments | the selected template and measured content |
+| the above plus `preferred_slot` or `preferred_region` | consider compatible capacity in the named place first, then other legal capabilities | the selected template and measured content |
+| the above plus `slot_id` | require that named capability; fail with evidence when it cannot host the block | the selected template and measured content |
 | the above plus `page` | constrain the insertion to that materialized page; this is a deliberate hard location | the selected template and measured content |
 | the above plus `frame` | create a request-owned overlay when no persistent slot is suitable | the request supplies the anchor; the planner supplies measured height and template defaults |
+
+`slot_id` and `page` are hard constraints. `preferred_slot` and
+`preferred_region` are soft preferences: candidate generation considers the
+preferred capability first, but may use another compatible capability when
+that produces a better legal plan. The contract does not overload one field
+with both meanings. A future hard region constraint, if required, receives a
+separate name.
 
 `sizing` is an optional escape hatch for a deliberate fixed-capacity or
 explicitly bounded overlay. When it is absent, the adapter inherits
@@ -170,13 +178,18 @@ occupied box so diagnostics can explain the result.
 
 The planner resolves this request in order:
 
-1. find compatible insertion slots declared by the selected template;
+1. enumerate compatible insertion-slot capabilities declared by every
+   selected page template that the request is allowed to use;
 2. measure the block, including caption and intrinsic aspect ratio;
-3. derive the occupied height (and a declared legal width range, if any);
-4. apply the slot's fit-content and overflow policy;
-5. place the insertion in the first legal candidate position;
-6. reflow or push lower-priority content using named template relations; and
-7. report the measured box, gaps and any quality penalty.
+3. materialize a bounded set of page-local slot instances from each compatible
+   capability;
+4. derive the occupied height and use one of the discrete widths or column
+   spans exposed by the template;
+5. apply the slot's fit-content and overflow policy;
+6. build complete plans for the resulting candidate positions;
+7. reflow or push lower-priority content using named template relations; and
+8. report the measured box, gaps and any quality penalty so the existing
+   engine can select the best complete legal candidate.
 
 Explicit coordinates and fixed dimensions remain available for a deliberate
 special composition, but they are the exception. A normal quote or image must
@@ -185,7 +198,124 @@ movement window. If no compatible template slot exists, the planner returns a
 diagnostic with the missing capability and remediation. It silently invents
 neither a slot nor a geometry fallback. A request-owned overlay is created only
 when the author provided its explicit `frame`; the normal content-first form
-never creates implicit slots as a rescue path.
+never invents an undeclared capability as a rescue path. Materializing one or
+more page-local instances from a declared reusable capability is normal
+planning, not implicit fallback slot creation.
+
+### Templates predefine insertion placement capabilities
+
+An insertion slot in a page template is not necessarily one permanently
+occupied rectangle. It may be a reusable capability describing how compatible
+content can be placed in a region. One capability can materialize several
+page-local slot instances up to a declared per-page capacity. This avoids
+requiring one authored slot for every quote in a long article while keeping
+the legal geometry under template control.
+
+Keep three concepts distinct:
+
+| Concept | Meaning |
+|---|---|
+| block kind or role | semantic content such as quote, image, table or intro |
+| slot placement policy | template-owned rule describing fixed, fit-content or movable geometry |
+| materialized slot | one page-local candidate or accepted instance with a concrete box |
+
+Release 1.1 extends the existing slot declaration rather than adding an
+insertion class or a parallel slot hierarchy. The target placement policy is a
+closed union:
+
+```ts
+type TemplateSlotPlacement =
+  | { mode: 'fixed' }
+  | { mode: 'anchored-fit-content' }
+  | {
+      mode: 'fluid-y';
+      region: string;
+      maxInstancesPerPage: number;
+      distribution?: 'free' | 'balanced';
+    };
+```
+
+- `fixed` requires a complete `x`, `y`, `width` and `height` frame.
+- `anchored-fit-content` requires `x`, `y` and `width`; measured content
+  supplies height up to the declared capacity.
+- `fluid-y` requires a horizontal frame (`x` and `width`) and a bounded region;
+  the usable vertical interval is derived from that region after chrome and
+  reserved slots are known. It does not accept an authored `y`.
+- A template offers alternative widths or column positions as separate named
+  capabilities. Release 1.1 does not search an arbitrary continuous width
+  range. Choosing between `image-wide`, `image-half` and `image-column` is a
+  bounded capability choice.
+- `maxInstancesPerPage` limits runtime materialization. It is not the number of
+  static slot records that must be written into the template.
+
+Example template declaration:
+
+```yaml
+slots:
+  quote-wide:
+    type: text
+    role: quote
+    frame: { x: 0.081, width: 0.838 }
+    fit_content: true
+    placement:
+      mode: fluid-y
+      region: body
+      max_instances_per_page: 2
+      distribution: balanced
+    spacing_profile: normal
+
+  quote-column:
+    type: text
+    role: quote
+    frame: { x: 0.081, width: 0.404 }
+    fit_content: true
+    placement:
+      mode: fluid-y
+      region: body
+      max_instances_per_page: 4
+      distribution: balanced
+    spacing_profile: compact
+
+  image-wide:
+    type: image
+    frame: { x: 0.25, width: 0.50 }
+    fit_content: true
+    placement:
+      mode: fluid-y
+      region: body
+      max_instances_per_page: 1
+      distribution: free
+    spacing_profile: normal
+
+  fixed-advertisement:
+    type: image
+    frame: { x: 0.70, y: 0.55, width: 0.22, height: 0.30 }
+    placement: { mode: fixed }
+```
+
+The exact identifiers are template vocabulary. A quote remains quote content
+when placed in `quote-column`; the planner must not silently turn it into an
+ordinary paragraph. `intro` remains its own required flow, but its image and
+lead reuse the same measurement, fit-content and relation mechanics as other
+non-main placements.
+
+For every block, the resolver returns all capabilities compatible with its
+flow, kind, role and explicit request constraints. `planner-candidates.ts`
+then materializes deterministic instances. Instance IDs are derived from the
+capability, page and ordinal, for example `quote-wide@page-4#2`; they are plan
+records, not persisted template or domain entities.
+
+The movement interval comes from the selected template region. Candidate
+density, refinement counts and global search budgets come from
+`server/templates/render-config.yml`; neither the content author nor every
+template repeats them. Static slots continue to work unchanged.
+
+If requested insertions exceed all compatible capacity, planning fails with
+the requested count, achievable count, considered templates/pages and
+unplaced block IDs. Remedies may recommend adding a template span, enabling a
+denser compatible capability such as `quote-column`, or reducing optional
+content. The planner never enables a capability that the selected templates or
+request did not allow.
 
 The template expresses relationships, not a pixel choreography:
 
@@ -309,6 +439,7 @@ The first migrated hard families require these factual payloads:
 | Family | Required facts when known |
 |---|---|
 | missing slot | flow/block, searched page range, selected template per page, compatible slot IDs |
+| insertion capacity exceeded | requested block IDs/count, compatible capabilities, per-page capacities, achievable count and unplaced block IDs |
 | overflow | required and available height/lines/rows, slot box, remaining content range |
 | bounds/collision | both boxes, tolerance, page and owning placements |
 | forbidden continuation | first placed page/slot, attempted next page/template, route policy |
@@ -410,6 +541,77 @@ The final bottom gap is not penalized when the relevant flow has no remaining
 content. Column fill compares sibling text slots in the same region and page;
 it never compares a sidebar with `main` or a footer with a body column.
 
+### Insertion rhythm, symmetry and spacing profiles
+
+Insertion quality is evaluated against the usable region selected by the
+template, not blindly against the physical paper edge. The usable region
+already accounts for page margins, dynamic chrome and reserved bands. The
+spacing report still records physical edge distances for explanation, but
+quality comparisons use the intended region unless the template explicitly
+anchors a capability to the page.
+
+For every insertion instance, record:
+
+- the nearest main-text gap before and after its occupied box;
+- its distances from the start and end edges of the usable region;
+- gaps to the preceding and following insertion in the same region;
+- the resolved spacing profile and numeric target used for comparison;
+- whether a gap is constrained by chrome, a reserved slot, an obstacle or the
+  beginning/end of available content; and
+- the width of every remaining text interval beside the insertion.
+
+The template selects a semantic `spacing_profile` such as `compact`, `normal`
+or `open`. The brand may select the default profile, but it does not supply
+independent numeric geometry. The profile and named relation resolve through
+`server/templates/render-config.yml`, so header, rule, body and insertion gaps
+can share one spacing rhythm without copying a number into several templates.
+For example, a normal header-to-rule separation and a normal insertion-to-text
+separation should resolve to the same or explicitly related target rather than
+unrelated literals.
+
+The evaluator applies these rules:
+
+1. The before/after text gaps of an insertion should be approximately
+   symmetric unless one side is explained by a boundary or another obstacle.
+2. A `balanced` fluid capability should minimize dispersion between the usable
+   region's outer gaps and the gaps between multiple insertion instances.
+3. Adjacent insertion gaps should follow the selected spacing profile. A
+   compact page rhythm favours compact gaps; an open rhythm favours wider
+   gaps. Density alone is not rewarded.
+4. A candidate is penalized when an insertion leaves a text interval narrower
+   than the configured usable-line threshold, even if the rectangles do not
+   collide.
+5. Symmetry is a soft quality signal. It cannot override hard bounds, content
+   coverage, keep rules, or an explicitly authored fixed placement.
+6. An exact geometric tie is unnecessary. Tolerances and penalties come from
+   render configuration and the plan reports the measured delta.
+
+Required score evidence includes:
+
+```ts
+interface CompositionInsertionRhythmReport {
+  page: number;
+  slotId: string;
+  regionId: string;
+  beforeTextGap?: number;
+  afterTextGap?: number;
+  textGapAsymmetry?: number;
+  regionStartGap: number;
+  regionEndGap: number;
+  previousInsertionGap?: number;
+  nextInsertionGap?: number;
+  spacingProfile: 'compact' | 'normal' | 'open';
+  targetGap: number;
+  narrowTextIntervals: Array<{ x: number; width: number }>;
+  explainedBy?: Array<'chrome' | 'reserved-slot' | 'obstacle' | 'content-boundary'>;
+}
+```
+
+One spacing fact is calculated once in `spacing-report.ts`. Scoring and
+diagnostics reference that record rather than reconstructing neighbour boxes.
+Candidate comparison may favour a more symmetric arrangement only after both
+candidates are complete and legal.
+
 ### Dynamic intro and chrome
 
 - Intro remains its own flow. A fit-content cover and lead consume their
@@ -432,6 +634,10 @@ Required non-blocking suggestion codes are:
 - `EXCESSIVE_EMPTY_REGION`;
 - `UNBALANCED_COLUMN_FILL`;
 - `UNBALANCED_INSERTION_GAP`;
+- `ASYMMETRIC_INSERTION_TEXT_GAPS`;
+- `UNBALANCED_INSERTION_DISTRIBUTION`;
+- `INCONSISTENT_SPACING_RHYTHM`;
+- `NARROW_TEXT_INTERVAL_AROUND_INSERTION`;
 - `UNUSED_FIT_CONTENT_ENVELOPE`;
 - `HEADER_GAP_TOO_SMALL`;
 - `FOOTER_GAP_TOO_SMALL`;
@@ -455,6 +661,9 @@ New configuration keys under `composition_score` cover:
 - minimum material empty-region area/height and its penalty;
 - maximum sibling-column fill difference and its penalty;
 - maximum insertion before/after-gap imbalance and its penalty;
+- insertion distribution dispersion and its penalty;
+- compact, normal and open spacing targets and deviation penalties;
+- minimum usable text interval beside an insertion and its penalty;
 - maximum retained fit-content envelope ratio and its penalty;
 - minimum footer/content gap and its penalty.
 
@@ -479,6 +688,19 @@ fit-content points = -max(0, ratio - configured threshold) * configured penalty
 
 footer deficit = max(0, configured minimum gap - measured gap)
 footer points = -deficit * configured penalty
+
+insertion text-gap asymmetry = abs(beforeTextGap - afterTextGap)
+insertion symmetry points =
+  -max(0, asymmetry - configured tolerance) * configured penalty
+
+balanced distribution dispersion =
+  mean(abs(each unexplained outer/inter-insertion gap - mean gap))
+distribution points =
+  -max(0, dispersion - configured tolerance) * configured penalty
+
+spacing rhythm deviation = abs(measured gap - resolved profile target)
+spacing rhythm points =
+  -max(0, deviation - configured tolerance) * configured penalty
 ```
 
 The existing insertion-spacing formula (internal imbalance, external
@@ -510,16 +732,28 @@ but may not drop hard violations or change codes.
 1. Inventory every built-in page template's structural envelope, fit-content
    flag, growth ceiling, push relation and overflow policy. Mark content-
    dependent dimensions that are currently hard-coded.
-2. Define the content-first insertion input and migration rules above, then
-   add schema/adapter fixtures for static-capability and explicit-overlay
-   requests.
-3. Add region and obstacle spacing types to `engine-contracts.ts`.
-4. Extract shared rectangle clipping, union-area and interval calculations into
+2. Extend the existing slot schema with the closed placement-policy union.
+   Convert repeated fixed quote positions into reusable capabilities only where
+   the template intends planner-controlled placement; retain deliberately
+   fixed advertisements and other authored boxes.
+3. Define `compact`, `normal` and `open` as categorical template/brand choices
+   and map them to one typed spacing scale in `render-config.yml`. Resolve
+   template override, then brand default, then the configured system default.
+4. Define the content-first insertion input and migration rules above, then
+   add schema/adapter fixtures for static-capability, reusable-capability and
+   explicit-overlay requests.
+5. Materialize deterministic page-local slot instances from reusable
+   capabilities, with stable capability/page/ordinal IDs and per-page capacity
+   enforcement.
+6. Add region, obstacle and insertion-rhythm spacing types to
+   `engine-contracts.ts`.
+7. Extract shared rectangle clipping, union-area and interval calculations into
    the existing composition geometry directory.
-5. Extend `attachPlanSpacingReport()` to create region/obstacle records from
-   already-materialized placements.
-6. Add plan-only fixtures proving deduplication, clipping, reserved bands,
-   fit-content shrinkage and final-content gaps.
+8. Extend `attachPlanSpacingReport()` to create region, obstacle and insertion-
+   rhythm records from already-materialized placements.
+9. Add plan-only fixtures proving deduplication, clipping, reserved bands,
+   fit-content shrinkage, final-content gaps and multiple instances of one slot
+   capability.
 
 The inventory and fixtures must distinguish a structural frame from measured
 occupied content. No scoring or candidate selection changes in this stage.
@@ -547,16 +781,19 @@ silently compensate for a bad plan.
 
 ### Stage D — quality scoring and suggestions
 
-1. Add and validate YAML thresholds.
-2. Add score components using the shared evidence.
+1. Add and validate YAML spacing profiles, symmetry tolerances, narrow-text
+   limits and penalties.
+2. Add score components using the shared evidence, including insertion-to-text
+   symmetry, multi-insertion distribution and spacing-rhythm consistency.
 3. Map negative components to suggestions.
 4. Prove that scores change while plan geometry and hard legality remain
    unchanged for a fixed candidate.
 
 ### Stage E — select among existing candidates
 
-1. Use existing movable insertion/graphic fixtures to produce at least two
-   complete legal candidates with different quality scores.
+1. Use existing movable insertion/graphic fixtures and one reusable fluid-slot
+   fixture to produce at least two complete legal candidates with different
+   quality scores.
 2. Confirm `compareCompositionEvaluations()` selects the higher score and
    preserves stable order for an exact tie.
 3. Confirm an aesthetically better illegal candidate cannot win.
@@ -581,9 +818,13 @@ query and retains the old behavior assertion.
 | `evaluation/scoring.ts` | numeric quality components for legal plans |
 | `evaluation/evaluator.ts` | assemble legality, score and suggestions once |
 | `composition-engine.ts` | compare candidates and record selection trace |
-| `layout/planner-candidates.ts` | generate declared movable-placement proposals |
+| `template/contracts.ts` | validate fixed, anchored-fit-content and reusable fluid-y slot policies |
+| `layout/page-state.ts` | materialize page-local instances and enforce per-page slot capacity |
+| `layout/planner-candidates.ts` | generate bounded proposals from template capabilities and declared movable placements |
 | `contracts/input/schema.ts` | validate the simple insertion form and explicit-overlay escape hatch |
 | `adapters/request-insertion-slots.ts` | resolve template capability, inherit defaults and materialize per-run overlays |
+| brand contracts/theme adapter | select an optional categorical spacing-profile default; never introduce independent numeric gaps |
+| `adapters/render-config.ts` | resolve spacing profiles, symmetry tolerances and penalties from the shared YAML configuration |
 | MCP/CLI adapters | preserve and format the same result |
 
 ## Test matrix
@@ -593,6 +834,11 @@ query and retains the old behavior assertion.
 | region union area does not double-count overlap | plan-only synthetic geometry | `test-structure-scoring.mjs` |
 | dynamic template height follows measured content | plan-only template/slot fixture | `test-editorial-plan-contract.mjs` |
 | fixed structural dimensions remain stable while content dimensions grow | plan-only two-content-length fixture | `test-report-chrome.mjs` |
+| one fluid capability places seven quotes across five pages without seven authored slots | plan-only reusable-capability fixture | `test-dynamic-insertion-slots.mjs` |
+| template alternatives allow wide and column quote geometry without changing quote semantics | plan-only capability-selection fixture | `test-dynamic-insertion-slots.mjs` |
+| insertion capacity exhaustion reports requested, achievable and remaining blocks | plan-only illegal fixture | `test-dynamic-insertion-slots.mjs` |
+| symmetric insertion spacing outranks an otherwise equivalent asymmetric candidate | two plan-only candidates | `test-structure-scoring.mjs` |
+| compact and open spacing profiles favour their corresponding gap scale | plan-only profile pairs | `test-structure-scoring.mjs` |
 | chrome/reserved area is intentional | plan-only template fixture | planning section of `test-report-chrome.mjs` |
 | unused fit-content envelope is visible | plan-only measured block fixture | `test-editorial-plan-contract.mjs` |
 | caption is included in an insertion obstacle | plan-only placement boxes | `test-dynamic-insertion-slots.mjs` |
@@ -610,6 +856,12 @@ query and retains the old behavior assertion.
 - Ordinary insertions work from content plus a compatible template capability;
   authors are not required to repeat template dimensions, push relations or
   movement rules for every quote/image.
+- One reusable slot capability can materialize several deterministic page-local
+  instances without creating persistent template records.
+- Template-declared wide, half-width and column alternatives remain discrete
+  legal choices; the planner does not invent an undeclared visual form.
+- Multiple insertions expose before/after, neighbour and usable-region edge
+  gaps, and the evaluator can explain spacing-profile and symmetry penalties.
 - No content-dependent width or height is introduced as a renderer constant or
   duplicated between template, code and test configuration.
 - Hard-violation code, severity and ordering remain unchanged for existing

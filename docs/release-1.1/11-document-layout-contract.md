@@ -341,8 +341,11 @@ The same adapter also owns the simplified content-first insertion form. A
 request that names only `flow_id` and `block_id` (with an optional semantic
 `kind` hint derived from the block when omitted) searches compatible slots in
 the selected page-template assignments and inherits their fit-content, growth,
-overflow and relation defaults. `preferred_region`, `slot_id` and `page` narrow
-that search when supplied. Only an explicit request `frame`
+overflow, placement-capacity and relation defaults. A compatible reusable
+slot capability may materialize several page-local instances; this does not
+change the layout or persist new slots in the template. `preferred_slot` and
+`preferred_region` influence candidate order, while `slot_id` and `page` are
+hard constraints. Only an explicit request `frame`
 materializes a new per-run overlay when no persistent capability is suitable;
 the overlay still receives sizing defaults from the selected template. This
 keeps template selection and insertion geometry separate: an insertion cannot

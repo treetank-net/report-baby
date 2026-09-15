@@ -14,6 +14,9 @@ explicitly reviewed editorial corpus.
 - Release 1.1 does not introduce a global document solver.
 - Search changes only placements for which request/template policy supplies
   `MovablePlacementBounds`.
+- A reusable `fluid-y` insertion capability derives those bounds from its
+  selected page-template region. Content authors do not provide candidate
+  counts or movement windows for ordinary insertions.
 - A candidate is a complete set of insertion and graphic proposals from which
   the ordinary planner produces a complete `CompositionPlan`.
 - The engine remains the only evaluator/selection loop.
@@ -72,6 +75,12 @@ interface CompositionSearchBudget {
 
 Pass it through `TextCompositionPlannerPolicy` to the existing candidate
 functions and engine configuration.
+
+The page-template adapter converts each materialized fluid insertion
+capability into `MovablePlacementBounds` after dynamic chrome and reserved
+regions are known. Alternative width or column forms are separate named slot
+capabilities, so the search combines a finite capability choice with a bounded
+position choice instead of sampling an arbitrary continuous width.
 
 ## Candidate identity and order
 

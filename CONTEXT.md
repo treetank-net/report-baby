@@ -129,10 +129,22 @@ defines geometry and behavior, but does not refer to one particular page.
 
 ## Slot
 
-A slot is a named place made available by a template within a region. It may
-be empty or accept one or more pieces of content. A planned slot references a
-region and adds the page, selected flow or content, and the behavior needed by
-the planner. For example: `page: 2`, `region: main-column-1`, `flow: main`.
+A slot is a named placement capability made available by a template within a
+region. It describes compatible content, capacity and placement behavior; it
+does not necessarily denote one permanently occupied rectangle.
+
+## Materialized slot
+
+A materialized slot is one page-local opportunity created from a template
+slot. It has concrete geometry and may be one of several instances permitted
+by the same reusable slot on a page.
+
+## Insertion
+
+An insertion is a content block planned through a compatible non-main slot so
+that it participates in page geometry and affects surrounding flow. Its
+semantic kind is independent of whether its placement is fixed, fit-content
+or movable.
 
 An insertion is authored as content that needs a compatible slot capability;
 the template supplies the slot envelope, sizing behavior and relationships.
@@ -140,13 +152,19 @@ The author should not have to repeat those layout rules for each quote, image
 or other inserted block. Explicit geometry is an exception for deliberate
 special compositions, not the normal insertion contract.
 
-A slot is a valid target only while its capacity and constraints allow another
-placement. A placement consumes space; the slot can remain open, become
-partially available, or become exhausted. Exhausted slots are not considered
-for the next placement.
+A materialized slot is a valid target only while its capacity and constraints
+allow another placement. A placement consumes space; the materialized slot can
+remain open, become partially available, or become exhausted. Exhausted slots
+are not considered for the next placement.
 
 `header`, `footer`, `sidebar` and `intro` are ordinary region names, not
 privileged engine concepts.
+
+## Spacing profile
+
+A spacing profile is a named visual rhythm such as compact, normal or open. A
+template or brand selects the profile while composition uses its shared gap
+scale to compare related margins, boundaries and insertion spacing.
 
 ## Route
 

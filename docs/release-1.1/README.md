@@ -17,7 +17,7 @@ needs to become explicit.
 | [03](03-brand-lockup-and-legacy-chrome.md) | planned lockup/header/footer content and removal of implicit renderer content | planned |
 | [04](04-planner-search-and-evaluator-calibration.md) | deterministic bounded search over existing movable-placement policies | planned |
 | [05](05-contract-cleanup-and-test-consolidation.md) | public-contract inventory and cheaper equivalent tests | planned |
-| [08–10](08-composition-quality-diagnostics-and-optimization.md) | one evidence, diagnostic, scoring and candidate-comparison process | planned |
+| [08–10](08-composition-quality-diagnostics-and-optimization.md) | reusable insertion capabilities plus one evidence, scoring and candidate-comparison process | planned |
 | [11](11-document-layout-contract.md) | one public document `layout`; removal of route-owned template selection | planned |
 
 Floats, RTL/CJK and broad visual calibration are deferred to

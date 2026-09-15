@@ -9,6 +9,9 @@ implementation plans:
   Release 1.1 composition cleanup;
 - [02-visual-calibration.md](02-visual-calibration.md) defines the entry
   conditions for broader cross-brand visual calibration after the Release 1.1
-  chrome and composition-quality mechanisms are stable.
+  chrome and composition-quality mechanisms are stable;
+- [03-editable-composition-drafts.md](03-editable-composition-drafts.md)
+  captures a future plan-edit-select-render workflow built on complete
+  Release 1.1 plan-only evidence.
 
 Neither task belongs to the Release 1.1 acceptance gate.
