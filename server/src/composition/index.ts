@@ -46,8 +46,16 @@ export type {
   CompositionPlan,
   CompositionPlanCandidate,
   CompositionPlanTrace,
+  CompositionPlacementScore,
+  CompositionPlacementScoreContribution,
+  CompositionRepairProposal,
+  CompositionMoveRepairProposal,
+  CompositionOmitRepairProposal,
+  CompositionScorePlacement,
+  CompositionCandidateSearchCandidate,
   CompositionCandidateSearchRound,
   CompositionCandidateSearchTrace,
+  CompositionRepairAttempt,
   CompositionPlanningPhase,
   CompositionPlanningPhaseName,
   CompositionBlockTrace,
@@ -67,8 +75,10 @@ export type {
 } from './contracts/engine-contracts.js';
 export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './composition-engine.js';
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
+export { attributeCompositionScore } from './evaluation/score-attribution.js';
+export { compositionRepairProposals } from './evaluation/repair-proposals.js';
 export { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './evaluation/structure-scoring.js';
-export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, scoreLegalPlan } from './evaluation/scoring.js';
+export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, scoreParagraphFragmentation, scoreOrphanLines, scoreLegalPlan } from './evaluation/scoring.js';
 export { elementProximityReports } from './observability/proximity-report.js';
 export { compositionDocumentFromInput } from './adapters/input.js';
 export { compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, type PageTemplateCompositionOptions, type PageTemplateSource } from './adapters/page-template.js';

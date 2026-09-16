@@ -217,7 +217,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
         return {
           content: [
             { type: 'text' as const, text: 'Report composition plan resolved without rendering.' },
-            { type: 'text' as const, text: compositionQualityText(composition.evaluation) },
+            { type: 'text' as const, text: compositionQualityText(composition.evaluation, composition.plan) },
           ],
           structuredContent: { ...brandRenderSummary(context.diagnostics), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan, drawings: [], composition }, 'full'), dryRun: true },
         };
@@ -227,7 +227,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       const renderWarnings: string[] = [];
       const rendered = await renderReportPdfDetailed(requestedTemplate, data, context.theme, renderWarnings, context.sourceContext, composition_debug, placement_requests, layout);
       await writeFile(out, rendered.buffer);
-      const qualityText = rendered.diagnostics.composition ? compositionQualityText(rendered.diagnostics.composition.evaluation) : undefined;
+      const qualityText = rendered.diagnostics.composition ? compositionQualityText(rendered.diagnostics.composition.evaluation, rendered.diagnostics.composition.plan) : undefined;
       return {
         content: [
           { type: 'text' as const, text: out },

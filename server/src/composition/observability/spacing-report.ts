@@ -383,7 +383,10 @@ function buildInsertionRhythmReport(
   return {
     kind: 'insertion-rhythm',
     page: placement.page,
+    ...(slot.flowId === undefined ? {} : { flowId: slot.flowId }),
     slotId: placement.slotId,
+    blockId: placement.graphicId.replace(/^insertion:/u, ''),
+    graphicId: placement.graphicId,
     regionId: slot.regionId,
     profile,
     owner: attribution.owner,

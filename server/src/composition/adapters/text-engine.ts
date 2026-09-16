@@ -35,6 +35,8 @@ export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
       maxRefinementRounds: search.maxRefinementRounds,
       maxCandidatesPerRefinement: search.maxCandidatesPerRefinement,
       maxFullPlanRecalculations: search.maxFullPlanRecalculations,
+      movableRefinementRounds: search.movableRefinementRounds,
+      minimumGeometryStepMm: search.minimumGeometryStepMm,
     },
   };
 }

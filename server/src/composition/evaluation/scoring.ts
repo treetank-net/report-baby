@@ -61,6 +61,8 @@ function observationContext(observation: CompositionSpacingObservation): Record<
   return {
     page: observation.page,
     ...(observation.flowId === undefined ? {} : { flowId: observation.flowId }),
+    ...(observation.blockId === undefined ? {} : { blockId: observation.blockId }),
+    ...(observation.graphicId === undefined ? {} : { graphicId: observation.graphicId }),
     ...(observation.regionId === undefined ? {} : { regionId: observation.regionId }),
     ...(observation.slotId === undefined ? {} : { slotId: observation.slotId }),
     ...(observation.templateRef === undefined ? {} : { templateRef: observation.templateRef }),
@@ -204,14 +206,18 @@ export function scoreSpacingRhythm(plan: CompositionPlan): CompositionScoreCompo
       || observation.metrics.afterTextGap === undefined
       || observation.metrics.beforeTextGap <= 0
       || observation.metrics.afterTextGap <= 0) return [];
-    return [observation.metrics.beforeTextGap, observation.metrics.afterTextGap]
-      .filter((value): value is number => value !== undefined).map((gap) => ({
-      ...observationContext(observation),
-      profile: observation.profile ?? 'normal',
-      target,
-      gap,
-      deviation: Math.abs(gap - target),
-    }));
+    return [
+      { side: 'before', gap: observation.metrics.beforeTextGap },
+      { side: 'after', gap: observation.metrics.afterTextGap },
+    ].filter((entry): entry is { side: 'before' | 'after'; gap: number } => entry.gap !== undefined)
+      .map(({ side, gap }) => ({
+        ...observationContext(observation),
+        side,
+        profile: observation.profile ?? 'normal',
+        target,
+        gap,
+        deviation: Math.abs(gap - target),
+      }));
   });
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.deviation - tolerance), 0);
   return negativeComponent('spacing-rhythm', excess, scoreConfigNumber('spacingProfilePenalty'), { profile: records[0]?.profile ?? 'normal', target: records[0]?.target ?? defaultTarget, tolerance, records });
@@ -399,6 +405,7 @@ type OrphanLineDetail = {
   side: 'before' | 'after';
   gap: number;
   graphicId: string;
+  lineHeight: number;
 };
 
 /**
@@ -441,6 +448,7 @@ function orphanDetailsForBlock(
       side: isolatedSide,
       gap,
       graphicId: blockingGraphic.graphicId,
+      lineHeight: isolatedLine.box.height,
     }];
   });
 }
@@ -585,6 +593,9 @@ export function scoreElementProximity(plan: CompositionPlan): CompositionScoreCo
       movementNeeded: observation.metrics.movementNeeded,
       movementBudget: observation.metrics.movementBudget,
       movementAvailable: observation.movementAvailable,
+      axis: observation.axis,
+      gapX: observation.metrics.gapX,
+      gapY: observation.metrics.gapY,
       reasons: observation.reasons,
     }))
     .filter((record) => record.deficit > 0);
@@ -777,10 +788,12 @@ export function scoreContrast(assessments: CompositionContrastAssessment[]): Com
  * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreLegalPlan implementation intact until its target seam is extracted.
  */
-export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; breakdown: CompositionScoreComponent[] } {
+export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; base: number; breakdown: CompositionScoreComponent[] } {
   const breakdown = [scoreColumnBalance(plan), scoreSiblingColumnImbalance(plan), scoreEmptyRegions(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreInsertionSymmetry(plan), scoreInsertionDistribution(plan), scoreSpacingRhythm(plan), scoreNarrowTextIntervals(plan), scoreFitContentEnvelope(plan), scoreHeaderSpacing(plan), scoreMainStartDelay(plan), scoreElementProximity(plan), scoreFooterGap(plan), scoreGlyphOverlap(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
+  const base = scoreConfigNumber('base');
   return {
-    score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
+    score: base + breakdown.reduce((sum, component) => sum + component.points, 0),
+    base,
     breakdown,
   };
 }

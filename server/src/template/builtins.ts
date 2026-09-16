@@ -23,6 +23,7 @@ export interface RenderConfig {
     maxRefinementRounds: number;
     maxCandidatesPerRefinement: number;
     maxFullPlanRecalculations: number;
+    minimumGeometryStepMm: number;
     movableWindowRatio?: number;
     movableCandidateCount?: number;
     movableRefinementRounds?: number;
@@ -173,12 +174,22 @@ export function readRenderConfig(): RenderConfig {
       verticalAlign,
     };
   };
+  const compositionScore = camelDictionary('composition_score');
+  for (const [key, value] of Object.entries(compositionScore)) {
+    if (key.endsWith('Penalty') && value < 0) {
+      throw new Error(`Built-in template render-config.composition_score.${key} must be non-negative.`);
+    }
+  }
+  const compositionSearch = camelDictionary('composition_search');
+  if (!(compositionSearch.minimumGeometryStepMm > 0)) {
+    throw new Error('Built-in template render-config.composition_search.minimum_geometry_step_mm must be greater than zero.');
+  }
   return {
     canvas: { width: get(canvas, 'width'), height: get(canvas, 'height'), pptxWidth: get(canvas, 'pptx_width'), pptxHeight: get(canvas, 'pptx_height'), pdfWidthMm: get(canvas, 'pdf_width_mm'), pdfHeightMm: get(canvas, 'pdf_height_mm'), pointsPerInch: get(canvas, 'points_per_inch') },
     quality: { pptxTextRegionMaxChangedPixelRatio: get(quality, 'pptx_text_region_max_changed_pixel_ratio') },
-    compositionScore: camelDictionary('composition_score'),
+    compositionScore,
     compositionPriority: { default: get(compositionPriority, 'default') },
-    compositionSearch: camelDictionary('composition_search') as RenderConfig['compositionSearch'],
+    compositionSearch: compositionSearch as RenderConfig['compositionSearch'],
     assets: camelDictionary('assets'),
     sources: { zipMaxEntries: get(sources, 'zip_max_entries'), zipMaxFileBytes: get(sources, 'zip_max_file_bytes'), zipMaxTotalBytes: get(sources, 'zip_max_total_bytes'), zipMaxCompressionRatio: get(sources, 'zip_max_compression_ratio'), zipMaxNestedArchives: get(sources, 'zip_max_nested_archives') },
     images: { maxAssetBytes: get(images, 'max_asset_bytes'), maxDecodedPixels: get(images, 'max_decoded_pixels'), maxDimensionPx: get(images, 'max_dimension_px'), maxPerDocument: get(images, 'max_per_document'), remoteTimeoutMs: get(images, 'remote_timeout_ms'), remoteMaxRedirects: get(images, 'remote_max_redirects'), decoderTimeoutMs: get(images, 'decoder_timeout_ms') },

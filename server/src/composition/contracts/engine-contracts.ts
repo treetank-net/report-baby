@@ -142,6 +142,63 @@ export interface CompositionSpacingSubject {
   slotId?: string;
 }
 
+/** Stable identity for one materialized occurrence receiving score attribution. */
+export interface CompositionScorePlacement {
+  id: string;
+  kind: 'text' | 'block' | 'table' | 'graphic' | 'glyph';
+  page: number;
+  flowId?: string;
+  blockId?: string;
+  slotId?: string;
+  graphicId?: string;
+  glyphId?: string;
+}
+
+/** One conserved score contribution and its stable scoring reason. */
+export interface CompositionPlacementScoreContribution {
+  code: string;
+  points: number;
+}
+
+/** Score assigned to one page/slot-qualified material placement. */
+export interface CompositionPlacementScore {
+  placement: CompositionScorePlacement;
+  points: number;
+  contributions: CompositionPlacementScoreContribution[];
+}
+
+/** Facts shared by machine-readable refinements; estimates are not measured outcomes. */
+interface CompositionRepairProposalBase {
+  id: string;
+  placement: CompositionScorePlacement;
+  sourceCode: string;
+  estimatedPoints: number;
+  estimateKind: 'local-geometry' | 'orphan-recovery' | 'fragmentation-recovery' | 'optional-omission';
+  evidencePlacementId?: string;
+  measuredGap?: number;
+  targetGap?: number;
+  orphanCount?: number;
+  lineHeight?: number;
+}
+
+/** A bounded movement that is legal inside an explicitly declared frame. */
+export interface CompositionMoveRepairProposal extends CompositionRepairProposalBase {
+  action: 'move';
+  axis: 'x' | 'y';
+  direction: 'left' | 'right' | 'up' | 'down';
+  distance: number;
+  legalCapability: 'declared-movable-frame';
+  legalBounds: CompositionBox;
+}
+
+/** Omission is only a candidate when the input explicitly opted in. */
+export interface CompositionOmitRepairProposal extends CompositionRepairProposalBase {
+  action: 'omit';
+  legalCapability: 'input-allows-omission';
+}
+
+export type CompositionRepairProposal = CompositionMoveRepairProposal | CompositionOmitRepairProposal;
+
 /** Explainable, extensible facts derived from one plan region or obstacle. */
 export interface CompositionSpacingObservation {
   kind: 'region' | 'obstacle' | 'insertion-rhythm' | 'element-proximity';
@@ -166,6 +223,8 @@ export interface CompositionSpacingObservation {
   toBox?: CompositionBox;
   /** Whether the insertion has a declared legal movement capability. */
   movementAvailable?: boolean;
+  /** Axis along which this pair's spacing deficit was measured. */
+  axis?: 'x' | 'y';
 }
 
 /** Explainable geometry and spacing projection attached to a composition plan. */
@@ -424,7 +483,7 @@ export interface CompositionBlockTrace {
   role: CompositionBlock['role'];
   sourceText: string;
   sourceWordCount: number;
-  status: 'placed' | 'partial' | 'residual' | 'empty';
+  status: 'placed' | 'partial' | 'residual' | 'empty' | 'omitted';
   fragments: CompositionBlockTraceFragment[];
   decisions: CompositionTraceDecision[];
 }
@@ -479,7 +538,30 @@ export interface CompositionCandidateSearchRound {
   bestScore?: number;
   improved: boolean;
   reflowPasses: number;
-  stopReason?: 'no-movable-placements' | 'no-new-candidates' | 'no-improvement' | 'round-limit' | 'calculation-budget';
+  repairProposals?: CompositionRepairProposal[];
+  repairAttempts?: CompositionRepairAttempt[];
+  candidateResults?: CompositionCandidateSearchCandidate[];
+  stopReason?: 'no-movable-placements' | 'no-new-candidates' | 'no-improvement' | 'minimum-step' | 'round-limit' | 'calculation-budget';
+}
+
+/** Connect one evaluator proposal to its generated and measured candidate, if any. */
+export interface CompositionRepairAttempt {
+  proposalId: string;
+  status: 'not-materialized' | 'deduplicated' | 'budget-skipped' | 'evaluated';
+  candidateSignature?: string;
+  legal?: boolean;
+  /** Actual geometry displacement tested by this complete candidate, when it is a move. */
+  testedDistance?: number;
+  /** Actual complete-plan score delta; absent until a generated candidate is evaluated. */
+  scoreDelta?: number;
+}
+
+export interface CompositionCandidateSearchCandidate {
+  signature: string;
+  score?: number;
+  scoreDelta?: number;
+  legal: boolean;
+  repairProposalIds?: string[];
 }
 
 export interface CompositionCandidateSearchTrace {
@@ -520,6 +602,7 @@ export interface CompositionPlan {
 export interface CompositionPlanCandidate {
   signature: string;
   plan: CompositionPlan;
+  repairProposalIds?: string[];
 }
 
 export interface CompositionEvaluation {
@@ -527,7 +610,13 @@ export interface CompositionEvaluation {
   diagnostics: CompositionDiagnostic[];
   hardViolations: CompositionDiagnostic[];
   score: number;
+  /** Configured base score; present for legal plans with attributed scoring. */
+  scoreBase?: number;
   scoreBreakdown: CompositionScoreComponent[];
+  /** Conserved placement-level decomposition of `score - scoreBase`. */
+  placementScores?: CompositionPlacementScore[];
+  /** Bounded, renderer-neutral actions the existing planner may try next. */
+  repairProposals?: CompositionRepairProposal[];
   /** Quality components that did not produce a penalty for this plan. */
   passedMetrics: CompositionScoreComponent[];
   residualContent: CompositionResidualContent[];
@@ -560,8 +649,8 @@ export interface CompositionPlanner {
   planCandidatesWithSignatures?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlanCandidate[];
   candidateRefinementRounds?: number;
   searchBudget?: CompositionSearchBudget;
-  planRefinedCandidates?(document: CompositionDocument, metrics: CompositionTextMetrics, selected: CompositionPlan, round: number): CompositionPlan[];
-  planRefinedCandidatesWithSignatures?(document: CompositionDocument, metrics: CompositionTextMetrics, selected: CompositionPlan, round: number): CompositionPlanCandidate[];
+  planRefinedCandidates?(document: CompositionDocument, metrics: CompositionTextMetrics, selected: CompositionPlan, round: number, evaluation?: CompositionEvaluation): CompositionPlan[];
+  planRefinedCandidatesWithSignatures?(document: CompositionDocument, metrics: CompositionTextMetrics, selected: CompositionPlan, round: number, evaluation?: CompositionEvaluation): CompositionPlanCandidate[];
 }
 
 export interface CompositionEvaluator {

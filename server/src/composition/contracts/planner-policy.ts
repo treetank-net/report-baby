@@ -21,6 +21,10 @@ export interface CompositionSearchBudget {
   maxRefinementRounds: number;
   maxCandidatesPerRefinement: number;
   maxFullPlanRecalculations: number;
+  /** Default refinement rounds for a movable capability without a local override. */
+  movableRefinementRounds?: number;
+  /** Finest geometry movement tested during bounded local refinement. */
+  minimumGeometryStepMm?: number;
 }
 
 /** Configuration knobs shared by document and flow planning. */

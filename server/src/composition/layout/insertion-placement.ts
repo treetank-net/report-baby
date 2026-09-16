@@ -115,6 +115,10 @@ function resolveInsertionBlockTarget(
   const key = insertionKey(flowId, block.id);
   const proposal = proposals.get(key);
   if (!proposal) {
+    const explicitOmission = block.allowOmission === true && plan.decisions.some((decision) => decision.code === 'OPTIONAL_INSERTION_OMITTED'
+      && decision.flowId === flowId
+      && decision.blockId === block.id);
+    if (explicitOmission) return undefined;
     plan.diagnostics.push(diagnostic('error', 'INSERTION_PLAN_MISSING', `Insertion '${block.id}' has no planned obstacle slot.`, { flowId, blockId: block.id }));
     addResidual(plan.residualContent, flowId, block, 0, undefined, 'insertion-plan-missing');
     return undefined;

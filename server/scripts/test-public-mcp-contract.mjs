@@ -102,6 +102,9 @@ try {
   });
   assert.notEqual(renderedSummary.isError, true, JSON.stringify(renderedSummary.content));
   assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.passedMetrics), 'normal render responses must expose passed composition metrics');
+  assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.placementScores), 'normal render responses must expose per-placement score contributions');
+  assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.repairProposals), 'normal render responses must expose machine-readable repair proposals');
+  assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.candidateSearch?.rounds), 'normal render responses must expose the planner candidate-search trace');
   assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.diagnostics), 'normal render responses must expose composition diagnostics');
   assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.suggestions), 'normal render responses must expose composition suggestions');
   assert.match(renderedSummary.content?.map((item) => item.text ?? '').join('\n') ?? '', /Composition quality/, 'normal render content must expose the quality report to clients');

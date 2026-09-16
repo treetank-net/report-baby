@@ -84,11 +84,15 @@ export interface ReportRenderDiagnosticsInput {
   composition?: { plan: CompositionPlan; evaluation: CompositionEvaluation };
 }
 
-export function compositionQualitySummary(evaluation: CompositionEvaluation): Record<string, unknown> {
+export function compositionQualitySummary(evaluation: CompositionEvaluation, plan?: CompositionPlan): Record<string, unknown> {
   return {
     status: evaluation.status,
     score: evaluation.score,
+    ...(evaluation.scoreBase === undefined ? {} : { scoreBase: evaluation.scoreBase }),
     passedMetrics: evaluation.passedMetrics.map(({ code, value, points }) => ({ code, value, points })),
+    ...(evaluation.placementScores === undefined ? {} : { placementScores: evaluation.placementScores }),
+    ...(evaluation.repairProposals === undefined ? {} : { repairProposals: evaluation.repairProposals }),
+    ...(plan?.trace?.candidateSearch === undefined ? {} : { candidateSearch: plan.trace.candidateSearch }),
     qualityPenalties: evaluation.scoreBreakdown
       .filter(({ points }) => points < 0)
       .map(({ code, value, points }) => ({ code, value, points })),
@@ -114,8 +118,8 @@ export function compositionQualitySummary(evaluation: CompositionEvaluation): Re
  * Keep the JSON payload as the source of truth so CLI/MCP users do not need a
  * private debug script to inspect the evidence and remediation suggestions.
  */
-export function compositionQualityText(evaluation: CompositionEvaluation): string {
-  return compositionQualityTextFromSummary(compositionQualitySummary(evaluation));
+export function compositionQualityText(evaluation: CompositionEvaluation, plan?: CompositionPlan): string {
+  return compositionQualityTextFromSummary(compositionQualitySummary(evaluation, plan));
 }
 
 export function compositionQualityTextFromSummary(summary: Record<string, unknown>): string {
@@ -131,7 +135,7 @@ export function reportRenderDiagnostics(input: ReportRenderDiagnosticsInput, det
     surface: input.diagnostics.surface,
     appliedOverrides: input.diagnostics.appliedOverrides,
     layoutEngine: 'composition-planner',
-    ...(input.composition ? { compositionQuality: compositionQualitySummary(input.composition.evaluation) } : {}),
+    ...(input.composition ? { compositionQuality: compositionQualitySummary(input.composition.evaluation, input.composition.plan) } : {}),
   });
   if (detail !== 'full') return summary;
   return {

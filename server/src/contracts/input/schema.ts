@@ -183,6 +183,7 @@ const compositionBlockBase = {
   role: compositionRoleSchema.optional(),
   atomic: z.boolean().optional(),
   keep_with_next_lines: z.number().int().nonnegative().optional(),
+  allow_omission: z.boolean().optional().describe('Allow the planner to omit this block only as an evaluated insertion-flow candidate.'),
 };
 
 export const compositionInputBlockSchema = z.discriminatedUnion('type', [
@@ -313,6 +314,9 @@ export const compositionInputSchema = z.preprocess((value) => {
 }, compositionInputCoreSchema).superRefine((input, context) => {
   for (const [flowId, flow] of Object.entries(input.flows)) {
     flow.blocks.forEach((block, index) => {
+      if (flowId === 'main' && block.allow_omission) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['flows', flowId, 'blocks', index, 'allow_omission'], message: 'The main flow is required and cannot allow block omission.' });
+      }
       if (flowId === 'main' && block.role === 'quote') {
         context.addIssue({ code: z.ZodIssueCode.custom, path: ['flows', flowId, 'blocks', index], message: 'The main flow cannot contain quote blocks; put quotes in a separate flow.' });
       }

@@ -228,6 +228,8 @@ export interface CompositionBlock {
   image?: CompositionImage;
   atomic?: boolean;
   keepWithNextLines?: number;
+  /** Input opt-in: insertion-flow content may be omitted only if the planner selects an explicit omission candidate. */
+  allowOmission?: boolean;
 }
 
 export interface CompositionFlow {

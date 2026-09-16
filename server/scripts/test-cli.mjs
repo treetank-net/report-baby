@@ -107,6 +107,10 @@ try {
   assert.ok(Array.isArray(planResult.compositionPlan?.lines));
   assert.ok(Array.isArray(planResult.compositionEvaluation?.passedMetrics), 'CLI report responses must expose passed composition metrics');
   assert.ok(Array.isArray(planResult.compositionEvaluation?.suggestions), 'CLI report responses must expose composition suggestions');
+  assert.equal(typeof planResult.compositionEvaluation?.scoreBase, 'number', 'CLI reports must expose the configured score base');
+  assert.ok(Array.isArray(planResult.compositionEvaluation?.placementScores), 'CLI reports must expose score contributions by material placement');
+  assert.ok(Array.isArray(planResult.compositionEvaluation?.repairProposals), 'CLI reports must expose evaluator repair proposals');
+  assert.ok(Array.isArray(planResult.compositionPlan?.trace?.candidateSearch?.rounds), 'CLI reports must expose the complete-plan candidate-search trace');
   assert.deepEqual(compositionPlanForParity(renderedParityResult), compositionPlanForParity(planResult), 'dry_run and render used different composition plans');
   assert.deepEqual(compositionPlanForParity(debugResult), compositionPlanForParity(planResult), 'debug overlay changed the composition plan');
 

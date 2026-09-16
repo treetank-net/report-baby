@@ -9,7 +9,7 @@ import type {
 } from '../contracts/engine-contracts.js';
 import { placeGlyphObjects } from './glyph-objects.js';
 import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './flow-space.js';
-import { recordPlanningPhase, tracePlan } from '../observability/planning-observability.js';
+import { recordPlanDecision, recordPlanningPhase, tracePlan } from '../observability/planning-observability.js';
 import { diagnostic } from '../observability/planning-observability.js';
 import {
   ensurePage,
@@ -30,6 +30,7 @@ import type {
   PlannedGraphic,
   PlannedInsertion,
 } from './planner-candidates.js';
+import { insertionKey } from './planner-candidates.js';
 import { validateMovablePlacementBounds } from './movable-placement-validation.js';
 import {
   movableGraphicFramesForPlan,
@@ -123,7 +124,11 @@ function validateInsertionFlowContracts(document: CompositionDocument, template:
     plan.diagnostics.push(diagnostic('error', 'MAIN_FLOW_INSERTIONS_FORBIDDEN', "The main flow cannot declare insertion slots; use a separate insertion flow.", { flowId: 'main' }));
   }
   for (const [flowId, flow] of Object.entries(document.flows)) {
+    const insertionBlockIds = new Set(insertionBlocksForFlow(template, flowId, flow.blocks).map((block) => block.id));
     for (const block of flow.blocks) {
+      if (block.allowOmission && !insertionBlockIds.has(block.id)) {
+        plan.diagnostics.push(diagnostic('error', 'OPTIONAL_OMISSION_REQUIRES_INSERTION_FLOW', `Block '${block.id}' allows omission but is not accepted by an insertion capability in flow '${flowId}'.`, { flowId, blockId: block.id }));
+      }
       if (block.role !== 'quote') continue;
       if (flowId === 'main') {
         plan.diagnostics.push(diagnostic('error', 'MAIN_FLOW_QUOTE_FORBIDDEN', `Quote block '${block.id}' must be supplied by a flow other than 'main'.`, { flowId, blockId: block.id }));
@@ -131,6 +136,23 @@ function validateInsertionFlowContracts(document: CompositionDocument, template:
       }
       if (template.routes[flowId]?.insertionSlots?.length) continue;
       plan.diagnostics.push(diagnostic('error', 'QUOTE_INSERTION_FLOW_REQUIRED', `Quote block '${block.id}' must belong to a flow with insertion slots.`, { flowId, blockId: block.id }));
+    }
+  }
+}
+
+function recordOptionalInsertionOmissions(
+  document: CompositionDocument,
+  template: CompositionLayout,
+  insertionProposals: Map<string, PlannedInsertion>,
+  plan: CompositionPlan,
+): void {
+  for (const [flowId, flow] of Object.entries(document.flows)) {
+    for (const block of insertionBlocksForFlow(template, flowId, flow.blocks)) {
+      if (!block.allowOmission || insertionProposals.has(insertionKey(flowId, block.id))) continue;
+      const decision = recordPlanDecision(plan, 'OPTIONAL_INSERTION_OMITTED');
+      decision.flowId = flowId;
+      decision.blockId = block.id;
+      decision.reason = 'input-allows-omission-and-candidate-has-no-insertion-placement';
     }
   }
 }
@@ -350,6 +372,7 @@ export function planDocumentOnce(
 ): CompositionPlan {
   const plan = createPlan(policy.minimumFragmentLines);
   preparePlanForLayout(document, template, policy, insertionProposals, graphicProposals, plan);
+  recordOptionalInsertionOmissions(document, template, insertionProposals, plan);
   const pages = reserveDocumentObstacles(document, template, plan, insertionProposals, graphicProposals);
   placeDocumentInsertions(document, metrics, template, plan, pages, insertionProposals);
   planDocumentFlows(document, metrics, template, policy, pages, plan);

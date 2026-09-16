@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { build } from 'esbuild';
+import { parse } from 'yaml';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
+const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
+const configuredOrphanPenalty = renderConfig.composition_score.orphan_penalty;
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-structure-scoring-'));
 const bundlePath = join(temporary, 'composition.cjs');
 
@@ -19,7 +22,7 @@ try {
   });
   const bundled = await import(bundlePath);
   const composition = bundled.default ?? bundled;
-  const { scoreListContinuity, scoreTableContinuity, scoreTinyFragments, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, elementProximityReports, scoreSiblingColumnImbalance, scoreEmptyRegions, scoreFitContentEnvelope, rectUnionArea } = composition;
+  const { scoreListContinuity, scoreTableContinuity, scoreTinyFragments, scoreParagraphFragmentation, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, elementProximityReports, scoreOrphanLines, attributeCompositionScore, compositionRepairProposals, scoreSiblingColumnImbalance, scoreEmptyRegions, scoreFitContentEnvelope, rectUnionArea } = composition;
   assert.equal(rectUnionArea([{ x: 0, y: 0, width: 10, height: 10 }, { x: 5, y: 0, width: 10, height: 10 }]), 150, 'overlapping geometry must be counted once');
   /**
    * @test-decision plan-fixture-or-assertion
@@ -132,6 +135,8 @@ try {
   assert.equal(tooClose[0].metrics.gap, 2);
   assert.equal(tooClose[0].metrics.minimumGap, 6, 'the pair must use the selected spacing profile target');
   assert.equal(tooClose[0].metrics.deficit, 4);
+  assert.equal(tooClose[0].axis, 'y', 'overlapping horizontal ranges must report their vertical breathing-room axis');
+  assert.equal(tooClose[0].metrics.gapY, 2);
   assert.equal(tooClose[0].movementAvailable, false, 'a fluid-y capacity does not make each materialized instance freely movable');
   proximityPlan.movableInsertionFrames = [{ id: 'quotes:quote-1', flowId: 'quotes', blockId: 'quote-1', page: 1, box: { x: 10, y: 0, width: 80, height: 60 }, axis: 'y', candidateCount: 3 }];
   assert.equal(elementProximityReports(proximityPlan, proximityDocument)[0].movementAvailable, true, 'a declared movable frame must be exposed in the observation');
@@ -141,6 +146,16 @@ try {
   proximityPlan.graphicPlacements[0].page = 2;
   proximityPlan.slots[1].page = 2;
   assert.equal(elementProximityReports(proximityPlan, proximityDocument).length, 0, 'proximity must never compare elements across different pages');
+  proximityPlan.graphicPlacements[0].page = 1;
+  proximityPlan.slots[1].page = 1;
+  proximityPlan.graphicPlacements[0].box = { x: 92, y: 12, width: 10, height: 8 };
+  const sideBySide = elementProximityReports(proximityPlan, proximityDocument);
+  assert.equal(sideBySide.length, 1, 'overlapping vertical ranges must expose an actionable horizontal gap');
+  assert.equal(sideBySide[0].axis, 'x');
+  assert.equal(sideBySide[0].metrics.gapX, 2);
+  assert.equal(sideBySide[0].movementAvailable, false, 'a vertical movement frame cannot claim horizontal repair capability');
+  proximityPlan.movableInsertionFrames = [{ ...proximityPlan.movableInsertionFrames[0], axis: 'x' }];
+  assert.equal(elementProximityReports(proximityPlan, proximityDocument)[0].movementAvailable, true, 'a matching horizontal frame must be exposed as a legal repair axis');
   assert.ok(scoreFooterGap(spacingPlan).points < 0);
   const overlappingGlyph = {
     ...basePlan,
@@ -182,6 +197,10 @@ try {
   assert.ok(scoreSiblingColumnImbalance(columnPlan).points < 0, 'uneven sibling columns must be penalized');
   assert.ok(scoreEmptyRegions(columnPlan).points < 0, 'large unexplained empty regions must be penalized');
   assert.ok(scoreFitContentEnvelope(columnPlan).points < 0, 'unused fit-content envelope must be penalized');
+  const emptyRegionPlan = { ...columnPlan, lines: [line('paragraph', 1, 'left')] };
+  const emptyRegionScore = scoreEmptyRegions(emptyRegionPlan);
+  const emptyRegionAttribution = attributeCompositionScore(document, emptyRegionPlan, [emptyRegionScore]);
+  assert.equal(emptyRegionAttribution.reduce((sum, entry) => sum + entry.points, 0), emptyRegionScore.points, 'region whitespace penalties must be allocated to participating placements without losing points');
   const terminalPage = {
     ...basePlan,
     pages: [{ page: 1 }, { page: 2 }],
@@ -195,6 +214,127 @@ try {
   assert.equal(Math.abs(scoreEmptyRegions(terminalPage).points), 0, 'natural underfill on the terminal main-flow page must not be penalized');
   terminalPage.spacing.slots[0].page = 1;
   assert.ok(scoreEmptyRegions(terminalPage).points < 0, 'underfill before the terminal page must remain a quality penalty');
+
+  const repairDocument = {
+    flows: {
+      intro: { id: 'intro', blocks: [{ id: 'intro-copy', kind: 'paragraph', role: 'intro', text: 'A short lead.' }] },
+      quotes: { id: 'quotes', blocks: [{ id: 'quote-copy', kind: 'paragraph', role: 'quote', text: 'A short quote.', allowOmission: true }] },
+      main: { id: 'main', blocks: [{ id: 'orphan-paragraph', kind: 'paragraph', role: 'body', text: 'A paragraph split by an image.' }] },
+    },
+  };
+  const repairPlan = {
+    ...basePlan,
+    pages: [{ page: 1 }],
+    slots: [
+      { id: 'intro-slot', page: 1, regionId: 'intro', flowId: 'intro', kind: 'text', box: { x: 10, y: 5, width: 80, height: 20 }, state: 'partial' },
+      { id: 'quote-slot', page: 1, regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 5, width: 80, height: 60 }, state: 'partial' },
+      { id: 'main-slot', page: 1, regionId: 'main', flowId: 'main', kind: 'text', box: { x: 10, y: 5, width: 80, height: 70 }, state: 'partial' },
+    ],
+    lines: [
+      { ...line('intro-copy', 1, 'intro-slot'), flowId: 'intro', box: { x: 10, y: 10, width: 80, height: 5 } },
+      { ...line('orphan-paragraph', 1, 'main-slot', 0, 4), flowId: 'main', box: { x: 10, y: 10, width: 80, height: 5 } },
+      { ...line('orphan-paragraph', 1, 'main-slot', 4, 8), flowId: 'main', box: { x: 10, y: 25, width: 80, height: 5 } },
+      { ...line('orphan-paragraph', 1, 'main-slot', 8, 12), flowId: 'main', box: { x: 10, y: 32, width: 80, height: 5 } },
+    ],
+    graphicPlacements: [{ id: 'graphic:insertion:quote-copy', graphicId: 'insertion:quote-copy', slotId: 'quote-slot', page: 1, shape: 'rectangle', wrap: 'around', box: { x: 10, y: 16, width: 80, height: 8 } }],
+    movableInsertionFrames: [{ id: 'quotes:quote-copy', flowId: 'quotes', blockId: 'quote-copy', page: 1, box: { x: 10, y: 5, width: 80, height: 60 }, axis: 'y', candidateCount: 5 }],
+    spacing: {
+      pages: [], slots: [], textPlacements: [],
+      observations: [{
+        kind: 'element-proximity', page: 1, axis: 'y',
+        from: { kind: 'block', id: 'intro-copy', blockId: 'intro-copy', flowId: 'intro', slotId: 'intro-slot' },
+        to: { kind: 'graphic', id: 'insertion:quote-copy', blockId: 'quote-copy', flowId: 'quotes', slotId: 'quote-slot' },
+        fromBox: { x: 10, y: 10, width: 80, height: 5 }, toBox: { x: 10, y: 16, width: 80, height: 8 },
+        metrics: { gap: 1, gapX: -80, gapY: 1, minimumGap: 6, deficit: 5, movementNeeded: 5, movementBudget: 8 },
+        movementAvailable: true,
+      }, {
+        kind: 'insertion-rhythm', page: 1, flowId: 'quotes', blockId: 'quote-copy', graphicId: 'insertion:quote-copy', slotId: 'quote-slot',
+        metrics: { beforeTextGap: 2, afterTextGap: 10, textGapAsymmetry: 8, referenceGap: 6 },
+      }],
+    },
+  };
+  const proximityComponent = scoreElementProximity(repairPlan);
+  const proximityAttribution = attributeCompositionScore(repairDocument, repairPlan, [proximityComponent]);
+  assert.equal(proximityAttribution.reduce((sum, item) => sum + item.points, 0), proximityComponent.points, 'pairwise proximity points must be conserved while attributed to both endpoints');
+  const proximityRepairs = compositionRepairProposals(repairDocument, repairPlan, [proximityComponent], proximityAttribution);
+  const proximityMove = proximityRepairs.find((proposal) => proposal.action === 'move');
+  const proximityOmission = proximityRepairs.find((proposal) => proposal.action === 'omit');
+  assert.ok(proximityMove, 'one explicitly movable endpoint must receive a bounded proximity repair');
+  assert.equal(proximityMove.placement.graphicId, 'insertion:quote-copy');
+  assert.equal(proximityMove.direction, 'down', 'the quote should move away from the lead text');
+  assert.equal(proximityMove.distance, 5);
+  assert.equal(proximityMove.estimatedPoints, 5, 'isolated linear proximity improvement is estimated from the measured gap');
+  assert.equal(proximityMove.legalCapability, 'declared-movable-frame');
+  assert.deepEqual(proximityMove.legalBounds, { x: 10, y: 5, width: 80, height: 60 });
+  assert.ok(proximityOmission, 'an explicitly optional insertion with a negative attribution may also be evaluated as omitted');
+  assert.equal(proximityOmission.legalCapability, 'input-allows-omission');
+  assert.ok(proximityOmission.estimatedPoints > 0);
+  assert.equal(proximityOmission.estimateKind, 'optional-omission');
+
+  const insertionSymmetry = scoreInsertionSymmetry(repairPlan);
+  const spacingRhythm = scoreSpacingRhythm(repairPlan);
+  const insertionAttribution = attributeCompositionScore(repairDocument, repairPlan, [insertionSymmetry, spacingRhythm]);
+  const insertionRepairs = compositionRepairProposals(repairDocument, repairPlan, [insertionSymmetry, spacingRhythm], insertionAttribution);
+  const symmetryRepair = insertionRepairs.find((proposal) => proposal.sourceCode === 'insertion-symmetry');
+  assert.ok(symmetryRepair, 'a movable insertion with asymmetric text gaps must receive an evaluator repair proposal');
+  assert.equal(symmetryRepair.placement.blockId, 'quote-copy');
+  assert.equal(symmetryRepair.direction, 'down', 'the quote must move away from its closer preceding text to balance both gaps');
+  assert.equal(symmetryRepair.distance, 4);
+  assert.equal(symmetryRepair.estimatedPoints, 6, 'the local symmetry estimate must represent the exact capped component recovery before reflow');
+  const rhythmRepair = insertionRepairs.find((proposal) => proposal.sourceCode === 'spacing-rhythm');
+  assert.ok(rhythmRepair, 'a movable insertion with an off-profile text gap must receive an evaluator repair proposal');
+  assert.equal(rhythmRepair.direction, 'down', 'an undersized before-gap should propose moving the insertion down');
+  assert.equal(rhythmRepair.measuredGap, 2);
+  assert.equal(rhythmRepair.targetGap, 6);
+
+  const fragmentationDocument = {
+    flows: {
+      main: { id: 'main', blocks: [{ id: 'fragmented-copy', kind: 'paragraph', role: 'body', text: 'A paragraph crosses a wrapping insertion.' }] },
+      quotes: { id: 'quotes', blocks: [{ id: 'fragmenting-quote', kind: 'paragraph', role: 'quote', text: 'A wrapped insertion splits the paragraph.' }] },
+    },
+  };
+  const fragmentationPlan = {
+    ...basePlan,
+    pages: [{ page: 1 }],
+    slots: [
+      { id: 'fragment-left', page: 1, regionId: 'main', flowId: 'main', kind: 'text', box: { x: 10, y: 15, width: 30, height: 40 }, state: 'partial' },
+      { id: 'fragment-right', page: 1, regionId: 'main', flowId: 'main', kind: 'text', box: { x: 60, y: 15, width: 30, height: 40 }, state: 'partial' },
+      { id: 'fragment-quote', page: 1, regionId: 'quotes', flowId: 'quotes', kind: 'text', box: { x: 40, y: 15, width: 20, height: 15 }, state: 'partial' },
+    ],
+    lines: [
+      { ...line('fragmented-copy', 1, 'fragment-left', 0, 4), flowId: 'main', box: { x: 10, y: 20, width: 30, height: 5 } },
+      { ...line('fragmented-copy', 1, 'fragment-right', 4, 8), flowId: 'main', box: { x: 60, y: 20, width: 30, height: 5 } },
+    ],
+    graphicPlacements: [{ id: 'graphic:fragmenting-quote', graphicId: 'insertion:fragmenting-quote', slotId: 'fragment-quote', page: 1, shape: 'rectangle', wrap: 'around', box: { x: 40, y: 15, width: 20, height: 15 } }],
+    movableInsertionFrames: [{ id: 'quotes:fragmenting-quote', flowId: 'quotes', blockId: 'fragmenting-quote', page: 1, box: { x: 40, y: 5, width: 20, height: 60 }, axis: 'y', candidateCount: 5 }],
+  };
+  const fragmentationComponent = scoreParagraphFragmentation(fragmentationDocument, fragmentationPlan);
+  const fragmentationAttribution = attributeCompositionScore(fragmentationDocument, fragmentationPlan, [fragmentationComponent]);
+  const fragmentationRepairs = compositionRepairProposals(fragmentationDocument, fragmentationPlan, [fragmentationComponent], fragmentationAttribution);
+  assert.equal(fragmentationComponent.value, 1, 'the split paragraph must be scored as one fragmentation');
+  assert.ok(fragmentationRepairs.length > 0 && fragmentationRepairs.every((proposal) => proposal.estimateKind === 'fragmentation-recovery' && proposal.estimatedPoints === renderConfig.composition_score.paragraph_fragmentation_penalty && proposal.lineHeight === 5), `a movable insertion separating text intervals must receive labeled line-step fragmentation probes: ${JSON.stringify({ details: fragmentationComponent.details, attributed: fragmentationAttribution, proposals: fragmentationRepairs })}`);
+  assert.deepEqual(new Set(fragmentationRepairs.map((proposal) => proposal.direction)), new Set(['up', 'down']), 'fragmentation proposals must consider both legal directions');
+
+  repairPlan.graphicPlacements[0].wrap = 'around';
+  repairPlan.graphicPlacements[0].box = { x: 10, y: 15, width: 20, height: 10 };
+  repairPlan.slots[2].box = { x: 10, y: 5, width: 80, height: 70 };
+  repairDocument.flows.main.blocks.push({ id: 'second-orphan-paragraph', kind: 'paragraph', role: 'body', text: 'A second paragraph has another isolated line.' });
+  repairPlan.slots.push({ id: 'second-obstacle-slot', page: 1, regionId: 'art', flowId: 'main', kind: 'graphic', box: { x: 10, y: 60, width: 20, height: 15 }, state: 'open' });
+  repairPlan.lines.push(
+    { ...line('second-orphan-paragraph', 1, 'main-slot', 0, 4), flowId: 'main', box: { x: 10, y: 55, width: 80, height: 5 } },
+    { ...line('second-orphan-paragraph', 1, 'main-slot', 4, 8), flowId: 'main', box: { x: 10, y: 70, width: 80, height: 5 } },
+  );
+  repairPlan.graphicPlacements.push({ id: 'graphic:second-obstacle', graphicId: 'second-obstacle', slotId: 'second-obstacle-slot', page: 1, shape: 'rectangle', wrap: 'around', box: { x: 10, y: 60, width: 20, height: 10 } });
+  const orphanComponent = scoreOrphanLines(repairDocument, repairPlan);
+  assert.equal(orphanComponent.value, 2, 'two blocked paragraphs should be measured as two orphan fragments');
+  assert.equal(orphanComponent.points, -orphanComponent.value * configuredOrphanPenalty, 'orphan weight must scale with the configured per-orphan penalty');
+  const orphanAttribution = attributeCompositionScore(repairDocument, repairPlan, [orphanComponent]);
+  assert.equal(orphanAttribution.reduce((sum, item) => sum + item.points, 0), orphanComponent.points, 'orphan penalties must be conserved across paragraph and blocking image placements');
+  const orphanRepairs = compositionRepairProposals(repairDocument, repairPlan, [orphanComponent], orphanAttribution);
+  assert.ok(orphanRepairs.length > 0, `a vertically movable blocking image should receive line-height orphan probes: ${JSON.stringify({ details: orphanComponent.details, attribution: orphanAttribution })}`);
+  const orphanMoveRepairs = orphanRepairs.filter((proposal) => proposal.estimateKind === 'orphan-recovery');
+  assert.ok(orphanMoveRepairs.length > 0 && orphanMoveRepairs.every((proposal) => proposal.orphanCount === 1 && proposal.lineHeight === 5 && proposal.estimatedPoints === configuredOrphanPenalty), 'orphan probes must expose the configured per-orphan recovery as an estimate');
+  assert.ok(orphanMoveRepairs.every((proposal) => Number.isInteger(proposal.distance / proposal.lineHeight)), 'orphan movement probes must remain in whole measured-line increments across refinement rounds');
   console.log(JSON.stringify({ status: 'passed', listSplit: listSplit.value, tableSplit: tableSplit.value, tinyFragments: tiny.value, qualityComponents: 6 }, null, 2));
 } finally {
   await rm(temporary, { recursive: true, force: true });

@@ -198,12 +198,15 @@ function convertBlock(flowId: string, input: CompositionInput['flows'][string]['
     role,
     ...(input.atomic === undefined ? {} : { atomic: input.atomic }),
     ...(input.keep_with_next_lines === undefined ? {} : { keepWithNextLines: input.keep_with_next_lines }),
+    ...(input.allow_omission === undefined ? {} : { allowOmission: input.allow_omission }),
   };
   if (input.type === 'text') {
     const normalized = contentNodes({ text: input.text, content: input.content });
-    return imageNodes(normalized.nodes).length > 0
-      ? contentBlocks(id, role, normalized)
-      : [{ ...common, kind: 'paragraph', text: normalized.text, inlineRuns: inlineRunsFromNodes(normalized.nodes), content: normalized.nodes, ...(normalized.diagnostics.length ? { diagnostics: normalized.diagnostics } : {}) }];
+    if (imageNodes(normalized.nodes).length > 0) {
+      const blocks = contentBlocks(id, role, normalized);
+      return input.allow_omission === undefined ? blocks : blocks.map((block) => ({ ...block, allowOmission: input.allow_omission }));
+    }
+    return [{ ...common, kind: 'paragraph', text: normalized.text, inlineRuns: inlineRunsFromNodes(normalized.nodes), content: normalized.nodes, ...(normalized.diagnostics.length ? { diagnostics: normalized.diagnostics } : {}) }];
   }
   if (input.type === 'heading' || input.type === 'list-item') {
     const normalized = contentNodes({ text: input.text });

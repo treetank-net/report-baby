@@ -9,6 +9,7 @@ import type {
   CompositionPlanCandidate,
   CompositionPlanResult,
   CompositionPlanner,
+  CompositionRepairAttempt,
 } from './contracts/engine-contracts.js';
 import type { CompositionDocument } from './contracts/model.js';
 
@@ -51,8 +52,35 @@ function positiveBudget(value: number | undefined): number {
   return Number.isInteger(value) && (value as number) > 0 ? value as number : Number.MAX_SAFE_INTEGER;
 }
 
+function repairStepsBelowMinimum(
+  proposals: CompositionEvaluation['repairProposals'],
+  round: number,
+  minimumStep: number | undefined,
+): boolean {
+  return minimumStep !== undefined
+    && (proposals?.length ?? 0) > 0
+    && proposals!.every((proposal) => proposal.action === 'move'
+      && (proposal.estimateKind === 'orphan-recovery' || proposal.estimateKind === 'fragmentation-recovery'
+        ? proposal.distance < minimumStep
+        : proposal.distance / (2 ** Math.max(0, round - 1)) < minimumStep));
+}
+
 function reflowPassCount(plan: CompositionPlan): number {
   return plan.trace?.phases.filter((phase) => phase.name === 'reflow').length ?? 0;
+}
+
+function testedRepairDistance(
+  proposal: NonNullable<CompositionEvaluation['repairProposals']>[number],
+  selected: CompositionPlan,
+  candidate: CompositionPlan,
+): number | undefined {
+  if (proposal.action !== 'move' || proposal.placement.graphicId === undefined) return undefined;
+  const selectedPlacement = selected.graphicPlacements.find((placement) => placement.graphicId === proposal.placement.graphicId
+    && placement.page === proposal.placement.page);
+  const candidatePlacement = candidate.graphicPlacements.find((placement) => placement.graphicId === proposal.placement.graphicId
+    && placement.page === proposal.placement.page);
+  if (!selectedPlacement || !candidatePlacement) return undefined;
+  return Math.abs(candidatePlacement.box[proposal.axis] - selectedPlacement.box[proposal.axis]);
 }
 
 function candidateRound(
@@ -64,6 +92,9 @@ function candidateRound(
   stopReason?: CompositionCandidateSearchRound['stopReason'],
   skippedCandidates = 0,
   signatures: string[] = candidates.map((_candidate, index) => index === 0 ? 'seed' : `compat-${index}`),
+  repairProposals?: CompositionCandidateSearchRound['repairProposals'],
+  candidateResults?: CompositionCandidateSearchRound['candidateResults'],
+  repairAttempts?: CompositionRepairAttempt[],
 ): CompositionCandidateSearchRound {
   const legalCandidates = evaluations.filter(evaluationIsLegal).length;
   const legalScores = evaluations.filter(evaluationIsLegal).map((evaluation) => evaluation.score);
@@ -78,6 +109,9 @@ function candidateRound(
     ...(legalScores.length > 0 ? { bestScore: Math.max(...legalScores) } : {}),
     improved,
     reflowPasses: candidates.reduce((total, plan) => total + reflowPassCount(plan), 0),
+    ...(repairProposals === undefined ? {} : { repairProposals }),
+    ...(repairAttempts === undefined ? {} : { repairAttempts }),
+    ...(candidateResults === undefined ? {} : { candidateResults }),
     ...(stopReason === undefined ? {} : { stopReason }),
   };
 }
@@ -198,12 +232,20 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         return { plan, evaluation };
       }
       for (let round = 1; round <= refinementRounds; round += 1) {
-        const refinedGenerated = planner.planRefinedCandidatesWithSignatures?.(document, metrics, candidates[selectedCandidate], round)
-          ?? (planner.planRefinedCandidates?.(document, metrics, candidates[selectedCandidate], round) ?? []).map((plan, index) => ({ signature: `compat-${round}-${index}`, plan }));
+        const selectedPlan = candidates[selectedCandidate];
+        const selectedEvaluation = evaluations[selectedCandidate];
+        const repairProposals = selectedEvaluation.repairProposals ?? [];
+        const refinedGenerated: CompositionPlanCandidate[] = planner.planRefinedCandidatesWithSignatures?.(document, metrics, selectedPlan, round, selectedEvaluation)
+          ?? (planner.planRefinedCandidates?.(document, metrics, selectedPlan, round, selectedEvaluation) ?? []).map((plan, index) => ({ signature: `compat-${round}-${index}`, plan }));
         if (refinedGenerated.length === 0) {
-          searchRounds.push(candidateRound(round, 0, [], [], false, 'no-new-candidates'));
+          const stopReason = repairStepsBelowMinimum(repairProposals, round, planner.searchBudget?.minimumGeometryStepMm)
+            ? 'minimum-step'
+            : 'no-new-candidates';
+          const repairAttempts = repairProposals.map(({ id }) => ({ proposalId: id, status: 'not-materialized' as const }));
+          searchRounds.push(candidateRound(round, 0, [], [], false, stopReason, 0, [], repairProposals, undefined, repairAttempts));
           break;
         }
+        const previouslyEvaluatedSignatures = new Set(evaluatedSignatures);
         const refinedUnique = uniqueCandidateRecords(refinedGenerated).records.filter((candidate) => {
           if (evaluatedSignatures.has(candidate.signature)) return false;
           evaluatedSignatures.add(candidate.signature);
@@ -214,7 +256,18 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         const refined = refinedRecords.map(({ plan }) => plan);
         const skippedRefined = refinedGenerated.length - refined.length;
         if (refined.length === 0) {
-          searchRounds.push(candidateRound(round, refinedGenerated.length, [], [], false, remainingBudget === 0 ? 'calculation-budget' : 'no-new-candidates', skippedRefined, []));
+          const repairAttempts = repairProposals.map((proposal) => {
+            const candidate = refinedGenerated.find((record) => record.repairProposalIds?.includes(proposal.id));
+            if (!candidate) return { proposalId: proposal.id, status: 'not-materialized' as const };
+            const testedDistance = testedRepairDistance(proposal, selectedPlan, candidate.plan);
+            return {
+              proposalId: proposal.id,
+              status: previouslyEvaluatedSignatures.has(candidate.signature) ? 'deduplicated' as const : 'budget-skipped' as const,
+              candidateSignature: candidate.signature,
+              ...(testedDistance === undefined ? {} : { testedDistance }),
+            };
+          });
+          searchRounds.push(candidateRound(round, refinedGenerated.length, [], [], false, remainingBudget === 0 ? 'calculation-budget' : 'no-new-candidates', skippedRefined, [], repairProposals, [], repairAttempts));
           break;
         }
         const refinedEvaluations = refined.map((candidate) => evaluator.evaluate(document, candidate));
@@ -234,9 +287,64 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
           ? 'calculation-budget'
           : improved
             ? round === refinementRounds ? 'round-limit' : undefined
-            : 'no-improvement';
-        searchRounds.push(candidateRound(round, refinedGenerated.length, refined, refinedEvaluations, improved, stopReason, skippedRefined, refinedRecords.map(({ signature }) => signature)));
-        if (!improved) break;
+            : round === refinementRounds ? 'no-improvement' : undefined;
+        const candidateResults = refinedRecords.map(({ signature, repairProposalIds }, index) => {
+          const candidateEvaluation = refinedEvaluations[index]!;
+          const legal = evaluationIsLegal(candidateEvaluation);
+          return {
+            signature,
+            legal,
+            ...(repairProposalIds === undefined ? {} : { repairProposalIds }),
+            ...(legal ? {
+              score: candidateEvaluation.score,
+              scoreDelta: candidateEvaluation.score - selectedEvaluation.score,
+            } : {}),
+          };
+        });
+        const repairAttempts = repairProposals.map((proposal) => {
+          const candidate = refinedGenerated.find((record) => record.repairProposalIds?.includes(proposal.id));
+          if (!candidate) return { proposalId: proposal.id, status: 'not-materialized' as const };
+          if (previouslyEvaluatedSignatures.has(candidate.signature)) {
+            const testedDistance = testedRepairDistance(proposal, selectedPlan, candidate.plan);
+            return {
+              proposalId: proposal.id,
+              status: 'deduplicated' as const,
+              candidateSignature: candidate.signature,
+              ...(testedDistance === undefined ? {} : { testedDistance }),
+            };
+          }
+          const candidateIndex = refinedRecords.findIndex((record) => record.signature === candidate.signature);
+          const testedDistance = testedRepairDistance(proposal, selectedPlan, candidate.plan);
+          if (candidateIndex < 0) return {
+            proposalId: proposal.id,
+            status: 'budget-skipped' as const,
+            candidateSignature: candidate.signature,
+            ...(testedDistance === undefined ? {} : { testedDistance }),
+          };
+          const candidateEvaluation = refinedEvaluations[candidateIndex]!;
+          const legal = evaluationIsLegal(candidateEvaluation);
+          return {
+            proposalId: proposal.id,
+            status: 'evaluated' as const,
+            candidateSignature: candidate.signature,
+            legal,
+            ...(testedDistance === undefined ? {} : { testedDistance }),
+            ...(legal ? { scoreDelta: candidateEvaluation.score - selectedEvaluation.score } : {}),
+          };
+        });
+        searchRounds.push(candidateRound(
+          round,
+          refinedGenerated.length,
+          refined,
+          refinedEvaluations,
+          improved,
+          stopReason,
+          skippedRefined,
+          refinedRecords.map(({ signature }) => signature),
+          repairProposals,
+          candidateResults,
+          repairAttempts,
+        ));
         if (budgetExhausted) break;
       }
       const plan = candidates[selectedCandidate];

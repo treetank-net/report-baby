@@ -163,8 +163,9 @@ try {
       plan() { throw new Error('refinement planner must use candidate seams'); },
       planCandidates() { return [coarsePlan]; },
       candidateRefinementRounds: 3,
-      planRefinedCandidates(_input, _metrics, selected, round) {
+      planRefinedCandidates(_input, _metrics, selected, round, evaluation) {
         assert.equal(selected, round === 1 ? coarsePlan : improvedPlan);
+        assert.equal(evaluation.score, selected.graphicPlacements[0].box.x, 'the engine must pass the selected plan evaluation into its refinement seam');
         return round === 1 ? [improvedPlan] : [unchangedPlan];
       },
     },
@@ -178,8 +179,109 @@ try {
   const refinementResult = refinementEngine.plan(document, metrics);
   assert.equal(refinementResult.plan, improvedPlan, 'a better local candidate must replace the coarse winner');
   assert.equal(refinementResult.plan.trace.candidateSearch.rounds[1].improved, true, 'trace must mark the improving refinement round');
-  assert.equal(refinementResult.plan.trace.candidateSearch.rounds[2].stopReason, 'no-improvement', 'trace must stop when a refinement no longer improves the winner');
+  assert.equal(refinementResult.plan.trace.candidateSearch.rounds[2].improved, false, 'a local round with no improvement must preserve the best candidate');
+  assert.equal(refinementResult.plan.trace.candidateSearch.rounds[3].stopReason, 'no-improvement', 'a no-improvement round must not stop the search before finer configured rounds have been tested');
   assert.equal(refinementResult.plan.trace.candidateSearch.selectedCandidate, 1, 'trace must expose the refined winner index');
+  assert.equal(refinementResult.plan.trace.candidateSearch.rounds[1].candidateResults[0].scoreDelta, 1, 'trace must report the measured score delta of a fully evaluated candidate');
+
+  const repairTraceEngine = createCompositionEngine({
+    planCandidatesWithSignatures() { return [{ signature: 'repair:seed', plan: coarsePlan }]; },
+    candidateRefinementRounds: 1,
+    planRefinedCandidatesWithSignatures() { return [{ signature: 'repair:move', plan: improvedPlan, repairProposalIds: ['repair:move-up'] }]; },
+  }, {
+    evaluate(_input, planned) {
+      const isSeed = planned === coarsePlan;
+      return {
+        status: 'accepted', diagnostics: [], hardViolations: [], score: planned.graphicPlacements[0].box.x, scoreBreakdown: [], residualContent: [],
+        ...(isSeed ? { repairProposals: [{ id: 'repair:move-up', placement: { id: 'placement', kind: 'graphic', page: 1, graphicId: 'search' }, action: 'move', axis: 'x', direction: 'right', distance: 1, sourceCode: 'element-proximity', estimatedPoints: 1, estimateKind: 'local-geometry', legalCapability: 'declared-movable-frame', legalBounds: { x: 0, y: 0, width: 2, height: 1 } }] } : {}),
+      };
+    },
+  });
+  const repairTraceResult = repairTraceEngine.plan(document, metrics);
+  assert.deepEqual(repairTraceResult.plan.trace.candidateSearch.rounds[1].repairAttempts, [{ proposalId: 'repair:move-up', status: 'evaluated', candidateSignature: 'repair:move', legal: true, testedDistance: 1, scoreDelta: 1 }], 'the trace must connect a repair proposal to its tested geometry displacement and measured complete-plan result');
+  assert.deepEqual(repairTraceResult.plan.trace.candidateSearch.rounds[1].candidateResults[0].repairProposalIds, ['repair:move-up']);
+
+  const incrementalPlans = [0, 1, 2].map((x) => ({
+    ...coarsePlan,
+    graphicPlacements: [{ ...coarsePlan.graphicPlacements[0], box: { x, y: 0, width: 1, height: 1 } }],
+    trace: { phases: [] },
+  }));
+  const incrementalEngine = createCompositionEngine({
+    planCandidatesWithSignatures() { return [{ signature: 'incremental:0', plan: incrementalPlans[0] }]; },
+    candidateRefinementRounds: 3,
+    planRefinedCandidatesWithSignatures(_input, _metrics, selected, round) {
+      if (round === 3) return [];
+      const next = incrementalPlans[round];
+      assert.equal(selected.graphicPlacements[0].box.x, round - 1, 'each refinement must proceed from the best plan found so far');
+      return [{ signature: `incremental:${round}`, plan: next }];
+    },
+  }, {
+    evaluate(_input, planned) { return { status: 'accepted', diagnostics: [], hardViolations: [], score: planned.graphicPlacements[0].box.x, scoreBreakdown: [], residualContent: [] }; },
+  });
+  const incrementalResult = incrementalEngine.plan(document, metrics);
+  assert.equal(incrementalResult.plan, incrementalPlans[2], 'the engine must retain successive small improvements rather than stopping at the first better plan');
+  assert.deepEqual(incrementalResult.plan.trace.candidateSearch.rounds.slice(1).map((round) => round.improved), [true, true, false]);
+  assert.equal(incrementalResult.plan.trace.candidateSearch.rounds.at(-1).stopReason, 'no-new-candidates');
+
+  const tiedPlans = [0, 1].map(() => ({ ...coarsePlan, trace: { phases: [] } }));
+  const tiedEngine = createCompositionEngine({
+    planCandidatesWithSignatures() { return tiedPlans.map((planned, index) => ({ signature: `tie:${index}`, plan: planned })); },
+  }, {
+    evaluate() { return { status: 'accepted', diagnostics: [], hardViolations: [], score: 7, scoreBreakdown: [], residualContent: [] }; },
+  });
+  const tiedResult = tiedEngine.plan(document, metrics);
+  assert.equal(tiedResult.plan, tiedPlans[0], 'equal plans must preserve stable generation order');
+  assert.equal(tiedResult.plan.trace.candidateSearch.selectedCandidate, 0);
+
+  const roundLimitedPlan = { ...coarsePlan, graphicPlacements: [{ ...coarsePlan.graphicPlacements[0], box: { x: 2, y: 0, width: 1, height: 1 } }], trace: { phases: [] } };
+  const roundLimitedEngine = createCompositionEngine({
+    planCandidatesWithSignatures() { return [{ signature: 'round-limit:seed', plan: coarsePlan }]; },
+    candidateRefinementRounds: 1,
+    planRefinedCandidatesWithSignatures() { return [{ signature: 'round-limit:better', plan: roundLimitedPlan }]; },
+  }, {
+    evaluate(_input, planned) { return { status: 'accepted', diagnostics: [], hardViolations: [], score: planned.graphicPlacements[0].box.x, scoreBreakdown: [], residualContent: [] }; },
+  });
+  const roundLimitedResult = roundLimitedEngine.plan(document, metrics);
+  assert.equal(roundLimitedResult.plan, roundLimitedPlan);
+  assert.equal(roundLimitedResult.plan.trace.candidateSearch.rounds[1].stopReason, 'round-limit', 'the trace must distinguish a budgeted round limit after improvement');
+
+  const cycleEngine = createCompositionEngine({
+    planCandidatesWithSignatures() { return [{ signature: 'cycle:seed', plan: coarsePlan }]; },
+    candidateRefinementRounds: 2,
+    planRefinedCandidatesWithSignatures() { return [{ signature: 'cycle:seed', plan: coarsePlan }]; },
+  }, {
+    evaluate() { return { status: 'accepted', diagnostics: [], hardViolations: [], score: 0, scoreBreakdown: [], residualContent: [] }; },
+  });
+  const cycleResult = cycleEngine.plan(document, metrics);
+  assert.equal(cycleResult.plan, coarsePlan, 'a repeated candidate signature must not displace the best plan');
+  assert.equal(cycleResult.plan.trace.candidateSearch.rounds[1].stopReason, 'no-new-candidates', 'a repeated signature must terminate as a deduplicated cycle');
+
+  const minimumStepEngine = createCompositionEngine({
+    planCandidatesWithSignatures() { return [{ signature: 'minimum:seed', plan: coarsePlan }]; },
+    candidateRefinementRounds: 2,
+    searchBudget: { maxFullPlanRecalculations: 5, minimumGeometryStepMm: 1 },
+    planRefinedCandidatesWithSignatures() { return []; },
+  }, {
+    evaluate() { return { status: 'accepted', diagnostics: [], hardViolations: [], score: 0, scoreBreakdown: [], residualContent: [], repairProposals: [{
+      id: 'minimum-step', placement: { id: 'graphic', kind: 'graphic', page: 1, graphicId: 'search' }, action: 'move', axis: 'x', direction: 'right', distance: 0.5,
+      sourceCode: 'element-proximity', estimatedPoints: 1, estimateKind: 'local-geometry', legalCapability: 'declared-movable-frame', legalBounds: { x: 0, y: 0, width: 2, height: 2 },
+    }] }; },
+  });
+  const minimumStepResult = minimumStepEngine.plan(document, metrics);
+  assert.equal(minimumStepResult.plan.trace.candidateSearch.rounds[1].stopReason, 'minimum-step', 'the trace must identify when every legal proposal is below the configured geometry step');
+
+  const budgetPlans = [1, 2, 3].map((score) => ({ ...coarsePlan, trace: { phases: [] }, score }));
+  let budgetEvaluationCalls = 0;
+  const budgetEngine = createCompositionEngine({
+    planCandidatesWithSignatures() { return budgetPlans.map((planned, index) => ({ signature: `budget:${index}`, plan: planned })); },
+    searchBudget: { maxInitialCandidates: 3, maxFullPlanRecalculations: 2, maxRefinementRounds: 1, maxCandidatesPerRefinement: 1 },
+  }, {
+    evaluate(_input, planned) { budgetEvaluationCalls += 1; return { status: 'accepted', diagnostics: [], hardViolations: [], score: planned.score, scoreBreakdown: [], residualContent: [] }; },
+  });
+  const budgetResult = budgetEngine.plan(document, metrics);
+  assert.equal(budgetEvaluationCalls, 2, 'the full-plan calculation budget must cap evaluations');
+  assert.equal(budgetResult.plan.score, 2, 'budget exhaustion must retain the best evaluated legal candidate');
+  assert.equal(budgetResult.plan.trace.candidateSearch.rounds[0].stopReason, 'calculation-budget');
   const capabilityCalls = [];
   const capabilities = combineJsPdfCompositionBlockCapabilities({
     image: {

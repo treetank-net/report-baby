@@ -2,6 +2,8 @@ import type { CompositionDocument } from '../contracts/model.js';
 import type { CompositionDiagnostic, CompositionEvaluation, CompositionPlan, CompositionScoreComponent, CompositionSuggestion } from '../contracts/engine-contracts.js';
 import type { CompositionContrastAssessment, CompositionContrastProvider } from './contrast.js';
 import { scoreLegalPlan } from './scoring.js';
+import { attributeCompositionScore } from './score-attribution.js';
+import { compositionRepairProposals } from './repair-proposals.js';
 import { decorateCompositionDiagnostics, suggestionFromScore } from './diagnostic-catalogue.js';
 import {
   appendDocumentDiagnostics,
@@ -82,6 +84,10 @@ function buildCompositionEvaluation(document: CompositionDocument, plan: Composi
   const hasErrors = diagnostics.some((item) => item.severity === 'error');
   const hardViolations = diagnostics.filter((item) => item.severity === 'error');
   const scored = hasErrors ? { score: Number.NEGATIVE_INFINITY, breakdown: [] } : scoreLegalPlan(document, plan, contrastAssessments);
+  const placementScores = hasErrors ? undefined : attributeCompositionScore(document, plan, scored.breakdown);
+  const repairProposals = hasErrors || placementScores === undefined
+    ? undefined
+    : compositionRepairProposals(document, plan, scored.breakdown, placementScores);
   const suggestions = suggestionsFromScore(scored.breakdown);
   const passedMetrics = scored.breakdown.filter((component) => component.points >= 0);
   if (suggestions.length > 0) plan.suggestions = suggestions;
@@ -90,7 +96,10 @@ function buildCompositionEvaluation(document: CompositionDocument, plan: Composi
     diagnostics,
     hardViolations,
     score: scored.score,
+    ...('base' in scored ? { scoreBase: scored.base } : {}),
     scoreBreakdown: scored.breakdown,
+    ...(placementScores === undefined ? {} : { placementScores }),
+    ...(repairProposals === undefined ? {} : { repairProposals }),
     passedMetrics,
     residualContent: plan.residualContent,
     ...(suggestions.length > 0 ? { suggestions } : {}),

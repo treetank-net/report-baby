@@ -165,10 +165,13 @@ export function tracePlan(document: CompositionDocument, metrics: CompositionTex
   for (const placement of plan.blockPlacements) addFragment(placement.blockId, { page: placement.page, slotId: placement.slotId, routeIndex: placement.routeIndex, box: { ...placement.box } });
   for (const placement of plan.tablePlacements) addFragment(placement.blockId, { page: placement.page, slotId: placement.slotId, routeIndex: placement.routeIndex, box: { ...placement.box } });
   const residualIds = new Set(plan.residualContent.map((residual) => residual.blockId));
+  const omittedIds = new Set(plan.decisions
+    .filter((decision) => decision.code === 'OPTIONAL_INSERTION_OMITTED' && typeof decision.flowId === 'string' && typeof decision.blockId === 'string')
+    .map((decision) => `${decision.flowId}:${decision.blockId}`));
   const blocks = sourceBlocks.map(({ flowId, block }) => {
     const fragments = (fragmentsByBlock.get(block.id) ?? []).sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
     const coveredWords = fragments.reduce((total, fragment) => total + Math.max(0, (fragment.endWord ?? fragment.startWord ?? 0) - (fragment.startWord ?? 0)), 0);
-    const status: CompositionBlockTrace['status'] = fragments.length === 0 ? 'empty' : residualIds.has(block.id) ? 'residual' : coveredWords < sourceWordCount(block) ? 'partial' : 'placed';
+    const status: CompositionBlockTrace['status'] = omittedIds.has(`${flowId}:${block.id}`) ? 'omitted' : fragments.length === 0 ? 'empty' : residualIds.has(block.id) ? 'residual' : coveredWords < sourceWordCount(block) ? 'partial' : 'placed';
     return { flowId, blockId: block.id, kind: block.kind, role: block.role, sourceText: textOf(block), sourceWordCount: sourceWordCount(block), status, fragments, decisions: decisionsByBlock.get(block.id) ?? [] };
   });
   const lineHeightBySlot = new Map<string, number>();

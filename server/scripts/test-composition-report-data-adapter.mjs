@@ -109,6 +109,15 @@ try {
     /main flow cannot contain quote blocks/u,
     'public input must put quotes in a separate flow',
   );
+  const optionalInsertionInput = compositionInputSchema.parse({
+    flows: { quotes: { blocks: [{ type: 'text', id: 'optional-quote', role: 'quote', text: 'This quote may be omitted if its evaluated composition is better.', allow_omission: true }] } },
+  });
+  assert.equal(compositionDocumentFromInput(optionalInsertionInput).flows.quotes.blocks[0].allowOmission, true, 'the public input opt-in must reach the planner document');
+  assert.throws(
+    () => compositionInputSchema.parse({ flows: { main: { blocks: [{ type: 'text', text: 'Main copy remains required.', allow_omission: true }] } } }),
+    /main flow is required and cannot allow block omission/u,
+    'main-flow content must not be made optional',
+  );
 
   const empty = compositionDocumentFromInput({ flows: { main: { blocks: [] } } });
   assert.deepEqual(Object.keys(empty.flows), ['main']);

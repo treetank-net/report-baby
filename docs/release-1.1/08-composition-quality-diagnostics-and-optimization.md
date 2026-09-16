@@ -3,9 +3,10 @@
 Status: the quality-reporting, scoring and existing-candidate comparison slice
 is implemented in the 1.0.2 composition checkpoint. This document replaces the
 former items 08, 09 and 10. They are one process, not three independently
-implemented features. Release 1.1 still needs per-placement score attribution
-and evaluator-guided iterative refinement; these extend the current procedural
-engine rather than adding a second search system.
+implemented features. Stage F is being completed in the current worktree; the
+remaining work extends the procedural engine rather than adding a second search
+system. Do not treat this status as a release-completion claim until its test
+matrix and public interface checks pass.
 
 The separate [visual verification record](08-10-visual-verification.md) is
 part of this status: it confirms that the current slice measures and reports
@@ -167,22 +168,24 @@ must respect that distinction and any hard page/slot request.
 
 The observation does not decide whether to move or defer. `ELEMENTS_TOO_CLOSE`
 is a soft suggestion and exposes the evidence needed to compare both options.
-If a page-local insertion is deferred, the source block must still be placed
-elsewhere; authored content is never discarded. Around-wrapping insertion
-graphics are not compared with ordinary main-flow line envelopes because their
-vertical overlap is intentional; they are compared with the opening flow and
-with other insertions where proximity is meaningful.
+Deferring an insertion to another legal slot preserves it. Omission is a
+separate candidate and is forbidden by default: only a non-main insertion
+block with input `allow_omission: true` may be omitted, and the plan records
+that decision and marks the block trace as `omitted`. Main-flow content cannot
+opt into omission. Around-wrapping insertion graphics are not compared with
+ordinary main-flow line envelopes because their vertical overlap is
+intentional; they are compared with the opening flow and with other insertions
+where proximity is meaningful.
 
 `scoreElementProximity` turns the summed deficit into a soft score component,
 and the evaluator publishes `ELEMENTS_TOO_CLOSE` with the exact pair evidence
-and remedies. The current score is plan-wide: pair records explain which
-elements conflict, but their points are not yet attributed to those
-placements. Existing candidate generation can move only placements for which
-a legal movement policy exists, and the evaluator does not yet feed typed
-repair proposals into that refinement path. The planned refinement below
-closes that gap while keeping complete-plan comparison authoritative. It must
-not let the evaluator mutate an accepted plan or silently remove authored
-content.
+and remedies. The scalar plan score remains authoritative, while its component
+points are deterministically shared among affected placements and conserved
+exactly. The evaluator emits typed movement or optional-omission proposals;
+movement proposals carry their declared legal frame, while omission proposals
+carry the input opt-in. The existing engine evaluates each proposal by
+generating and rescoring a complete plan. An estimated local improvement is
+reported as an estimate, never as the measured score delta.
 
 The current proximity measurement has a directional blind spot:
 `elementProximityReports()` measures vertical separation only when the pair's
@@ -371,6 +374,13 @@ optional `kind` hint may narrow capability matching but must agree with that
 block. A slot, page, region, frame or sizing override is optional. The author
 does not repeat the template's dimensions, padding, max height, push graph or
 collision rules.
+
+Insertion content remains required unless its source block explicitly sets
+`allow_omission: true`. This is permission for candidate search to compare a
+complete plan with that insertion omitted; it is not a planner instruction to
+drop the block. Main-flow blocks cannot opt in. Omission is recorded as a plan
+decision and as `status: omitted` in the block trace, and coverage accepts only
+that explicit recorded case.
 
 ```yaml
 placement_requests:
@@ -1184,6 +1194,14 @@ silently compensate for a bad plan.
    omission, multi-round incremental improvement, ties, cycle prevention and
    every stop condition. Keep one rendered artifact check for whether the
    selected plan is painted as reported.
+
+The public candidate trace separates estimates from outcomes: a repair
+proposal's `estimatedPoints` is advisory; `repairAttempts` reports whether it
+was materialized, deduplicated, skipped by budget or evaluated, and the actual
+geometry displacement tested for each move; only an evaluated complete-plan
+candidate receives an actual `scoreDelta`. Candidate results link back through
+`repairProposalIds`, while the engine retains the best legal plan and
+deterministic candidate order.
 
 ### Stage G — remove duplicated calculations
 

@@ -1092,6 +1092,10 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "allow_omission": {
+                              "description": "Allow the planner to omit this block only as an evaluated insertion-flow candidate.",
+                              "type": "boolean"
+                            },
                             "atomic": {
                               "type": "boolean"
                             },
@@ -1303,6 +1307,9 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "allow_omission": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                            },
                             "atomic": {
                               "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                             },
@@ -1339,6 +1346,9 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "allow_omission": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                            },
                             "atomic": {
                               "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                             },
@@ -1368,6 +1378,9 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "allow_omission": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                            },
                             "alt": {
                               "type": "string"
                             },
@@ -1427,6 +1440,9 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "allow_omission": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                            },
                             "atomic": {
                               "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                             },
@@ -1476,6 +1492,9 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "allow_omission": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                            },
                             "atomic": {
                               "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                             },
@@ -1546,6 +1565,9 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "allow_omission": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                            },
                             "atomic": {
                               "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                             },
@@ -1596,6 +1618,9 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "allow_omission": {
+                              "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                            },
                             "atomic": {
                               "$ref": "#/properties/data/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                             },
@@ -2490,6 +2515,10 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "description": "Allow the planner to omit this block only as an evaluated insertion-flow candidate.",
+                                    "type": "boolean"
+                                  },
                                   "atomic": {
                                     "type": "boolean"
                                   },
@@ -2701,6 +2730,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -2737,6 +2769,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -2766,6 +2801,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "alt": {
                                     "type": "string"
                                   },
@@ -2825,6 +2863,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -2874,6 +2915,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -2944,6 +2988,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -2994,6 +3041,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -3462,6 +3512,10 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "description": "Allow the planner to omit this block only as an evaluated insertion-flow candidate.",
+                                    "type": "boolean"
+                                  },
                                   "atomic": {
                                     "type": "boolean"
                                   },
@@ -3673,6 +3727,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -3709,6 +3766,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -3738,6 +3798,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "alt": {
                                     "type": "string"
                                   },
@@ -3797,6 +3860,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -3846,6 +3912,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -3916,6 +3985,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -3966,6 +4038,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -4442,6 +4517,10 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "description": "Allow the planner to omit this block only as an evaluated insertion-flow candidate.",
+                                    "type": "boolean"
+                                  },
                                   "atomic": {
                                     "type": "boolean"
                                   },
@@ -4653,6 +4732,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -4689,6 +4771,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -4718,6 +4803,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "alt": {
                                     "type": "string"
                                   },
@@ -4777,6 +4865,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -4826,6 +4917,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -4896,6 +4990,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },
@@ -4946,6 +5043,9 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "allow_omission": {
+                                    "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/allow_omission"
+                                  },
                                   "atomic": {
                                     "$ref": "#/properties/data/properties/slides/items/properties/flows/additionalProperties/properties/blocks/items/anyOf/0/properties/atomic"
                                   },

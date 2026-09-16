@@ -300,8 +300,12 @@ export function validateOrdinaryBlockCoverage(flowId: string, block: Composition
  * @planner-responsibility Keep the current validateContentCoverage implementation intact until its target seam is extracted.
  */
 export function validateContentCoverage(document: CompositionDocument, plan: CompositionPlan, repeatedFlows: Set<string>, diagnostics: CompositionDiagnostic[]): void {
+  const explicitlyOmitted = new Set(plan.decisions
+    .filter((decision) => decision.code === 'OPTIONAL_INSERTION_OMITTED' && decision.flowId !== undefined && decision.blockId !== undefined)
+    .map((decision) => `${decision.flowId}:${decision.blockId}`));
   for (const [flowId, flow] of Object.entries(document.flows)) {
     for (const block of flow.blocks) {
+      if (block.allowOmission === true && explicitlyOmitted.has(`${flowId}:${block.id}`)) continue;
       if (wordCountOf(block.text) === 0) continue;
       if (repeatedFlows.has(flowId)) validateRepeatedBlockCoverage(flowId, block, plan, diagnostics);
       else validateOrdinaryBlockCoverage(flowId, block, plan, diagnostics);

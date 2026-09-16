@@ -285,13 +285,59 @@ export function seedInsertionProposalCandidates(
   document: CompositionDocument,
   template: CompositionLayout,
   metrics: CompositionTextMetrics,
+  maxCandidates = Number.MAX_SAFE_INTEGER,
 ): Map<string, PlannedInsertion>[] {
   const seed = seedInsertionProposals(document, template, metrics);
   const candidates = [seed];
+  const signatures = new Set([insertionProposalSignature(seed)]);
+  const addCandidate = (candidate: Map<string, PlannedInsertion>): void => {
+    if (candidates.length >= maxCandidates) return;
+    const signature = insertionProposalSignature(candidate);
+    if (signatures.has(signature)) return;
+    signatures.add(signature);
+    candidates.push(candidate);
+  };
   for (const flowId of flowsWithOptionalFirstInsertion(document, template)) {
     const skipped = seedInsertionProposals(document, template, metrics, { skipFirstCandidateFlows: new Set([flowId]) });
-    if (insertionProposalSignature(skipped) === insertionProposalSignature(seed)) continue;
-    candidates.push(skipped);
+    addCandidate(skipped);
+  }
+  for (const [flowId, flow] of Object.entries(document.flows)) {
+    const route = template.routes[flowId];
+    if (flowId === 'main' || !route?.insertionSlots?.length) continue;
+    const blocks = insertionBlocksForFlow(template, flowId, flow.blocks);
+    for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+      const block = blocks[blockIndex]!;
+      const key = insertionKey(flowId, block.id);
+      const current = seed.get(key);
+      if (!current) continue;
+      const options = insertionSlotCandidates(template, route, flowId, block);
+      const previous = blockIndex > 0 ? seed.get(insertionKey(flowId, blocks[blockIndex - 1]!.id)) : undefined;
+      const next = seed.get(insertionKey(flowId, blocks[blockIndex + 1]?.id ?? ''));
+      const previousIndex = previous ? options.findIndex((candidate) => candidate.page === previous.page && candidate.slotId === previous.slotId && candidate.box.x === previous.box.x && candidate.box.y === previous.box.y) : -1;
+      const nextIndex = next ? options.findIndex((candidate) => candidate.page === next.page && candidate.slotId === next.slotId && candidate.box.x === next.box.x && candidate.box.y === next.box.y) : options.length;
+      for (let optionIndex = 0; optionIndex < options.length; optionIndex += 1) {
+        if (optionIndex === previousIndex || optionIndex === nextIndex || optionIndex <= previousIndex || optionIndex >= nextIndex) continue;
+        const proposal = fitInsertionProposal(document, metrics, template, { flowId, blockId: block.id, ...options[optionIndex]! });
+        if (!insertionProposalCanFollow(previous, proposal) || (next !== undefined && !insertionProposalCanFollow(proposal, next))) continue;
+        const alternative = new Map(seed);
+        alternative.set(key, proposal);
+        addCandidate(alternative);
+        if (candidates.length >= maxCandidates) return candidates;
+      }
+      if (candidates.length >= maxCandidates) return candidates;
+    }
+  }
+  for (const [flowId, flow] of Object.entries(document.flows)) {
+    if (flowId === 'main') continue;
+    for (const block of insertionBlocksForFlow(template, flowId, flow.blocks)) {
+      if (!block.allowOmission) continue;
+      const key = insertionKey(flowId, block.id);
+      if (!seed.has(key)) continue;
+      const omitted = new Map(seed);
+      omitted.delete(key);
+      addCandidate(omitted);
+      if (candidates.length >= maxCandidates) return candidates;
+    }
   }
   return candidates;
 }

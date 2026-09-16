@@ -14,6 +14,7 @@ const bundles = {
   adapter: join(temporary, 'composition/report-composition-entrypoint.cjs'),
   backend: join(temporary, 'composition/index.cjs'),
   pdfBackend: join(temporary, 'composition/adapters/pdf/backend.cjs'),
+  responses: join(temporary, 'interfaces/mcp/responses.cjs'),
   primitives: join(temporary, 'rendering/primitives.cjs'),
   template: join(temporary, 'template/contracts.cjs'),
   geometry: join(temporary, 'template/geometry.cjs'),
@@ -25,6 +26,7 @@ async function buildPlanningBundles() {
       'src/composition/report-composition-entrypoint.ts',
       'src/composition/index.ts',
       'src/composition/adapters/pdf/backend.ts',
+      'src/interfaces/mcp/responses.ts',
       'src/rendering/primitives.ts',
       'src/template/contracts.ts',
       'src/template/geometry.ts',
@@ -69,6 +71,7 @@ function assertSpacingEvidence(result) {
   assert.equal(insertionObservations.length, insertionPlacements.length, 'every insertion obstacle must have rhythm evidence');
   for (const observation of insertionObservations) {
     assert.ok(observation.owner && observation.cause, 'insertion rhythm must identify its responsible layer and cause');
+    assert.ok(observation.flowId && observation.blockId && observation.graphicId, 'insertion rhythm must identify its exact content placement for score attribution');
     assert.ok(observation.templateRef, 'insertion rhythm must identify the supplying template');
     assert.ok(Number.isFinite(observation.metrics.referenceGap), 'insertion rhythm must expose a numeric reference gap');
     assert.ok(observation.profile === 'normal' || observation.profile === 'compact' || observation.profile === 'open', 'insertion rhythm must expose a known profile');
@@ -106,14 +109,15 @@ await buildPlanningBundles();
 
 try {
   const { planReportComposition, compositionPdfBackendOptionsFromRenderConfig, compositionStylesFromRenderConfig } = await import(bundles.adapter);
-  const { renderComposition, evaluateCompositionPlan } = await import(bundles.backend);
+  const { renderComposition, evaluateCompositionPlan, compareCompositionEvaluations } = await import(bundles.backend);
   const { createJsPdfTextBackend } = await import(bundles.pdfBackend);
   const { newPdf } = await import(bundles.primitives);
   const { compileTemplateSource } = await import(bundles.template);
   const { pageGeometryFromTemplate } = await import(bundles.geometry);
   const source = parse(await readFile(join(root, 'templates/pages/editorial-inset-two-column/template.yml'), 'utf8'));
   const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
-  const compiled = compileTemplateSource(qualitySource(source));
+  const dynamicSource = qualitySource(source);
+  const compiled = compileTemplateSource(dynamicSource);
   const geometry = pageGeometryFromTemplate(compiled);
   const fixture = createEditorialNumberedFixture({
     quoteMarkGap: renderConfig.pdf.quote_mark_gap,
@@ -134,15 +138,52 @@ try {
     fixture.input,
     { family: 'DejaVu', maxPages: 6, styles },
   );
+  const tightQuoteSource = qualitySource(source);
+  tightQuoteSource.id = 'pages/editorial-inset-tight-quote-quality-check';
+  tightQuoteSource.slots['quote-capability'].frame = { ...tightQuoteSource.slots['quote-capability'].frame, y: 0.255, height: 0.24 };
+  const tightQuoteTemplate = compileTemplateSource(tightQuoteSource);
+  const tightQuoteGeometry = pageGeometryFromTemplate(tightQuoteTemplate);
+  const tightQuoteResult = planReportComposition(
+    pdf,
+    tightQuoteTemplate,
+    tightQuoteGeometry,
+    fixture.input,
+    { family: 'DejaVu', maxPages: 6, styles },
+  );
   assert.equal(result.evaluation.status, 'accepted', JSON.stringify(result.evaluation));
+  assert.equal(tightQuoteResult.evaluation.status, 'accepted', JSON.stringify(tightQuoteResult.evaluation));
+  assert.deepEqual(result.plan.residualContent, []);
+  assert.deepEqual(tightQuoteResult.plan.residualContent, []);
+  assert.ok(result.evaluation.score > tightQuoteResult.evaluation.score, 'the caller must prefer the more balanced legal insertion template');
+  const selectedTemplate = compareCompositionEvaluations(result.evaluation, tightQuoteResult.evaluation) <= 0 ? result : tightQuoteResult;
+  assert.equal(selectedTemplate, result, 'a caller comparing legal template alternatives must select the higher-scoring insertion rhythm');
   assert.deepEqual(result.plan.residualContent, [], JSON.stringify(result.plan.residualContent));
-  const quoteSlots = result.plan.slots.filter((slot) => slot.id.includes('quote-capability#'));
+  assert.equal(typeof result.evaluation.scoreBase, 'number', 'legal evaluation must expose the configured score base');
+  assert.ok(Array.isArray(result.evaluation.placementScores), 'legal evaluation must expose score contributions by material placement');
+  const attributedPoints = result.evaluation.placementScores.reduce((sum, placement) => sum + placement.points, 0);
+  const attributionTolerance = Number.EPSILON * Math.max(1, Math.abs(result.evaluation.score)) * result.evaluation.placementScores.length * 4;
+  assert.ok(Math.abs(result.evaluation.scoreBase + attributedPoints - result.evaluation.score) <= attributionTolerance, 'base plus placement contributions must conserve the plan score');
+  for (const component of result.evaluation.scoreBreakdown) {
+    const componentAttribution = result.evaluation.placementScores.flatMap((placement) => placement.contributions)
+      .filter((contribution) => contribution.code === component.code)
+      .reduce((sum, contribution) => sum + contribution.points, 0);
+    assert.ok(Math.abs(componentAttribution - component.points) <= attributionTolerance, `component ${component.code} must be attributed exactly once`);
+  }
+  assert.ok(Array.isArray(result.evaluation.repairProposals), 'legal evaluation must expose machine-readable repair proposals');
+  const { compositionQualitySummary, compositionQualityText } = await import(bundles.responses);
+  const publicQuality = compositionQualitySummary(selectedTemplate.evaluation, selectedTemplate.plan);
+  assert.equal(publicQuality.scoreBase, selectedTemplate.evaluation.scoreBase, 'the public quality summary must expose the score base');
+  assert.deepEqual(publicQuality.placementScores, selectedTemplate.evaluation.placementScores, 'the public quality summary must expose per-placement contributions');
+  assert.deepEqual(publicQuality.repairProposals, selectedTemplate.evaluation.repairProposals, 'the public quality summary must expose evaluator repair proposals');
+  assert.deepEqual(publicQuality.candidateSearch, selectedTemplate.plan.trace?.candidateSearch, 'the public quality summary must expose the complete-plan candidate trace');
+  assert.match(compositionQualityText(selectedTemplate.evaluation, selectedTemplate.plan), /"candidateSearch"/u, 'human-facing MCP quality text must expose the same candidate trace as structured output');
+  const quoteSlots = selectedTemplate.plan.slots.filter((slot) => slot.id.includes('quote-capability#'));
   assert.ok(quoteSlots.length > 0, 'fluid insertion capability must materialize page-local slot instances in the actual plan');
   assert.ok(quoteSlots.every((slot) => slot.id.includes('#1') || slot.id.includes('#2')), 'fluid capability must stay bounded to its declared per-page capacity');
-  assert.ok(result.plan.insertionLines?.length >= 4, 'the real editorial fixture must place all authored quote insertions');
-  assert.ok((result.plan.trace?.candidateSearch?.generatedCandidates ?? 0) >= 2, 'a dynamic intro must produce an earliest-slot and an optional skip-first insertion candidate');
-  assertSpacingEvidence(result);
-  const proximityPlan = structuredClone(result.plan);
+  assert.ok(selectedTemplate.plan.insertionLines?.length >= 4, 'the real editorial fixture must place all authored quote insertions');
+  assert.ok((selectedTemplate.plan.trace?.candidateSearch?.generatedCandidates ?? 0) >= 2, 'a dynamic intro must produce an earliest-slot and an optional skip-first insertion candidate');
+  assertSpacingEvidence(selectedTemplate);
+  const proximityPlan = structuredClone(selectedTemplate.plan);
   proximityPlan.spacing.observations.push({
     kind: 'element-proximity',
     page: 1,
@@ -154,12 +195,12 @@ try {
     movementAvailable: true,
     reasons: ['elements-too-close'],
   });
-  const proximityEvaluation = evaluateCompositionPlan(result.document, proximityPlan);
+  const proximityEvaluation = evaluateCompositionPlan(selectedTemplate.document, proximityPlan);
   const proximitySuggestion = proximityEvaluation.suggestions?.find((suggestion) => suggestion.code === 'ELEMENTS_TOO_CLOSE');
   assert.ok(proximitySuggestion, 'a measured pairwise gap must become a public evaluator suggestion');
   assert.equal(proximitySuggestion.evidence.records[0].fromBox.y, 40, 'the public suggestion must expose measured geometry');
   assert.equal(proximitySuggestion.evidence.records[0].to.blockId, 'quote-near-intro', 'the public suggestion must name both source elements');
-  const artifact = renderComposition(result.document, result, createJsPdfTextBackend(
+  const artifact = renderComposition(selectedTemplate.document, selectedTemplate, createJsPdfTextBackend(
     pdf,
     'DejaVu',
     styles,
@@ -173,10 +214,19 @@ try {
     mode: 'plan-and-representative-artifact',
     pages: result.plan.pages.length,
     insertionSlots: quoteSlots.length,
-    insertionLines: result.plan.insertionLines?.length ?? 0,
-    observations: result.plan.spacing?.observations.length ?? 0,
-    scoreBreakdown: result.evaluation.scoreBreakdown.map(({ code, value, points }) => ({ code, value, points })),
-    suggestions: result.evaluation.suggestions?.map(({ code, why, remedies, evidence }) => ({ code, why, remedies, evidence })) ?? [],
+    insertionLines: selectedTemplate.plan.insertionLines?.length ?? 0,
+    observations: selectedTemplate.plan.spacing?.observations.length ?? 0,
+    qualityAlternatives: [result, tightQuoteResult].map((candidate) => ({
+      template: candidate.template.id,
+      score: candidate.evaluation.score,
+      status: candidate.evaluation.status,
+      insertionQuality: candidate.evaluation.scoreBreakdown
+        .filter((component) => ['insertion-symmetry', 'insertion-distribution', 'spacing-rhythm'].includes(component.code))
+        .map(({ code, points }) => ({ code, points })),
+    })),
+    selectedTemplate: selectedTemplate.template.id,
+    scoreBreakdown: selectedTemplate.evaluation.scoreBreakdown.map(({ code, value, points }) => ({ code, value, points })),
+    suggestions: selectedTemplate.evaluation.suggestions?.map(({ code, why, remedies, evidence }) => ({ code, why, remedies, evidence })) ?? [],
     artifactPath,
   }, null, 2));
 } finally {

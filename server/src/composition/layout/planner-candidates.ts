@@ -72,7 +72,12 @@ function movablePlacementBoxes(proposal: { box: CompositionRect }, policy: Movab
  * @planner-target composition/layout/planner-candidates.ts
  * @planner-responsibility Keep the current movablePlacementRefinementBoxes implementation intact until its target seam is extracted.
  */
-function movablePlacementRefinementBoxes(proposal: { box: CompositionRect }, policy: MovablePlacementBounds, round: number): CompositionRect[] {
+function movablePlacementRefinementBoxes(
+  proposal: { box: CompositionRect },
+  policy: MovablePlacementBounds,
+  round: number,
+  minimumStep?: number,
+): CompositionRect[] {
   const { bounds } = policy;
   const minimumX = bounds.x;
   const maximumX = bounds.x + bounds.width - proposal.box.width;
@@ -86,6 +91,7 @@ function movablePlacementRefinementBoxes(proposal: { box: CompositionRect }, pol
   const current = clamp(axis === 'x' ? proposal.box.x : proposal.box.y, minimum, maximum);
   const coarseStep = (maximum - minimum) / Math.max(1, policy.candidateCount - 1);
   const radius = coarseStep / (2 ** round);
+  if (minimumStep !== undefined && radius < minimumStep) return [];
   return Array.from({ length: count }, (_, index) => {
     const fraction = count === 1 ? 0.5 : index / (count - 1);
     const coordinate = clamp(current - radius + (2 * radius * fraction), minimum, maximum);
@@ -174,9 +180,11 @@ function movablePlacementProposalRefinements<T extends PlannedPlacement>(
   selectedIdForKey: (key: string, proposal: T) => string,
   maxCandidates?: number,
   signature: (proposal: Map<string, T>) => string = defaultPlacementSignature,
+  defaultRefinementRounds = 0,
+  minimumStep?: number,
 ): Map<string, T>[] {
   const movableEntries = orderedPolicyEntries(seeded, policies)
-    .filter(([, bounds]) => (bounds.refinementRounds ?? 0) >= round);
+    .filter(([, bounds]) => (bounds.refinementRounds ?? defaultRefinementRounds) >= round);
   if (movableEntries.length === 0) return [];
   const limit = boundedCandidateLimit(maxCandidates);
   let variants: Map<string, T>[] = [seeded];
@@ -192,7 +200,7 @@ function movablePlacementProposalRefinements<T extends PlannedPlacement>(
       slotId: selectedPlacement.slotId.replace(/^\d+:/u, ''),
       box: { ...selectedPlacement.box },
     } as T;
-    const boxes = movablePlacementRefinementBoxes(anchoredProposal, bounds, round);
+    const boxes = movablePlacementRefinementBoxes(anchoredProposal, bounds, round, minimumStep);
     if (boxes.length === 0) return [];
     const nextVariants: Map<string, T>[] = [];
     const seen = new Set<string>();
@@ -244,6 +252,8 @@ export function movableInsertionProposalRefinements(
   policies: MovableInsertionPolicy,
   round: number,
   maxCandidates?: number,
+  defaultRefinementRounds = 0,
+  minimumStep?: number,
 ): Map<string, PlannedInsertion>[] {
   return movablePlacementProposalRefinements(
     seeded,
@@ -253,6 +263,8 @@ export function movableInsertionProposalRefinements(
     (_key, proposal) => `insertion:${proposal.blockId}`,
     maxCandidates,
     movableInsertionProposalSignature,
+    defaultRefinementRounds,
+    minimumStep,
   );
 }
 
@@ -289,6 +301,8 @@ export function movableGraphicProposalRefinements(
   policies: MovableGraphicPolicy,
   round: number,
   maxCandidates?: number,
+  defaultRefinementRounds = 0,
+  minimumStep?: number,
 ): Map<string, PlannedGraphic>[] {
   return movablePlacementProposalRefinements(
     seeded,
@@ -298,6 +312,8 @@ export function movableGraphicProposalRefinements(
     (key) => key,
     maxCandidates,
     movableGraphicProposalSignature,
+    defaultRefinementRounds,
+    minimumStep,
   );
 }
 

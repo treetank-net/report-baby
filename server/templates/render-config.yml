@@ -103,6 +103,7 @@ composition_search:
   max_refinement_rounds: 2
   max_candidates_per_refinement: 16
   max_full_plan_recalculations: 128
+  minimum_geometry_step_mm: 0.5
   movable_window_ratio: 0.02
   movable_candidate_count: 5
   movable_refinement_rounds: 1

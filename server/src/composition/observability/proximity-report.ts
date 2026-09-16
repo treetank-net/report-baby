@@ -15,7 +15,7 @@ interface ProximitySubject {
   reference: CompositionSpacingSubject;
   box: CompositionBox;
   profile?: 'compact' | 'normal' | 'open';
-  movable: boolean;
+  movementAxis?: 'x' | 'y';
   insertion: boolean;
   around?: boolean;
 }
@@ -35,10 +35,6 @@ function unionBoxes(boxes: CompositionBox[]): CompositionBox | undefined {
   const rightEdge = Math.max(...boxes.map(right));
   const bottomEdge = Math.max(...boxes.map(bottom));
   return { x: left, y: top, width: rightEdge - left, height: bottomEdge - top };
-}
-
-function horizontalOverlap(first: CompositionBox, second: CompositionBox): boolean {
-  return Math.min(right(first), right(second)) > Math.max(first.x, second.x);
 }
 
 function flowByBlock(document: CompositionDocument): Map<string, string> {
@@ -72,7 +68,6 @@ function blockSubjects(plan: CompositionPlan, document: CompositionDocument): Pr
       page: line.page,
       box: { ...line.box },
       profile: slot.spacingProfile,
-      movable: false,
       insertion: false,
     });
   }
@@ -85,34 +80,32 @@ function blockSubjects(plan: CompositionPlan, document: CompositionDocument): Pr
       page: placement.page,
       box: { ...placement.box },
       profile: slot.spacingProfile,
-      movable: false,
       insertion: false,
     });
   }
   return [...groups.values()];
 }
 
-function insertionSubjects(plan: CompositionPlan): ProximitySubject[] {
+function graphicSubjects(plan: CompositionPlan): ProximitySubject[] {
   const slots = new Map(plan.slots.map((slot) => [slot.id, slot]));
   const subjects: ProximitySubject[] = [];
-  for (const placement of plan.graphicPlacements.filter((graphic) => graphic.graphicId.startsWith('insertion:'))) {
+  for (const placement of plan.graphicPlacements) {
     const slot = slots.get(placement.slotId);
     if (!slot) continue;
+    const insertion = placement.graphicId.startsWith('insertion:');
     subjects.push({
       reference: {
         kind: 'graphic',
         id: placement.graphicId,
         ...(slot.flowId === undefined ? {} : { flowId: slot.flowId }),
-        blockId: placement.graphicId.slice('insertion:'.length),
+        ...(insertion ? { blockId: placement.graphicId.slice('insertion:'.length) } : {}),
         slotId: placement.slotId,
       },
       page: placement.page,
       box: { ...placement.box },
       profile: slot.spacingProfile,
-      movable: (plan.movableInsertionFrames ?? []).some((frame) => frame.page === placement.page
-          && frame.flowId === (slot.flowId ?? '')
-          && frame.blockId === placement.graphicId.slice('insertion:'.length)),
-      insertion: true,
+      movementAxis: graphicMovementAxis(plan, placement.graphicId, placement.page),
+      insertion,
       around: placement.wrap === 'around',
     });
   }
@@ -143,6 +136,31 @@ function verticalGap(first: CompositionBox, second: CompositionBox): number {
   if (bottom(first) <= second.y) return second.y - bottom(first);
   if (bottom(second) <= first.y) return first.y - bottom(second);
   return -Math.min(bottom(first), bottom(second)) + Math.max(first.y, second.y);
+}
+
+function horizontalGap(first: CompositionBox, second: CompositionBox): number {
+  if (right(first) <= second.x) return second.x - right(first);
+  if (right(second) <= first.x) return first.x - right(second);
+  return -(Math.min(right(first), right(second)) - Math.max(first.x, second.x));
+}
+
+function proximityAxis(first: CompositionBox, second: CompositionBox): { axis: 'x' | 'y'; gap: number } | undefined {
+  const gapX = horizontalGap(first, second);
+  const gapY = verticalGap(first, second);
+  const xOverlaps = gapX < 0;
+  const yOverlaps = gapY < 0;
+  if (xOverlaps && yOverlaps) return gapX >= gapY ? { axis: 'x', gap: gapX } : { axis: 'y', gap: gapY };
+  if (xOverlaps) return { axis: 'y', gap: gapY };
+  if (yOverlaps) return { axis: 'x', gap: gapX };
+  return undefined;
+}
+
+function graphicMovementAxis(plan: CompositionPlan, graphicId: string, page: number): 'x' | 'y' | undefined {
+  if (graphicId.startsWith('insertion:')) {
+    const blockId = graphicId.slice('insertion:'.length);
+    return (plan.movableInsertionFrames ?? []).find((frame) => frame.page === page && frame.blockId === blockId)?.axis;
+  }
+  return (plan.movableGraphicFrames ?? []).find((frame) => frame.page === page && frame.graphicId === graphicId)?.axis;
 }
 
 function spacingTarget(profile: ProximitySubject['profile'], score: ReturnType<typeof readRenderConfig>['compositionScore']): number {
@@ -178,7 +196,7 @@ function proximityObservation(
     toBox: { ...second.box },
     profile,
     box: { ...first.box },
-    movementAvailable: [first, second].some((subject) => isInsertion(subject) && subject.movable),
+    movementAvailable: false,
     metrics: {
       gap,
       minimumGap,
@@ -198,18 +216,24 @@ function proximityObservation(
 export function elementProximityReports(plan: CompositionPlan, document: CompositionDocument): CompositionSpacingObservation[] {
   const config = readRenderConfig().compositionScore;
   const moveBudget = config.elementProximityMoveBudgetMm;
-  const subjects = [...blockSubjects(plan, document), ...insertionSubjects(plan)];
+  const subjects = [...blockSubjects(plan, document), ...graphicSubjects(plan)];
   const reports: CompositionSpacingObservation[] = [];
   for (let index = 0; index < subjects.length; index += 1) {
     for (let nextIndex = index + 1; nextIndex < subjects.length; nextIndex += 1) {
       const first = subjects[index];
       const second = subjects[nextIndex];
       if (first.reference.slotId === second.reference.slotId && first.reference.id === second.reference.id) continue;
-      if (!shouldMeasurePair(first, second) || !horizontalOverlap(first.box, second.box)) continue;
-      const gap = verticalGap(first.box, second.box);
+      if (!shouldMeasurePair(first, second)) continue;
+      const measured = proximityAxis(first.box, second.box);
+      if (!measured) continue;
+      const gap = measured.gap;
       const minimumGap = pairSpacingTarget(first, second, config);
       if (gap >= minimumGap) continue;
       const report = proximityObservation(first, second, gap, minimumGap, moveBudget);
+      report.axis = measured.axis;
+      report.movementAvailable = [first, second].some((subject) => subject.movementAxis === measured.axis);
+      report.metrics.gapX = horizontalGap(first.box, second.box);
+      report.metrics.gapY = verticalGap(first.box, second.box);
       reports.push(report);
     }
   }

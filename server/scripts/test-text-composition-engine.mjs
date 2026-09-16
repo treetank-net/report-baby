@@ -787,6 +787,20 @@ try {
   assert.ok(movableEvaluationPhase?.details?.candidates?.some((candidate) => candidate.refinementRound === 1), 'the candidate trace must identify the local refinement round');
   const movableCandidatePlans = createTextCompositionPlanner(movableQuoteTemplate, movableQuotePolicy).planCandidates(movableQuoteDocument, movableMetrics);
   assert.equal(movableCandidatePlans.length, 6, 'the planner seam must expose every movable-position candidate');
+  const proposalPlanner = createTextCompositionPlanner(movableQuoteTemplate, movableQuotePolicy);
+  const proposalSourcePlan = movableCandidatePlans[0];
+  const proposalSourceGraphic = proposalSourcePlan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block');
+  const evaluatorRepair = {
+    status: 'accepted', diagnostics: [], hardViolations: [], score: 1, scoreBreakdown: [], residualContent: [],
+    repairProposals: [{
+      id: 'move-quote-down',
+      placement: { id: `1:quote:quotes:movable-quote-block`, kind: 'graphic', page: 1, slotId: proposalSourceGraphic.slotId, flowId: 'quotes', blockId: 'movable-quote-block', graphicId: 'insertion:movable-quote-block' },
+      action: 'move', axis: 'y', direction: 'down', distance: 5, sourceCode: 'element-proximity', estimatedPoints: 5, estimateKind: 'local-geometry',
+    }],
+  };
+  const proposalCandidates = proposalPlanner.planRefinedCandidatesWithSignatures(movableQuoteDocument, movableMetrics, proposalSourcePlan, 1, evaluatorRepair);
+  assert.ok(proposalCandidates.some((candidate) => candidate.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y === proposalSourceGraphic.box.y + 5), 'the planner must turn an evaluator proposal into a fully replanned bounded placement candidate');
+  assert.ok(proposalCandidates.some((candidate) => candidate.repairProposalIds?.includes('move-quote-down')), 'the planner must preserve the proposal identity for public candidate trace');
   const movableCandidateSummary = movableCandidatePlans.map((candidate) => {
     const quote = candidate.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block');
     const quoteLine = candidate.insertionLines?.find((line) => line.blockId === 'movable-quote-block');
@@ -832,6 +846,29 @@ try {
   const bestFragmentation = Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs));
   assert.equal(selectedCandidate.score, Math.max(...movableEvaluationPhase.details.candidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring movable candidate');
   assert.equal(movableCandidateSummary.find((candidate) => candidate.quoteY === movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y)?.fragmentedParagraphs, bestFragmentation, 'the selected quote position must have the least paragraph fragmentation');
+
+  const optionalInsertionDocument = {
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: [movableParagraphs[0]] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ ...movableQuoteDocument.flows.quotes.blocks[0], allowOmission: true }] },
+    },
+  };
+  const optionalInsertionPlanner = createTextCompositionPlanner(movableQuoteTemplate);
+  const optionalInsertionCandidates = optionalInsertionPlanner.planCandidates(optionalInsertionDocument, movableMetrics);
+  const omittedInsertion = optionalInsertionCandidates.find((candidate) => candidate.decisions.some((decision) => decision.code === 'OPTIONAL_INSERTION_OMITTED'));
+  assert.ok(omittedInsertion, 'the candidate set must contain an omission variant only for an input-authorized insertion');
+  const omittedInsertionEvaluation = evaluateCompositionPlan(optionalInsertionDocument, omittedInsertion);
+  assert.equal(omittedInsertionEvaluation.status, 'accepted', `explicitly optional insertion omission must preserve legal coverage: ${JSON.stringify(omittedInsertionEvaluation)}`);
+  assert.equal(omittedInsertion.trace?.blocks.find((block) => block.flowId === 'quotes' && block.blockId === 'movable-quote-block')?.status, 'omitted', 'the plan trace must distinguish an intentional omission from missing or residual content');
+  const placedOptionalCandidate = optionalInsertionCandidates.find((candidate) => !candidate.decisions.some((decision) => decision.code === 'OPTIONAL_INSERTION_OMITTED'));
+  const optionalRepairCandidates = optionalInsertionPlanner.planRefinedCandidatesWithSignatures(optionalInsertionDocument, movableMetrics, placedOptionalCandidate, 1, {
+    repairProposals: [{
+      id: 'omit-optional-quote',
+      placement: { id: '1:quote:quotes:movable-quote-block', kind: 'graphic', page: 1, slotId: 'quote', flowId: 'quotes', blockId: 'movable-quote-block', graphicId: 'insertion:movable-quote-block' },
+      action: 'omit', sourceCode: 'element-proximity', estimatedPoints: 1, estimateKind: 'optional-omission', legalCapability: 'input-allows-omission',
+    }],
+  });
+  assert.ok(optionalRepairCandidates.some((candidate) => candidate.plan.decisions.some((decision) => decision.code === 'OPTIONAL_INSERTION_OMITTED')), 'the refinement seam must materialize an evaluator omission proposal as a complete plan');
   const earlyStopPolicy = structuredClone(movableQuotePolicy);
   earlyStopPolicy.movableInsertionBounds['quotes:movable-quote-block'].refinementRounds = 3;
   earlyStopPolicy.movableInsertionBounds['quotes:movable-quote-block'].refinementCandidateCount = 1;
@@ -1618,6 +1655,11 @@ try {
   const graphicGlyph = graphicResult.plan.glyphPlacements.find((glyph) => glyph.targetType === 'graphic');
   assert.ok(graphicGlyph && graphicGlyph.box.x >= 20 && graphicGlyph.box.y >= 16 && graphicGlyph.opacity === 0.35, 'a glyph may attach to a graphic box with offsets and opacity');
   assert.equal(graphicResult.evaluation.diagnostics.some((item) => item.code === 'LINE_GRAPHIC_OVERLAP'), false);
+  const glyphOverlapScore = graphicResult.evaluation.scoreBreakdown.find((component) => component.code === 'glyph-overlap');
+  const glyphOverlapContributors = graphicResult.evaluation.placementScores.filter((entry) => entry.contributions.some((contribution) => contribution.code === 'glyph-overlap'));
+  assert.ok(glyphOverlapScore && glyphOverlapScore.points < 0, 'the overlapping authored glyph fixture should produce a measurable composition penalty');
+  assert.ok(glyphOverlapContributors.some((entry) => entry.placement.kind === 'glyph') && glyphOverlapContributors.some((entry) => entry.placement.kind === 'text'), 'glyph overlap must identify both the decorative glyph and the affected text placement');
+  assert.equal(glyphOverlapContributors.reduce((sum, entry) => sum + entry.contributions.filter((contribution) => contribution.code === 'glyph-overlap').reduce((points, contribution) => points + contribution.points, 0), 0), glyphOverlapScore.points, 'glyph-overlap attribution must conserve its whole-plan penalty');
   const linesBesideGraphic = graphicResult.plan.lines.filter((line) => line.page === 1 && line.box.y < 25 && line.box.y + line.box.height > 15);
   assert.ok(linesBesideGraphic.some((line) => line.box.x + line.box.width <= 20 || line.box.x >= 38), 'text beside the graphic must use a non-overlapping interval');
   for (const shape of ['rectangle', 'triangle', 'star', 'polygon']) {

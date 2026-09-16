@@ -38,6 +38,18 @@ neutral (`0` points), while a violation subtracts points. Penalties are not
 expressed as a percentage of a corresponding positive bonus and are not capped
 as a group. Repeated observations can therefore dominate the total score.
 
+The scalar score still ranks complete plans. Its separate per-placement
+contributions account for the same component points without changing that
+ranking; pairwise and region-wide points are split deterministically among the
+affected placements. These contributions are diagnostic evidence, not
+independent scores to rank elements.
+
+`orphan_penalty` is a flat, configurable number of points per measured orphan:
+`orphan_count × composition_score.orphan_penalty` (currently 4 points per
+orphan). Increasing or decreasing that YAML weight scales every orphan
+equally; the scorer does not currently apply a severity curve. This is
+intentional until visual calibration justifies severity-based weighting.
+
 This is an accounting description, not a claim that the weights are visually
 calibrated. A score is useful for comparing candidates only after the report is
 read with its component evidence and the rendered artifact is checked.
@@ -57,9 +69,11 @@ so a later candidate policy can decide whether to add breathing room.
 The report also exposes `element-proximity` for relevant pairs such as an
 intro block and a quote insertion. It names both subjects and records the
 signed gap, movement deficit, movement budget and whether legal movement is
-declared. This remains a soft ranking signal, not an action choice; the planner
-must supply alternatives and the engine compares complete legal plans while
-preserving authored-content coverage.
+declared. The evaluator may propose a bounded move only when the plan carries
+the declared movement frame. It may propose omission only when a non-main
+insertion block explicitly opts in with `allow_omission: true`. Each proposal
+is a candidate action, not an applied edit: the planner reflows a complete
+plan and the engine compares its measured score with the current best plan.
 
 Request-owned one-off insertions may share one flow while targeting different
 pages. The planner groups those requests, keeps each slot on its requested
