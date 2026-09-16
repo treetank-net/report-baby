@@ -11,24 +11,32 @@ import { routeLayout } from '../layout/page-state.js';
 
 type PlacementSlot = NonNullable<PlacementRequests['insertion_flows']>[number]['slots'][number];
 type PlacementFlow = NonNullable<PlacementRequests['insertion_flows']>[number];
+type OneOffPlacementSlot = PlacementSlot & { page: number };
+type RequestedPlacementFlow = PlacementFlow & { oneOff?: boolean; slots: Array<PlacementSlot | OneOffPlacementSlot> };
 
-function requestFlows(requests: PlacementRequests): PlacementFlow[] {
-  const flows = [...(requests.insertion_flows ?? [])];
+function requestFlows(requests: PlacementRequests): RequestedPlacementFlow[] {
+  const flows: RequestedPlacementFlow[] = [...(requests.insertion_flows ?? [])];
+  const oneOffs = new Map<string, RequestedPlacementFlow>();
   for (const insertion of requests.insertions ?? []) {
-    flows.push({
+    const flow = oneOffs.get(insertion.flow_id) ?? {
       flow_id: insertion.flow_id,
       start_page: insertion.page,
-      repeat: 'once',
-      slots: [{
-        id: `request:${insertion.flow_id}:${insertion.block_id}:${insertion.page}`,
-        frame: insertion.frame,
-        kind: insertion.kind,
-        allowed_block_ids: [insertion.block_id],
-        sizing: insertion.sizing,
-      }],
+      repeat: 'once' as const,
+      oneOff: true,
+      slots: [],
+    };
+    flow.start_page = Math.min(flow.start_page ?? insertion.page, insertion.page);
+    flow.slots.push({
+      id: `request:${insertion.flow_id}:${insertion.block_id}:${insertion.page}`,
+      frame: insertion.frame,
+      kind: insertion.kind,
+      allowed_block_ids: [insertion.block_id],
+      sizing: insertion.sizing,
+      page: insertion.page,
     });
+    oneOffs.set(insertion.flow_id, flow);
   }
-  return flows;
+  return [...flows, ...oneOffs.values()];
 }
 
 function requireFlow(document: { flows?: Record<string, unknown> } | undefined, flowId: string): void {
@@ -134,7 +142,9 @@ function assignDefaultPushes(slots: PlacementSlot[]): PlacementSlot[] {
   const ids = new Set(slots.map((slot) => slot.id));
   return slots.map((slot, index) => {
     if (slot.sizing?.mode === 'fixed' || slot.sizing?.pushes || typeof slot.frame.height === 'number') return slot;
+    const slotPage = 'page' in slot && typeof slot.page === 'number' ? slot.page : undefined;
     const pushes = slots.slice(index + 1)
+      .filter((candidate) => slotPage === undefined || !('page' in candidate) || candidate.page === slotPage)
       .filter((candidate) => candidate.frame.y > slot.frame.y)
       .map((candidate) => candidate.id)
       .filter((id) => ids.has(id));
@@ -181,6 +191,7 @@ export function applyDynamicInsertionRequests(
     if (pages.length === 0) validatePage(flow.start_page ?? defaultStartPage, template.maxPages, flow.flow_id);
     for (const page of pages) validatePage(page, template.maxPages, flow.flow_id);
     for (const slot of normalizedSlots) {
+      const requestedSlot = slot as PlacementSlot | OneOffPlacementSlot;
       validateFrame(slot, flow.flow_id);
       if (slot.allowed_block_ids) {
         const blocks = document.flows?.[flow.flow_id]?.blocks ?? [];
@@ -189,13 +200,17 @@ export function applyDynamicInsertionRequests(
       }
       if (staticIds.has(slot.id) || dynamicIds.has(slot.id)) throw new Error(`Insertion slot id '${slot.id}' is already in use.`);
       dynamicIds.add(slot.id);
-      const firstLayout = routeLayout(route, template, pages[0] ?? defaultStartPage) ?? template.pageTemplates[0];
+      const slotPagesForRequest: number[] = flow.oneOff
+        ? [('page' in requestedSlot && typeof requestedSlot.page === 'number' ? requestedSlot.page : defaultStartPage)]
+        : pages;
+      for (const page of slotPagesForRequest) validatePage(page, template.maxPages, flow.flow_id);
+      const firstLayout = routeLayout(route, template, slotPagesForRequest[0] ?? defaultStartPage) ?? template.pageTemplates[0];
       if (!firstLayout) throw new Error(`Insertion flow '${flow.flow_id}' has no page layout.`);
       const firstDefinition = physicalSlot(slot, flow.flow_id, firstLayout);
       if (firstDefinition.grow?.pushes?.some((id) => !normalizedSlots.some((candidate) => candidate.id === id))) {
         throw new Error(`Insertion slot '${slot.id}' pushes an unknown request slot.`);
       }
-      for (const page of pages) {
+      for (const page of slotPagesForRequest) {
         const pageLayout = routeLayout(route, template, page);
         if (!pageLayout) throw new Error(`Insertion flow '${flow.flow_id}' has no layout for page ${page}.`);
         const pageDefinition = physicalSlot(slot, flow.flow_id, pageLayout);
@@ -213,7 +228,7 @@ export function applyDynamicInsertionRequests(
     }
     routes[flow.flow_id] = {
       ...addRouteSlots(route, normalizedSlots.map((slot) => slot.id)),
-      continuation: route.continuation,
+      continuation: flow.oneOff ? 'allowed' : route.continuation,
       ...(flow.repeat === 'each-page' ? { repeat: 'each-page' as const } : {}),
       ...(flow.start_page === undefined ? {} : { startPage: flow.start_page }),
     };

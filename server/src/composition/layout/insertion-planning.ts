@@ -21,6 +21,11 @@ type InsertionSlotCandidate = {
   box: CompositionRect;
 };
 
+type SeedInsertionOptions = {
+  /** Flow ids for which the first page-local capability is intentionally left unused. */
+  skipFirstCandidateFlows?: ReadonlySet<string>;
+};
+
 function insertionProposalCanFollow(previous: PlannedInsertion | undefined, candidate: PlannedInsertion): boolean {
   if (!previous || candidate.page !== previous.page) return true;
   return !rectsOverlap(previous.box, candidate.box);
@@ -96,6 +101,29 @@ function insertionSlotCandidates(
     }
   }
   return candidates.sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x || left.slotId.localeCompare(right.slotId));
+}
+
+function insertionProposalSignature(proposals: Map<string, PlannedInsertion>): string {
+  return [...proposals.entries()]
+    .map(([key, proposal]) => `${key}@${proposal.page}:${proposal.slotId}:${proposal.box.x},${proposal.box.y},${proposal.box.width},${proposal.box.height}`)
+    .join('|');
+}
+
+function flowsWithOptionalFirstInsertion(
+  document: CompositionDocument,
+  template: CompositionLayout,
+): string[] {
+  if (!document.flows.intro?.blocks.length) return [];
+  return Object.entries(document.flows)
+    .filter(([flowId]) => flowId !== 'main' && flowId !== 'intro')
+    .filter(([flowId]) => {
+      const route = template.routes[flowId];
+      if (!route?.insertionSlots?.length) return false;
+      const firstPage = route.startPage ?? 1;
+      const firstLayout = routeLayout(route, template, firstPage);
+      return route.insertionSlots.some((slotId) => firstLayout?.slots.some((slot) => slot.id === slotId && slot.placement?.mode === 'fluid-y'));
+    })
+    .map(([flowId]) => flowId);
 }
 
 function candidateSupportsBlock(
@@ -212,6 +240,7 @@ export function seedInsertionProposals(
   document: CompositionDocument,
   template: CompositionLayout,
   metrics: CompositionTextMetrics,
+  options: SeedInsertionOptions = {},
 ): Map<string, PlannedInsertion> {
   const proposals = new Map<string, PlannedInsertion>();
   for (const [flowId, flow] of Object.entries(document.flows)) {
@@ -220,7 +249,10 @@ export function seedInsertionProposals(
     if (!route?.insertionSlots?.length) continue;
     const insertionBlocks = insertionBlocksForFlow(template, flowId, flow.blocks);
     const candidates = insertionSlotCandidates(template, route, flowId);
-    let previousCandidateIndex = -1;
+    const firstPage = route.startPage ?? 1;
+    const firstPageCandidateIndex = candidates.findIndex((candidate) => candidate.page === firstPage);
+    const shouldSkipFirstCandidate = options.skipFirstCandidateFlows?.has(flowId) === true && firstPageCandidateIndex >= 0;
+    let previousCandidateIndex = shouldSkipFirstCandidate ? firstPageCandidateIndex : -1;
     let previousProposal: PlannedInsertion | undefined;
     insertionBlocks.forEach((block) => {
       let selectedIndex = -1;
@@ -241,6 +273,27 @@ export function seedInsertionProposals(
     });
   }
   return proposals;
+}
+
+/**
+ * Generate deterministic activation alternatives for reusable insertion
+ * capabilities.  Capacity is an upper bound: when a dynamic intro occupies
+ * the opening area, the planner may leave the first quote instance unused and
+ * compare that arrangement with the authored earliest-slot seed.
+ */
+export function seedInsertionProposalCandidates(
+  document: CompositionDocument,
+  template: CompositionLayout,
+  metrics: CompositionTextMetrics,
+): Map<string, PlannedInsertion>[] {
+  const seed = seedInsertionProposals(document, template, metrics);
+  const candidates = [seed];
+  for (const flowId of flowsWithOptionalFirstInsertion(document, template)) {
+    const skipped = seedInsertionProposals(document, template, metrics, { skipFirstCandidateFlows: new Set([flowId]) });
+    if (insertionProposalSignature(skipped) === insertionProposalSignature(seed)) continue;
+    candidates.push(skipped);
+  }
+  return candidates;
 }
 
 /** Find the next planned insertion that must remain below current text. */

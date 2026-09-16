@@ -441,7 +441,7 @@ export const reportDiagnosticsField = {
     .enum(['summary', 'full'])
     .optional()
     .default('summary')
-    .describe('Response detail. "summary" (default) returns the written path, resolved brand profile, page count and warnings. "full" adds the resolved report layout plan for every page.'),
+    .describe('Response detail. "summary" (default) returns the written path, resolved brand profile, page count, composition quality status, passed metrics, penalties, diagnostics and remediation suggestions. "full" additionally adds the resolved report layout plan and drawing evidence for every page.'),
 };
 
 export type CompositionInput = z.infer<typeof compositionInputSchema>;

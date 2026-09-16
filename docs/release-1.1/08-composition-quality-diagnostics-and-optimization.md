@@ -1,11 +1,15 @@
 # Release 1.1 — composition quality, diagnostics and placement optimization
 
-Status: implementation slice in the 1.0.2 composition checkpoint (with
-calibration follow-up tracked in item 04). This document replaces the former
-items 08, 09 and 10. They are one process, not three independently implemented
-features. Quality evidence and the closed slot-placement contract are wired;
-remaining brand defaults and richer capability search stay explicit follow-up
-work.
+Status: the quality-reporting, scoring and existing-candidate comparison slice
+is implemented in the 1.0.2 composition checkpoint. This document replaces the
+former items 08, 09 and 10. They are one process, not three independently
+implemented features. Release 1.1 still needs per-placement score attribution
+and evaluator-guided iterative refinement; these extend the current procedural
+engine rather than adding a second search system.
+
+The separate [visual verification record](08-10-visual-verification.md) is
+part of this status: it confirms that the current slice measures and reports
+quality, but does not yet guarantee a visually preferred selected candidate.
 
 ## Goal
 
@@ -14,12 +18,23 @@ For every complete composition candidate, Report Baby must answer:
 1. is the plan legal and is all required content accounted for;
 2. which measurable geometric facts describe its composition quality;
 3. which facts reduce its score and why;
-4. what input, template or declared movement policy could improve it; and
-5. whether another already-generated legal candidate is better.
+4. which element, input constraint, template capability or movement policy
+   caused the quality loss and what bounded repair could be tried; and
+5. whether a legal candidate already generated or found by further refinement
+   improves the total score.
 
 The answer must be present in `CompositionPlan` and `CompositionEvaluation` and
 must survive CLI/MCP serialization. Rendering or an ad-hoc debugging script is
 not required.
+
+The evaluator is a feedback boundary, not an autonomous template author. It
+scores the supplied template and candidate placements and may describe
+bounded, evidence-based repairs for the existing planner to try. The caller
+(normally the LLM-facing orchestration layer) may still respond to quality
+suggestions by choosing another template, changing the input or requesting
+another planning run. A plan that is legal but aesthetically weak must remain
+explainable so that either local refinement or this upstream decision can be
+made explicitly.
 
 This task does not create a second evaluator, planner, quality service or
 search loop. It extends the existing functions and data structures.
@@ -30,13 +45,22 @@ search loop. It extends the existing functions and data structures.
 - `composition-engine.ts` remains the only owner of candidate evaluation and
   selection.
 - The evaluator scores only complete plans. It never moves a placement.
-- `planner-candidates.ts` remains the only generator of movable insertion and
-  graphic proposals. This task consumes its existing candidates; item 04 may
-  later expand their dimensions and budgets.
+- `planner-candidates.ts` and the existing text-planner refinement seam remain
+  the only generators of placement proposals. The evaluator may return
+  evidence-based repair proposals, but it does not mutate a plan or generate a
+  replacement plan itself.
+- A candidate repair is always re-planned and re-evaluated as a complete plan;
+  local estimated gains never substitute for the final whole-plan score.
+- The global plan score remains the selection value. Its element-attributed
+  contributions must add up to the same total without counting a pairwise or
+  region-level penalty more than once.
 - Authored placement coordinates remain fixed when no movement bounds were
   supplied.
 - Geometry is measured from the plan. Raster pixels are not an input to these
   rules.
+- Natural underfill on the terminal main-flow page is allowed; empty space on
+  an earlier page remains a quality signal because it may indicate a premature
+  page break.
 - Existing diagnostic codes and fields remain valid. Unknown evidence is
   omitted, never filled with zero or synthetic identifiers.
 - Numeric thresholds and penalties are loaded from
@@ -55,8 +79,9 @@ search loop. It extends the existing functions and data structures.
 - Diagnostics already carry stable code, severity, message and optional
   flow/block/page/slot identifiers, but their `details` are untyped and they
   have no `why`, `remedies` or `retryable` fields.
-- Suggestions already carry message, evidence and string remedies. Only three
-  score codes are currently translated into suggestions in `evaluator.ts`.
+- Suggestions already carry message, evidence and string remedies. Actionable
+  score codes, including `element-proximity`, are translated into suggestions
+  in `evaluator.ts`.
 
 ### Geometry and scoring
 
@@ -66,11 +91,42 @@ search loop. It extends the existing functions and data structures.
   collision boxes.
 - `evaluation/scoring.ts` already scores column balance, heading continuity,
   paragraph/list/table fragmentation, orphan fragments, insertion spacing,
-  header spacing and contrast.
+  header spacing, glyph/text overlap and contrast.
 - Fit-content blocks are measured during placement and spacing reports now
   expose occupied/empty area derived from rectangle unions. The evaluator uses
   those facts when available and retains the height-ratio fallback for legacy
   synthetic plans.
+
+### Attribute whitespace to its owner
+
+An empty area or an asymmetric gap is not actionable unless the report says
+which decision created it. The evaluator must therefore match each measured
+spacing fact to the responsible contract layer:
+
+| Evidence | Required attribution | Typical remediation |
+|---|---|---|
+| content ends inside a fixed-height intro/header slot | template fixed frame or fixed-capacity policy | enable `fit_content`/`height: auto`, or deliberately keep the fixed slot |
+| content ends inside a fit-content growth envelope | template growth ceiling | lower the envelope or let the next flow use the released space |
+| a gap follows a reserved header/footer band | template chrome geometry | keep it when intentional; otherwise adjust the band or content anchor |
+| an insertion has uneven before/after or peer gaps | insertion capability plus planner-selected position | evaluate another legal position or change the capability rhythm |
+| a requested location prevents a better position | input hard constraint (`page`, `slot_id`, or explicit frame) | relax the hard constraint or provide another legal capability |
+| no legal position exists in any compatible capability | template capability coverage | add/choose a compatible template capability; do not invent a fallback slot |
+
+The current plan can often make this match indirectly through `pageTemplateId`,
+`templateRef`, `slotId`, `flowId`, `fitContent`, `growthMaxHeight`, measured
+boxes and insertion profiles. The public quality record must make the cause
+explicit rather than forcing the caller to reconstruct it. In particular, a
+large unused intro area must be reported as a consequence of a static intro
+frame when that is what the template declared, not as an unexplained generic
+empty region. Intentional terminal-page breathing room remains exempt from
+the empty-region penalty.
+
+This attribution also separates a weak template from a restrictive input. A
+template can offer a dynamic intro and movable insertion capability; the input
+can still make a position hard by supplying `page`, `slot_id` or an explicit
+frame. The evaluator should report both facts when they coexist, so an
+upstream caller can decide whether to change the template, the input, or the
+candidate search policy.
 
 ### Candidate selection
 
@@ -78,9 +134,194 @@ search loop. It extends the existing functions and data structures.
   for declared movable insertion/graphic bounds.
 - `composition-engine.ts` evaluates candidates, rejects illegal candidates
   before score comparison and applies stable input order to ties.
-- The engine currently serializes complete plans to deduplicate them and can
-  re-evaluate equivalent refinements. Item 04 owns improving that search
-  mechanism; this task only supplies stable quality components.
+- The engine deduplicates proposal records by signature, skips already
+  evaluated refinement signatures, enforces configured round/recalculation
+  budgets and stops a refinement round when it finds no improvement.
+- Refinement candidates are currently generated from declared movement
+  policies, not from typed evaluator repair proposals; the planner receives
+  the selected plan but has no explicit selected-evaluation input or
+  minimum-step schedule. Item 04 supplies bounded-search safety. This task
+  adds score-directed candidate refinement on top of those limits.
+
+### Element-to-element spacing and optional insertion pressure
+
+Whitespace quality is not only a property of one slot. A dynamic `intro`
+block, quote, image or other insertion can be individually legal while still
+being too close to another material element. The spacing report now emits an
+`element-proximity` observation for a relevant pair on the same page when their
+horizontal ranges meet and their signed vertical gap is below
+the pair's spacing-profile target from `composition_score` (normal is the
+fallback when neither slot names a profile). The observation contains:
+
+- typed `from` and `to` references (block or insertion graphic, including flow,
+  block and slot identifiers when known);
+- `fromBox` and `toBox` renderer-neutral geometry for direct inspection;
+- `gap`, `minimumGap`, `deficit`, `movementNeeded` and `movementBudget` metrics;
+- whether the insertion has a declared legal movement capability.
+
+`fluid-y` currently materializes bounded page-local instances by dividing the
+capability frame; it does not make each instance freely movable. The report
+marks movement available only when the plan contains a matching
+`movableInsertionFrame` from an explicit movement policy. Candidate expansion
+must respect that distinction and any hard page/slot request.
+
+The observation does not decide whether to move or defer. `ELEMENTS_TOO_CLOSE`
+is a soft suggestion and exposes the evidence needed to compare both options.
+If a page-local insertion is deferred, the source block must still be placed
+elsewhere; authored content is never discarded. Around-wrapping insertion
+graphics are not compared with ordinary main-flow line envelopes because their
+vertical overlap is intentional; they are compared with the opening flow and
+with other insertions where proximity is meaningful.
+
+`scoreElementProximity` turns the summed deficit into a soft score component,
+and the evaluator publishes `ELEMENTS_TOO_CLOSE` with the exact pair evidence
+and remedies. The current score is plan-wide: pair records explain which
+elements conflict, but their points are not yet attributed to those
+placements. Existing candidate generation can move only placements for which
+a legal movement policy exists, and the evaluator does not yet feed typed
+repair proposals into that refinement path. The planned refinement below
+closes that gap while keeping complete-plan comparison authoritative. It must
+not let the evaluator mutate an accepted plan or silently remove authored
+content.
+
+The current proximity measurement has a directional blind spot:
+`elementProximityReports()` measures vertical separation only when the pair's
+horizontal ranges overlap. It does not report side-by-side boxes whose
+vertical ranges overlap but whose horizontal gap is too small. Stage F must
+extend the pair observation to identify the measured axis (and both axis gaps
+where needed), so the evaluator can distinguish “move up/down” from “move
+left/right”. It must not classify intentional around-text wrapping as a
+generic collision; the current exemption for ordinary main-flow line envelopes
+remains, while intro-to-insertion, insertion-to-insertion and other material
+pair relations are measured when their geometry makes a gap meaningful.
+
+### Per-placement score attribution and evaluator-guided refinement
+
+The plan score remains one scalar used by `compareCompositionEvaluations()`.
+In addition, every scored placement must expose its positive and negative
+point contributions and their reasons. The plan total is decomposable as the
+configured base plus the sum of placement-attributed contributions. Pairwise
+and region-wide rules still have one canonical penalty; when it is attributed
+to multiple placements, the allocated shares must sum to that penalty rather
+than duplicate it. Stable attribution uses the placed instance (page and
+slot-qualified placement identity), not only a source block ID that may be
+split across pages or slots.
+
+For each negative placement contribution, the evaluator may return bounded,
+machine-readable repair proposals using the existing evaluation and candidate
+boundaries. A proposal identifies the affected placement, action, legal axis
+or target when known, suggested displacement or destination when measurable,
+the evidence that prompted it, and whether it is only an estimate. Supported
+actions include moving within an already-declared legal bound, trying another
+compatible page/capability, and leaving an insertion unused only when the
+input semantics permit omission. Required authored content is otherwise
+reassigned, never dropped. These are candidate-generation instructions, not
+diagnostics phrased as commands and not edits to the selected plan.
+
+The existing engine/refinement loop is extended procedurally:
+
+```text
+generate and evaluate bounded seed candidates
+  -> select the best complete legal plan
+  -> inspect its per-placement contributions and repair proposals
+  -> generate a bounded neighborhood of complete alternative plans
+  -> reflow affected text and all dependent placements
+  -> run legality, coverage and all quality scoring again
+  -> keep the best legal plan seen so far
+  -> continue from that best plan while a better unexplored neighbor exists
+  -> stop only at a local stop condition or the configured search budget
+```
+
+An improvement does not end refinement. If a small upward movement improves
+the total score, the improved candidate becomes the next refinement center;
+the planner may then test a smaller displacement, down to the configured
+minimum geometry step. Search must be finite and deterministic: use the
+existing round and complete-plan recalculation budgets, proposal signatures,
+and visited-candidate deduplication. Stop when the bounded neighborhood has no
+strictly better legal candidate, no new candidate can be generated, or the
+round/calculation budget is exhausted. Preserve the best evaluated plan, not
+the last attempted one. Ties retain the existing stable candidate order. Do not
+add a minimum-score-improvement cutoff that discards small real gains; bound
+fine search through geometry step size and existing candidate/recalculation
+budgets instead.
+
+Candidate generation considers the affected element together with nearby
+elements and text boundaries. For a proximity pair it can propose moving
+either eligible endpoint, or test omission/reassignment when allowed; it must
+not optimize one pair in isolation if the move worsens another neighbor. For
+text-box spacing it considers both the gap above and below the box. Horizontal
+movement is considered only where the template exposes legal horizontal
+movement or another compatible width/column capability. Every alternative is
+re-laid out before its final score is compared, since text wrapping, orphan
+fragments, column balance and downstream flow can change together.
+
+#### What the current measurements can predict
+
+The evaluator can analytically estimate a local score delta only for a
+piecewise-linear geometry rule while the affected relations remain unchanged:
+
+- `element-proximity` is a linear gap-deficit penalty inside its active range.
+  If a placement moves away from a measured neighbor, the evaluator can
+  calculate the pair's estimated gain as
+  `min(gap increase, current deficit) * configured penalty`. The gain must
+  account for every neighbor affected by that move, including any newly
+  created proximity pair. With the current `element_proximity_penalty: 1`, an
+  isolated one-millimetre reduction in active deficit estimates one point;
+  another unit such as a rendered pixel must first be converted to the plan's
+  geometry scale.
+- insertion before/after text gaps, header/footer gap deficits, and glyph
+  overlap area can also yield local directional estimates from their measured
+  boxes while the same text lines and intersecting relations remain in place.
+- A report such as “try this placement higher by Δ” is supportable as a local
+  estimate when legal movement bounds and the relevant neighbor boxes are
+  known. It is not a guarantee that the whole plan gains those points.
+
+Orphan and fragmentation outcomes are discontinuous, not unknowable. The plan
+already exposes line boxes, fragment membership, the gap between fragments,
+and (for insertion-wrap orphans) the blocking graphic. The evaluator can use
+the adjacent measured line height to propose likely recovery moves at
+`±1`, `±2`, and further whole-line increments, stopping at the legal movement
+bound or candidate budget. It should prefer directions that plausibly let the
+isolated fragment rejoin the remaining lines of its source paragraph, while
+testing the other legal direction when the surrounding geometry does not make
+that choice obvious. It must not merge separate authored paragraphs to hide a
+fragmentation penalty.
+
+The current orphan rule assigns a known fixed penalty per detected orphan, so
+the evaluator can estimate the score recovery if a specific orphan disappears
+(currently `orphan_penalty` is 4 points per orphan). That is a predicted
+component delta, not a promise: moving an image or insertion can change the
+line breaks, create another orphan, affect paragraph fragmentation or move
+downstream content. Each line-height probe must therefore cause a complete
+re-plan and evaluation; only that result establishes the actual total-score
+change. The public report distinguishes the estimated orphan recovery from
+the measured candidate delta.
+
+Scoring geometry and configured spacing targets are expressed in millimetres;
+line-height probes use the measured line box height in those same plan units.
+“One pixel” has no renderer-neutral meaning until a pixel scale/DPI is chosen;
+the fine-search step must therefore be configured in planner geometry units,
+not hard-coded as a PDF raster pixel. The implementation should test whether a
+small legal step yields an actual increase in total score, but it must not
+promise a fixed point gain per pixel. With the current proximity weight of one
+point per millimetre of deficit, for example, an isolated one-millimetre
+improvement yields one point only while that pair remains within its active
+penalty range; the final candidate delta can differ when other elements or
+text flow are affected.
+
+The planner receives repair proposals through an explicit refinement input,
+not by parsing human-readable suggestion messages. Extend the current
+`planRefinedCandidates*` seam to receive the selected evaluation (or its
+machine-readable proposals) alongside the selected plan. Keep public
+`CompositionSuggestion` wording separate from internal candidate instructions,
+but expose the evidence and resulting candidate comparisons through the
+existing evaluation/trace output so CLI and MCP users can understand why a
+move was tried and whether it improved the plan.
+
+The implementation uses the existing spacing-report pipeline and YAML
+configuration; no second planner or evaluator is introduced. The threshold
+and movement budget are calibration parameters, not legality rules, and should
+be validated against representative intro-plus-multiple-insertion fixtures.
 
 ## Template contract: capacity, not content dimensions
 
@@ -779,7 +1020,8 @@ user-facing suggestion.
 The existing `diagnostics` request mode remains the control surface:
 
 - compact/default output returns codes, concise messages, affected page/block
-  identifiers and the highest-impact remedies;
+  identifiers, the highest-impact remedies and a compact `compositionQuality`
+  object containing `status`, `score` and `passedMetrics`;
 - full output additionally returns `why`, complete evidence, score breakdown,
   spacing records and candidate trace;
 - neither mode requires a generated PDF;
@@ -802,8 +1044,11 @@ resolve to the shared compact/normal/open targets; an absent profile uses the
 normal target. The closed `fixed`, `anchored-fit-content` and `fluid-y` slot
 placement union is validated and fluid capabilities are materialized into
 bounded deterministic page-local instances. Negative quality components
-produce actionable suggestions without changing hard legality. Ranking
-calibration is maintained by item 04.
+produce actionable suggestions without changing hard legality. The score is
+currently plan-wide; element-pair evidence is not yet a conserved
+per-placement score ledger, and suggestions do not yet drive another bounded
+round of placement generation. Ranking calibration and deterministic search
+budgets are maintained by item 04.
 
 ## Implementation sequence
 
@@ -877,9 +1122,70 @@ silently compensate for a bad plan.
 2. Confirm `compareCompositionEvaluations()` selects the higher score and
    preserves stable order for an exact tie.
 3. Confirm an aesthetically better illegal candidate cannot win.
-4. Do not expand candidate dimensions here; that belongs to item 04.
+4. Keep this baseline separate from evaluator-guided search: prove the scorer
+   and selector agree before adding repair proposals.
 
-### Stage F — remove duplicated calculations
+### Stage F — attribute quality and iteratively refine the best plan
+
+1. Extend the existing evaluation result with per-placement positive and
+   negative point contributions. Preserve the existing scalar `score` and
+   `scoreBreakdown`; assert that the configured base plus all attributed
+   contributions equals the scalar total. Attribute pairwise and region-wide
+   penalties once across their affected placements, with no duplicated points.
+   Keep penalty magnitudes tunable in `render-config.yml`; validate configured
+   penalty weights as finite and non-negative so a negative `orphan_penalty`
+   cannot turn an orphan into a score bonus. The orphan penalty remains a
+   flat per-orphan weight unless later calibration justifies severity scaling.
+2. Migrate score components one by one. Use existing plan/spacing references
+   and measurements to identify affected placements. Where a metric has only a
+   page/region scope, attribute its total to the participating placements by a
+   documented deterministic rule rather than inventing a culprit. Extend
+   proximity evidence beyond today's vertical-gap-only, horizontally
+   overlapping pair case to also measure relevant side-by-side horizontal
+   gaps and provide the axis/direction needed by repair proposals.
+3. Add machine-readable repair proposals to the existing evaluator/planner
+   refinement boundary. Do not infer actions by parsing `message`, `remedies`
+   or other user-facing prose. Each proposal carries the affected placement,
+   action, direction/target or destination when measurable, legal capability
+   evidence, and estimated-versus-measured status.
+4. Pass the selected plan's evaluation/proposals to
+   `planRefinedCandidates*()`. Keep `composition-engine.ts` as the one loop
+   owner and `planner-candidates.ts` / `text-planner.ts` as the proposal and
+   complete-plan generators.
+5. Generate bounded neighbors around implicated placements: vertical and
+   horizontal movement only inside declared bounds; compatible page/slot or
+   width alternatives only when selected templates permit them; omission only
+   when the input explicitly allows that content to be omitted. Test both
+   endpoints of a proximity pair and include all nearby text/element
+   relationships in the candidate's complete reflow.
+6. For continuous local gap rules, use measured neighboring boxes to estimate
+   useful direction and distance to a target gap. For orphan/fragmentation or
+   text-wrap metrics, use the affected line boxes and blocking placement to
+   generate bounded probes in increments of one measured line height in each
+   plausible legal vertical direction (`±1` line, `±2` lines, and so on).
+   Estimate a recoverable orphan's known component penalty, but label it as an
+   approximation. Every proposal is still fully replanned, legality-checked,
+   coverage-checked and rescored before its actual score delta is reported.
+7. Continue from the best plan seen after an improvement, including small
+   improvements. Use a coarse-to-fine step schedule toward a configured minimum
+   geometry step; add and validate that setting under the existing
+   `composition_search` YAML configuration in `render-config.yml` and its typed
+   adapter. Calibrate the step and existing round/recalculation budgets against
+   plan-only fixtures. Stop only when no strictly better legal neighbor is
+   found, no new proposal exists, or a configured budget is exhausted.
+   Deduplicate by proposal signature, prevent cycles, retain the best plan
+   rather than the last attempted one, and preserve deterministic tie order.
+8. Extend candidate trace and public CLI/MCP quality output with placement
+   contributions, repair proposals tried, complete-candidate score deltas and
+   the reason refinement stopped. Estimated local deltas must never be
+   presented as measured candidate outcomes.
+9. Add plan-only tests for score conservation, movement direction, interactions
+   with neighboring elements, wrap/orphan changes after reflow, optional
+   omission, multi-round incremental improvement, ties, cycle prevention and
+   every stop condition. Keep one rendered artifact check for whether the
+   selected plan is painted as reported.
+
+### Stage G — remove duplicated calculations
 
 After all callers consume shared spacing evidence, delete superseded
 header/insertion/orphan box calculations. Every deletion names its replacement
@@ -895,16 +1201,17 @@ query and retains the old behavior assertion.
 | `evaluation/plan-queries.ts` | read and group plan/spacing facts |
 | `evaluation/legality*.ts`, `content.ts` | hard violations only |
 | `evaluation/diagnostic-catalogue.ts` | wording, remedies and retryability from supplied facts |
-| `evaluation/scoring.ts` | numeric quality components for legal plans |
-| `evaluation/evaluator.ts` | assemble legality, score and suggestions once |
-| `composition-engine.ts` | compare candidates and record selection trace |
+| `evaluation/scoring.ts` | numeric quality components and conserved point attribution for legal plans |
+| `evaluation/evaluator.ts` | assemble legality, score attribution, public suggestions and machine-readable repair proposals |
+| `composition-engine.ts` | own iterative legal-first evaluation/refinement, total-score selection and candidate trace |
+| `layout/text-planner.ts`, `layout/planner-candidates.ts` | consume repair proposals and generate bounded complete-plan alternatives |
 | `template/contracts.ts` | validate fixed, anchored-fit-content and reusable fluid-y slot policies |
 | `layout/page-state.ts` | materialize page-local instances and enforce per-page slot capacity |
 | `layout/planner-candidates.ts` | generate bounded proposals from template capabilities and declared movable placements |
 | `contracts/input/schema.ts` | validate the simple insertion form and explicit-overlay escape hatch |
 | `adapters/request-insertion-slots.ts` | resolve template capability, inherit defaults and materialize per-run overlays |
 | brand contracts/theme adapter | select an optional categorical spacing-profile default; never introduce independent numeric gaps |
-| `adapters/render-config.ts` | resolve spacing profiles, symmetry tolerances and penalties from the shared YAML configuration |
+| `adapters/render-config.ts` | resolve spacing profiles, score penalties, local geometry step and search budgets from the shared YAML configuration |
 | MCP/CLI adapters | preserve and format the same result |
 
 ## Test matrix
@@ -928,6 +1235,14 @@ query and retains the old behavior assertion.
 | hard diagnostic gains why/remedy without changing code | plan-only failure fixtures | `test-text-composition-engine.mjs` |
 | compact/full interfaces preserve diagnostics | one request per interface, no PDF | `test-public-mcp-contract.mjs`, `test-cli.mjs` |
 | legal higher-quality candidate wins | plan-only candidate fixture | `test-structure-scoring.mjs` |
+| element contributions sum to the existing whole-plan score without pairwise double-counting | plan-only scored pair and multi-neighbor fixtures | `test-structure-scoring.mjs` |
+| proximity evidence identifies vertical and horizontal gap direction | plan-only adjacent-box and stacked-box fixtures | `test-structure-scoring.mjs` |
+| a small legal move can improve a local continuous metric but final selection uses complete-plan score | two or more complete plan candidates | `test-text-composition-engine.mjs` |
+| multiple incremental improvements continue refinement until local stop or configured budget | deterministic synthetic planner/evaluator, no PDF | `test-text-composition-engine.mjs` |
+| wrap/orphan changes are measured after replanning rather than predicted as a local derivative | candidate pair with changed line boxes | `test-structure-scoring.mjs` |
+| orphan repair proposals probe legal positions in measured one-line increments and label recovered orphan points as estimates | line-box plus blocking-image fixture and complete replanned candidates | `test-text-composition-engine.mjs`, `test-structure-scoring.mjs` |
+| required content is never omitted; optional omission is proposed only when allowed | coverage and optional-insertion plan fixtures | `test-text-composition-engine.mjs`, `test-dynamic-insertion-slots.mjs` |
+| estimated local delta is distinct from measured candidate delta in public output | one CLI/MCP report fixture | `test-public-mcp-contract.mjs`, `test-cli.mjs` |
 | selected plan paints as reported | one PDF, no raster requirement | `test-editorial-parity.mjs` |
 
 ## Completion criteria
@@ -955,6 +1270,20 @@ query and retains the old behavior assertion.
 - Fixed authored placements remain fixed without movement bounds.
 - The existing engine selects the higher-scoring legal candidate and never
   selects an illegal one.
+- The plan-wide score remains the candidate-selection value and exactly equals
+  its configured base plus all per-placement point contributions.
+- Every local quality loss can be traced to its affected placement(s) and
+  reason; a pairwise or region-level penalty is never counted twice.
+- Evaluator repair proposals are machine-readable, use only legal existing
+  capabilities/constraints, and cause the planner to generate complete
+  alternatives rather than mutate the selected plan.
+- Search continues after a small improvement, re-centres on the best plan and
+  tests finer legal movement until no better bounded neighbor remains or the
+  configured budget is reached.
+- Predicted local score deltas are explicitly estimates; only a fully
+  replanned and re-evaluated candidate reports an actual score change.
+- Refinement is deterministic, cycle-free, and returns the best evaluated
+  legal plan even when the search budget ends during a later iteration.
 - CLI and MCP expose equivalent codes and evidence.
 - No routine quality test rasterizes a PDF; one representative PDF remains.
 - All thresholds and penalties are sourced from render configuration.

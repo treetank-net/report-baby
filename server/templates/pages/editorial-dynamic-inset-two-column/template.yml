@@ -1,0 +1,83 @@
+schema_version: 1
+id: pages/editorial-dynamic-inset-two-column
+kind: page
+surface: pdf-a4
+archetype: columns
+composition:
+  heading_keep_with_next_lines: 1
+canvas:
+  direction: ltr
+page:
+  width: 210
+  height: 297
+  margins: { top: 18, right: 17, bottom: 18, left: 17 }
+  columns:
+    count: 2
+    gutter: 6
+    widths: [85, 85]
+  reserved_bands:
+    footer: { x: 0, y: 0.93, width: 1, height: 0.07 }
+  flow:
+    align: left
+    hyphenate: true
+constraints:
+  inside_canvas: true
+  no_overlap: false
+regions:
+  body:
+    frame: { x: 0.081, y: 0.30, width: 0.838, height: 0.58 }
+slots:
+  header:
+    type: text
+    frame: { x: 0.081, y: 0.04, width: 0.838, height: 0 }
+    role: header
+    fit_content: true
+    grow: { axis: y, max_height: 0.14, pushes: [intro, content] }
+  intro:
+    type: text
+    frame: { x: 0.081, y: 0.12, width: 0.838, height: 0 }
+    role: intro
+    allowed_block_kinds: [paragraph, image]
+    fit_content: true
+    grow: { axis: y, max_height: 0.18, pushes: [content] }
+  quote-pool:
+    type: text
+    frame: { x: 0.081, y: 0.30, width: 0.838, height: 0.58 }
+    role: quote
+    fit_content: true
+    placement:
+      mode: fluid-y
+      region: body
+      max_instances_per_page: 3
+      distribution: balanced
+  content:
+    type: text
+    frame: { x: 0.081, y: 0.16, width: 0.838, height: 0.77 }
+  footer:
+    type: text
+    frame: { x: 0.081, y: 0.93, width: 0.838, height: 0.04 }
+flows:
+  header:
+    slots: [header]
+    priority: 500
+    continuation: forbidden
+    repeat: each-page
+  intro:
+    slots: [intro]
+    priority: 450
+    continuation: forbidden
+  main:
+    slots: [content]
+    priority: 200
+    continuation: allowed
+  quotes:
+    slots: [quote-pool]
+    insertion_slots: [quote-pool]
+    priority: 400
+    start_page: 1
+    continuation: allowed
+  footer:
+    slots: [footer]
+    priority: 500
+    continuation: forbidden
+    repeat: each-page

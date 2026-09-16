@@ -105,6 +105,8 @@ try {
   assert.ok(Array.isArray(planResult.reportPlan?.pages));
   assert.ok(Array.isArray(planResult.compositionPlan?.flowPlacements));
   assert.ok(Array.isArray(planResult.compositionPlan?.lines));
+  assert.ok(Array.isArray(planResult.compositionEvaluation?.passedMetrics), 'CLI report responses must expose passed composition metrics');
+  assert.ok(Array.isArray(planResult.compositionEvaluation?.suggestions), 'CLI report responses must expose composition suggestions');
   assert.deepEqual(compositionPlanForParity(renderedParityResult), compositionPlanForParity(planResult), 'dry_run and render used different composition plans');
   assert.deepEqual(compositionPlanForParity(debugResult), compositionPlanForParity(planResult), 'debug overlay changed the composition plan');
 

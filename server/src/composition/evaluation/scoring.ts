@@ -57,6 +57,34 @@ function spacingObservations(plan: CompositionPlan): CompositionSpacingObservati
   return plan.spacing?.observations ?? [];
 }
 
+function observationContext(observation: CompositionSpacingObservation): Record<string, unknown> {
+  return {
+    page: observation.page,
+    ...(observation.flowId === undefined ? {} : { flowId: observation.flowId }),
+    ...(observation.regionId === undefined ? {} : { regionId: observation.regionId }),
+    ...(observation.slotId === undefined ? {} : { slotId: observation.slotId }),
+    ...(observation.templateRef === undefined ? {} : { templateRef: observation.templateRef }),
+    ...(observation.owner === undefined ? {} : { owner: observation.owner }),
+    ...(observation.cause === undefined ? {} : { cause: observation.cause }),
+  };
+}
+
+function slotContext(plan: CompositionPlan, page: number, slotId: string): Record<string, unknown> {
+  const slot = plan.spacing?.slots.find((candidate) => candidate.page === page && candidate.slotId === slotId);
+  if (!slot) return { page, slotId };
+  return {
+    page,
+    slotId,
+    ...(slot.flowId === undefined ? {} : { flowId: slot.flowId }),
+    ...(slot.regionId === undefined ? {} : { regionId: slot.regionId }),
+    ...(slot.templateRef === undefined ? {} : { templateRef: slot.templateRef }),
+    ...(slot.owner === undefined ? {} : { owner: slot.owner }),
+    ...(slot.cause === undefined ? {} : { cause: slot.cause }),
+    ...(slot.fitContent === undefined ? {} : { fitContent: slot.fitContent }),
+    ...(slot.growthMaxHeight === undefined ? {} : { growthMaxHeight: slot.growthMaxHeight }),
+  };
+}
+
 function negativeComponent(code: string, value: number, penalty: number, details: Record<string, unknown>): CompositionScoreComponent {
   return { code, value, points: -Math.max(0, value) * penalty, details };
 }
@@ -65,14 +93,25 @@ function negativeComponent(code: string, value: number, penalty: number, details
 export function scoreEmptyRegions(plan: CompositionPlan): CompositionScoreComponent {
   const threshold = scoreConfigNumber('emptyRegionRatioThreshold');
   const heightThreshold = scoreConfigNumber('emptyRegionHeightThresholdMm');
+  const finalPage = plan.pages.length > 0 ? Math.max(...plan.pages.map((page) => page.page)) : undefined;
   const regions = (plan.spacing?.slots ?? [])
-    .filter((slot) => slot.occupiedHeight > 0 && slot.box.height >= heightThreshold)
+    .filter((slot) => slot.box.height >= heightThreshold
+      // A terminal main-flow fragment is allowed to leave breathing room at
+      // the end of the document. Empty space on earlier pages remains a
+      // quality signal because it indicates a premature page break.
+      && !(finalPage !== undefined && slot.page === finalPage && slot.flowId === 'main'))
     .map((slot) => {
       const envelopeArea = slot.box.width * slot.box.height;
-      const ratio = slot.emptyArea !== undefined
+      const ratio = slot.occupiedHeight <= 0
+        ? 1
+        : slot.emptyArea !== undefined
         ? slot.emptyArea / Math.max(1, envelopeArea)
         : slot.remainingHeight / Math.max(1, slot.box.height);
-      return { page: slot.page, slotId: slot.slotId, ratio, gap: slot.gapAfter };
+      return {
+        ...slotContext(plan, slot.page, slot.slotId),
+        ratio,
+        gap: slot.gapAfter,
+      };
     })
     .filter((slot) => slot.gap > heightThreshold);
   const excess = regions.reduce((sum, region) => sum + Math.max(0, region.ratio - threshold), 0);
@@ -99,7 +138,14 @@ export function scoreSiblingColumnImbalance(plan: CompositionPlan): CompositionS
 /** Penalize asymmetric text gaps around insertion obstacles. */
 export function scoreInsertionSymmetry(plan: CompositionPlan): CompositionScoreComponent {
   const tolerance = scoreConfigNumber('insertionSymmetryToleranceMm');
-  const records = spacingObservations(plan).filter((observation) => observation.kind === 'insertion-rhythm' && observation.metrics.textGapAsymmetry !== undefined).map((observation) => ({ page: observation.page, slotId: observation.slotId, asymmetry: observation.metrics.textGapAsymmetry ?? 0 }));
+  const records = spacingObservations(plan)
+    .filter((observation) => observation.kind === 'insertion-rhythm'
+      && observation.metrics.beforeTextGap !== undefined
+      && observation.metrics.afterTextGap !== undefined
+      && observation.metrics.beforeTextGap > 0
+      && observation.metrics.afterTextGap > 0
+      && observation.metrics.textGapAsymmetry !== undefined)
+    .map((observation) => ({ ...observationContext(observation), asymmetry: observation.metrics.textGapAsymmetry ?? 0 }));
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.asymmetry - tolerance), 0);
   return negativeComponent('insertion-symmetry', excess, scoreConfigNumber('insertionSymmetryPenalty'), { tolerance, records });
 }
@@ -107,14 +153,39 @@ export function scoreInsertionSymmetry(plan: CompositionPlan): CompositionScoreC
 /** Penalize uneven outer and inter-insertion gaps within one page region. */
 export function scoreInsertionDistribution(plan: CompositionPlan): CompositionScoreComponent {
   const tolerance = scoreConfigNumber('insertionDistributionToleranceMm');
-  const groups = new Map<string, number[]>();
-  for (const observation of spacingObservations(plan).filter((item) => item.kind === 'insertion-rhythm')) {
-    const values = [observation.metrics.regionStartGap, observation.metrics.regionEndGap, observation.metrics.previousInsertionGap, observation.metrics.nextInsertionGap].filter((value): value is number => value !== undefined);
-    if (values.length > 1) groups.set(`${observation.page}:${observation.regionId ?? ''}`, [...(groups.get(`${observation.page}:${observation.regionId ?? ''}`) ?? []), ...values]);
+  const groups = new Map<string, { values: number[]; sources: Record<string, unknown>[] }>();
+  const observations = spacingObservations(plan)
+    .filter((item) => item.kind === 'insertion-rhythm')
+    .sort((left, right) => left.page - right.page || (left.box?.y ?? 0) - (right.box?.y ?? 0));
+  const grouped = new Map<string, typeof observations>();
+  for (const observation of observations) {
+    const key = `${observation.page}:${observation.regionId ?? ''}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), observation]);
   }
-  const records = [...groups.entries()].map(([key, values]) => {
-    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-    return { key, mean, dispersion: values.reduce((sum, value) => sum + Math.abs(value - mean), 0) / values.length };
+  for (const [key, pageObservations] of grouped) {
+    if (pageObservations.length === 0) continue;
+    const isFluidCapability = pageObservations.every((observation) => observation.cause === 'template-fluid-insertion-capability');
+    const first = pageObservations[0];
+    const last = pageObservations[pageObservations.length - 1];
+    const neighbourGaps = pageObservations.flatMap((observation) => [
+      observation.metrics.previousInsertionGap,
+      observation.metrics.nextInsertionGap,
+    ]).filter((value): value is number => value !== undefined);
+    const values = (isFluidCapability
+      ? pageObservations.slice(0, -1).map((observation) => observation.metrics.nextInsertionGap)
+      : [
+        first.metrics.regionStartGap,
+        last.metrics.regionEndGap,
+        ...neighbourGaps,
+      ]).filter((value): value is number => value !== undefined);
+    if (values.length > 1) groups.set(key, {
+      values,
+      sources: pageObservations.map(observationContext),
+    });
+  }
+  const records = [...groups.entries()].map(([key, group]) => {
+    const mean = group.values.reduce((sum, value) => sum + value, 0) / group.values.length;
+    return { key, mean, dispersion: group.values.reduce((sum, value) => sum + Math.abs(value - mean), 0) / group.values.length, sources: group.sources };
   });
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.dispersion - tolerance), 0);
   return negativeComponent('insertion-distribution', excess, scoreConfigNumber('insertionDistributionPenalty'), { tolerance, records });
@@ -126,12 +197,21 @@ export function scoreSpacingRhythm(plan: CompositionPlan): CompositionScoreCompo
   const tolerance = scoreConfigNumber('spacingProfileToleranceMm');
   const records = spacingObservations(plan).filter((observation) => observation.kind === 'insertion-rhythm').flatMap((observation) => {
     const target = observation.metrics.referenceGap ?? defaultTarget;
-    return [
-      observation.metrics.beforeTextGap,
-      observation.metrics.afterTextGap,
-      observation.metrics.previousInsertionGap,
-      observation.metrics.nextInsertionGap,
-    ].filter((value): value is number => value !== undefined).map((gap) => ({ page: observation.page, slotId: observation.slotId, profile: observation.profile ?? 'normal', target, gap, deviation: Math.abs(gap - target) }));
+    // Inter-insertion distance belongs to insertion-distribution. Comparing it
+    // with the ordinary text gap target would punish intentional open spacing
+    // between two separate callouts as if it were a text collision.
+    if (observation.metrics.beforeTextGap === undefined
+      || observation.metrics.afterTextGap === undefined
+      || observation.metrics.beforeTextGap <= 0
+      || observation.metrics.afterTextGap <= 0) return [];
+    return [observation.metrics.beforeTextGap, observation.metrics.afterTextGap]
+      .filter((value): value is number => value !== undefined).map((gap) => ({
+      ...observationContext(observation),
+      profile: observation.profile ?? 'normal',
+      target,
+      gap,
+      deviation: Math.abs(gap - target),
+    }));
   });
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.deviation - tolerance), 0);
   return negativeComponent('spacing-rhythm', excess, scoreConfigNumber('spacingProfilePenalty'), { profile: records[0]?.profile ?? 'normal', target: records[0]?.target ?? defaultTarget, tolerance, records });
@@ -140,7 +220,14 @@ export function scoreSpacingRhythm(plan: CompositionPlan): CompositionScoreCompo
 /** Penalize text intervals that become too narrow beside an insertion. */
 export function scoreNarrowTextIntervals(plan: CompositionPlan): CompositionScoreComponent {
   const minimum = scoreConfigNumber('narrowTextIntervalMinMm');
-  const records = spacingObservations(plan).filter((observation) => observation.kind === 'insertion-rhythm').flatMap((observation) => (observation.intervals ?? []).map((interval) => ({ page: observation.page, slotId: observation.slotId, width: interval.width, deficit: Math.max(0, minimum - interval.width) }))).filter((record) => record.deficit > 0);
+  const records = spacingObservations(plan)
+    .filter((observation) => observation.kind === 'insertion-rhythm')
+    .flatMap((observation) => (observation.intervals ?? []).map((interval) => ({
+      ...observationContext(observation),
+      width: interval.width,
+      deficit: Math.max(0, minimum - interval.width),
+    })))
+    .filter((record) => record.deficit > 0);
   const deficit = records.reduce((sum, record) => sum + record.deficit, 0);
   return negativeComponent('narrow-text-interval', deficit, scoreConfigNumber('narrowTextIntervalPenalty'), { minimum, records });
 }
@@ -154,7 +241,12 @@ export function scoreFitContentEnvelope(plan: CompositionPlan): CompositionScore
   }).map((slot) => {
     const envelope = plan.slots.find((candidate) => candidate.id === slot.slotId)?.growthMaxHeight ?? slot.box.height;
     const ratio = Math.max(0, envelope - slot.occupiedHeight) / envelope;
-    return { page: slot.page, slotId: slot.slotId, envelope, occupiedHeight: slot.occupiedHeight, ratio };
+    return {
+      ...slotContext(plan, slot.page, slot.slotId),
+      envelope,
+      occupiedHeight: slot.occupiedHeight,
+      ratio,
+    };
   });
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.ratio - threshold), 0);
   return negativeComponent('fit-content-envelope', excess, scoreConfigNumber('fitContentUnusedPenalty'), { threshold, records });
@@ -163,9 +255,51 @@ export function scoreFitContentEnvelope(plan: CompositionPlan): CompositionScore
 /** Penalize content that ends too close to the footer rule. */
 export function scoreFooterGap(plan: CompositionPlan): CompositionScoreComponent {
   const minimum = scoreConfigNumber('footerContentGapMinMm');
-  const records = (plan.spacing?.textPlacements ?? []).filter((placement) => placement.flowId !== 'footer' && placement.gapToFooter !== undefined).map((placement) => ({ page: placement.page, blockId: placement.blockId, gap: placement.gapToFooter ?? 0, deficit: Math.max(0, minimum - (placement.gapToFooter ?? 0)) })).filter((record) => record.deficit > 0);
+  const records = (plan.spacing?.textPlacements ?? [])
+    .filter((placement) => placement.flowId !== 'footer' && placement.gapToFooter !== undefined)
+    .map((placement) => ({
+      ...slotContext(plan, placement.page, placement.slotId),
+      blockId: placement.blockId,
+      gap: placement.gapToFooter ?? 0,
+      deficit: Math.max(0, minimum - (placement.gapToFooter ?? 0)),
+      boundary: 'footer',
+      cause: 'content-near-footer',
+    }))
+    .filter((record) => record.deficit > 0);
   const deficit = records.reduce((sum, record) => sum + record.deficit, 0);
   return negativeComponent('footer-gap', deficit, scoreConfigNumber('footerContentGapPenalty'), { minimum, records });
+}
+
+/** Penalize decorative glyphs that intrude into a painted text line. */
+export function scoreGlyphOverlap(plan: CompositionPlan): CompositionScoreComponent {
+  const minimumArea = scoreConfigNumber('glyphOverlapMinAreaMm2');
+  const records = [];
+  for (const glyph of plan.glyphPlacements ?? []) {
+    for (const line of allLines(plan)) {
+      if (line.page !== glyph.page) continue;
+      const overlapWidth = Math.min(glyph.box.x + glyph.box.width, line.box.x + line.box.width) - Math.max(glyph.box.x, line.box.x);
+      const overlapHeight = Math.min(glyph.box.y + glyph.box.height, line.box.y + line.box.height) - Math.max(glyph.box.y, line.box.y);
+      const overlapArea = Math.max(0, overlapWidth) * Math.max(0, overlapHeight);
+      if (overlapArea < minimumArea) continue;
+        const pagePlan = plan.pages.find((page) => page.page === glyph.page);
+        records.push({
+          glyphId: glyph.glyphId,
+          glyphPlacementId: glyph.id,
+          glyphSource: glyph.source,
+          targetId: glyph.targetId,
+          blockId: line.blockId,
+          flowId: line.flowId,
+          page: glyph.page,
+          slotId: glyph.slotId ?? line.slotId,
+          ...(pagePlan ? { templateRef: pagePlan.templateRef ?? pagePlan.pageTemplateId } : {}),
+          owner: glyph.source === 'authored' ? 'input' : 'planner',
+          cause: glyph.source === 'authored' ? 'input-authored-glyph-offset' : 'planner-glyph-placement',
+          overlapArea,
+        });
+    }
+  }
+  const totalArea = records.reduce((sum, record) => sum + record.overlapArea, 0);
+  return negativeComponent('glyph-overlap', totalArea, scoreConfigNumber('glyphOverlapPenalty'), { minimumArea, records });
 }
 
 
@@ -396,6 +530,68 @@ export function scoreHeaderSpacing(plan: CompositionPlan): CompositionScoreCompo
   };
 }
 
+type MainStartDelayDetail = {
+  page: number;
+  slotId: string;
+  allowedTop: number;
+  firstLineTop: number;
+  delay: number;
+  blockingInsertionIds: string[];
+};
+
+/** Penalize a main flow that waits behind an avoidable insertion on a page. */
+export function scoreMainStartDelay(plan: CompositionPlan): CompositionScoreComponent {
+  const details: MainStartDelayDetail[] = [];
+  for (const page of plan.pages) {
+    const firstMainPlacements = (plan.flowPlacements ?? [])
+      .filter((placement) => placement.page === page.page && placement.flowId === 'main' && placement.hasContent)
+      .sort((left, right) => left.box.x - right.box.x || left.box.y - right.box.y);
+    for (const mainPlacement of firstMainPlacements) {
+      const lines = plan.lines
+        .filter((line) => line.page === page.page && line.flowId === 'main' && line.layer !== 'insertion' && line.slotId === mainPlacement.slotId)
+        .sort((left, right) => left.box.y - right.box.y);
+      if (lines.length === 0) continue;
+      const firstLineTop = lines[0]!.box.y;
+      const delay = Math.max(0, firstLineTop - mainPlacement.box.y);
+      const blockingInsertionIds = plan.graphicPlacements
+        .filter((graphic) => graphic.page === page.page
+          && graphic.graphicId.startsWith('insertion:')
+          && graphic.box.y < firstLineTop
+          && graphic.box.y + graphic.box.height > mainPlacement.box.y
+          && horizontalOverlap(graphic.box, mainPlacement.box))
+        .map((graphic) => graphic.graphicId);
+      if (delay <= 0 || blockingInsertionIds.length === 0) continue;
+      details.push({ page: page.page, slotId: mainPlacement.slotId, allowedTop: mainPlacement.box.y, firstLineTop, delay, blockingInsertionIds });
+    }
+  }
+  const value = details.reduce((sum, detail) => sum + detail.delay, 0);
+  return negativeComponent('main-start-delay', value, scoreConfigNumber('mainStartDelayPenalty'), { details });
+}
+
+/** Penalize material elements that are closer than the configured breathing room. */
+export function scoreElementProximity(plan: CompositionPlan): CompositionScoreComponent {
+  const minimumGap = scoreConfigNumber('spacingProfileNormalTargetMm');
+  const records = spacingObservations(plan)
+    .filter((observation) => observation.kind === 'element-proximity')
+    .map((observation) => ({
+      page: observation.page,
+      from: observation.from,
+      to: observation.to,
+      fromBox: observation.fromBox,
+      toBox: observation.toBox,
+      gap: observation.metrics.gap,
+      minimumGap: observation.metrics.minimumGap,
+      deficit: Math.max(0, observation.metrics.deficit ?? (observation.metrics.minimumGap ?? minimumGap) - (observation.metrics.gap ?? minimumGap)),
+      movementNeeded: observation.metrics.movementNeeded,
+      movementBudget: observation.metrics.movementBudget,
+      movementAvailable: observation.movementAvailable,
+      reasons: observation.reasons,
+    }))
+    .filter((record) => record.deficit > 0);
+  const deficit = records.reduce((sum, record) => sum + record.deficit, 0);
+  return negativeComponent('element-proximity', deficit, scoreConfigNumber('elementProximityPenalty'), { defaultMinimumGap: minimumGap, records });
+}
+
 /**
  * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Calculate spacing details for one insertion block.
@@ -423,6 +619,7 @@ function insertionSpacingDetail(lines: CompositionLine[], plan: CompositionPlan,
     if (!previous || !next) return [];
     const before = obstacle.box.y - (previous.box.y + previous.box.height);
     const after = next.box.y - (obstacle.box.y + obstacle.box.height);
+    if (before <= 0 || after <= 0) return [];
     return [{ slotId: slot.id, before, after, imbalance: Math.abs(before - after) }];
   });
   const externalImbalance = streamGaps.length > 0
@@ -432,6 +629,7 @@ function insertionSpacingDetail(lines: CompositionLine[], plan: CompositionPlan,
   const afterGaps = streamGaps.map((gap) => gap.after);
   const crossStreamSpread = (spread(beforeGaps) + spread(afterGaps)) / 2;
   return [{
+    ...slotContext(plan, obstacle.page, obstacle.slotId),
     blockId: firstLine.blockId,
     page: obstacle.page,
     obstacle: { ...obstacle.box },
@@ -580,7 +778,7 @@ export function scoreContrast(assessments: CompositionContrastAssessment[]): Com
  * @planner-responsibility Keep the current scoreLegalPlan implementation intact until its target seam is extracted.
  */
 export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreSiblingColumnImbalance(plan), scoreEmptyRegions(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreInsertionSymmetry(plan), scoreInsertionDistribution(plan), scoreSpacingRhythm(plan), scoreNarrowTextIntervals(plan), scoreFitContentEnvelope(plan), scoreHeaderSpacing(plan), scoreFooterGap(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
+  const breakdown = [scoreColumnBalance(plan), scoreSiblingColumnImbalance(plan), scoreEmptyRegions(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreInsertionSymmetry(plan), scoreInsertionDistribution(plan), scoreSpacingRhythm(plan), scoreNarrowTextIntervals(plan), scoreFitContentEnvelope(plan), scoreHeaderSpacing(plan), scoreMainStartDelay(plan), scoreElementProximity(plan), scoreFooterGap(plan), scoreGlyphOverlap(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
   return {
     score: scoreConfigNumber('base') + breakdown.reduce((sum, component) => sum + component.points, 0),
     breakdown,

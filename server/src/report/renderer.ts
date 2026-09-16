@@ -30,6 +30,7 @@ const TEMPLATES: TemplateInfo[] = [
   { name: 'pages/editorial-two-column', description: 'A4 editorial page with two equal text columns.' },
   { name: 'pages/editorial-dynamic-chrome', description: 'A4 editorial page with fit-content repeated header chrome.' },
   { name: 'pages/editorial-inset-two-column', description: 'A4 editorial page with a full-width intro and full-width in-text insertions between two narrative columns.' },
+  { name: 'pages/editorial-dynamic-inset-two-column', description: 'A4 editorial page with fit-content header and intro flows plus input-defined fluid insertions between two narrative columns.' },
   { name: 'pages/editorial-metrics-two-column', description: 'A4 editorial page with KPI slots above two narrative columns.' },
   { name: 'pages/editorial-chart-two-column', description: 'A4 editorial page with a chart slot above two narrative columns.' },
   { name: 'pages/editorial-three-column', description: 'A4 editorial page with three unequal text columns.' },

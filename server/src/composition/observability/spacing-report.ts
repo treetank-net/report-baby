@@ -15,6 +15,7 @@ import { plannedLines } from '../layout/plan-lines.js';
 import { lineHeight, styleFor, textMargins, textPadding } from '../text/text-layout.js';
 import { readRenderConfig } from '../../template/builtins.js';
 import { rectUnionArea } from '../geometry/rectangles.js';
+import { elementProximityReports } from './proximity-report.js';
 
 function boxFromSegment(segment: PageSegment): CompositionBox {
   return { x: segment.x, y: segment.top, width: segment.width, height: segment.bottom - segment.top };
@@ -26,6 +27,25 @@ function bottom(box: CompositionBox): number {
 
 function right(box: CompositionBox): number {
   return box.x + box.width;
+}
+
+function templateRefForPage(plan: CompositionPlan, page: number): string | undefined {
+  const pagePlan = plan.pages.find((candidate) => candidate.page === page);
+  return pagePlan?.templateRef ?? pagePlan?.pageTemplateId;
+}
+
+function slotAttribution(slot: CompositionPlan['slots'][number]): {
+  owner: 'template' | 'input' | 'chrome';
+  cause: string;
+} {
+  if (slot.flowId === 'header') return { owner: 'chrome', cause: 'header-band' };
+  if (slot.flowId === 'footer') return { owner: 'chrome', cause: 'footer-band' };
+  if (slot.id.includes(':request:') || slot.id.startsWith('request:')) return { owner: 'input', cause: 'input-request-overlay' };
+  if (slot.fitContent === true) return {
+    owner: 'template',
+    cause: slot.growthMaxHeight === undefined ? 'fit-content-slot' : 'fit-content-growth-envelope',
+  };
+  return { owner: 'template', cause: 'static-slot-frame' };
 }
 
 function unionBoxes(boxes: CompositionBox[]): CompositionBox | undefined {
@@ -120,11 +140,14 @@ function slotSpacingReport(
   const remainingHeight = Math.max(0, slot.box.height - occupiedHeight);
   const styles = linesBySlot.get(slot.id) ?? [];
   const bandGaps = staticBandGaps(slot, geometry);
+  const pageTemplateRef = templateRefForPage(plan, slot.page);
+  const attribution = slotAttribution(slot);
   return {
     page: slot.page,
     slotId: slot.id,
     regionId: slot.regionId,
     ...(slot.flowId === undefined ? {} : { flowId: slot.flowId }),
+    ...(pageTemplateRef === undefined ? {} : { templateRef: pageTemplateRef }),
     box: { ...slot.box },
     ...(occupiedBox ? { occupiedBox } : {}),
     occupiedArea,
@@ -134,6 +157,11 @@ function slotSpacingReport(
     gapBefore: occupiedBox ? occupiedBox.y - slot.box.y : 0,
     gapAfter: occupiedBox ? bottom(slot.box) - bottom(occupiedBox) : slot.box.height,
     ...(slot.spacingProfile === undefined ? {} : { profile: slot.spacingProfile }),
+    ...(slot.fitContent === undefined ? {} : { fitContent: slot.fitContent }),
+    ...(slot.growthMaxHeight === undefined ? {} : { growthMaxHeight: slot.growthMaxHeight }),
+    ...(slot.placement === undefined ? {} : { placement: slot.placement }),
+    owner: attribution.owner,
+    cause: attribution.cause,
     ...(bandGaps ? { staticBandGaps: bandGaps } : {}),
     ...(styles.length > 0 ? { textStyles: styles } : {}),
   };
@@ -312,6 +340,26 @@ function insertionExplanations(placement: InsertionPlacement, geometry: PageGeom
   return explanations.length > 0 ? [...new Set(explanations)] : undefined;
 }
 
+function insertionAttribution(
+  plan: CompositionPlan,
+  placement: InsertionPlacement,
+  slot: CompositionPlan['slots'][number],
+): { owner: 'template' | 'input' | 'planner'; cause: string; templateRef?: string } {
+  const templateRef = templateRefForPage(plan, placement.page);
+  const movable = plan.movableInsertionFrames?.some((frame) => frame.page === placement.page
+    && frame.flowId === (slot.flowId ?? '')
+    && frame.blockId === placement.graphicId.replace(/^insertion:/u, ''));
+  if (movable) return { owner: 'planner', cause: 'planner-selected-insertion-position', ...(templateRef === undefined ? {} : { templateRef }) };
+  if (slot.id.includes(':request:') || slot.id.startsWith('request:')) return { owner: 'input', cause: 'input-requested-insertion-frame', ...(templateRef === undefined ? {} : { templateRef }) };
+  const mode = slot.placement?.mode;
+  const cause = mode === 'fluid-y'
+    ? 'template-fluid-insertion-capability'
+    : mode === 'anchored-fit-content'
+      ? 'template-anchored-insertion-capability'
+      : 'template-fixed-insertion-slot';
+  return { owner: 'template', cause, ...(templateRef === undefined ? {} : { templateRef }) };
+}
+
 function buildInsertionRhythmReport(
   plan: CompositionPlan,
   placement: InsertionPlacement,
@@ -324,6 +372,7 @@ function buildInsertionRhythmReport(
   const neighbourGaps = insertionNeighbourGaps(placement, insertionsInRegion(plan, placement, slot.regionId));
   const explanations = insertionExplanations(placement, geometry, textGaps);
   const intervals = textIntervalsBeside(plan, placement.page, placement.box);
+  const attribution = insertionAttribution(plan, placement, slot);
   const profile = slot.spacingProfile ?? 'normal';
   const profileTargets = readRenderConfig().compositionScore;
   const referenceGap = profile === 'compact'
@@ -337,6 +386,9 @@ function buildInsertionRhythmReport(
     slotId: placement.slotId,
     regionId: slot.regionId,
     profile,
+    owner: attribution.owner,
+    cause: attribution.cause,
+    ...(attribution.templateRef === undefined ? {} : { templateRef: attribution.templateRef }),
     box: { ...placement.box },
     metrics: {
       ...(textGaps.before === undefined ? {} : { beforeTextGap: textGaps.before }),
@@ -381,6 +433,8 @@ function regionSpacingObservations(slots: CompositionSlotSpacingReport[]): Compo
     page: slot.page,
     regionId: slot.regionId,
     slotId: slot.slotId,
+    ...(slot.flowId === undefined ? {} : { flowId: slot.flowId }),
+    ...(slot.templateRef === undefined ? {} : { templateRef: slot.templateRef }),
     ...(slot.box ? { box: { ...slot.box } } : {}),
     metrics: {
       occupiedHeight: slot.occupiedHeight,
@@ -389,6 +443,8 @@ function regionSpacingObservations(slots: CompositionSlotSpacingReport[]): Compo
       gapAfter: slot.gapAfter,
     },
     ...(slot.profile === undefined ? {} : { profile: slot.profile }),
+    ...(slot.owner === undefined ? {} : { owner: slot.owner }),
+    ...(slot.cause === undefined ? {} : { cause: slot.cause }),
     ...(slot.flowId === 'header' || slot.flowId === 'footer' ? { reasons: ['chrome'] } : {}),
   }));
 }
@@ -425,6 +481,7 @@ export function attachPlanSpacingReport(
       ...regionSpacingObservations(slots),
       ...obstacleSpacingObservations(plan),
       ...insertionRhythmReports(plan, geometryByPage),
+      ...elementProximityReports(plan, document),
     ],
   } satisfies CompositionPlanSpacingReport;
 }

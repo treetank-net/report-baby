@@ -58,6 +58,7 @@ export type {
   CompositionPlanResult,
   CompositionScoreComponent,
   CompositionSpacingObservation,
+  CompositionSpacingSubject,
   CompositionPlanner,
   CompositionResidualContent,
   CompositionSlot,
@@ -67,7 +68,8 @@ export type {
 export { compareCompositionEvaluations, createCompositionEngine, renderComposition } from './composition-engine.js';
 export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './evaluation/evaluator.js';
 export { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './evaluation/structure-scoring.js';
-export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreLegalPlan } from './evaluation/scoring.js';
+export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, scoreLegalPlan } from './evaluation/scoring.js';
+export { elementProximityReports } from './observability/proximity-report.js';
 export { compositionDocumentFromInput } from './adapters/input.js';
 export { compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, type PageTemplateCompositionOptions, type PageTemplateSource } from './adapters/page-template.js';
 export { documentLayoutVariantsWithinPageLimit, normalizeDocumentLayout, pageTemplateAssignmentForPage, type DocumentLayoutVariant } from './adapters/document-layout.js';

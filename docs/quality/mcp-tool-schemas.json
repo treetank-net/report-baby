@@ -954,7 +954,7 @@
     "name": "render_metric_cards"
   },
   {
-    "description": "Render semantic flow content through the selected built-in A4 composition template. The template owns slots, page layouts and repeated regions; data supplies named flows containing ordered text, image, table, chart and metric blocks. Returns the path to the written PDF.",
+    "description": "Render semantic flow content through the selected built-in A4 composition template. The template owns slots, page layouts and repeated regions; data supplies named flows containing ordered text, image, table, chart and metric blocks. Returns the path to the written PDF plus composition quality status, passed metrics, penalties, diagnostics, measured evidence and remediation suggestions. Use diagnostics: \"full\" to include the complete renderer-neutral plan.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "additionalProperties": false,
@@ -1636,14 +1636,6 @@
                       ]
                     },
                     "type": "array"
-                  },
-                  "continuation": {
-                    "default": "allowed",
-                    "enum": [
-                      "allowed",
-                      "forbidden"
-                    ],
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -1844,7 +1836,7 @@
         },
         "diagnostics": {
           "default": "summary",
-          "description": "Response detail. \"summary\" (default) returns the written path, resolved brand profile, page count and warnings. \"full\" adds the resolved report layout plan for every page.",
+          "description": "Response detail. \"summary\" (default) returns the written path, resolved brand profile, page count, composition quality status, passed metrics, penalties, diagnostics and remediation suggestions. \"full\" additionally adds the resolved report layout plan and drawing evidence for every page.",
           "enum": [
             "summary",
             "full"
@@ -1863,6 +1855,82 @@
           "default": false,
           "description": "Resolve and validate the report layout plan without rasterizing or writing a PDF.",
           "type": "boolean"
+        },
+        "layout": {
+          "description": "Optional document layout assigning reusable page templates to contiguous page spans.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "pages": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "exclusiveMinimum": 0,
+                        "type": "integer"
+                      },
+                      "to": {
+                        "$ref": "#/properties/layout/items/properties/pages/anyOf/0/properties/from"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "count": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/properties/layout/items/properties/pages/anyOf/0/properties/from"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "max": {
+                                "$ref": "#/properties/layout/items/properties/pages/anyOf/0/properties/from"
+                              },
+                              "min": {
+                                "$ref": "#/properties/layout/items/properties/pages/anyOf/0/properties/from"
+                              }
+                            },
+                            "required": [
+                              "min",
+                              "max"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "count"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "const": "remaining",
+                    "type": "string"
+                  }
+                ]
+              },
+              "template": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "pages",
+              "template"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
         },
         "output_path": {
           "type": "string"
@@ -1970,63 +2038,7 @@
           "type": "object"
         },
         "page_template_schedule": {
-          "description": "Optional ordered page ranges selecting built-in page templates. Each range uses ordinary slots; it does not create continuation slots.",
-          "items": {
-            "additionalProperties": false,
-            "properties": {
-              "pages": {
-                "additionalProperties": false,
-                "properties": {
-                  "count": {
-                    "anyOf": [
-                      {
-                        "exclusiveMinimum": 0,
-                        "type": "integer"
-                      },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "max": {
-                            "exclusiveMinimum": 0,
-                            "type": "integer"
-                          },
-                          "min": {
-                            "exclusiveMinimum": 0,
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "min",
-                          "max"
-                        ],
-                        "type": "object"
-                      }
-                    ]
-                  },
-                  "from": {
-                    "exclusiveMinimum": 0,
-                    "type": "integer"
-                  },
-                  "to": {
-                    "exclusiveMinimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "template_ref": {
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "pages",
-              "template_ref"
-            ],
-            "type": "object"
-          },
-          "minItems": 1,
-          "type": "array"
+          "description": "Removed. Use the top-level layout array with pages and template."
         },
         "placement_requests": {
           "additionalProperties": false,
@@ -2036,14 +2048,6 @@
               "items": {
                 "additionalProperties": false,
                 "properties": {
-                  "continuation": {
-                    "default": "forbidden",
-                    "enum": [
-                      "allowed",
-                      "forbidden"
-                    ],
-                    "type": "string"
-                  },
                   "flow_id": {
                     "minLength": 1,
                     "type": "string"

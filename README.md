@@ -23,10 +23,13 @@ data and receive a path to a finished PDF or PNG.
 - Returns a **file path**, not an image in context (a human deliverable).
   Optional `return_image` on PNG tools is available when an LLM must judge the
   layout.
-- The response stays small on purpose: the written path plus the resolved brand
-  profile, `template_ref`, slide count, and deduplicated warnings. The
-  `render_slides_*` tools accept `diagnostics: "full"` to add the per-slide
-  pixel layout plans for debugging; that payload is large, so it is opt-in.
+- Report responses include the written path plus composition quality status,
+  passed metrics, penalties, diagnostics and remediation suggestions. Use
+  `diagnostics: "full"` on `render_report` to add the complete renderer-neutral
+  plan and drawing evidence. Slide responses remain compact by default and
+  accept the same option to add their per-slide pixel layout plans.
+- In the human CLI mode, the PDF path remains on stdout and the same report is
+  printed to stderr; `--json` returns the structured response directly.
 
 ## Tools
 

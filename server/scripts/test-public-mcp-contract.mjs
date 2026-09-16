@@ -95,6 +95,18 @@ try {
   assert.equal(rendered.structuredContent?.layoutEngine, 'composition-planner');
   assert.equal((await readFile(reportPath)).subarray(0, 5).toString(), '%PDF-');
 
+  const summaryPath = join(outputDir, 'report-summary.pdf');
+  const renderedSummary = await client.callTool({
+    name: 'render_report',
+    arguments: { template: 'default-report', output_path: summaryPath, brand_ref: 'brand://acme/primary', data: reportData },
+  });
+  assert.notEqual(renderedSummary.isError, true, JSON.stringify(renderedSummary.content));
+  assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.passedMetrics), 'normal render responses must expose passed composition metrics');
+  assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.diagnostics), 'normal render responses must expose composition diagnostics');
+  assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.suggestions), 'normal render responses must expose composition suggestions');
+  assert.match(renderedSummary.content?.map((item) => item.text ?? '').join('\n') ?? '', /Composition quality/, 'normal render content must expose the quality report to clients');
+  assert.equal((await readFile(summaryPath)).subarray(0, 5).toString(), '%PDF-');
+
   const rejected = await client.callTool({
     name: 'render_report',
     arguments: { template_ref: 'slides/two-column', data: { title: 'Invalid report template' } },

@@ -1,7 +1,10 @@
 # Release 1.1 — implementation plan
 
-Status: implementation checkpoint completed in 1.0.2 for items 04, 08–10 and
-11. Items 01, 03 and 05 remain planned work for the later 1.1 release.
+Status: implementation checkpoint completed in 1.0.2 for items 04 and 11;
+items 08–10 have an implemented measurement/reporting and baseline scoring
+slice, while per-placement score attribution and evaluator-guided iterative
+refinement remain planned. Items 01, 03 and 05 remain planned work for the
+later 1.1 release.
 
 Release 1.1 changes existing procedural composition processes. It does not add
 service classes or parallel planner/evaluator abstractions. New TypeScript
@@ -17,7 +20,7 @@ needs to become explicit.
 | [03](03-brand-lockup-and-legacy-chrome.md) | planned lockup/header/footer content and removal of implicit renderer content | planned |
 | [04](04-planner-search-and-evaluator-calibration.md) | deterministic bounded search over existing movable-placement policies | implemented in 1.0.2; corpus maintained |
 | [05](05-contract-cleanup-and-test-consolidation.md) | public-contract inventory and cheaper equivalent tests | planned |
-| [08–10](08-composition-quality-diagnostics-and-optimization.md) | reusable insertion capabilities plus one evidence, scoring and candidate-comparison process | implemented in 1.0.2 |
+| [08–10](08-composition-quality-diagnostics-and-optimization.md) | reusable insertion capabilities plus one evidence, scoring and iterative candidate-refinement process | measurement/reporting and baseline scoring implemented in 1.0.2; per-placement attribution and evaluator-guided refinement planned |
 | [11](11-document-layout-contract.md) | one public document `layout`; removal of route-owned template selection | implemented in 1.0.2 |
 
 Floats, RTL/CJK and broad visual calibration are deferred to
@@ -37,7 +40,8 @@ request + brand + template catalogue
   -> create a complete CompositionPlan for each proposal
   -> evaluate hard legality and content coverage
   -> calculate soft composition quality for legal plans
-  -> select the best legal plan deterministically
+  -> select and locally refine the best legal plan until no better bounded
+     candidate exists or the configured search budget is exhausted
   -> render the selected accepted plan
 ```
 
@@ -67,16 +71,20 @@ Ownership remains procedural:
    through the normal flow path and remove renderer-authored content once all
    built-in page templates are classified.
 5. **Quality scoring and existing-candidate comparison (08–10, stages C–E).**
-   Measure dynamic intro/chrome/insertion geometry, turn the facts into score
-   components and prove the existing moving insertion path can select the
-   better legal candidate. This stage starts only after the chrome boxes it
-   measures are part of the plan.
-6. **Paint order (01).** Normalize existing backend operations to explicit
+   Measure dynamic intro/chrome/insertion geometry, report pairwise proximity
+   between material elements, turn the facts into score components and prove
+   the existing moving insertion path can select the better legal candidate.
+   This stage starts only after the chrome boxes it measures are part of the
+   plan.
+6. **Evaluator-guided iterative refinement (08–10, stage F).** Attribute score
+   contributions to placements, derive repair proposals from measurable
+   spacing/orphan evidence, generate bounded complete-plan alternatives, and
+   continue refinement after incremental improvement until a local stop
+   condition or the item 04 calculation budget is reached. Keep whole-plan
+   legality and total score authoritative.
+7. **Paint order (01).** Normalize existing backend operations to explicit
    phases, preserving the old order as YAML configuration. Implement this only
    where a concrete layering requirement exists.
-7. **Bounded search expansion and calibration (04).** Add candidate dimensions
-   only after their score/evidence contract is stable and the safety slice has
-   bounded their cost.
 8. **Contract and test consolidation (05).** The inventory and timing checks
    run during every preceding item; the final pass removes redundant tests and
    keeps one representative rendered-artifact check.

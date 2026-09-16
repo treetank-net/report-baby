@@ -4,6 +4,7 @@ import { configFromEnv } from '../../infrastructure/config.js';
 import { registerRenderTools } from '../mcp/render-tools.js';
 import { registerBrandTools } from '../mcp/brand-tools.js';
 import { registerAuthTools } from '../mcp/update-tools.js';
+import { compositionQualityTextFromSummary } from '../mcp/responses.js';
 
 type Handler = (args: any, extra?: any) => any;
 
@@ -165,6 +166,9 @@ async function main(): Promise<void> {
   }
   const path = structuredContent?.path;
   process.stdout.write(path ? `${path}\n` : `${JSON.stringify(structuredContent, null, 2)}\n`);
+  if (path && structuredContent?.compositionQuality) {
+    process.stderr.write(`${compositionQualityTextFromSummary(structuredContent.compositionQuality)}\n`);
+  }
   if (path && Array.isArray(structuredContent?.warnings)) {
     for (const warning of structuredContent.warnings) {
       process.stderr.write(`report-baby warning: ${typeof warning === 'string' ? warning : JSON.stringify(warning)}\n`);

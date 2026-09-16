@@ -18,6 +18,7 @@ import {
 } from './planner-candidates.js';
 import {
   insertionProposalsFromPlan,
+  seedInsertionProposalCandidates,
   seedInsertionProposals,
 } from './insertion-layout.js';
 import { seedGraphicProposals } from './graphic-planning.js';
@@ -58,10 +59,13 @@ function planCandidateRecords(
     return [{ signature: 'invalid-policy', plan }];
   }
   const candidates: CompositionPlanCandidate[] = [];
-  const seededProposals = seedInsertionProposals(document, template, metrics);
+  const seededProposalCandidates = seedInsertionProposalCandidates(document, template, metrics);
+  const seededProposals = seededProposalCandidates[0]!;
   const seededGraphicProposals = seedGraphicProposals(document, template);
   const initialCandidateLimit = policy.searchBudget?.maxInitialCandidates;
-  const movableCandidates = movableInsertionProposalCandidates(seededProposals, policy.movableInsertionBounds ?? {}, initialCandidateLimit);
+  const movableCandidates = [...new Map(seededProposalCandidates
+    .flatMap((seed) => movableInsertionProposalCandidates(seed, policy.movableInsertionBounds ?? {}, initialCandidateLimit))
+    .map((proposal) => [movableInsertionProposalSignature(proposal), proposal] as const)).values()];
   const movableGraphicCandidates = movableGraphicProposalCandidates(seededGraphicProposals, policy.movableGraphicBounds ?? {}, initialCandidateLimit);
   if (movableCandidates.length > 1 || movableGraphicCandidates.length > 1) {
     const combinations = combineProposalCandidates(

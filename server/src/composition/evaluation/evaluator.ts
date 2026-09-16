@@ -35,6 +35,12 @@ function suggestionsFromScore(breakdown: CompositionScoreComponent[]): Compositi
     if (component.code === 'header-spacing') return [{
       ...suggestionFromScore('HEADER_GAP_TOO_SMALL', 'Header content is too close to the first page content on at least one page.', component.details, ['Increase the configured header/content gap.', 'Use a shorter header or a template with a larger chrome band.'], 'The measured header-to-content gap is below the configured spacing target.'),
     }];
+    if (component.code === 'main-start-delay') return [{
+      ...suggestionFromScore('MAIN_FLOW_START_DELAYED', 'The main flow starts below its first available placement because an insertion occupies the opening area.', component.details, ['Evaluate a candidate that leaves the first insertion capability unused.', 'Use a template with a clear opening slot before optional insertions.'], 'An optional insertion delays the first main-flow text line even though the main slot is already available.'),
+    }];
+    if (component.code === 'element-proximity') return [{
+      ...suggestionFromScore('ELEMENTS_TOO_CLOSE', 'Two material elements are closer than the configured breathing room.', component.details, ['Where the insertion has a declared movement capability, compare nearby-position candidates.', 'Compare a candidate that places the insertion on another compatible page while preserving all authored content.', 'If neither alternative is legal or scores better, adjust the input constraint or template capability.'], 'The evidence reports the measured pair, gap, movement requirement, available movement capability and movement budget. It does not choose or mutate a plan; complete legal candidates must be compared by total score.'),
+    }];
     if (component.code === 'orphan-lines') return [{
       ...suggestionFromScore('ORPHAN_FRAGMENT', 'A wrapped paragraph leaves an isolated fragment beside an insertion.', component.details, ['Move the insertion within its legal movement window.', 'Reduce the insertion width or place it on a page with more continuous text.'], 'An insertion obstacle leaves an isolated text fragment.'),
     }];
@@ -56,6 +62,9 @@ function suggestionsFromScore(breakdown: CompositionScoreComponent[]): Compositi
     if (component.code === 'footer-gap') return [{
       ...suggestionFromScore('FOOTER_GAP_TOO_SMALL', 'Content ends too close to the footer boundary.', component.details, ['Increase the footer/content gap.', 'Use a template with more bottom breathing room.'], 'The measured gap to the footer is below the configured minimum.'),
     }];
+    if (component.code === 'glyph-overlap') return [{
+      ...suggestionFromScore('GLYPH_TEXT_OVERLAP', 'A decorative glyph overlaps painted text.', component.details, ['Move the glyph farther from the target line.', 'Reduce the glyph size or offset.'], 'The measured glyph box intersects a text line beyond the configured tolerance.'),
+    }];
     if (component.code === 'empty-regions') return [{
       ...suggestionFromScore('EMPTY_REGION', 'A material page region contains a large unexplained empty area.', component.details, ['Move or resize nearby content.', 'Choose a template with a better content envelope.'], 'The measured unused region exceeds the configured threshold.'),
     }];
@@ -74,6 +83,7 @@ function buildCompositionEvaluation(document: CompositionDocument, plan: Composi
   const hardViolations = diagnostics.filter((item) => item.severity === 'error');
   const scored = hasErrors ? { score: Number.NEGATIVE_INFINITY, breakdown: [] } : scoreLegalPlan(document, plan, contrastAssessments);
   const suggestions = suggestionsFromScore(scored.breakdown);
+  const passedMetrics = scored.breakdown.filter((component) => component.points >= 0);
   if (suggestions.length > 0) plan.suggestions = suggestions;
   return {
     status: hasErrors ? 'rejected' : diagnostics.length > 0 ? 'accepted-with-warnings' : 'accepted',
@@ -81,6 +91,7 @@ function buildCompositionEvaluation(document: CompositionDocument, plan: Composi
     hardViolations,
     score: scored.score,
     scoreBreakdown: scored.breakdown,
+    passedMetrics,
     residualContent: plan.residualContent,
     ...(suggestions.length > 0 ? { suggestions } : {}),
   };

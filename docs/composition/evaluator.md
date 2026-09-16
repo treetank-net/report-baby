@@ -28,6 +28,24 @@ higher score > lower score
 tie → stable candidate order
 ```
 
+Every evaluated result also exposes `passedMetrics`: the score components that
+did not incur a penalty. Public report responses include a compact
+`compositionQuality` summary with those passed metrics, composition diagnostics
+and actionable suggestions; requesting full diagnostics additionally exposes
+the complete plan and score evidence.
+
+This is product output, not test-only output. `render_report` includes the same
+quality summary in MCP `structuredContent` and text content for both `dry_run`
+drafts and rendered PDFs. The CLI keeps the PDF path on stdout for shell
+compatibility and writes the quality summary to stderr, so a normal render still
+tells the caller what was accepted, penalized, or needs fixing.
+
+The low-level `renderReportPdf` helper intentionally remains a buffer-only
+primitive for embedding callers. It must not write to stdout or stderr as a
+side effect. Public adapters call the detailed renderer and are responsible for
+returning or printing its evaluation; test scripts may assert that contract but
+are not the product reporting channel.
+
 ## Hard rejection rules
 
 Any diagnostic with severity `error` is a hard violation. There is no minimum
@@ -126,6 +144,27 @@ meaning. The soft thresholds exist to rank legal alternatives. Where a numeric
 value expresses an aesthetic preference rather than an invariant, it is
 deliberately provisional and must be tested before being changed.
 
+### Element proximity
+
+The spacing report also exposes `element-proximity` observations. Each
+observation identifies the measured `from` and `to` subjects (for example an
+`intro` block and an insertion graphic), the signed vertical `gap`, the
+configured `minimumGap`, the resulting `deficit`, required movement,
+`movementBudget`, and whether the insertion has a declared movement capability.
+`fluid-y` capacity alone does not imply a movable position: its bounded page
+instances are currently materialized as concrete boxes. Movement is reported
+available only when the plan contains a matching explicit movable insertion
+frame.
+
+The evaluator scores the deficit as `element-proximity` and publishes an
+`ELEMENTS_TOO_CLOSE` suggestion with the pair identities and remediation. This
+is advisory quality evidence, not a legality error. The evaluator never chooses
+between moving and deferring, removes authored content, or mutates a plan.
+Candidate generation must provide legal nearby-move and optional-insertion
+reassignment alternatives; the composition engine then compares complete legal
+plans by total score. Leaving a page capability unused must not discard the
+source block: the block still needs a complete placement elsewhere in the plan.
+
 ## Current score
 
 The score is a deterministic Report Baby product heuristic. It is not a CSS/W3C
@@ -147,6 +186,7 @@ measurements are computed from plan geometry:
 | `paragraph-fragmentation` | Paragraphs split across different pages/slots | negative: count * `paragraph_fragmentation_penalty` |
 | `orphan-lines` | One-line paragraph fragments separated by at least `orphan_min_gap_mm` when an obstacle causes the gap | negative: count * `orphan_penalty` |
 | `insertion-spacing` | Uneven insertion padding, gaps before/after it, and spread between streams | negative: sum of measurements * the relevant weights |
+| `element-proximity` | Pairwise gap deficit between an intro, insertion or other material element and a nearby peer | negative: summed deficit * `element_proximity_penalty` |
 | `contrast` | Monte Carlo contrast measurements for every planned glyph cell, resolving the supplied page background and painted image graphics at each sample point with the glyph's own foreground color when available | continuous negative adjustment based on normalized measured quality; no binary plan failure |
 
 A gap may be legal and caused by an immovable object, while still being

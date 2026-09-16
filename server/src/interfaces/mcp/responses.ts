@@ -84,6 +84,44 @@ export interface ReportRenderDiagnosticsInput {
   composition?: { plan: CompositionPlan; evaluation: CompositionEvaluation };
 }
 
+export function compositionQualitySummary(evaluation: CompositionEvaluation): Record<string, unknown> {
+  return {
+    status: evaluation.status,
+    score: evaluation.score,
+    passedMetrics: evaluation.passedMetrics.map(({ code, value, points }) => ({ code, value, points })),
+    qualityPenalties: evaluation.scoreBreakdown
+      .filter(({ points }) => points < 0)
+      .map(({ code, value, points }) => ({ code, value, points })),
+    diagnostics: evaluation.diagnostics.map(({ code, severity, message, why, remedies, retryable, page, flowId, blockId, slotId, details }) => ({
+      code,
+      severity,
+      message,
+      ...(why === undefined ? {} : { why }),
+      ...(remedies === undefined ? {} : { remedies }),
+      ...(retryable === undefined ? {} : { retryable }),
+      ...(page === undefined ? {} : { page }),
+      ...(flowId === undefined ? {} : { flowId }),
+      ...(blockId === undefined ? {} : { blockId }),
+      ...(slotId === undefined ? {} : { slotId }),
+      ...(details === undefined ? {} : { details }),
+    })),
+    suggestions: evaluation.suggestions ?? [],
+  };
+}
+
+/**
+ * Human-facing rendering of the same quality payload exposed to API clients.
+ * Keep the JSON payload as the source of truth so CLI/MCP users do not need a
+ * private debug script to inspect the evidence and remediation suggestions.
+ */
+export function compositionQualityText(evaluation: CompositionEvaluation): string {
+  return compositionQualityTextFromSummary(compositionQualitySummary(evaluation));
+}
+
+export function compositionQualityTextFromSummary(summary: Record<string, unknown>): string {
+  return `Composition quality\n${JSON.stringify(summary, null, 2)}`;
+}
+
 export function reportRenderDiagnostics(input: ReportRenderDiagnosticsInput, detail: DiagnosticsDetail): Record<string, unknown> {
   const summary = withoutEmptyValues({
     pages: input.plan.pages.length,
@@ -93,6 +131,7 @@ export function reportRenderDiagnostics(input: ReportRenderDiagnosticsInput, det
     surface: input.diagnostics.surface,
     appliedOverrides: input.diagnostics.appliedOverrides,
     layoutEngine: 'composition-planner',
+    ...(input.composition ? { compositionQuality: compositionQualitySummary(input.composition.evaluation) } : {}),
   });
   if (detail !== 'full') return summary;
   return {

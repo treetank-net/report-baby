@@ -40,16 +40,16 @@ export function legacyFixtureToCompositionInput(report = {}) {
     add('heading', { id: 'highlights-heading', role: 'heading', text: report.highlights_title ?? 'Highlights' });
     for (const [index, text] of report.highlights.entries()) add('list-item', { id: `highlight-${index + 1}`, text });
   }
-  flows.main = { blocks: main, continuation: 'allowed' };
+  flows.main = { blocks: main };
 
   const header = [];
   if (report.brand?.trim()) header.push({ type: 'text', id: 'header-brand', role: 'header', text: report.brand.toUpperCase(), keep_with_next_lines: 1 });
   if (report.title?.trim()) header.push({ type: 'heading', id: 'header-title', role: 'header', text: report.title, keep_with_next_lines: report.subtitle?.trim() ? 1 : 0 });
   if (report.subtitle?.trim()) header.push({ type: 'text', id: 'header-subtitle', role: 'header', text: report.subtitle });
   if (report.period?.trim()) header.push({ type: 'text', id: 'header-period', role: 'header', text: report.period });
-  if (header.length) flows.header = { blocks: header, continuation: 'forbidden' };
+  if (header.length) flows.header = { blocks: header };
 
-  if (report.footer?.trim()) flows.footer = { blocks: [{ type: 'text', id: 'footer', role: 'footer', text: `${report.footer}    {{page.number}} / {{page.count}}` }], continuation: 'forbidden' };
+  if (report.footer?.trim()) flows.footer = { blocks: [{ type: 'text', id: 'footer', role: 'footer', text: `${report.footer}    {{page.number}} / {{page.count}}` }] };
 
   if (report.title_page) {
     const page = report.title_page;
@@ -58,7 +58,7 @@ export function legacyFixtureToCompositionInput(report = {}) {
     if (page.title?.trim()) blocks.push({ type: 'heading', id: 'title-page-title', role: 'title', text: page.title, keep_with_next_lines: page.subtitle?.trim() ? 1 : 0 });
     if (page.subtitle?.trim()) blocks.push({ type: 'text', id: 'title-page-subtitle', role: 'subtitle', text: page.subtitle });
     if (page.period?.trim()) blocks.push({ type: 'text', id: 'title-page-period', role: 'subtitle', text: page.period });
-    flows.title = { blocks, continuation: 'forbidden' };
+    flows.title = { blocks };
   }
 
   return { flows };

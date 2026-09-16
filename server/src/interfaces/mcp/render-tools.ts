@@ -12,7 +12,7 @@ import { loadRenderFontSet, renderSvgToPng } from '../../rendering/primitives.js
 import { renderSlidesPdf, renderSlidesPng, renderSlidesPptx } from '../../presentation/slides.js';
 import { resolveSlideDeck } from '../../presentation/planning/slide-context.js';
 import { listBuiltinSlideTemplates, readBuiltinTemplateSource } from '../../template/builtins.js';
-import { brandRenderSummary, reportRenderDiagnostics, slideNotesCarriage, slideRenderDiagnostics } from './responses.js';
+import { brandRenderSummary, compositionQualityText, reportRenderDiagnostics, slideNotesCarriage, slideRenderDiagnostics } from './responses.js';
 
 import {
   brandRenderFields,
@@ -189,7 +189,7 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
 
   server.tool(
     'render_report',
-    'Render semantic flow content through the selected built-in A4 composition template. The template owns slots, page layouts and repeated regions; data supplies named flows containing ordered text, image, table, chart and metric blocks. Returns the path to the written PDF.',
+    'Render semantic flow content through the selected built-in A4 composition template. The template owns slots, page layouts and repeated regions; data supplies named flows containing ordered text, image, table, chart and metric blocks. Returns the path to the written PDF plus composition quality status, passed metrics, penalties, diagnostics, measured evidence and remediation suggestions. Use diagnostics: "full" to include the complete renderer-neutral plan.',
     {
       template: z.string().optional().default('default-report').describe('Built-in A4 report template name, from list_templates: default-report, campaign-summary or a pages/* template'),
       data: compositionInputSchema,
@@ -214,14 +214,27 @@ export function registerRenderTools(server: McpServer, cfg: ReportConfig) {
       if (dry_run) {
         const composition = await resolveReportCompositionOnly(requestedTemplate, data, context.theme, context.sourceContext, placement_requests, layout);
         const plan = resolveReportPlanOnly(requestedTemplate, data, context.theme, layout);
-        return { content: [{ type: 'text' as const, text: 'Report composition plan resolved without rendering.' }], structuredContent: { ...brandRenderSummary(context.diagnostics), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan, drawings: [], composition }, 'full'), dryRun: true } };
+        return {
+          content: [
+            { type: 'text' as const, text: 'Report composition plan resolved without rendering.' },
+            { type: 'text' as const, text: compositionQualityText(composition.evaluation) },
+          ],
+          structuredContent: { ...brandRenderSummary(context.diagnostics), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan, drawings: [], composition }, 'full'), dryRun: true },
+        };
       }
       await mkdir(cfg.outputDir, { recursive: true });
       const out = outputPath(cfg, output_path, 'pdf');
       const renderWarnings: string[] = [];
       const rendered = await renderReportPdfDetailed(requestedTemplate, data, context.theme, renderWarnings, context.sourceContext, composition_debug, placement_requests, layout);
       await writeFile(out, rendered.buffer);
-      return { content: [{ type: 'text' as const, text: out }], structuredContent: { path: out, ...brandRenderSummary(context.diagnostics, renderWarnings), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan: rendered.diagnostics.plan, drawings: rendered.diagnostics.drawings, ...(rendered.diagnostics.composition ? { composition: rendered.diagnostics.composition } : {}) }, diagnostics) } };
+      const qualityText = rendered.diagnostics.composition ? compositionQualityText(rendered.diagnostics.composition.evaluation) : undefined;
+      return {
+        content: [
+          { type: 'text' as const, text: out },
+          ...(qualityText ? [{ type: 'text' as const, text: qualityText }] : []),
+        ],
+        structuredContent: { path: out, ...brandRenderSummary(context.diagnostics, renderWarnings), ...reportRenderDiagnostics({ diagnostics: context.diagnostics, plan: rendered.diagnostics.plan, drawings: rendered.diagnostics.drawings, ...(rendered.diagnostics.composition ? { composition: rendered.diagnostics.composition } : {}) }, diagnostics) },
+      };
     },
   );
 

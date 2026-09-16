@@ -141,7 +141,10 @@ function materializeFluidCapabilities(
       ...slot,
       id,
       box: { ...slot.box, y: slot.box.y + height * index, height },
-      placement: { mode: 'fixed' as const },
+      // Keep the originating capability visible after materialisation.  The
+      // concrete box is fixed for this page-local instance, but diagnostics
+      // still need to explain that it came from a reusable fluid capability.
+      placement: capability,
     }));
   });
   if (replacements.size === 0) return { pageTemplate, routes };

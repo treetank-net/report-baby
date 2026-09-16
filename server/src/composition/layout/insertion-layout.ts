@@ -9,6 +9,7 @@ export {
   insertionProposalsFromPlan,
   nextInsertionBoundary,
   nextInsertionProposal,
+  seedInsertionProposalCandidates,
   seedInsertionProposals,
 } from './insertion-planning.js';
 export {

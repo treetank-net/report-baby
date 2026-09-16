@@ -8,6 +8,7 @@ import type {
   CompositionGlyphAnchorAlignment,
   CompositionGlyphTargetMode,
   CompositionGraphicShape,
+  CompositionSlotPlacement,
   CompositionSlotKind,
   CompositionSpacingProfile,
 } from './model.js';
@@ -96,6 +97,7 @@ export interface CompositionSlotSpacingReport {
   slotId: string;
   regionId: string;
   flowId?: string;
+  templateRef?: string;
   box: CompositionBox;
   occupiedBox?: CompositionBox;
   occupiedArea?: number;
@@ -106,6 +108,11 @@ export interface CompositionSlotSpacingReport {
   gapAfter: number;
   staticBandGaps?: { fromHeader?: number; toFooter?: number };
   chromeBandGaps?: { fromHeader?: number; toFooter?: number };
+  fitContent?: boolean;
+  growthMaxHeight?: number;
+  placement?: CompositionSlotPlacement;
+  owner?: 'template' | 'input' | 'planner' | 'chrome';
+  cause?: string;
   textStyles?: CompositionTextSpacingReport[];
   profile?: CompositionSpacingProfile;
 }
@@ -126,19 +133,39 @@ export interface CompositionTextPlacementSpacingReport {
   gapToFooter?: number;
 }
 
+/** Identify one material element participating in a spacing observation. */
+export interface CompositionSpacingSubject {
+  kind: 'block' | 'graphic';
+  id: string;
+  flowId?: string;
+  blockId?: string;
+  slotId?: string;
+}
+
 /** Explainable, extensible facts derived from one plan region or obstacle. */
 export interface CompositionSpacingObservation {
-  kind: 'region' | 'obstacle' | 'insertion-rhythm';
+  kind: 'region' | 'obstacle' | 'insertion-rhythm' | 'element-proximity';
   page: number;
   regionId?: string;
+  flowId?: string;
   slotId?: string;
   blockId?: string;
   graphicId?: string;
+  templateRef?: string;
+  owner?: 'template' | 'input' | 'planner' | 'chrome';
+  cause?: string;
   box?: CompositionBox;
   metrics: Record<string, number>;
   profile?: 'compact' | 'normal' | 'open';
   reasons?: string[];
   intervals?: Array<{ x: number; width: number }>;
+  /** Present for element-proximity observations; identifies the measured pair. */
+  from?: CompositionSpacingSubject;
+  to?: CompositionSpacingSubject;
+  fromBox?: CompositionBox;
+  toBox?: CompositionBox;
+  /** Whether the insertion has a declared legal movement capability. */
+  movementAvailable?: boolean;
 }
 
 /** Explainable geometry and spacing projection attached to a composition plan. */
@@ -178,6 +205,7 @@ export interface CompositionSlot {
   allowedBlockKinds?: CompositionBlockKind[];
   priority?: number;
   spacingProfile?: CompositionSpacingProfile;
+  placement?: CompositionSlotPlacement;
   fitContent?: boolean;
   growthMaxHeight?: number;
   box: CompositionBox;
@@ -500,6 +528,8 @@ export interface CompositionEvaluation {
   hardViolations: CompositionDiagnostic[];
   score: number;
   scoreBreakdown: CompositionScoreComponent[];
+  /** Quality components that did not produce a penalty for this plan. */
+  passedMetrics: CompositionScoreComponent[];
   residualContent: CompositionResidualContent[];
   suggestions?: CompositionSuggestion[];
 }
