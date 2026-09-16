@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2
+
+- Completed and verified the composition-quality slice covering reusable
+  insertion capabilities, measured diagnostics, score attribution and bounded
+  evaluator-guided refinement (Release 1.1 items 08–10).
+- Preserved a representative visual artifact and public CLI/MCP evidence while
+  keeping routine plan-only checks renderer-independent.
+- Added the Release 1.1 plan for constructive baseline planning followed by
+  bounded evaluator-guided micro-optimization.
+
 ## 1.0.1
 
 - Completed the scheduled page-template migration: ordinary template slots

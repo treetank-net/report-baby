@@ -1,16 +1,14 @@
 # Release 1.1 — composition quality, diagnostics and placement optimization
 
-Status: the quality-reporting, scoring and existing-candidate comparison slice
-is implemented in the 1.0.2 composition checkpoint. This document replaces the
-former items 08, 09 and 10. They are one process, not three independently
-implemented features. Stage F is being completed in the current worktree; the
-remaining work extends the procedural engine rather than adding a second search
-system. Do not treat this status as a release-completion claim until its test
-matrix and public interface checks pass.
+Status: implemented and verified in the current 1.0.2 worktree. This document
+replaces the former items 08, 09 and 10: they are one process, not three
+independently implemented features. Stages A-G are implemented, the complete
+composition matrix passes, and the representative artifact has been inspected.
+The verification record below is the acceptance evidence for this status.
 
 The separate [visual verification record](08-10-visual-verification.md) is
-part of this status: it confirms that the current slice measures and reports
-quality, but does not yet guarantee a visually preferred selected candidate.
+part of this status. It records the representative artifact, the measured
+quality findings and the candidate-selection evidence.
 
 ## Goal
 
@@ -77,12 +75,12 @@ search loop. It extends the existing functions and data structures.
 - `contracts/engine-contracts.ts` already defines `CompositionPlan`,
   `CompositionEvaluation`, `CompositionDiagnostic`, `CompositionSuggestion`,
   score components, page/slot/text spacing reports and candidate-search trace.
-- Diagnostics already carry stable code, severity, message and optional
-  flow/block/page/slot identifiers, but their `details` are untyped and they
-  have no `why`, `remedies` or `retryable` fields.
-- Suggestions already carry message, evidence and string remedies. Actionable
-  score codes, including `element-proximity`, are translated into suggestions
-  in `evaluator.ts`.
+- Diagnostics carry stable code, severity, message, optional
+  flow/block/page/slot identifiers and decorated `why`, `remedies` and
+  `retryable` fields. Their factual `details` remain extensible records.
+- Suggestions carry message, evidence, reasons and string remedies. Actionable
+  score components, including `element-proximity`, are translated into
+  suggestions in `evaluator.ts`.
 
 ### Geometry and scoring
 
@@ -97,6 +95,11 @@ search loop. It extends the existing functions and data structures.
   expose occupied/empty area derived from rectangle unions. The evaluator uses
   those facts when available and retains the height-ratio fallback for legacy
   synthetic plans.
+- Glyph/text overlap compares the glyph rectangle to planned per-character
+  advance cells, not the full-width line envelope. The cells are a
+  renderer-neutral occupancy approximation, not proof of raster-ink overlap;
+  public evidence includes the glyph, character-cell and intersection boxes so
+  the caller can see exactly what was measured.
 
 ### Attribute whitespace to its owner
 
@@ -187,16 +190,11 @@ carry the input opt-in. The existing engine evaluates each proposal by
 generating and rescoring a complete plan. An estimated local improvement is
 reported as an estimate, never as the measured score delta.
 
-The current proximity measurement has a directional blind spot:
-`elementProximityReports()` measures vertical separation only when the pair's
-horizontal ranges overlap. It does not report side-by-side boxes whose
-vertical ranges overlap but whose horizontal gap is too small. Stage F must
-extend the pair observation to identify the measured axis (and both axis gaps
-where needed), so the evaluator can distinguish “move up/down” from “move
-left/right”. It must not classify intentional around-text wrapping as a
-generic collision; the current exemption for ordinary main-flow line envelopes
-remains, while intro-to-insertion, insertion-to-insertion and other material
-pair relations are measured when their geometry makes a gap meaningful.
+`elementProximityReports()` identifies the measured axis and directional gap
+for both stacked and side-by-side boxes. Intentional around-text wrapping
+remains exempt from generic collision scoring, while intro-to-insertion,
+insertion-to-insertion and other material pair relations are measured when
+their geometry makes a gap meaningful.
 
 ### Per-placement score attribution and evaluator-guided refinement
 
@@ -740,7 +738,7 @@ interface for every scoring rule or insertion variant:
 
 ```ts
 interface CompositionSpacingObservation {
-  kind: 'region' | 'obstacle' | 'insertion-rhythm';
+  kind: 'region' | 'obstacle' | 'insertion-rhythm' | 'element-proximity' | 'orphan-fragment';
   page: number;
   regionId?: string;
   slotId?: string;
@@ -925,6 +923,16 @@ One spacing fact is calculated once in `spacing-report.ts`. Scoring and
 diagnostics reference the observation and its named facts rather than
 reconstructing neighbour boxes. New rules may add facts without expanding the
 central contract; their tests must document the keys they require.
+
+For insertion spacing, `insertion-rhythm.metrics` also carries measured
+content insets and per-text-slot gaps under numeric keys such as
+`contentInsetTop`, `textStreamBefore:<slotId>` and
+`textStreamAfter:<slotId>`. This keeps the open metric-record contract numeric
+while allowing score detail to retain the slot identity. Header/content gaps
+are emitted once as a `region` observation with `cause: header-content-gap`.
+An `orphan-fragment` observation identifies the isolated paragraph range and
+the around-wrapping graphic; orphan scoring and repair proposals consume this
+fact instead of repeating its box tests.
 Candidate comparison may favour a more symmetric arrangement only after both
 candidates are complete and legal.
 
@@ -945,19 +953,25 @@ candidates are complete and legal.
 
 ## Quality codes and scoring
 
-Required non-blocking suggestion codes are:
+The current non-blocking suggestion codes are:
 
-- `EXCESSIVE_EMPTY_REGION`;
-- `UNBALANCED_COLUMN_FILL`;
-- `UNBALANCED_INSERTION_GAP`;
-- `ASYMMETRIC_INSERTION_TEXT_GAPS`;
-- `UNBALANCED_INSERTION_DISTRIBUTION`;
-- `INCONSISTENT_SPACING_RHYTHM`;
-- `NARROW_TEXT_INTERVAL_AROUND_INSERTION`;
+- `EMPTY_REGION`;
+- `COLUMN_FILL_IMBALANCE`;
+- `INSERTION_SPACING_IMBALANCE`;
+- `INSERTION_DISTRIBUTION_IMBALANCE`;
+- `INSERTION_RHYTHM_DEVIATION`;
+- `NARROW_TEXT_INTERVAL`;
 - `UNUSED_FIT_CONTENT_ENVELOPE`;
-- `HEADER_GAP_TOO_SMALL`;
+- `HEADER_GAP_TOO_SMALL` and `HEADER_GAP_TOO_LARGE`;
 - `FOOTER_GAP_TOO_SMALL`;
-- `ORPHAN_FRAGMENT`.
+- `ORPHAN_FRAGMENT`;
+- `GLYPH_TEXT_OVERLAP`;
+- `ELEMENTS_TOO_CLOSE`;
+- `MAIN_FLOW_START_DELAYED`.
+
+The scorer retains stable internal component codes (for example,
+`empty-regions` and `sibling-column-imbalance`); the catalogue maps those
+components to the public suggestion codes above.
 
 `PLACEMENT_CANDIDATE_IMPROVEMENT` is not a diagnostic code. Candidate scores
 and the reason the winner was selected belong in `trace.candidateSearch`.
@@ -981,6 +995,9 @@ New configuration keys under `composition_score` cover:
 - compact, normal and open spacing targets and deviation penalties;
 - minimum usable text interval beside an insertion and its penalty;
 - maximum retained fit-content envelope ratio and its penalty;
+- minimum chrome/content gap and its penalty; an excessive chrome/content
+  gap uses the first content slot's spacing-profile target plus the shared
+  profile tolerance as its upper bound;
 - minimum footer/content gap and its penalty.
 
 Each component returns the measured value, points and exact evidence records.
@@ -1004,6 +1021,10 @@ fit-content points = -max(0, ratio - configured threshold) * configured penalty
 
 footer deficit = max(0, configured minimum gap - measured gap)
 footer points = -deficit * configured penalty
+
+header gap deficit = max(0, configured minimum gap - measured chrome/content gap)
+header gap excess = max(0, measured chrome/content gap - (profile target + profile tolerance))
+header points = -(deficit + excess) * configured penalty
 
 insertion text-gap asymmetry = abs(beforeTextGap - afterTextGap)
 insertion symmetry points =
@@ -1042,23 +1063,25 @@ The existing `diagnostics` request mode remains the control surface:
 response path serialize the same evaluation. They may format it differently
 but may not drop hard violations or change codes.
 
-## Implementation status (1.0.2)
+## Implementation checkpoint at 1.0.2
 
-Stages A-D are wired through the existing planner/evaluator seam. The plan
-exposes region, obstacle and insertion-rhythm observations; scoring reads
-those observations for empty regions, sibling-column imbalance, insertion
-symmetry/distribution, spacing rhythm, narrow intervals, fit-content envelopes
-and footer gaps. Thresholds and penalties are loaded from
-`server/templates/render-config.yml`. Slot-declared `spacing_profile` values
-resolve to the shared compact/normal/open targets; an absent profile uses the
-normal target. The closed `fixed`, `anchored-fit-content` and `fluid-y` slot
-placement union is validated and fluid capabilities are materialized into
-bounded deterministic page-local instances. Negative quality components
-produce actionable suggestions without changing hard legality. The score is
-currently plan-wide; element-pair evidence is not yet a conserved
-per-placement score ledger, and suggestions do not yet drive another bounded
-round of placement generation. Ranking calibration and deterministic search
-budgets are maintained by item 04.
+Stages A-G are wired through the existing planner/evaluator seam. The plan
+exposes region, obstacle, insertion-rhythm, proximity and orphan observations;
+scoring consumes those shared measurements for whitespace, column balance,
+insertion rhythm, fit-content envelopes, chrome gaps, fragmentation, glyph
+overlap and related quality rules. Thresholds, penalties, spacing profiles and
+the minimum geometry step are loaded from
+`server/templates/render-config.yml`. The closed `fixed`,
+`anchored-fit-content` and `fluid-y` placement union is validated and fluid
+capabilities are materialized into bounded deterministic page-local instances.
+
+Legal candidates expose conserved per-placement contributions and
+machine-readable repair proposals. `composition-engine.ts` passes the selected
+evaluation to the existing refinement seam, re-plans complete alternatives,
+re-evaluates legality and quality, and retains the best legal candidate. The
+trace separates estimated repair gains from measured candidate deltas and
+records deduplication, budget and stop reasons. Ranking calibration and
+deterministic search budgets remain configuration concerns owned by item 04.
 
 ## Implementation sequence
 
@@ -1205,9 +1228,15 @@ deterministic candidate order.
 
 ### Stage G — remove duplicated calculations
 
-After all callers consume shared spacing evidence, delete superseded
-header/insertion/orphan box calculations. Every deletion names its replacement
-query and retains the old behavior assertion.
+The shared spacing report is now the sole producer for the header/content gap,
+insertion content insets and text-stream gaps, and orphan-fragment geometry.
+`scoreHeaderSpacing`, `scoreInsertionSpacing` and `scoreOrphanLines` consume
+those observations; they no longer recalculate the same boxes from raw line
+and graphic placements. Their plan-only fixtures compare reported measurements
+with scoring details and retain assertions for the prior scoring behavior.
+The long obstacle-flow test keeps its PDF/raster/text-extraction branch behind
+`REPORT_BABY_FULL_PIXEL_QA=1`; the default composition gate exercises the same
+coverage and ordering through the renderer-neutral plan.
 
 ## File ownership
 
@@ -1255,6 +1284,7 @@ query and retains the old behavior assertion.
 | legal higher-quality candidate wins | plan-only candidate fixture | `test-structure-scoring.mjs` |
 | element contributions sum to the existing whole-plan score without pairwise double-counting | plan-only scored pair and multi-neighbor fixtures | `test-structure-scoring.mjs` |
 | proximity evidence identifies vertical and horizontal gap direction | plan-only adjacent-box and stacked-box fixtures | `test-structure-scoring.mjs` |
+| header, insertion and orphan scoring reuse the spacing report's measured geometry | reported facts and score details agree; an orphan fixture is generated from line/obstacle boxes | `test-structure-scoring.mjs`, `test-composition-quality-e2e.mjs` |
 | a small legal move can improve a local continuous metric but final selection uses complete-plan score | two or more complete plan candidates | `test-text-composition-engine.mjs` |
 | multiple incremental improvements continue refinement until local stop or configured budget | deterministic synthetic planner/evaluator, no PDF | `test-text-composition-engine.mjs` |
 | wrap/orphan changes are measured after replanning rather than predicted as a local derivative | candidate pair with changed line boxes | `test-structure-scoring.mjs` |
@@ -1285,6 +1315,9 @@ query and retains the old behavior assertion.
   fixtures.
 - Every negative quality component points to measured evidence and an
   actionable remedy.
+- Header/content spacing is measured from the reserved chrome-band boundary to
+  the first material element, not from the last header text line; both too-small
+  and profile-excessive gaps expose the exact template and participating boxes.
 - Fixed authored placements remain fixed without movement bounds.
 - The existing engine selects the higher-scoring legal candidate and never
   selects an illegal one.

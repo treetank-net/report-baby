@@ -66,10 +66,12 @@ function planCandidateRecords(
   const seededProposalCandidates = seedInsertionProposalCandidates(document, template, metrics, initialCandidateLimit);
   const seededProposals = seededProposalCandidates[0]!;
   const seededGraphicProposals = seedGraphicProposals(document, template);
-  const movableCandidates = [...new Map(seededProposalCandidates
-    .flatMap((seed) => movableInsertionProposalCandidates(seed, policy.movableInsertionBounds ?? {}, initialCandidateLimit))
+  const insertionAlternatives = seededProposalCandidates.flatMap((seed) =>
+    movableInsertionProposalCandidates(seed, policy.movableInsertionBounds ?? {}, initialCandidateLimit));
+  const movableCandidates = [...new Map([...seededProposalCandidates, ...insertionAlternatives]
     .map((proposal) => [movableInsertionProposalSignature(proposal), proposal] as const)).values()];
-  const movableGraphicCandidates = movableGraphicProposalCandidates(seededGraphicProposals, policy.movableGraphicBounds ?? {}, initialCandidateLimit);
+  const movableGraphicCandidates = [...new Map([seededGraphicProposals, ...movableGraphicProposalCandidates(seededGraphicProposals, policy.movableGraphicBounds ?? {}, initialCandidateLimit)]
+    .map((proposal) => [movableGraphicProposalSignature(proposal), proposal] as const)).values()];
   if (movableCandidates.length > 1 || movableGraphicCandidates.length > 1) {
     const combinations = combineProposalCandidates(
       movableCandidates,

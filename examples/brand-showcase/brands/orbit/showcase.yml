@@ -10,7 +10,6 @@ showcase:
       data:
         flows:
           title:
-            continuation: forbidden
             blocks:
               - type: heading
                 text: From signal to momentum

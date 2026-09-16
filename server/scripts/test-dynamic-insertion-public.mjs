@@ -33,8 +33,8 @@ try {
       brand_ref: 'brand://acme/primary',
       data: {
         flows: {
-          main: { continuation: 'allowed', blocks: [{ type: 'text', id: 'story', role: 'body', text: loremWords(lorem, 1000) }] },
-          quotes: { continuation: 'forbidden', blocks: Array.from({ length: 7 }, (_, index) => ({ type: 'text', id: `quote-${index + 1}`, role: 'quote', text: `Quote ${index + 1}: ${loremWords(lorem, 4)}.` })) },
+          main: { blocks: [{ type: 'text', id: 'story', role: 'body', text: loremWords(lorem, 1000) }] },
+          quotes: { blocks: Array.from({ length: 7 }, (_, index) => ({ type: 'text', id: `quote-${index + 1}`, role: 'quote', text: loremWords(lorem, 8) })) },
         },
       },
       placement_requests: {

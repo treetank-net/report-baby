@@ -4,11 +4,12 @@ import type { CompositionDocument, CompositionBlock } from '../contracts/model.j
 
 import type { CompositionContrastAssessment } from './contrast.js';
 
-import type { CompositionLine, CompositionPlan, CompositionScoreComponent } from '../contracts/engine-contracts.js';
+import type { CompositionPlan, CompositionScoreComponent } from '../contracts/engine-contracts.js';
 
 import { allLines } from './plan-queries.js';
 import { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './structure-scoring.js';
 import type { CompositionSpacingObservation } from '../contracts/engine-contracts.js';
+import { rectIntersection } from '../geometry/rectangles.js';
 
 /**
  * @planner-target composition/evaluation/scoring.ts
@@ -85,6 +86,16 @@ function slotContext(plan: CompositionPlan, page: number, slotId: string): Recor
     ...(slot.fitContent === undefined ? {} : { fitContent: slot.fitContent }),
     ...(slot.growthMaxHeight === undefined ? {} : { growthMaxHeight: slot.growthMaxHeight }),
   };
+}
+
+function insertionSlotForObservation(
+  plan: CompositionPlan,
+  observation: CompositionSpacingObservation,
+): CompositionPlan['slots'][number] | undefined {
+  const slotId = observation.slotId;
+  if (slotId === undefined) return undefined;
+  return plan.slots.find((slot) => slot.page === observation.page
+    && (slot.id === slotId || slotId.startsWith(`${slot.id}:`)));
 }
 
 function negativeComponent(code: string, value: number, penalty: number, details: Record<string, unknown>): CompositionScoreComponent {
@@ -166,7 +177,11 @@ export function scoreInsertionDistribution(plan: CompositionPlan): CompositionSc
   }
   for (const [key, pageObservations] of grouped) {
     if (pageObservations.length === 0) continue;
-    const isFluidCapability = pageObservations.every((observation) => observation.cause === 'template-fluid-insertion-capability');
+    // Attribution describes who chose a placement, not the slot's geometric
+    // semantics. A planner-selected position in a fluid-y slot must be scored
+    // with the same distribution model as the template's seed position.
+    const isFluidCapability = pageObservations.every((observation) =>
+      insertionSlotForObservation(plan, observation)?.placement?.mode === 'fluid-y');
     const first = pageObservations[0];
     const last = pageObservations[pageObservations.length - 1];
     const neighbourGaps = pageObservations.flatMap((observation) => [
@@ -283,25 +298,38 @@ export function scoreGlyphOverlap(plan: CompositionPlan): CompositionScoreCompon
   for (const glyph of plan.glyphPlacements ?? []) {
     for (const line of allLines(plan)) {
       if (line.page !== glyph.page) continue;
-      const overlapWidth = Math.min(glyph.box.x + glyph.box.width, line.box.x + line.box.width) - Math.max(glyph.box.x, line.box.x);
-      const overlapHeight = Math.min(glyph.box.y + glyph.box.height, line.box.y + line.box.height) - Math.max(glyph.box.y, line.box.y);
-      const overlapArea = Math.max(0, overlapWidth) * Math.max(0, overlapHeight);
-      if (overlapArea < minimumArea) continue;
+      // A line box is a flow/placement envelope, not the painted text extent.
+      // Compare with character advance cells when available so whitespace in
+      // a wide text slot does not produce a false glyph-overlap penalty.
+      const textCells = line.glyphSamplingBoxes?.map((sample) => sample.box) ?? [];
+      for (const textCell of textCells) {
+        const overlapBox = rectIntersection(glyph.box, textCell);
+        if (!overlapBox) continue;
+        const overlapArea = overlapBox.width * overlapBox.height;
+        if (overlapArea < minimumArea) continue;
         const pagePlan = plan.pages.find((page) => page.page === glyph.page);
         records.push({
           glyphId: glyph.glyphId,
           glyphPlacementId: glyph.id,
           glyphSource: glyph.source,
+          glyphText: glyph.text,
+          glyphBox: { ...glyph.box },
           targetId: glyph.targetId,
           blockId: line.blockId,
           flowId: line.flowId,
+          lineText: line.text,
+          textCell: { ...textCell },
+          textSlotId: line.slotId,
+          ...(glyph.slotId === undefined ? {} : { glyphSlotId: glyph.slotId }),
+          overlapBox: { ...overlapBox },
           page: glyph.page,
-          slotId: glyph.slotId ?? line.slotId,
+          slotId: line.slotId,
           ...(pagePlan ? { templateRef: pagePlan.templateRef ?? pagePlan.pageTemplateId } : {}),
           owner: glyph.source === 'authored' ? 'input' : 'planner',
           cause: glyph.source === 'authored' ? 'input-authored-glyph-offset' : 'planner-glyph-placement',
           overlapArea,
         });
+      }
     }
   }
   const totalArea = records.reduce((sum, record) => sum + record.overlapArea, 0);
@@ -396,90 +424,50 @@ export function scoreParagraphFragmentation(document: CompositionDocument, plan:
   };
 }
 
-type OrphanLineDetail = {
-  blockId: string;
-  page: number;
-  slotId: string;
-  text: string;
-  fragmentLines: number;
-  side: 'before' | 'after';
-  gap: number;
-  graphicId: string;
-  lineHeight: number;
-};
-
 /**
  * @planner-target composition/evaluation/scoring.ts
- * @planner-responsibility Find orphan fragments for one paragraph.
+ * @planner-responsibility Score orphan fragments already detected by the spacing report.
  */
-function orphanDetailsForBlock(
-  blockId: string,
-  lines: CompositionLine[],
-  plan: CompositionPlan,
-  orphanFragmentLimit: number,
-): OrphanLineDetail[] {
-  if (lines.length < 2) return [];
-  const orderedLines = [...lines].sort((left, right) => left.endWord - right.endWord);
-  return orderedLines.flatMap((line, index) => {
-    if (index === 0) return [];
-    const previousLine = orderedLines[index - 1];
-    if (line.page !== previousLine.page || line.slotId !== previousLine.slotId) return [];
-    const gap = line.box.y - (previousLine.box.y + previousLine.box.height);
-    if (gap < scoreConfigNumber('orphanMinGapMm')) return [];
-    const blockingGraphic = plan.graphicPlacements.find((graphic) => graphic.page === line.page
-      && graphic.slotId !== line.slotId
-      && graphic.wrap === 'around'
-      && graphic.box.y <= line.box.y
-      && graphic.box.y + graphic.box.height >= previousLine.box.y + previousLine.box.height
-      && horizontalOverlap(graphic.box, line.box));
-    if (!blockingGraphic) return [];
-    const beforeLines = index;
-    const afterLines = orderedLines.length - index;
-    const isolatedSide = beforeLines <= orphanFragmentLimit ? 'before' : afterLines <= orphanFragmentLimit ? 'after' : undefined;
-    if (!isolatedSide) return [];
-    const isolatedLines = isolatedSide === 'before' ? orderedLines.slice(0, index) : orderedLines.slice(index);
-    const isolatedLine = isolatedSide === 'before' ? isolatedLines[0] : isolatedLines.at(-1)!;
-    return [{
-      blockId,
-      page: isolatedLine.page,
-      slotId: isolatedLine.slotId,
-      text: isolatedLine.text,
-      fragmentLines: isolatedLines.length,
-      side: isolatedSide,
-      gap,
-      graphicId: blockingGraphic.graphicId,
-      lineHeight: isolatedLine.box.height,
-    }];
-  });
-}
-
-/**
- * @planner-target composition/evaluation/scoring.ts
- * @planner-responsibility Group paragraph lines before orphan scoring.
- */
-function paragraphLinesForOrphanScoring(
-  document: CompositionDocument,
-  plan: CompositionPlan,
-): Map<string, CompositionLine[]> {
-  const paragraphs = new Set(Object.values(document.flows).flatMap((flow) => flow.blocks
-    .filter((block: CompositionBlock) => block.kind === 'paragraph' && typeof block.text === 'string')
-    .map((block) => block.id)));
-  const linesByBlock = new Map<string, CompositionLine[]>();
-  for (const line of plan.lines) {
-    if (!paragraphs.has(line.blockId)) continue;
-    linesByBlock.set(line.blockId, [...(linesByBlock.get(line.blockId) ?? []), line]);
-  }
-  return linesByBlock;
-}
-
-/**
- * @planner-target composition/evaluation/scoring.ts
- * @planner-responsibility Keep the current scoreOrphanLines implementation intact until its target seam is extracted.
- */
-export function scoreOrphanLines(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
+export function scoreOrphanLines(_document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
   const orphanFragmentLimit = Math.max(1, Math.floor(scoreConfigNumber('orphanMaxFragmentLines')));
-  const orphans = [...paragraphLinesForOrphanScoring(document, plan).entries()]
-    .flatMap(([blockId, lines]) => orphanDetailsForBlock(blockId, lines, plan, orphanFragmentLimit))
+  const orphans = spacingObservations(plan)
+    .filter((observation) => observation.kind === 'orphan-fragment')
+    .flatMap((observation) => {
+      const blockId = observation.blockId;
+      const graphicId = observation.graphicId;
+      const slotId = observation.slotId;
+      const fragmentLines = observation.metrics.fragmentLines;
+      const startWord = observation.metrics.startWord;
+      const endWord = observation.metrics.endWord;
+      const gap = observation.metrics.gap;
+      const lineHeight = observation.metrics.lineHeight;
+      const side = observation.reasons?.includes('orphan-before-obstacle')
+        ? 'before'
+        : observation.reasons?.includes('orphan-after-obstacle') ? 'after' : undefined;
+      if (!blockId || !graphicId || !slotId || fragmentLines === undefined
+        || startWord === undefined || endWord === undefined || gap === undefined || lineHeight === undefined || !side) return [];
+      const text = allLines(plan)
+        .filter((line) => line.blockId === blockId
+          && line.page === observation.page
+          && line.slotId === slotId
+          && line.startWord >= startWord
+          && line.endWord <= endWord)
+        .sort((left, right) => left.startWord - right.startWord)
+        .map((line) => line.text)
+        .join(' ');
+      return [{
+        ...observationContext(observation),
+        blockId,
+        graphicId,
+        page: observation.page,
+        slotId,
+        text,
+        fragmentLines,
+        side,
+        gap,
+        lineHeight,
+      }];
+    })
     .sort((left, right) => left.page - right.page || left.slotId.localeCompare(right.slotId) || left.blockId.localeCompare(right.blockId));
   const minGap = scoreConfigNumber('orphanMinGapMm');
   return {
@@ -500,7 +488,7 @@ type StreamGap = {
 type InsertionSpacingDetail = {
   blockId: string;
   page: number;
-  obstacle: CompositionLine['box'];
+  obstacle?: CompositionPlan['graphicPlacements'][number]['box'];
   content: { top: number; bottom: number };
   internal: { top: number; bottom: number; imbalance: number };
   streams: StreamGap[];
@@ -514,27 +502,58 @@ type HeaderSpacingDetail = {
   firstContentTop: number;
   gap: number;
   deficit: number;
+  excess: number;
+  referenceGap: number;
+  maximumGap: number;
+  flowId?: string;
+  blockId?: string;
+  slotId?: string;
+  templateRef?: string;
+  owner?: string;
+  cause?: string;
+  from?: CompositionSpacingObservation['from'];
+  to?: CompositionSpacingObservation['to'];
+  fromBox?: CompositionSpacingObservation['fromBox'];
+  toBox?: CompositionSpacingObservation['toBox'];
 };
 
 /** Measure the breathing room between repeated chrome and page content. */
 export function scoreHeaderSpacing(plan: CompositionPlan): CompositionScoreComponent {
   const minimumGap = scoreConfigNumber('headerContentGapMinMm');
-  const details: HeaderSpacingDetail[] = [];
-  for (const page of plan.pages) {
-    const headerLines = plan.lines.filter((line) => line.page === page.page && line.flowId === 'header');
-    const contentLines = plan.lines.filter((line) => line.page === page.page && line.flowId !== 'header' && line.layer !== 'insertion');
-    if (headerLines.length === 0 || contentLines.length === 0) continue;
-    const headerBottom = Math.max(...headerLines.map((line) => line.box.y + line.box.height));
-    const firstContentTop = Math.min(...contentLines.map((line) => line.box.y));
-    const gap = firstContentTop - headerBottom;
-    details.push({ page: page.page, headerBottom, firstContentTop, gap, deficit: Math.max(0, minimumGap - gap) });
-  }
+  const tolerance = scoreConfigNumber('spacingProfileToleranceMm');
+  const defaultReferenceGap = scoreConfigNumber('spacingProfileNormalTargetMm');
+  const details: HeaderSpacingDetail[] = spacingObservations(plan)
+    .filter((observation) => observation.kind === 'region' && observation.cause === 'header-content-gap')
+    .flatMap((observation) => {
+      const headerBottom = observation.metrics.headerBottom;
+      const firstContentTop = observation.metrics.firstContentTop;
+      const gap = observation.metrics.headerContentGap;
+      if (headerBottom === undefined || firstContentTop === undefined || gap === undefined) return [];
+      const referenceGap = observation.metrics.referenceGap ?? defaultReferenceGap;
+      const maximumGap = referenceGap + tolerance;
+      return [{
+        page: observation.page,
+        headerBottom,
+        firstContentTop,
+        gap,
+        deficit: Math.max(0, minimumGap - gap),
+        excess: Math.max(0, gap - maximumGap),
+        referenceGap,
+        maximumGap,
+        ...observationContext(observation),
+        ...(observation.from === undefined ? {} : { from: observation.from }),
+        ...(observation.to === undefined ? {} : { to: observation.to }),
+        ...(observation.fromBox === undefined ? {} : { fromBox: observation.fromBox }),
+        ...(observation.toBox === undefined ? {} : { toBox: observation.toBox }),
+      }];
+    });
   const deficit = details.reduce((sum, item) => sum + item.deficit, 0);
+  const excess = details.reduce((sum, item) => sum + item.excess, 0);
   return {
     code: 'header-spacing',
     value: details.length > 0 ? details.reduce((sum, item) => sum + item.gap, 0) / details.length : minimumGap,
-    points: -deficit * scoreConfigNumber('headerContentGapPenalty'),
-    details: { minimumGap, pages: details },
+    points: -(deficit + excess) * scoreConfigNumber('headerContentGapPenalty'),
+    details: { minimumGap, tolerance, pages: details },
   };
 }
 
@@ -605,74 +624,47 @@ export function scoreElementProximity(plan: CompositionPlan): CompositionScoreCo
 
 /**
  * @planner-target composition/evaluation/scoring.ts
- * @planner-responsibility Calculate spacing details for one insertion block.
- */
-function insertionSpacingDetail(lines: CompositionLine[], plan: CompositionPlan, ordinaryLines: CompositionLine[]): InsertionSpacingDetail[] {
-  const firstLine = lines[0];
-  const obstacle = plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:' + firstLine.blockId && graphic.page === firstLine.page);
-  if (!obstacle) return [];
-  const contentTop = Math.min(...lines.map((line) => line.box.y));
-  const contentBottom = Math.max(...lines.map((line) => line.box.y + line.box.height));
-  const internalTop = contentTop - obstacle.box.y;
-  const internalBottom = obstacle.box.y + obstacle.box.height - contentBottom;
-  const overlappingSlots = plan.slots.filter((slot) => slot.page === obstacle.page
-    && slot.id !== obstacle.slotId
-    && slot.kind === 'text'
-    && horizontalOverlap(slot.box, obstacle.box));
-  const streamGaps = overlappingSlots.flatMap((slot) => {
-    const linesInSlot = ordinaryLines.filter((line) => line.page === obstacle.page && line.slotId === slot.id);
-    const previous = linesInSlot
-      .filter((line) => line.box.y + line.box.height <= obstacle.box.y)
-      .sort((left, right) => (right.box.y + right.box.height) - (left.box.y + left.box.height))[0];
-    const next = linesInSlot
-      .filter((line) => line.box.y >= obstacle.box.y + obstacle.box.height)
-      .sort((left, right) => left.box.y - right.box.y)[0];
-    if (!previous || !next) return [];
-    const before = obstacle.box.y - (previous.box.y + previous.box.height);
-    const after = next.box.y - (obstacle.box.y + obstacle.box.height);
-    if (before <= 0 || after <= 0) return [];
-    return [{ slotId: slot.id, before, after, imbalance: Math.abs(before - after) }];
-  });
-  const externalImbalance = streamGaps.length > 0
-    ? streamGaps.reduce((sum, gap) => sum + gap.imbalance, 0) / streamGaps.length
-    : 0;
-  const beforeGaps = streamGaps.map((gap) => gap.before);
-  const afterGaps = streamGaps.map((gap) => gap.after);
-  const crossStreamSpread = (spread(beforeGaps) + spread(afterGaps)) / 2;
-  return [{
-    ...slotContext(plan, obstacle.page, obstacle.slotId),
-    blockId: firstLine.blockId,
-    page: obstacle.page,
-    obstacle: { ...obstacle.box },
-    content: { top: contentTop, bottom: contentBottom },
-    internal: { top: internalTop, bottom: internalBottom, imbalance: Math.abs(internalTop - internalBottom) },
-    streams: streamGaps,
-    externalImbalance,
-    crossStreamSpread,
-  }];
-}
-
-/**
- * @planner-target composition/evaluation/scoring.ts
- * @planner-responsibility Group insertion lines by block, page, and slot.
- */
-function insertionLinesByPlacement(plan: CompositionPlan): Map<string, CompositionLine[]> {
-  const insertions = new Map<string, CompositionLine[]>();
-  for (const line of plan.insertionLines ?? []) {
-    const key = line.blockId + ':' + line.page + ':' + line.slotId;
-    insertions.set(key, [...(insertions.get(key) ?? []), line]);
-  }
-  return insertions;
-}
-
-/**
- * @planner-target composition/evaluation/scoring.ts
- * @planner-responsibility Keep the current scoreInsertionSpacing implementation intact until its target seam is extracted.
+ * @planner-responsibility Score insertion-spacing metrics already measured by the spacing report.
  */
 export function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreComponent {
-  const ordinaryLines = plan.lines.filter((line) => line.layer !== 'insertion');
-  const details = [...insertionLinesByPlacement(plan).values()]
-    .flatMap((lines) => insertionSpacingDetail(lines, plan, ordinaryLines));
+  const details: InsertionSpacingDetail[] = spacingObservations(plan)
+    .filter((observation) => observation.kind === 'insertion-rhythm')
+    .flatMap((observation) => {
+      const blockId = observation.blockId;
+      const obstacle = observation.box;
+      const contentTop = observation.metrics.contentTop;
+      const contentBottom = observation.metrics.contentBottom;
+      const internalTop = observation.metrics.contentInsetTop;
+      const internalBottom = observation.metrics.contentInsetBottom;
+      if (!blockId || !obstacle || contentTop === undefined || contentBottom === undefined
+        || internalTop === undefined || internalBottom === undefined) return [];
+      const streamIds = [...new Set(Object.keys(observation.metrics)
+        .filter((key) => key.startsWith('textStreamBefore:'))
+        .map((key) => key.slice('textStreamBefore:'.length)))];
+      const streams = streamIds.flatMap((slotId) => {
+        const before = observation.metrics[`textStreamBefore:${slotId}`];
+        const after = observation.metrics[`textStreamAfter:${slotId}`];
+        if (before === undefined || after === undefined) return [];
+        return [{ slotId, before, after, imbalance: Math.abs(before - after) }];
+      });
+      const beforeGaps = streams.map((stream) => stream.before);
+      const afterGaps = streams.map((stream) => stream.after);
+      const externalImbalance = streams.length > 0
+        ? streams.reduce((sum, stream) => sum + stream.imbalance, 0) / streams.length
+        : 0;
+      const crossStreamSpread = (spread(beforeGaps) + spread(afterGaps)) / 2;
+      return [{
+        ...observationContext(observation),
+        blockId,
+        page: observation.page,
+        obstacle,
+        content: { top: contentTop, bottom: contentBottom },
+        internal: { top: internalTop, bottom: internalBottom, imbalance: observation.metrics.contentInsetImbalance ?? Math.abs(internalTop - internalBottom) },
+        streams,
+        externalImbalance,
+        crossStreamSpread,
+      }];
+    });
   const internalImbalance = details.reduce((sum, insertion) => sum + insertion.internal.imbalance, 0);
   const externalImbalance = details.reduce((sum, insertion) => sum + insertion.externalImbalance, 0);
   const crossStreamSpread = details.reduce((sum, insertion) => sum + insertion.crossStreamSpread, 0);

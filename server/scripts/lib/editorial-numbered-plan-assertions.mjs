@@ -8,30 +8,43 @@ export function plannedLines(plan) {
   return [...plan.lines, ...(plan.insertionLines ?? [])];
 }
 
+function words(text) {
+  return text.toLocaleLowerCase('und').match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
 /**
- * @test-decision plan-assertion
- * @test-action Keep numbered source coverage as a semantic plan assertion, independent of PDF extraction.
+ * Return the fixture's authored words in source order, excluding page chrome.
  */
-export function numberedTokens(text, prefixes) {
-  const pattern = prefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|');
-  return [...text.matchAll(new RegExp(`\\b(?:${pattern})\\d{4}\\b`, 'gu'))].map((match) => match[0]);
+export function authoredFixtureWords(fixture) {
+  const blocksById = new Map(Object.values(fixture.input.flows)
+    .flatMap((flow) => flow.blocks ?? [])
+    .map((block) => [block.id, block]));
+  return fixture.sourceShape.flatMap(({ id }) => {
+    const block = blocksById.get(id);
+    assert.ok(block, `editorial fixture is missing source block '${id}'`);
+    return words(block.text ?? '');
+  });
+}
+
+/**
+ * Return planned source text in authored block and word-span order.
+ */
+export function plannedFixtureWords(result, fixture) {
+  const sourceOrder = new Map(fixture.sourceShape.map(({ id }, index) => [id, index]));
+  const lines = plannedLines(result.plan)
+    .filter((line) => sourceOrder.has(line.blockId))
+    .sort((left, right) => sourceOrder.get(left.blockId) - sourceOrder.get(right.blockId)
+      || left.startWord - right.startWord
+      || left.endWord - right.endWord);
+  return lines.flatMap((line) => words(line.text));
 }
 
 /**
  * @test-decision plan-assertion
- * @test-action Keep token numbering validation in the plan contract; PDF token parity belongs to the opt-in visual gate.
+ * @test-action Compare the planned text to the authored fixture directly; numeric word suffixes are not needed to prove coverage or order.
  */
-export function numbers(tokens) {
-  return tokens.map((token) => Number(token.match(/\d{4}$/u)?.[0]));
-}
-
-/**
- * @test-decision plan-assertion
- * @test-action Keep exact source coverage in the plan contract; do not duplicate this assertion in backend tests.
- */
-export function assertExactNumberSet(actual, expected, message) {
-  const sortedActual = [...actual].sort((a, b) => a - b);
-  assert.deepEqual(sortedActual, expected, message);
+export function assertPhysicalReadingOrder(result, fixture) {
+  assert.deepEqual(plannedFixtureWords(result, fixture), authoredFixtureWords(fixture), 'planner must preserve every authored word exactly once and in source order');
 }
 
 /**
@@ -157,14 +170,6 @@ export function assertFlowPlacementRegistryMatchesPlan(result) {
  * @test-decision plan-assertion
  * @test-action Keep physical reading order in the plan contract; PDF text extraction is redundant for the fast gate.
  */
-export function assertPhysicalReadingOrder(result, fixture) {
-  const authoredBlockOrder = new Map(fixture.sourceShape.map((block, index) => [block.id, index]));
-  const planNumbers = numbers(numberedTokens(plannedLines(result.plan)
-    .sort((left, right) => (authoredBlockOrder.get(left.blockId) ?? Number.MAX_SAFE_INTEGER) - (authoredBlockOrder.get(right.blockId) ?? Number.MAX_SAFE_INTEGER) || left.startWord - right.startWord)
-    .map((line) => line.text).join(' '), fixture.tokenPrefixes));
-  assert.deepEqual(planNumbers, Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner reading order must be monotonically increasing');
-}
-
 /**
  * @test-decision plan-assertion
  * @test-action Keep authored quote geometry and flow ownership in the plan-only editorial contract.

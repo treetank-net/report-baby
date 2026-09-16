@@ -12,6 +12,8 @@ import type {
   CompositionSpacingSubject,
 } from '../contracts/engine-contracts.js';
 import { elementProximityReports } from '../observability/proximity-report.js';
+import { allLines } from './plan-queries.js';
+import { rectIntersectionArea } from '../geometry/rectangles.js';
 import { scorePlacementForGraphic } from './score-attribution.js';
 
 type DetailRecord = Record<string, unknown>;
@@ -311,6 +313,128 @@ function spacingRhythmProposals(
   return proposals;
 }
 
+function glyphOverlapAreaAt(
+  box: CompositionBox,
+  textCells: CompositionBox[],
+  minimumArea: number,
+): number {
+  return textCells.reduce((area, textCell) => {
+      const overlapArea = rectIntersectionArea(box, textCell);
+      return area + (overlapArea >= minimumArea ? overlapArea : 0);
+    }, 0);
+}
+
+function textPlacementForGlyphRecord(
+  record: DetailRecord,
+  page: number,
+  placementScores: CompositionPlacementScore[],
+): CompositionScorePlacement | undefined {
+  const blockId = textAt(record, 'blockId');
+  const flowId = textAt(record, 'flowId');
+  const slotId = textAt(record, 'textSlotId');
+  if (!blockId) return undefined;
+  return placementScores.map((entry) => entry.placement).find((placement) => placement.page === page
+    && placement.blockId === blockId
+    && (flowId === undefined || placement.flowId === flowId)
+    && (slotId === undefined || placement.slotId === slotId));
+}
+
+function glyphTargetGraphicId(
+  glyph: NonNullable<CompositionPlan['glyphPlacements']>[number],
+  plan: CompositionPlan,
+): string | undefined {
+  if (glyph.targetType === 'graphic') {
+    return plan.graphicPlacements.find((placement) => placement.graphicId === glyph.targetId || placement.id === glyph.targetId)?.graphicId;
+  }
+  const insertionId = `insertion:${glyph.targetId}`;
+  return plan.graphicPlacements.some((placement) => placement.graphicId === insertionId) ? insertionId : undefined;
+}
+
+function glyphOverlapProposals(
+  document: CompositionDocument,
+  plan: CompositionPlan,
+  component: CompositionScoreComponent,
+  placementScores: CompositionPlacementScore[],
+): CompositionRepairProposal[] {
+  const config = readRenderConfig();
+  const minimumStep = config.compositionSearch.minimumGeometryStepMm;
+  const minimumArea = config.compositionScore.glyphOverlapMinAreaMm2;
+  const penalty = config.compositionScore.glyphOverlapPenalty;
+  const cellsByPage = new Map<number, Array<{ blockId: string; box: CompositionBox }>>();
+  for (const line of allLines(plan)) {
+    const cells = line.glyphSamplingBoxes?.map((sample) => ({ blockId: line.blockId, box: sample.box })) ?? [];
+    if (cells.length > 0) cellsByPage.set(line.page, [...(cellsByPage.get(line.page) ?? []), ...cells]);
+  }
+  const recordsByGlyph = new Map<string, DetailRecord[]>();
+  for (const record of recordsAt(component, 'records')) {
+    const glyphPlacementId = textAt(record, 'glyphPlacementId');
+    if (!glyphPlacementId) continue;
+    recordsByGlyph.set(glyphPlacementId, [...(recordsByGlyph.get(glyphPlacementId) ?? []), record]);
+  }
+  const proposals: CompositionRepairProposal[] = [];
+  for (const [glyphPlacementId, records] of recordsByGlyph) {
+    const glyph = plan.glyphPlacements?.find((candidate) => candidate.id === glyphPlacementId);
+    if (!glyph) continue;
+    const graphicId = glyphTargetGraphicId(glyph, plan);
+    const graphicPlanPlacement = graphicId
+      ? plan.graphicPlacements.find((placement) => placement.page === glyph.page && placement.graphicId === graphicId)
+      : undefined;
+    const graphicScorePlacement = graphicPlanPlacement
+      ? scorePlacementForGraphic(document, graphicPlanPlacement)
+      : undefined;
+    if (!graphicScorePlacement) continue;
+    const movable = movableGraphic(plan, graphicScorePlacement);
+    if (!movable) continue;
+    const glyphMovesWithBlock = glyph.targetType === 'block' ? glyph.targetId : undefined;
+    const textCells = (cellsByPage.get(glyph.page) ?? [])
+      .filter((cell) => cell.blockId !== glyphMovesWithBlock)
+      .map((cell) => cell.box);
+    const affectedTextCells = textCells
+      .map((box) => ({ box, area: rectIntersectionArea(glyph.box, box) }))
+      .filter((cell) => cell.area >= minimumArea);
+    if (affectedTextCells.length === 0) continue;
+    const currentOverlapArea = affectedTextCells.reduce((sum, cell) => sum + cell.area, 0);
+    const evidencePlacement = records.map((record) => textPlacementForGlyphRecord(record, glyph.page, placementScores)).find(Boolean);
+    const directions = movable.axis === 'x'
+      ? [{ direction: 'left' as const, sign: -1 }, { direction: 'right' as const, sign: 1 }]
+      : [{ direction: 'up' as const, sign: -1 }, { direction: 'down' as const, sign: 1 }];
+    for (const { direction, sign } of directions) {
+      const axis = movable.axis;
+      const glyphStart = glyph.box[axis];
+      const glyphExtent = axis === 'x' ? glyph.box.width : glyph.box.height;
+      const distanceNeeded = Math.max(...affectedTextCells.map(({ box }) => {
+        const cellStart = box[axis];
+        const cellExtent = axis === 'x' ? box.width : box.height;
+        return sign < 0
+          ? glyphStart + glyphExtent - cellStart + minimumStep
+          : cellStart + cellExtent - glyphStart + minimumStep;
+      }));
+      const allowedDistance = Math.min(distanceNeeded, availableMovement(movable, axis, direction));
+      if (allowedDistance < minimumStep) continue;
+      const candidateGlyphBox = { ...glyph.box, [axis]: glyphStart + (sign * allowedDistance) };
+      const remainingOverlapArea = glyphOverlapAreaAt(candidateGlyphBox, textCells, minimumArea);
+      const estimatedPoints = (currentOverlapArea - remainingOverlapArea) * penalty;
+      if (estimatedPoints <= 0) continue;
+      proposals.push({
+        id: `glyph-overlap:${graphicScorePlacement.id}:${direction}:${allowedDistance}`,
+        placement: graphicScorePlacement,
+        action: 'move',
+        axis,
+        direction,
+        distance: allowedDistance,
+        sourceCode: component.code,
+        estimatedPoints,
+        estimateKind: 'local-geometry',
+        legalCapability: 'declared-movable-frame',
+        legalBounds: { ...movable.bounds },
+        ...(evidencePlacement === undefined ? {} : { evidencePlacementId: evidencePlacement.id }),
+        overlapArea: currentOverlapArea,
+      });
+    }
+  }
+  return proposals;
+}
+
 function orphanProposals(
   plan: CompositionPlan,
   component: CompositionScoreComponent,
@@ -481,12 +605,17 @@ export function compositionRepairProposals(
   const spacingRhythm = breakdown.find((component) => component.code === 'spacing-rhythm');
   const fragmentation = breakdown.find((component) => component.code === 'paragraph-fragmentation');
   const orphan = breakdown.find((component) => component.code === 'orphan-lines');
-  return [
+  const glyphOverlap = breakdown.find((component) => component.code === 'glyph-overlap');
+  const proposals = [
     ...(proximity ? proximityProposals(document, plan, proximity, placementScores) : []),
     ...(symmetry ? insertionSymmetryProposals(plan, symmetry, placementScores) : []),
     ...(spacingRhythm ? spacingRhythmProposals(plan, spacingRhythm, placementScores) : []),
     ...(fragmentation ? paragraphFragmentationProposals(document, plan, fragmentation, placementScores) : []),
     ...(orphan ? orphanProposals(plan, orphan, placementScores) : []),
+    ...(glyphOverlap ? glyphOverlapProposals(document, plan, glyphOverlap, placementScores) : []),
     ...optionalOmissionProposals(document, placementScores),
-  ].slice(0, readRenderConfig().compositionSearch.maxCandidatesPerRefinement);
+  ];
+  return proposals
+    .sort((left, right) => right.estimatedPoints - left.estimatedPoints || left.id.localeCompare(right.id))
+    .slice(0, readRenderConfig().compositionSearch.maxCandidatesPerRefinement);
 }

@@ -46,6 +46,7 @@ try {
     quoteMarkGap: renderConfig.pdf.quote_mark_gap,
     quoteMarkOffsetX: renderConfig.pdf.quote_mark_offset_x,
     quoteMarkOffsetY: renderConfig.pdf.quote_mark_offset_y,
+    quoteMarkCloseOffsetY: renderConfig.pdf.quote_mark_close_offset_y,
     illustration: {
       blockId: 'intro-illustration',
       assetId: 'editorial-neutral-illustration',
@@ -127,16 +128,16 @@ try {
     pdf: { normalization: 'pdf-content', hash: artifactHash },
   };
   const serialized = `${JSON.stringify(summary, null, 2)}\n`;
-  if (process.env.REPORT_BABY_EDITORIAL_BASELINE_UPDATE === '1') await writeFile(baselinePath, serialized);
-  else {
-    const baseline = JSON.parse(await readFile(baselinePath, 'utf8'));
-    assert.deepEqual(summary, baseline, 'editorial parity baseline changed');
-  }
   if (debugArtifactDirectory) {
     await mkdir(debugArtifactDirectory, { recursive: true });
     await writeFile(join(debugArtifactDirectory, 'editorial.pdf'), result.buffer);
     await writeFile(join(debugArtifactDirectory, 'editorial-summary.json'), serialized);
     await writeFile(join(debugArtifactDirectory, 'ink-occupancy.json'), JSON.stringify(inkOccupancy, null, 2));
+  }
+  if (process.env.REPORT_BABY_EDITORIAL_BASELINE_UPDATE === '1') await writeFile(baselinePath, serialized);
+  else {
+    const baseline = JSON.parse(await readFile(baselinePath, 'utf8'));
+    assert.deepEqual(summary, baseline, 'editorial parity baseline changed');
   }
   console.log(JSON.stringify({
     status: 'passed',

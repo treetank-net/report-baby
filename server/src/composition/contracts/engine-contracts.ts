@@ -177,6 +177,7 @@ interface CompositionRepairProposalBase {
   evidencePlacementId?: string;
   measuredGap?: number;
   targetGap?: number;
+  overlapArea?: number;
   orphanCount?: number;
   lineHeight?: number;
 }
@@ -201,7 +202,7 @@ export type CompositionRepairProposal = CompositionMoveRepairProposal | Composit
 
 /** Explainable, extensible facts derived from one plan region or obstacle. */
 export interface CompositionSpacingObservation {
-  kind: 'region' | 'obstacle' | 'insertion-rhythm' | 'element-proximity';
+  kind: 'region' | 'obstacle' | 'insertion-rhythm' | 'element-proximity' | 'orphan-fragment';
   page: number;
   regionId?: string;
   flowId?: string;
@@ -562,6 +563,8 @@ export interface CompositionCandidateSearchCandidate {
   scoreDelta?: number;
   legal: boolean;
   repairProposalIds?: string[];
+  /** Preserve the reason a complete repair candidate failed legality. */
+  diagnostics?: CompositionDiagnostic[];
 }
 
 export interface CompositionCandidateSearchTrace {

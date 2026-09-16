@@ -1,10 +1,7 @@
 # Release 1.1 — implementation plan
 
-Status: implementation checkpoint completed in 1.0.2 for items 04 and 11;
-items 08–10 have an implemented measurement/reporting and baseline scoring
-slice, while per-placement score attribution and evaluator-guided iterative
-refinement remain planned. Items 01, 03 and 05 remain planned work for the
-later 1.1 release.
+Status: implementation checkpoint completed in 1.0.2 for items 04, 08–10 and
+11. Items 01, 03, 05 and 12 remain planned work for the later 1.1 release.
 
 Release 1.1 changes existing procedural composition processes. It does not add
 service classes or parallel planner/evaluator abstractions. New TypeScript
@@ -20,8 +17,9 @@ needs to become explicit.
 | [03](03-brand-lockup-and-legacy-chrome.md) | planned lockup/header/footer content and removal of implicit renderer content | planned |
 | [04](04-planner-search-and-evaluator-calibration.md) | deterministic bounded search over existing movable-placement policies | implemented in 1.0.2; corpus maintained |
 | [05](05-contract-cleanup-and-test-consolidation.md) | public-contract inventory and cheaper equivalent tests | planned |
-| [08–10](08-composition-quality-diagnostics-and-optimization.md) | reusable insertion capabilities plus one evidence, scoring and iterative candidate-refinement process | measurement/reporting and baseline scoring implemented in 1.0.2; per-placement attribution and evaluator-guided refinement planned |
+| [08–10](08-composition-quality-diagnostics-and-optimization.md) | reusable insertion capabilities plus one evidence, scoring and iterative candidate-refinement process | implemented and verified in 1.0.2; representative artifact and public CLI/MCP evidence covered |
 | [11](11-document-layout-contract.md) | one public document `layout`; removal of route-owned template selection | implemented in 1.0.2 |
+| [12](12-constructive-planning-and-guided-micro-optimization.md) | legal baseline first, then bounded evaluator-guided local quality repairs | planned |
 
 Floats, RTL/CJK and broad visual calibration are deferred to
 [`docs/release-1.2`](../release-1.2/README.md). Runtime planner telemetry has no
@@ -76,18 +74,22 @@ Ownership remains procedural:
    the existing moving insertion path can select the better legal candidate.
    This stage starts only after the chrome boxes it measures are part of the
    plan.
-6. **Evaluator-guided iterative refinement (08–10, stage F).** Attribute score
+6. **Evaluator-guided iterative refinement (08–10, stage F — implemented).** Attribute score
    contributions to placements, derive repair proposals from measurable
    spacing/orphan evidence, generate bounded complete-plan alternatives, and
    continue refinement after incremental improvement until a local stop
    condition or the item 04 calculation budget is reached. Keep whole-plan
    legality and total score authoritative.
-7. **Paint order (01).** Normalize existing backend operations to explicit
+7. **Paint order (01 — planned).** Normalize existing backend operations to explicit
    phases, preserving the old order as YAML configuration. Implement this only
    where a concrete layering requirement exists.
-8. **Contract and test consolidation (05).** The inventory and timing checks
+8. **Contract and test consolidation (05 — planned).** The inventory and timing checks
    run during every preceding item; the final pass removes redundant tests and
    keeps one representative rendered-artifact check.
+9. **Constructive planning and guided micro-optimization (12 — planned).**
+   Replace broad complete-plan enumeration in the common path with one legal
+   baseline followed by bounded evaluator-guided repairs. Preserve a final
+   whole-document legality and score decision.
 
 ## Definition of ready for implementation
 

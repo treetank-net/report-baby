@@ -122,6 +122,10 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.fit_content_unused_penalty` | Penalty multiplier for unused fit-content envelope excess. |
 | `composition_score.footer_content_gap_min_mm` | Minimum preferred distance from ordinary content to the resolved footer boundary. |
 | `composition_score.footer_content_gap_penalty` | Penalty multiplier for footer/content gap deficits. |
+| `composition_score.element_proximity_move_budget_mm` | Maximum distance the planner may propose for a local movement repair around a proximity conflict. It bounds repair candidates; it does not mutate a fixed placement. |
+| `composition_score.element_proximity_penalty` | Penalty multiplier for measured proximity deficits between material elements. It contributes to the total plan score together with the per-placement attribution. |
+| `composition_score.glyph_overlap_min_area_mm2` | Minimum intersecting glyph area that counts as a visible overlap. It filters numerical noise before applying `glyph_overlap_penalty`. |
+| `composition_score.glyph_overlap_penalty` | Penalty multiplier for each measured glyph overlap above `glyph_overlap_min_area_mm2`; the evaluator also reports the affected glyph boxes and measured area. |
 | `composition_score.contrast_penalty` | Maximum normalized penalty for measured text contrast across the complete corpus, including the supplied page background and variable graphic backgrounds. It interacts with normalized contrast quality and is part of the general plan score, not a separate legality gate. |
 | `composition_score.contrast_mean_quality_weight` | Weight for diffuse contrast quality across sampled glyphs. It interacts with the worst-point and affected-glyph terms; the three weights should normally sum to 1. |
 | `composition_score.contrast_worst_glyph_weight` | Weight that keeps one glyph with a severely affected sampled point visible in the score even when the document contains thousands of good glyphs. Despite the historical field name, it applies to the worst sampled point. It is continuous, not a rejection rule. |
@@ -187,6 +191,7 @@ than its slot; otherwise there is no meaningful position to vary.
 | `composition_search.movable_candidate_count` | Number of coarse positions sampled in the movement window. It interacts with the window ratio and evaluator score. |
 | `composition_search.movable_refinement_rounds` | Number of local refinement passes after coarse candidates are evaluated. It interacts with refinement candidate count and deterministic candidate ordering. |
 | `composition_search.movable_refinement_candidate_count` | Number of local positions sampled during each refinement pass. It interacts with refinement rounds and geometry tolerance used to compare positions. |
+| `composition_search.minimum_geometry_step_mm` | Smallest movement distance worth materializing as a refinement candidate. It prevents repeated sub-pixel reflows while allowing the evaluator to request bounded local repairs. |
 
 ## PDF values that implement composition rules
 

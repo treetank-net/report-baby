@@ -374,12 +374,19 @@ function buildInsertionRhythmReport(
   const intervals = textIntervalsBeside(plan, placement.page, placement.box);
   const attribution = insertionAttribution(plan, placement, slot);
   const profile = slot.spacingProfile ?? 'normal';
-  const profileTargets = readRenderConfig().compositionScore;
-  const referenceGap = profile === 'compact'
-    ? profileTargets.spacingProfileCompactTargetMm
-    : profile === 'open'
-      ? profileTargets.spacingProfileOpenTargetMm
-      : profileTargets.spacingProfileNormalTargetMm;
+  const referenceGap = spacingProfileTarget(profile);
+  const metrics: Record<string, number> = {
+    ...(textGaps.before === undefined ? {} : { beforeTextGap: textGaps.before }),
+    ...(textGaps.after === undefined ? {} : { afterTextGap: textGaps.after }),
+    ...(textGaps.before === undefined || textGaps.after === undefined ? {} : { textGapAsymmetry: Math.abs(textGaps.before - textGaps.after) }),
+    regionStartGap: Math.max(0, placement.box.y - region.y),
+    regionEndGap: Math.max(0, bottom(region) - bottom(placement.box)),
+    ...(neighbourGaps.previous === undefined ? {} : { previousInsertionGap: neighbourGaps.previous }),
+    ...(neighbourGaps.next === undefined ? {} : { nextInsertionGap: neighbourGaps.next }),
+    referenceGap,
+    ...insertionContentMetrics(plan, placement),
+    ...insertionTextStreamMetrics(plan, placement, ordinaryLines),
+  };
   return {
     kind: 'insertion-rhythm',
     page: placement.page,
@@ -393,19 +400,58 @@ function buildInsertionRhythmReport(
     cause: attribution.cause,
     ...(attribution.templateRef === undefined ? {} : { templateRef: attribution.templateRef }),
     box: { ...placement.box },
-    metrics: {
-      ...(textGaps.before === undefined ? {} : { beforeTextGap: textGaps.before }),
-      ...(textGaps.after === undefined ? {} : { afterTextGap: textGaps.after }),
-      ...(textGaps.before === undefined || textGaps.after === undefined ? {} : { textGapAsymmetry: Math.abs(textGaps.before - textGaps.after) }),
-      regionStartGap: Math.max(0, placement.box.y - region.y),
-      regionEndGap: Math.max(0, bottom(region) - bottom(placement.box)),
-      ...(neighbourGaps.previous === undefined ? {} : { previousInsertionGap: neighbourGaps.previous }),
-      ...(neighbourGaps.next === undefined ? {} : { nextInsertionGap: neighbourGaps.next }),
-      referenceGap,
-    },
+    metrics,
     ...(explanations === undefined ? {} : { reasons: explanations }),
     ...(intervals.length === 0 ? {} : { intervals }),
   };
+}
+
+function insertionContentMetrics(plan: CompositionPlan, placement: InsertionPlacement): Record<string, number> {
+  const blockId = placement.graphicId.replace(/^insertion:/u, '');
+  const contentLines = (plan.insertionLines ?? []).filter((line) => line.blockId === blockId
+    && line.page === placement.page
+    && line.slotId === placement.slotId);
+  if (contentLines.length === 0) return {};
+  const contentTop = Math.min(...contentLines.map((line) => line.box.y));
+  const contentBottom = Math.max(...contentLines.map((line) => bottom(line.box)));
+  const contentInsetTop = contentTop - placement.box.y;
+  const contentInsetBottom = bottom(placement.box) - contentBottom;
+  return {
+    contentTop,
+    contentBottom,
+    contentInsetTop,
+    contentInsetBottom,
+    contentInsetImbalance: Math.abs(contentInsetTop - contentInsetBottom),
+  };
+}
+
+function insertionTextStreamMetrics(
+  plan: CompositionPlan,
+  placement: InsertionPlacement,
+  ordinaryLines: ReturnType<typeof plannedLines>,
+): Record<string, number> {
+  const overlappingSlots = plan.slots.filter((slot) => slot.page === placement.page
+    && slot.id !== placement.slotId
+    && slot.kind === 'text'
+    && horizontalOverlap(slot.box, placement.box));
+  const streamGaps = overlappingSlots.flatMap((slot) => {
+    const linesInSlot = ordinaryLines.filter((line) => line.page === placement.page && line.slotId === slot.id);
+    const previous = linesInSlot
+      .filter((line) => bottom(line.box) <= placement.box.y)
+      .sort((left, right) => bottom(right.box) - bottom(left.box))[0];
+    const next = linesInSlot
+      .filter((line) => line.box.y >= bottom(placement.box))
+      .sort((left, right) => left.box.y - right.box.y)[0];
+    if (!previous || !next) return [];
+    const before = placement.box.y - bottom(previous.box);
+    const after = next.box.y - bottom(placement.box);
+    if (before <= 0 || after <= 0) return [];
+    return [{ slotId: slot.id, before, after }];
+  });
+  return Object.fromEntries(streamGaps.flatMap(({ slotId, before, after }) => [
+    [`textStreamBefore:${slotId}`, before],
+    [`textStreamAfter:${slotId}`, after],
+  ]));
 }
 
 function insertionRhythmForPlacement(
@@ -452,6 +498,187 @@ function regionSpacingObservations(slots: CompositionSlotSpacingReport[]): Compo
   }));
 }
 
+interface PageContentAnchor {
+  box: CompositionBox;
+  subject: CompositionSpacingObservation['to'];
+  flowId?: string;
+  blockId?: string;
+  slotId?: string;
+  profile?: CompositionSlotSpacingReport['profile'];
+}
+
+function flowForMaterialSlot(plan: CompositionPlan, page: number, slotId: string, fallback?: string): string | undefined {
+  return plan.slots.find((slot) => slot.page === page && (slot.id === slotId || slotId.startsWith(`${slot.id}:`)))?.flowId ?? fallback;
+}
+
+function pageContentAnchors(plan: CompositionPlan, page: number, slots: CompositionSlotSpacingReport[]): PageContentAnchor[] {
+  const anchors: PageContentAnchor[] = [];
+  for (const line of plannedLines(plan).filter((candidate) => candidate.page === page)) {
+    const flowId = flowForMaterialSlot(plan, page, line.slotId, line.flowId);
+    if (flowId === 'header' || flowId === 'footer') continue;
+    const slot = slots.find((candidate) => candidate.page === page && (candidate.slotId === line.slotId || line.slotId.startsWith(`${candidate.slotId}:`)));
+    anchors.push({
+      box: line.box,
+      subject: { kind: 'block', id: line.blockId, flowId, blockId: line.blockId, slotId: line.slotId },
+      ...(flowId === undefined ? {} : { flowId }),
+      blockId: line.blockId,
+      slotId: line.slotId,
+      ...(slot?.profile === undefined ? {} : { profile: slot.profile }),
+    });
+  }
+  for (const graphic of plan.graphicPlacements.filter((candidate) => candidate.page === page)) {
+    const flowId = flowForMaterialSlot(plan, page, graphic.slotId);
+    if (flowId === 'header' || flowId === 'footer') continue;
+    const slot = slots.find((candidate) => candidate.page === page && (candidate.slotId === graphic.slotId || graphic.slotId.startsWith(`${candidate.slotId}:`)));
+    const blockId = graphic.graphicId.startsWith('insertion:') ? graphic.graphicId.slice('insertion:'.length) : undefined;
+    anchors.push({
+      box: graphic.box,
+      subject: { kind: 'graphic', id: graphic.graphicId, ...(flowId === undefined ? {} : { flowId }), ...(blockId === undefined ? {} : { blockId }), slotId: graphic.slotId },
+      ...(flowId === undefined ? {} : { flowId }),
+      ...(blockId === undefined ? {} : { blockId }),
+      slotId: graphic.slotId,
+      ...(slot?.profile === undefined ? {} : { profile: slot.profile }),
+    });
+  }
+  for (const placement of plan.blockPlacements.filter((candidate) => candidate.page === page)) {
+    const flowId = flowForMaterialSlot(plan, page, placement.slotId);
+    if (flowId === 'header' || flowId === 'footer') continue;
+    const slot = slots.find((candidate) => candidate.page === page && (candidate.slotId === placement.slotId || placement.slotId.startsWith(`${candidate.slotId}:`)));
+    anchors.push({
+      box: placement.box,
+      subject: { kind: 'block', id: placement.blockId, ...(flowId === undefined ? {} : { flowId }), blockId: placement.blockId, slotId: placement.slotId },
+      ...(flowId === undefined ? {} : { flowId }),
+      blockId: placement.blockId,
+      slotId: placement.slotId,
+      ...(slot?.profile === undefined ? {} : { profile: slot.profile }),
+    });
+  }
+  for (const placement of plan.tablePlacements.filter((candidate) => candidate.page === page)) {
+    const flowId = flowForMaterialSlot(plan, page, placement.slotId);
+    if (flowId === 'header' || flowId === 'footer') continue;
+    const slot = slots.find((candidate) => candidate.page === page && (candidate.slotId === placement.slotId || placement.slotId.startsWith(`${candidate.slotId}:`)));
+    anchors.push({
+      box: placement.box,
+      subject: { kind: 'block', id: placement.blockId, ...(flowId === undefined ? {} : { flowId }), blockId: placement.blockId, slotId: placement.slotId },
+      ...(flowId === undefined ? {} : { flowId }),
+      blockId: placement.blockId,
+      slotId: placement.slotId,
+      ...(slot?.profile === undefined ? {} : { profile: slot.profile }),
+    });
+  }
+  return anchors.sort((left, right) => left.box.y - right.box.y || left.box.x - right.box.x);
+}
+
+function spacingProfileTarget(profile: CompositionSlotSpacingReport['profile']): number {
+  const score = readRenderConfig().compositionScore;
+  if (profile === 'compact') return score.spacingProfileCompactTargetMm;
+  if (profile === 'open') return score.spacingProfileOpenTargetMm;
+  return score.spacingProfileNormalTargetMm;
+}
+
+function headerContentGapObservations(
+  plan: CompositionPlan,
+  pages: CompositionPageGeometryReport[],
+  slots: CompositionSlotSpacingReport[],
+): CompositionSpacingObservation[] {
+  const lines = plannedLines(plan);
+  return plan.pages.flatMap((page) => {
+    const headerLines = lines.filter((line) => line.page === page.page && line.flowId === 'header');
+    const pageGeometry = pages.find((candidate) => candidate.page === page.page);
+    const headerBand = pageGeometry?.bands.header;
+    const headerTextBottom = headerLines.length > 0 ? Math.max(...headerLines.map((line) => bottom(line.box))) : undefined;
+    const headerVisualBox = unionBoxes([
+      ...(headerBand === undefined ? [] : [headerBand]),
+      ...headerLines.map((line) => line.box),
+    ]);
+    const headerBottom = headerVisualBox === undefined ? headerTextBottom : bottom(headerVisualBox);
+    const firstContent = pageContentAnchors(plan, page.page, slots)[0];
+    if (headerBottom === undefined || !firstContent) return [];
+    const firstContentTop = firstContent.box.y;
+    const profile = firstContent.profile ?? 'normal';
+    const headerLine = [...headerLines].sort((left, right) => bottom(right.box) - bottom(left.box))[0];
+    return [{
+      kind: 'region' as const,
+      page: page.page,
+      ...(firstContent.flowId === undefined ? {} : { flowId: firstContent.flowId }),
+      ...(firstContent.blockId === undefined ? {} : { blockId: firstContent.blockId }),
+      ...(firstContent.slotId === undefined ? {} : { slotId: firstContent.slotId }),
+      regionId: 'chrome',
+      ...(pageGeometry?.templateRef === undefined ? {} : { templateRef: pageGeometry.templateRef }),
+      owner: 'chrome' as const,
+      cause: 'header-content-gap',
+      ...(headerLine === undefined ? {} : { from: { kind: 'block' as const, id: headerLine.blockId, flowId: 'header', blockId: headerLine.blockId, slotId: headerLine.slotId } }),
+      to: firstContent.subject,
+      ...(headerVisualBox === undefined ? {} : { fromBox: headerVisualBox }),
+      toBox: { ...firstContent.box },
+      profile,
+      metrics: {
+        headerBottom,
+        firstContentTop,
+        headerContentGap: firstContentTop - headerBottom,
+        referenceGap: spacingProfileTarget(profile),
+      },
+      reasons: ['chrome', 'header-content-gap'],
+    }];
+  });
+}
+
+function orphanFragmentObservations(document: CompositionDocument, plan: CompositionPlan): CompositionSpacingObservation[] {
+  const config = readRenderConfig().compositionScore;
+  const fragmentLimit = Math.max(1, Math.floor(config.orphanMaxFragmentLines));
+  const minimumGap = config.orphanMinGapMm;
+  const paragraphIds = new Set([...blockMap(document)]
+    .filter(([, block]) => block.kind === 'paragraph' && typeof block.text === 'string')
+    .map(([blockId]) => blockId));
+  const linesByBlock = new Map<string, ReturnType<typeof plannedLines>>();
+  for (const line of plannedLines(plan)) {
+    if (!paragraphIds.has(line.blockId)) continue;
+    linesByBlock.set(line.blockId, [...(linesByBlock.get(line.blockId) ?? []), line]);
+  }
+  return [...linesByBlock.entries()].flatMap(([blockId, lines]) => {
+    if (lines.length < 2) return [];
+    const orderedLines = [...lines].sort((left, right) => left.endWord - right.endWord);
+    return orderedLines.flatMap((line, index) => {
+      if (index === 0) return [];
+      const previousLine = orderedLines[index - 1];
+      if (line.page !== previousLine.page || line.slotId !== previousLine.slotId) return [];
+      const gap = line.box.y - bottom(previousLine.box);
+      if (gap < minimumGap) return [];
+      const blockingGraphic = plan.graphicPlacements.find((graphic) => graphic.page === line.page
+        && graphic.slotId !== line.slotId
+        && graphic.wrap === 'around'
+        && graphic.box.y <= line.box.y
+        && bottom(graphic.box) >= bottom(previousLine.box)
+        && horizontalOverlap(graphic.box, line.box));
+      if (!blockingGraphic) return [];
+      const beforeLines = index;
+      const afterLines = orderedLines.length - index;
+      const isolatedSide = beforeLines <= fragmentLimit ? 'before' : afterLines <= fragmentLimit ? 'after' : undefined;
+      if (!isolatedSide) return [];
+      const isolatedLines = isolatedSide === 'before' ? orderedLines.slice(0, index) : orderedLines.slice(index);
+      const isolatedLine = isolatedSide === 'before' ? isolatedLines[0]! : isolatedLines.at(-1)!;
+      const box = unionBoxes(isolatedLines.map((item) => item.box))!;
+      return [{
+        kind: 'orphan-fragment' as const,
+        page: isolatedLine.page,
+        flowId: isolatedLine.flowId,
+        slotId: isolatedLine.slotId,
+        blockId,
+        graphicId: blockingGraphic.graphicId,
+        box,
+        metrics: {
+          gap,
+          fragmentLines: isolatedLines.length,
+          lineHeight: isolatedLine.box.height,
+          startWord: Math.min(...isolatedLines.map((item) => item.startWord)),
+          endWord: Math.max(...isolatedLines.map((item) => item.endWord)),
+        },
+        reasons: [isolatedSide === 'before' ? 'orphan-before-obstacle' : 'orphan-after-obstacle', 'around-obstacle'],
+      }];
+    });
+  });
+}
+
 function obstacleSpacingObservations(plan: CompositionPlan): CompositionSpacingObservation[] {
   return plan.graphicPlacements.filter((placement) => !placement.graphicId.startsWith('insertion:')).map((placement) => ({
     kind: 'obstacle' as const,
@@ -482,9 +709,11 @@ export function attachPlanSpacingReport(
     textPlacements: textPlacementReports(plan, document, metrics, geometryByPage),
     observations: [
       ...regionSpacingObservations(slots),
+      ...headerContentGapObservations(plan, pages, slots),
       ...obstacleSpacingObservations(plan),
       ...insertionRhythmReports(plan, geometryByPage),
       ...elementProximityReports(plan, document),
+      ...orphanFragmentObservations(document, plan),
     ],
   } satisfies CompositionPlanSpacingReport;
 }

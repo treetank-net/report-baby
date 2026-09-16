@@ -13,6 +13,15 @@ export function slotFor(plan: CompositionPlan, slotId: string): CompositionSlot 
   return plan.slots.find((slot) => slot.id === slotId);
 }
 
+/** Match a planner decision's template-local slot id to its page-qualified plan id. */
+function decisionTargetsSlot(decision: CompositionPlan['decisions'][number], slotId: string): boolean {
+  const decisionSlotId = typeof decision.slotId === 'string' ? decision.slotId : undefined;
+  const decisionFrom = typeof decision.from === 'string' ? decision.from : undefined;
+  const page = typeof decision.page === 'number' ? decision.page : undefined;
+  return [decisionSlotId, decisionFrom].some((candidate) => candidate !== undefined
+    && (candidate === slotId || (page !== undefined && `${page}:${candidate}` === slotId)));
+}
+
 /** Determine whether planner decisions explain a missing usable fragment. */
 /**
  * @planner-target composition/evaluation/plan-queries.ts
@@ -37,10 +46,10 @@ export function plannerFoundNoUsableLine(
     && decision.reason === 'keep-list-item-together-below-minimum-fragment')) return true;
   if (plan.decisions.some((decision) => decision.code === 'KEEP_CLUSTER_PUSHED'
     && decision.blockId === blockId
-    && (decision.slotId === slotId || decision.from === slotId)
+    && decisionTargetsSlot(decision, slotId)
     && decision.reason === 'insufficient-local-capacity')) return true;
   return plan.decisions.some((decision) => {
-    if (decision.code !== 'FLOW_SEGMENT_ADVANCED' || decision.slotId !== slotId) return false;
+    if (decision.code !== 'FLOW_SEGMENT_ADVANCED' || !decisionTargetsSlot(decision, slotId)) return false;
     const details = decision.details as { nextBlockId?: unknown; nextBlockAvailableLines?: unknown } | undefined;
     return details?.nextBlockId === blockId
       && typeof details.nextBlockAvailableLines === 'number'

@@ -88,7 +88,7 @@ export { createTextCompositionPlanner } from './layout/text-planner.js';
 export type { MovableGraphicPolicy, MovableInsertionBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 export { createTextCompositionEngine, type TextCompositionEngineOptions } from './adapters/text-engine.js';
 export { fitContainBox, imagePixelAtPoint } from './geometry/visual-geometry.js';
-export { rectBottom, rectFitsInside, rectsOverlap, rectUnionArea } from './geometry/rectangles.js';
+export { rectBottom, rectFitsInside, rectsOverlap, rectIntersection, rectIntersectionArea, rectUnionArea } from './geometry/rectangles.js';
 export { resolvePagePlaceholders } from './text/page-placeholders.js';
 export {
   assertCompositionDraftRenderable,

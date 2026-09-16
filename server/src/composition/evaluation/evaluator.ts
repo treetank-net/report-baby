@@ -34,9 +34,30 @@ import {
 function suggestionsFromScore(breakdown: CompositionScoreComponent[]): CompositionSuggestion[] {
   return breakdown.flatMap((component): CompositionSuggestion[] => {
     if (component.points >= 0) return [];
-    if (component.code === 'header-spacing') return [{
-      ...suggestionFromScore('HEADER_GAP_TOO_SMALL', 'Header content is too close to the first page content on at least one page.', component.details, ['Increase the configured header/content gap.', 'Use a shorter header or a template with a larger chrome band.'], 'The measured header-to-content gap is below the configured spacing target.'),
-    }];
+    if (component.code === 'header-spacing') {
+      const details = component.details ?? {};
+      const records = Array.isArray(details.pages)
+        ? details.pages.filter((record): record is Record<string, unknown> => record !== null && typeof record === 'object' && !Array.isArray(record))
+        : [];
+      const tooSmall = records.filter((record) => typeof record.deficit === 'number' && record.deficit > 0);
+      const tooLarge = records.filter((record) => typeof record.excess === 'number' && record.excess > 0);
+      return [
+        ...(tooSmall.length === 0 ? [] : [suggestionFromScore(
+          'HEADER_GAP_TOO_SMALL',
+          'The first material content is closer to the repeated chrome than its minimum spacing allows.',
+          { ...details, pages: tooSmall },
+          ['Increase the configured header/content gap.', 'Use a shorter header or a template with more room below the chrome band.'],
+          'The measured gap from the chrome boundary to the first material content box is below the configured minimum.',
+        )]),
+        ...(tooLarge.length === 0 ? [] : [suggestionFromScore(
+          'HEADER_GAP_TOO_LARGE',
+          'The first material content is farther from the repeated chrome than the selected spacing rhythm allows.',
+          { ...details, pages: tooLarge },
+          ['Move the first compatible content placement closer to the chrome boundary when the template permits it.', 'Choose a template with a smaller header-to-content gap if the blank band is unintended.'],
+          'The measured blank distance from the reserved chrome boundary to the first material content box exceeds the selected spacing profile.',
+        )]),
+      ];
+    }
     if (component.code === 'main-start-delay') return [{
       ...suggestionFromScore('MAIN_FLOW_START_DELAYED', 'The main flow starts below its first available placement because an insertion occupies the opening area.', component.details, ['Evaluate a candidate that leaves the first insertion capability unused.', 'Use a template with a clear opening slot before optional insertions.'], 'An optional insertion delays the first main-flow text line even though the main slot is already available.'),
     }];
@@ -65,7 +86,7 @@ function suggestionsFromScore(breakdown: CompositionScoreComponent[]): Compositi
       ...suggestionFromScore('FOOTER_GAP_TOO_SMALL', 'Content ends too close to the footer boundary.', component.details, ['Increase the footer/content gap.', 'Use a template with more bottom breathing room.'], 'The measured gap to the footer is below the configured minimum.'),
     }];
     if (component.code === 'glyph-overlap') return [{
-      ...suggestionFromScore('GLYPH_TEXT_OVERLAP', 'A decorative glyph overlaps painted text.', component.details, ['Move the glyph farther from the target line.', 'Reduce the glyph size or offset.'], 'The measured glyph box intersects a text line beyond the configured tolerance.'),
+      ...suggestionFromScore('GLYPH_TEXT_OVERLAP', 'A decorative glyph overlaps a planned text-character envelope.', component.details, ['Move the glyph farther from the affected text.', 'Reduce the glyph size or offset.'], 'The measured glyph rectangle intersects one or more character advance cells; these renderer-neutral cells approximate text occupancy rather than raster ink.'),
     }];
     if (component.code === 'empty-regions') return [{
       ...suggestionFromScore('EMPTY_REGION', 'A material page region contains a large unexplained empty area.', component.details, ['Move or resize nearby content.', 'Choose a template with a better content envelope.'], 'The measured unused region exceeds the configured threshold.'),

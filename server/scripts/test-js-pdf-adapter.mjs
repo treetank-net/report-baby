@@ -24,6 +24,21 @@ if (build.status !== 0) throw new Error(`jsPDF adapter bundle failed: ${build.st
 
 try {
   const { createJsPdfChartBlockCapabilities, createJsPdfImageBlockCapabilities, createJsPdfMetricBlockCapabilities, createJsPdfTableBlockCapabilities, createJsPdfTextBackend, createJsPdfTextMetrics, createTextCompositionEngine, renderComposition } = await import(bundle);
+  const glyphPdf = new jsPDF({ unit: 'mm', format: [100, 100] });
+  glyphPdf.addFileToVFS('DejaVuSans.ttf', (await readFile(join(root, 'src/assets/font.ttf'))).toString('base64'));
+  glyphPdf.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
+  const glyphMetrics = createJsPdfTextMetrics(glyphPdf, 'DejaVu', {
+    quote: {
+      fontSize: renderConfig.pdf.quote_mark_size,
+      lineHeight: renderConfig.pdf.quote_line_height,
+      baselineOffset: renderConfig.pdf.quote_mark_baseline_offset,
+      fontStyle: 'normal',
+    },
+  });
+  const closingQuoteBounds = glyphMetrics.glyphInkBounds('”', 'quote');
+  const quoteLineBounds = glyphMetrics.lineInkBounds('quote');
+  assert.ok(closingQuoteBounds.bottom - closingQuoteBounds.top < (quoteLineBounds.bottom - quoteLineBounds.top) / 2, 'TTF glyph occupancy must use the selected quote mark outline instead of the font-wide ascender/descender box');
+  assert.ok(Number.isFinite(closingQuoteBounds.top) && Number.isFinite(closingQuoteBounds.bottom), 'TTF glyph bounds must remain finite in composition geometry');
   const template = {
     maxPages: 2,
     pageTemplates: [

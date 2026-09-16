@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { parse } from 'yaml';
 import { runProcess } from './lib/process.mjs';
+import { createDeterministicLorem } from './lib/deterministic-lorem.mjs';
 import { legacyFixtureToCompositionInput } from './lib/legacy-fixture-to-composition-input.mjs';
 import { extractPdfText, extractPdfWords } from './lib/pdf-text.mjs';
 
@@ -20,6 +21,7 @@ const primitivesBundle = join(temporary, 'render-primitives.cjs');
 const templateBundle = join(temporary, 'template.cjs');
 const geometryBundle = join(temporary, 'geometry.cjs');
 const parityConfig = parse(await readFile(join(root, 'templates/composition-pixel-qa-prototype.yml'), 'utf8'));
+const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
 
 /**
  * @test-decision merge-shared-bundle
@@ -52,6 +54,36 @@ build('src/template/geometry.ts', geometryBundle);
  */
 function normalizeToken(token) {
   return token.toLocaleLowerCase('und').replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function textWords(text) {
+  return text.split(/\s+/u).map(normalizeToken).filter(Boolean);
+}
+
+function pdfWordsForPlannedLines(pdfWords, lines, toleranceMm) {
+  const pointsPerMm = 72 / 25.4;
+  const available = [...pdfWords];
+  const matched = [];
+  for (const line of [...lines].sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x)) {
+    const tolerance = toleranceMm * pointsPerMm;
+    const box = {
+      x: line.box.x * pointsPerMm,
+      y: line.box.y * pointsPerMm,
+      width: line.box.width * pointsPerMm,
+      height: line.box.height * pointsPerMm,
+    };
+    const words = available.filter((word) => word.page === line.page - 1
+      && word.xMin >= box.x - tolerance && word.xMax <= box.x + box.width + tolerance
+      && word.yMin >= box.y - tolerance && word.yMax <= box.y + box.height + tolerance)
+      .sort((left, right) => left.xMin - right.xMin);
+    assert.deepEqual(words.flatMap((word) => textWords(word.text)), textWords(line.text), `PDF text for planned line ${line.blockId} must match its source line`);
+    const used = new Set(words);
+    for (let index = available.length - 1; index >= 0; index -= 1) {
+      if (used.has(available[index])) available.splice(index, 1);
+    }
+    matched.push({ ...line, pdfWords: words });
+  }
+  return matched;
 }
 
 /**
@@ -200,7 +232,7 @@ try {
   const source = parse(await readFile(join(root, 'templates/pages/editorial-two-column/template.yml'), 'utf8'));
   const compiled = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(compiled);
-  const body = Array.from({ length: 720 }, (_, index) => `sentinel${String(index + 1).padStart(4, '0')}`).join(' ');
+  const body = createDeterministicLorem().generateWords(720);
   const data = {
     brand: 'Composition Lab',
     title: 'A production chrome fixture',
@@ -248,7 +280,7 @@ try {
 
   const numberedInsetTemplate = {
     maxPages: 1,
-    layouts: [{ id: 'numbered-inset', width: 100, height: 100, slots: [
+    pageTemplates: [{ id: 'numbered-inset', width: 100, height: 100, slots: [
       { id: 'left-before', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 20 }, allowedRoles: ['body'] },
       { id: 'right-before', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 20 }, allowedRoles: ['body'] },
       { id: 'left-after', regionId: 'main', kind: 'text', box: { x: 5, y: 45, width: 40, height: 20 }, allowedRoles: ['body'] },
@@ -256,21 +288,22 @@ try {
       { id: 'quote-b', regionId: 'quotes', kind: 'text', box: { x: 5, y: 70, width: 90, height: 10 }, allowedRoles: ['quote'] },
     ] }],
     routes: {
-      main: { slots: ['left-before', 'left-after', 'right-before', 'right-after'], layouts: ['numbered-inset'], continuation: 'forbidden' },
-      quotes: { slots: ['quote-b'], insertionSlots: ['quote-b'], layouts: ['numbered-inset'], continuation: 'forbidden' },
+      main: { slots: ['left-before', 'left-after', 'right-before', 'right-after'], continuation: 'forbidden' },
+      quotes: { slots: ['quote-b'], insertionSlots: ['quote-b'], continuation: 'forbidden' },
     },
   };
-  const numberedHeadingWords = ['lorem1', 'lorem2'];
-  const numberedBodyWords = Array.from({ length: 6 }, (_, index) => `lorem${index + numberedHeadingWords.length + 1}`);
-  const numberedTailWords = Array.from({ length: 4 }, (_, index) => `lorem${index + numberedHeadingWords.length + numberedBodyWords.length + 1}`);
+  const insetHeadingText = 'Lorem ipsum';
+  const insetBodyText = 'dolor sit amet consectetur adipiscing elit';
+  const insetTailText = 'sed do eiusmod tempor incididunt ut';
+  const insetQuoteText = 'voices shape change';
   const numberedInsetDocument = {
     flows: {
       main: { id: 'main', continuation: 'forbidden', blocks: [
-      { id: 'numbered-heading', kind: 'paragraph', role: 'body', text: numberedHeadingWords.join(' ') },
-      { id: 'numbered-body', kind: 'paragraph', role: 'body', text: numberedBodyWords.join(' ') },
-      { id: 'numbered-tail', kind: 'paragraph', role: 'body', text: numberedTailWords.join(' ') },
+      { id: 'numbered-heading', kind: 'paragraph', role: 'body', text: insetHeadingText },
+      { id: 'numbered-body', kind: 'paragraph', role: 'body', text: insetBodyText },
+      { id: 'numbered-tail', kind: 'paragraph', role: 'body', text: insetTailText },
       ] },
-      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'numbered-quote', kind: 'paragraph', role: 'quote', text: 'quote-0001 quote-0002' }] },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [{ id: 'numbered-quote', kind: 'paragraph', role: 'quote', text: insetQuoteText }] },
     },
   };
   const numberedMetrics = {
@@ -281,39 +314,24 @@ try {
   };
   const numberedComposition = createTextCompositionEngine(numberedInsetTemplate).plan(numberedInsetDocument, numberedMetrics);
   assert.equal(numberedComposition.evaluation.status, 'accepted', JSON.stringify(numberedComposition.evaluation));
-  const plannedNumberedTokens = numberedComposition.plan.lines
-    .flatMap((line) => line.text.match(/lorem\d+/gu) ?? []);
-  assert.deepEqual(plannedNumberedTokens, [...numberedHeadingWords, ...numberedBodyWords, ...numberedTailWords], 'the plan must retain numbered source order across the insertion');
-  const numberedPdf = newPdf('portrait', [numberedInsetTemplate.layouts[0].width, numberedInsetTemplate.layouts[0].height]);
+  const sourceWords = textWords(`${insetHeadingText} ${insetBodyText} ${insetTailText}`);
+  const blockOrder = new Map([['numbered-heading', 0], ['numbered-body', 1], ['numbered-tail', 2]]);
+  const orderedPlanLines = [...numberedComposition.plan.lines]
+    .sort((left, right) => blockOrder.get(left.blockId) - blockOrder.get(right.blockId) || left.startWord - right.startWord);
+  assert.deepEqual(orderedPlanLines.flatMap((line) => textWords(line.text)), sourceWords, 'the plan must retain the authored source text and order across the insertion');
+  const numberedPdf = newPdf('portrait', [numberedInsetTemplate.pageTemplates[0].width, numberedInsetTemplate.pageTemplates[0].height]);
   const numberedArtifact = renderComposition(numberedInsetDocument, numberedComposition, createJsPdfTextBackend(numberedPdf, 'DejaVu', (await import(adapterBundle)).compositionStylesFromRenderConfig(), compositionPdfBackendOptionsFromRenderConfig()));
   const numberedPdfPath = join(temporary, 'numbered-inset.pdf');
   await writeFile(numberedPdfPath, numberedArtifact);
-  const numberedPdfWords = extractPdfWords(numberedPdfPath).filter((word) => /^lorem\d+$/u.test(word.text));
-  const numberedExpectedSet = [...numberedHeadingWords, ...numberedBodyWords, ...numberedTailWords].sort();
-  assert.deepEqual(numberedPdfWords.map((word) => word.text).sort(), numberedExpectedSet, 'every numbered word must reach the final PDF');
-  const numberedEntries = numberedPdfWords.map((word) => ({ number: Number(word.text.slice(5)), x: word.xMin, y: word.yMin }));
-  const numberedLeftSlot = numberedComposition.plan.slots.find((slot) => slot.id === '1:left-before');
-  const numberedRightSlot = numberedComposition.plan.slots.find((slot) => slot.id === '1:right-before');
-  assert.ok(numberedLeftSlot && numberedRightSlot, 'numbered PDF fixture must expose both column slots');
-  const pointsPerMm = 72 / 25.4;
-  const numberedColumnBoundary = ((numberedLeftSlot.box.x + numberedLeftSlot.box.width) + numberedRightSlot.box.x) / 2 * pointsPerMm;
-  /**
-   * @test-decision visual-gate
-   * @test-action Move PDF token/box/oracle work to one compatibility/showcase gate; use plan lines and placements for fast assertions.
-   */
-  const leftOfPdfEntry = (entry) => entry.x < numberedColumnBoundary;
-  assert.deepEqual(numberedEntries.filter(leftOfPdfEntry).map((entry) => entry.number).sort((a, b) => a - b), [...numberedHeadingWords, ...numberedBodyWords].map((word) => Number(word.slice(5))).sort((a, b) => a - b), 'the first column must contain the complete heading and body stream');
-  assert.deepEqual(numberedEntries.filter((entry) => !leftOfPdfEntry(entry)).map((entry) => entry.number).sort((a, b) => a - b), numberedTailWords.map((word) => Number(word.slice(5))).sort((a, b) => a - b), 'the second column must start only after the first stream is complete');
-  for (const right of numberedEntries.filter((entry) => !leftOfPdfEntry(entry))) {
-    for (const left of numberedEntries.filter((entry) => leftOfPdfEntry(entry) && right.y <= entry.y)) {
-      assert.ok(right.number > left.number, `PDF number ${right.number} must not appear to the right and above number ${left.number}`);
-    }
-  }
+  const pdfLines = pdfWordsForPlannedLines(extractPdfWords(numberedPdfPath), numberedComposition.plan.lines, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
+  assert.equal(pdfLines.reduce((sum, line) => sum + line.pdfWords.length, 0), sourceWords.length, 'the PDF must retain every authored word in its planned line');
+  assert.ok(numberedComposition.plan.lines.filter((line) => line.blockId === 'numbered-heading' || line.blockId === 'numbered-body').every((line) => line.box.x < 50), 'the first column PDF stream must contain the heading and body');
+  assert.ok(numberedComposition.plan.lines.filter((line) => line.blockId === 'numbered-tail').every((line) => line.box.x >= 50), 'the second column PDF stream must begin with the text after the insertion');
   const integrated = await renderReportCompositionPdf('pages/editorial-two-column', input);
   const integratedPath = join(temporary, 'integrated-composition.pdf');
   await writeFile(integratedPath, integrated.buffer);
   const integratedText = extractPdfText(integratedPath, ['-layout']);
-  assert.match(integratedText, /sentinel0001/u);
+  assert.ok((tokenCounts(integratedText).get('lorem') ?? 0) > 0, 'the integrated report must contain natural Lorem Ipsum body text');
   assert.match(integratedText, /Oracle comparison fixture/u);
   assert.match(integratedText, /A production chrome fixture/u);
   assert.match(integratedText, /COMPOSITION LAB/u);

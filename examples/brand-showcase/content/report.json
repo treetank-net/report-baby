@@ -3,7 +3,6 @@
   "data": {
     "flows": {
       "title": {
-        "continuation": "forbidden",
         "blocks": [
           { "type": "heading", "text": "From signal to momentum", "role": "title", "level": 1 },
           { "type": "text", "text": "A cross-channel product performance review", "role": "subtitle" },

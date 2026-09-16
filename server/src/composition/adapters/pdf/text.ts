@@ -34,6 +34,9 @@ export function applyStyle(doc: jsPDF, family: string, style: JsPdfCompositionSt
 interface JsPdfFontMetricsMetadata {
   ascender?: number;
   decender?: number;
+  head?: { unitsPerEm?: number };
+  characterToGlyph?: (codePoint: number) => number;
+  glyf?: { glyphFor(glyphId: number): { yMin?: number; yMax?: number } | null };
 }
 
 /**
@@ -75,6 +78,24 @@ function measureGlyphInkBounds(doc: jsPDF, family: string, text: string, style: 
   applyStyle(doc, family, style);
   const internal = doc.internal as unknown as { getFont?: () => { metadata?: JsPdfFontMetricsMetadata } };
   const metadata = internal.getFont?.()?.metadata;
+  const unitsPerEm = metadata?.head?.unitsPerEm;
+  const glyphTable = metadata?.glyf;
+  if (Number.isFinite(unitsPerEm) && unitsPerEm !== undefined && unitsPerEm > 0 && metadata?.characterToGlyph && glyphTable?.glyphFor) {
+    const glyphBounds = [...text].map((character) => {
+      const glyphId = metadata.characterToGlyph!(character.codePointAt(0)!);
+      if (glyphId <= 0) return undefined;
+      const glyph = glyphTable.glyphFor(glyphId);
+      if (!glyph || !Number.isFinite(glyph.yMin) || !Number.isFinite(glyph.yMax)
+        || glyph.yMin === undefined || glyph.yMax === undefined) return undefined;
+      return { top: glyph.yMax, bottom: glyph.yMin };
+    });
+    if (glyphBounds.length > 0 && glyphBounds.every((bounds) => bounds !== undefined)) {
+      const fontUnitToMm = style.fontSize * 25.4 / 72 / unitsPerEm;
+      const inkTop = Math.min(...glyphBounds.map((bounds) => style.baselineOffset - bounds.top * fontUnitToMm));
+      const inkBottom = Math.max(...glyphBounds.map((bounds) => style.baselineOffset - bounds.bottom * fontUnitToMm));
+      return { top: inkTop, bottom: inkBottom };
+    }
+  }
   const ascender = metadata?.ascender;
   const decender = metadata?.decender;
   if (Number.isFinite(ascender) && Number.isFinite(decender) && ascender !== undefined && decender !== undefined && ascender > 0 && decender < 0) {

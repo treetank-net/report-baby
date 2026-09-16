@@ -35,6 +35,21 @@ function glyphTargetBox(
   return placement ? { box: placement.box, slotId: placement.slotId, flowId: undefined } : undefined;
 }
 
+function lineTextHorizontalBounds(line: CompositionLine): { left: number; right: number } {
+  const cells = line.glyphSamplingBoxes?.map((sample) => sample.box) ?? [];
+  if (cells.length > 0) {
+    return {
+      left: Math.min(...cells.map((box) => box.x)),
+      right: Math.max(...cells.map((box) => box.x + box.width)),
+    };
+  }
+  const alignedOffset = line.textAlign === 'right'
+    ? line.box.width - line.naturalWidth
+    : line.textAlign === 'center' ? (line.box.width - line.naturalWidth) / 2 : 0;
+  const left = line.box.x + alignedOffset;
+  return { left, right: left + line.naturalWidth };
+}
+
 /**
  * @planner-target composition/layout/glyph-objects.ts
  * @planner-responsibility Keep the current glyphAnchorX implementation intact until its target seam is extracted.
@@ -42,17 +57,18 @@ function glyphTargetBox(
 function glyphAnchorX(metrics: CompositionTextMetrics, spec: CompositionGlyphSpec, target: { box: CompositionRect; line?: CompositionLine }): number {
   const offsetX = spec.offsetX ?? 0;
   if (spec.anchor === 'text-start') {
-    const anchorX = target.line?.box.x ?? target.box.x;
+    const anchorX = target.line ? lineTextHorizontalBounds(target.line).left : target.box.x;
     return spec.anchorAlignment === 'end'
       ? anchorX - metrics.measureText(spec.text, spec.styleName) - offsetX
       : anchorX + offsetX;
   }
   if (spec.anchor === 'text-end') {
     if (!target.line) return target.box.x + target.box.width + offsetX;
-    const textWidth = spec.anchorMeasureStyleName
-      ? metrics.measureText(target.line.text, spec.anchorMeasureStyleName)
-      : target.line.naturalWidth;
-    const anchorX = target.line.box.x + textWidth;
+    const horizontalBounds = lineTextHorizontalBounds(target.line);
+    const measuredTextRight = spec.anchorMeasureStyleName
+      ? target.line.box.x + metrics.measureText(target.line.text, spec.anchorMeasureStyleName)
+      : horizontalBounds.right;
+    const anchorX = Math.max(horizontalBounds.right, measuredTextRight);
     return spec.anchorAlignment === 'end'
       ? anchorX - metrics.measureText(spec.text, spec.styleName) - offsetX
       : anchorX + offsetX;

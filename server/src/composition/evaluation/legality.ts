@@ -8,7 +8,7 @@ import {
   plannerFoundNoUsableLine,
   slotFor,
 } from './plan-queries.js';
-import { fitsInside, geometryTolerance, lineEntersGraphic, overlaps, usableLinesAfter } from './legality-geometry.js';
+import { fitsInside, geometryTolerance, lineGraphicOverlapEvidence, lineEntersGraphic, overlapTolerance, overlaps, usableLinesAfter } from './legality-geometry.js';
 import { pushEvaluationError } from './diagnostics.js';
 
 import {
@@ -58,7 +58,15 @@ export function validateDeclaredFlowPlacement(
   if (!slot) {
     pushEvaluationError(diagnostics, 'FLOW_PLACEMENT_TARGET_MISSING', 'Flow placement ' + placement.id + ' targets missing slot ' + placement.slotId + '.', { flowId: placement.flowId, page: placement.page, slotId: placement.slotId });
   } else if (placement.page !== slot.page || !fitsInside(placement.box, slot.box)) {
-    pushEvaluationError(diagnostics, 'FLOW_PLACEMENT_OUTSIDE_SLOT', 'Flow placement ' + placement.id + ' leaves slot ' + slot.id + '.', { flowId: placement.flowId, page: placement.page, slotId: placement.slotId });
+    pushEvaluationError(diagnostics, 'FLOW_PLACEMENT_OUTSIDE_SLOT', 'Flow placement ' + placement.id + ' leaves slot ' + slot.id + '.', {
+      flowId: placement.flowId,
+      page: placement.page,
+      slotId: placement.slotId,
+      placementBox: placement.box,
+      slotBox: slot.box,
+      slotPage: slot.page,
+      tolerance: geometryTolerance(placement.box.x, placement.box.y, placement.box.width, placement.box.height, slot.box.x, slot.box.y, slot.box.width, slot.box.height),
+    });
   }
   const lines = allLines(plan).filter((line) => line.flowId === placement.flowId && line.slotId === placement.slotId);
   const actualBlockIds = new Set(lines.map((line) => line.blockId));
@@ -108,7 +116,7 @@ export function checkFlowBarrierBoxCandidates(plan: CompositionPlan, diagnostics
       pushEvaluationError(diagnostics,
         'FLOW_BARRIER_CANDIDATE_OUTSIDE_PLACEMENT',
         `Flow barrier candidate '${candidate.id}' leaves flow placement '${placement.id}'.`,
-        { flowId: candidate.flowId, page: candidate.page, slotId: placement.slotId },
+        { flowId: candidate.flowId, page: candidate.page, slotId: placement.slotId, candidateBox: candidate.box, placementBox: placement.box, tolerance: geometryTolerance(candidate.box.x, candidate.box.y, candidate.box.width, candidate.box.height, placement.box.x, placement.box.y, placement.box.width, placement.box.height) },
       );
     }
     for (const sourceId of [candidate.previousSourceId, candidate.nextSourceId].filter((value): value is string => value !== undefined)) {
@@ -168,9 +176,10 @@ export function checkEarlyRouteTransitions(document: CompositionDocument, plan: 
       if (plannerFoundNoUsableLine(plan, nextLines[0].blockId, previous.slotId, minimum)) continue;
       const nextBlock = sourceBlocks.get(nextLines[0].blockId);
       if (!nextBlock || usable <= minimumUsableLinesBefore(nextBlock, minimum)) continue;
+      const underfilledThresholdLines = minimumUsableLinesBefore(nextBlock, minimum);
       pushEvaluationError(diagnostics,
         'FLOW_FRAGMENT_UNDERFILLED',
-        `Flow '${key.split(':')[0]}' advanced to route segment ${routeIndexes[index]} while ${usable} usable line(s) remained in '${previous.slotId}'.`,
+        `Flow '${key.split(':')[0]}' advanced to route segment ${routeIndexes[index]} with ${usable} usable line(s) left in '${previous.slotId}' before block '${nextBlock.id}', exceeding the underfilled threshold of ${underfilledThresholdLines}.`,
         {
           flowId: key.split(':')[0],
           page: previous.page,
@@ -179,6 +188,11 @@ export function checkEarlyRouteTransitions(document: CompositionDocument, plan: 
             previousRouteIndex: routeIndexes[index - 1],
             nextRouteIndex: routeIndexes[index],
             nextSlotId: nextLines[0].slotId,
+            nextBlockId: nextBlock.id,
+            nextBlockKind: nextBlock.kind,
+            nextBlockRole: nextBlock.role,
+            nextBlockKeepWithNextLines: nextBlock.keepWithNextLines,
+            underfilledThresholdLines,
             usableLines: usable,
             minimumFragmentLines: minimum,
           },
@@ -324,7 +338,8 @@ export function validateUnderfilledFlowSlot(
   );
   if (plannerFoundNoUsableLine(plan, nextAuthoredBlock.id, slot.id, minimum)
     || usable <= minimumUsableLinesBefore(nextAuthoredBlock, minimum)) return;
-  pushEvaluationError(diagnostics, 'FLOW_SLOT_UNDERFILLED', 'Flow ' + flow.id + ' leaves ' + usable + ' usable line(s) in ' + slot.id + ' before later content.', {
+  const underfilledThresholdLines = minimumUsableLinesBefore(nextAuthoredBlock, minimum);
+  pushEvaluationError(diagnostics, 'FLOW_SLOT_UNDERFILLED', 'Flow ' + flow.id + ' leaves ' + usable + ' usable line(s) in ' + slot.id + ' before block ' + nextAuthoredBlock.id + ', exceeding the underfilled threshold of ' + underfilledThresholdLines + '.', {
     flowId: flow.id,
     page: slot.page,
     slotId: slot.id,
@@ -332,6 +347,11 @@ export function validateUnderfilledFlowSlot(
       routeIndex: slot.routeIndex,
       usableLines: usable,
       minimumFragmentLines: minimum,
+      nextBlockId: nextAuthoredBlock.id,
+      nextBlockKind: nextAuthoredBlock.kind,
+      nextBlockRole: nextAuthoredBlock.role,
+      nextBlockKeepWithNextLines: nextAuthoredBlock.keepWithNextLines,
+      underfilledThresholdLines,
       nextSlotId: laterItems[0].slotId,
       nextPage: laterItems[0].page,
     },
@@ -548,7 +568,15 @@ export function validateLineTargets(plan: CompositionPlan, repeatedFlows: Set<st
     const key = line.flowId + ':' + line.blockId + ':' + line.startWord + ':' + line.endWord + (repeatedFlows.has(line.flowId) ? ':' + line.page : '');
     if (seenLines.has(key)) pushEvaluationError(diagnostics, 'DUPLICATE_CONTENT', 'Content range ' + key + ' was placed more than once.', { blockId: line.blockId, slotId: line.slotId });
     seenLines.add(key);
-    if (line.page !== slot.page || !fitsInside(line.box, slot.box)) pushEvaluationError(diagnostics, 'LINE_OUTSIDE_SLOT', 'Line for ' + line.blockId + ' leaves slot ' + slot.id + '.', { blockId: line.blockId, slotId: slot.id, page: line.page });
+    if (line.page !== slot.page || !fitsInside(line.box, slot.box)) pushEvaluationError(diagnostics, 'LINE_OUTSIDE_SLOT', 'Line for ' + line.blockId + ' leaves slot ' + slot.id + '.', {
+      blockId: line.blockId,
+      slotId: slot.id,
+      page: line.page,
+      lineBox: line.box,
+      slotBox: slot.box,
+      slotPage: slot.page,
+      tolerance: geometryTolerance(line.box.x, line.box.y, line.box.width, line.box.height, slot.box.x, slot.box.y, slot.box.width, slot.box.height),
+    });
   }
 }
 
@@ -562,7 +590,15 @@ export function validateLineSlotOverlaps(plan: CompositionPlan, diagnostics: Com
     const line = planned[index];
     for (let other = index + 1; other < planned.length; other += 1) {
       const candidate = planned[other];
-      if (line.page === candidate.page && line.slotId === candidate.slotId && overlaps(line.box, candidate.box)) pushEvaluationError(diagnostics, 'LINE_OVERLAP', 'Lines for ' + line.blockId + ' and ' + candidate.blockId + ' overlap in slot ' + line.slotId + '.', { slotId: line.slotId, page: line.page, firstBlockId: line.blockId, secondBlockId: candidate.blockId });
+      if (line.page === candidate.page && line.slotId === candidate.slotId && overlaps(line.box, candidate.box)) pushEvaluationError(diagnostics, 'LINE_OVERLAP', 'Lines for ' + line.blockId + ' and ' + candidate.blockId + ' overlap in slot ' + line.slotId + '.', {
+        slotId: line.slotId,
+        page: line.page,
+        firstBlockId: line.blockId,
+        secondBlockId: candidate.blockId,
+        firstBox: line.box,
+        secondBox: candidate.box,
+        tolerance: overlapTolerance(line.box, candidate.box),
+      });
     }
   }
 }
@@ -574,7 +610,18 @@ export function validateLineSlotOverlaps(plan: CompositionPlan, diagnostics: Com
 export function validateLineGraphicOverlaps(plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
   for (const line of allLines(plan)) {
     for (const graphic of plan.graphicPlacements) {
-      if (graphic.page === line.page && graphic.slotId !== line.slotId && graphic.wrap === 'around' && lineEntersGraphic(line, graphic)) pushEvaluationError(diagnostics, 'LINE_GRAPHIC_OVERLAP', 'Line for ' + line.blockId + ' enters wrapping graphic ' + graphic.graphicId + '.', { blockId: line.blockId, graphicId: graphic.graphicId, slotId: line.slotId, page: line.page });
+      if (graphic.page !== line.page || graphic.slotId === line.slotId || graphic.wrap !== 'around' || !lineEntersGraphic(line, graphic)) continue;
+      const overlap = lineGraphicOverlapEvidence(line, graphic);
+      if (overlap) pushEvaluationError(diagnostics, 'LINE_GRAPHIC_OVERLAP', 'Line for ' + line.blockId + ' enters wrapping graphic ' + graphic.graphicId + '.', {
+        blockId: line.blockId,
+        graphicId: graphic.graphicId,
+        slotId: line.slotId,
+        page: line.page,
+        lineBox: line.box,
+        graphicBox: graphic.box,
+        blockedIntervals: overlap.blockedIntervals,
+        intersections: overlap.intersections,
+      });
     }
   }
 }
@@ -590,7 +637,15 @@ export function validateBlockPlacementTargets(plan: CompositionPlan, diagnostics
       pushEvaluationError(diagnostics, 'PLACEMENT_TARGET_MISSING', 'Placement for ' + placement.blockId + ' targets missing slot ' + placement.slotId + '.', { blockId: placement.blockId, slotId: placement.slotId });
       continue;
     }
-    if (placement.page !== slot.page || !fitsInside(placement.box, slot.box)) pushEvaluationError(diagnostics, 'PLACEMENT_OUTSIDE_SLOT', 'Placement for ' + placement.blockId + ' leaves slot ' + slot.id + '.', { blockId: placement.blockId, slotId: slot.id, page: placement.page });
+    if (placement.page !== slot.page || !fitsInside(placement.box, slot.box)) pushEvaluationError(diagnostics, 'PLACEMENT_OUTSIDE_SLOT', 'Placement for ' + placement.blockId + ' leaves slot ' + slot.id + '.', {
+      blockId: placement.blockId,
+      slotId: slot.id,
+      page: placement.page,
+      placementBox: placement.box,
+      slotBox: slot.box,
+      slotPage: slot.page,
+      tolerance: geometryTolerance(placement.box.x, placement.box.y, placement.box.width, placement.box.height, slot.box.x, slot.box.y, slot.box.width, slot.box.height),
+    });
   }
 }
 
@@ -605,7 +660,15 @@ export function validateTablePlacement(placement: CompositionPlan['tablePlacemen
   else if (source.kind !== 'table' || !table) pushEvaluationError(diagnostics, 'TABLE_KIND_MISMATCH', 'Placement ' + placement.blockId + ' does not reference a table block.', { blockId: placement.blockId, slotId: placement.slotId });
   const slot = slotFor(plan, placement.slotId);
   if (!slot) pushEvaluationError(diagnostics, 'TABLE_PLACEMENT_TARGET_MISSING', 'Table placement ' + placement.blockId + ' targets missing slot ' + placement.slotId + '.', { blockId: placement.blockId, slotId: placement.slotId });
-  else if (placement.page !== slot.page || !fitsInside(placement.box, slot.box)) pushEvaluationError(diagnostics, 'TABLE_PLACEMENT_OUTSIDE_SLOT', 'Table placement ' + placement.blockId + ' leaves slot ' + slot.id + '.', { blockId: placement.blockId, slotId: slot.id, page: placement.page });
+  else if (placement.page !== slot.page || !fitsInside(placement.box, slot.box)) pushEvaluationError(diagnostics, 'TABLE_PLACEMENT_OUTSIDE_SLOT', 'Table placement ' + placement.blockId + ' leaves slot ' + slot.id + '.', {
+    blockId: placement.blockId,
+    slotId: slot.id,
+    page: placement.page,
+    placementBox: placement.box,
+    slotBox: slot.box,
+    slotPage: slot.page,
+    tolerance: geometryTolerance(placement.box.x, placement.box.y, placement.box.width, placement.box.height, slot.box.x, slot.box.y, slot.box.width, slot.box.height),
+  });
   const rowCount = table?.body.length ?? 0;
   if (!Number.isInteger(placement.startRow) || !Number.isInteger(placement.endRow) || placement.startRow < 0 || placement.endRow <= placement.startRow || placement.endRow > rowCount) {
     pushEvaluationError(diagnostics, 'TABLE_ROW_RANGE_INVALID', 'Table placement ' + placement.blockId + ' has an invalid row range.', { blockId: placement.blockId, startRow: placement.startRow, endRow: placement.endRow, rowCount });
@@ -614,8 +677,23 @@ export function validateTablePlacement(placement: CompositionPlan['tablePlacemen
     if (placement.startRow !== expected) pushEvaluationError(diagnostics, 'TABLE_ROW_COVERAGE_GAP', 'Table ' + placement.blockId + ' is not covered continuously by row fragments.', { blockId: placement.blockId, expected, actual: { start: placement.startRow, end: placement.endRow } });
     seenTableRows.set(placement.blockId, Math.max(expected, placement.endRow));
   }
-  for (const line of allLines(plan)) if (line.page === placement.page && overlaps(line.box, placement.box)) pushEvaluationError(diagnostics, 'TABLE_TEXT_OVERLAP', 'Table ' + placement.blockId + ' overlaps text for ' + line.blockId + '.', { blockId: placement.blockId, secondBlockId: line.blockId, page: placement.page, slotId: placement.slotId });
-  for (const other of plan.blockPlacements) if (other.page === placement.page && overlaps(other.box, placement.box)) pushEvaluationError(diagnostics, 'TABLE_BLOCK_OVERLAP', 'Table ' + placement.blockId + ' overlaps block ' + other.blockId + '.', { blockId: placement.blockId, secondBlockId: other.blockId, page: placement.page });
+  for (const line of allLines(plan)) if (line.page === placement.page && overlaps(line.box, placement.box)) pushEvaluationError(diagnostics, 'TABLE_TEXT_OVERLAP', 'Table ' + placement.blockId + ' overlaps text for ' + line.blockId + '.', {
+    blockId: placement.blockId,
+    secondBlockId: line.blockId,
+    page: placement.page,
+    slotId: placement.slotId,
+    tableBox: placement.box,
+    lineBox: line.box,
+    tolerance: overlapTolerance(placement.box, line.box),
+  });
+  for (const other of plan.blockPlacements) if (other.page === placement.page && overlaps(other.box, placement.box)) pushEvaluationError(diagnostics, 'TABLE_BLOCK_OVERLAP', 'Table ' + placement.blockId + ' overlaps block ' + other.blockId + '.', {
+    blockId: placement.blockId,
+    secondBlockId: other.blockId,
+    page: placement.page,
+    tableBox: placement.box,
+    blockBox: other.box,
+    tolerance: overlapTolerance(placement.box, other.box),
+  });
 }
 
 /**
@@ -626,7 +704,14 @@ export function validateTableOverlaps(plan: CompositionPlan, diagnostics: Compos
   for (const placement of plan.tablePlacements ?? []) {
     for (const other of plan.tablePlacements ?? []) {
       if (other === placement) break;
-      if (other.page === placement.page && overlaps(other.box, placement.box)) pushEvaluationError(diagnostics, 'TABLE_OVERLAP', 'Table fragments ' + other.blockId + ' and ' + placement.blockId + ' overlap.', { blockId: placement.blockId, secondBlockId: other.blockId, page: placement.page });
+      if (other.page === placement.page && overlaps(other.box, placement.box)) pushEvaluationError(diagnostics, 'TABLE_OVERLAP', 'Table fragments ' + other.blockId + ' and ' + placement.blockId + ' overlap.', {
+        blockId: placement.blockId,
+        secondBlockId: other.blockId,
+        page: placement.page,
+        firstBox: other.box,
+        secondBox: placement.box,
+        tolerance: overlapTolerance(other.box, placement.box),
+      });
     }
   }
 }
@@ -661,10 +746,33 @@ export function validateAtomicPlacement(placement: CompositionPlan['blockPlaceme
     pushEvaluationError(diagnostics, 'BLOCK_PLACEMENT_TARGET_MISSING', 'Atomic block ' + placement.blockId + ' targets missing slot ' + placement.slotId + '.', { blockId: placement.blockId, slotId: placement.slotId });
     return;
   }
-  if (placement.page !== slot.page || !fitsInside(placement.box, slot.box)) pushEvaluationError(diagnostics, 'BLOCK_PLACEMENT_OUTSIDE_SLOT', 'Atomic block ' + placement.blockId + ' leaves slot ' + slot.id + '.', { blockId: placement.blockId, slotId: slot.id, page: placement.page });
+  if (placement.page !== slot.page || !fitsInside(placement.box, slot.box)) pushEvaluationError(diagnostics, 'BLOCK_PLACEMENT_OUTSIDE_SLOT', 'Atomic block ' + placement.blockId + ' leaves slot ' + slot.id + '.', {
+    blockId: placement.blockId,
+    slotId: slot.id,
+    page: placement.page,
+    placementBox: placement.box,
+    slotBox: slot.box,
+    slotPage: slot.page,
+    tolerance: geometryTolerance(placement.box.x, placement.box.y, placement.box.width, placement.box.height, slot.box.x, slot.box.y, slot.box.width, slot.box.height),
+  });
   const wrappedImage = source?.kind === 'image' && (source.image?.wrap === 'left' || source.image?.wrap === 'right');
-  for (const line of allLines(plan)) if (!wrappedImage && line.page === placement.page && overlaps(line.box, placement.box)) pushEvaluationError(diagnostics, 'BLOCK_TEXT_OVERLAP', 'Atomic block ' + placement.blockId + ' overlaps text for ' + line.blockId + '.', { blockId: placement.blockId, secondBlockId: line.blockId, page: placement.page, slotId: placement.slotId });
-  for (const other of plan.blockPlacements) if (other !== placement && other.page === placement.page && overlaps(other.box, placement.box)) pushEvaluationError(diagnostics, 'BLOCK_OVERLAP', 'Atomic blocks ' + other.blockId + ' and ' + placement.blockId + ' overlap.', { blockId: placement.blockId, secondBlockId: other.blockId, page: placement.page });
+  for (const line of allLines(plan)) if (!wrappedImage && line.page === placement.page && overlaps(line.box, placement.box)) pushEvaluationError(diagnostics, 'BLOCK_TEXT_OVERLAP', 'Atomic block ' + placement.blockId + ' overlaps text for ' + line.blockId + '.', {
+    blockId: placement.blockId,
+    secondBlockId: line.blockId,
+    page: placement.page,
+    slotId: placement.slotId,
+    blockBox: placement.box,
+    lineBox: line.box,
+    tolerance: overlapTolerance(placement.box, line.box),
+  });
+  for (const other of plan.blockPlacements) if (other !== placement && other.page === placement.page && overlaps(other.box, placement.box)) pushEvaluationError(diagnostics, 'BLOCK_OVERLAP', 'Atomic blocks ' + other.blockId + ' and ' + placement.blockId + ' overlap.', {
+    blockId: placement.blockId,
+    secondBlockId: other.blockId,
+    page: placement.page,
+    firstBox: other.box,
+    secondBox: placement.box,
+    tolerance: overlapTolerance(other.box, placement.box),
+  });
 }
 
 /**
@@ -689,6 +797,14 @@ export function validateGraphicPlacements(document: CompositionDocument, plan: C
       pushEvaluationError(diagnostics, 'GRAPHIC_TARGET_MISSING', 'Graphic ' + graphic.graphicId + ' targets missing slot ' + graphic.slotId + '.', { graphicId: graphic.graphicId, slotId: graphic.slotId });
       continue;
     }
-    if (graphic.page !== slot.page || !fitsInside(graphic.box, slot.box)) pushEvaluationError(diagnostics, 'GRAPHIC_OUTSIDE_SLOT', 'Graphic ' + graphic.graphicId + ' leaves slot ' + slot.id + '.', { graphicId: graphic.graphicId, slotId: slot.id, page: graphic.page });
+    if (graphic.page !== slot.page || !fitsInside(graphic.box, slot.box)) pushEvaluationError(diagnostics, 'GRAPHIC_OUTSIDE_SLOT', 'Graphic ' + graphic.graphicId + ' leaves slot ' + slot.id + '.', {
+      graphicId: graphic.graphicId,
+      slotId: slot.id,
+      page: graphic.page,
+      graphicBox: graphic.box,
+      slotBox: slot.box,
+      slotPage: slot.page,
+      tolerance: geometryTolerance(graphic.box.x, graphic.box.y, graphic.box.width, graphic.box.height, slot.box.x, slot.box.y, slot.box.width, slot.box.height),
+    });
   }
 }

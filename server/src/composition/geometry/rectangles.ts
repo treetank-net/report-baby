@@ -35,6 +35,21 @@ export function rectsOverlap(first: CompositionRect, second: CompositionRect): b
   return horizontal > Number.EPSILON * scale * 32 && vertical > Number.EPSILON * scale * 32;
 }
 
+/** Return the shared area of two rectangles, or no rectangle when they only touch. */
+export function rectIntersection(first: CompositionRect, second: CompositionRect): CompositionRect | undefined {
+  const x = Math.max(first.x, second.x);
+  const y = Math.max(first.y, second.y);
+  const right = Math.min(first.x + first.width, second.x + second.width);
+  const bottom = Math.min(first.y + first.height, second.y + second.height);
+  return right <= x || bottom <= y ? undefined : { x, y, width: right - x, height: bottom - y };
+}
+
+/** Return the shared area of two rectangles in square page units. */
+export function rectIntersectionArea(first: CompositionRect, second: CompositionRect): number {
+  const intersection = rectIntersection(first, second);
+  return intersection ? intersection.width * intersection.height : 0;
+}
+
 /** Return the area covered by a rectangle union without double-counting overlaps. */
 export function rectUnionArea(rectangles: CompositionRect[]): number {
   const valid = rectangles.filter((rect) => rect.width > 0 && rect.height > 0);

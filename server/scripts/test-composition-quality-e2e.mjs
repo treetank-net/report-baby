@@ -9,6 +9,12 @@ import { parse } from 'yaml';
 import { createEditorialNumberedFixture } from './lib/editorial-numbered-fixture.mjs';
 
 const root = process.cwd();
+const timingEnabled = process.env.REPORT_BABY_TEST_TIMING === '1';
+const timingStartedAt = performance.now();
+function reportTiming(label, startedAt, details = {}) {
+  if (!timingEnabled) return;
+  console.error(`[test-composition-quality-e2e] ${label}: ${(performance.now() - startedAt).toFixed(0)}ms`, details);
+}
 const temporary = await mkdtemp(join(tmpdir(), 'report-baby-composition-quality-e2e-'));
 const bundles = {
   adapter: join(temporary, 'composition/report-composition-entrypoint.cjs'),
@@ -43,7 +49,7 @@ async function buildPlanningBundles() {
 
 function qualitySource(source) {
   const result = structuredClone(source);
-  result.regions = { body: { x: 0.081, y: 0.25, width: 0.838, height: 0.68 } };
+  result.regions = { body: { ...result.slots.content.frame } };
   delete result.slots['quote-a'];
   delete result.slots['quote-b'];
   delete result.slots['quote-c'];
@@ -66,6 +72,21 @@ function assertSpacingEvidence(result) {
   assert.equal(spacing.pages.length, result.plan.pages.length, 'spacing report must cover every planned page');
   assert.equal(spacing.slots.length, result.plan.slots.length, 'spacing report must cover every materialized slot');
   assert.ok(spacing.observations.some((observation) => observation.kind === 'region'), 'spacing report must expose region observations');
+  assert.ok(spacing.observations.some((observation) => observation.kind === 'region'
+    && observation.cause === 'header-content-gap'
+    && Number.isFinite(observation.metrics.headerContentGap)), 'header/content gap must be measured once in the spacing report');
+  for (const observation of spacing.observations.filter((candidate) => candidate.kind === 'region' && candidate.cause === 'header-content-gap')) {
+    const page = spacing.pages.find((candidate) => candidate.page === observation.page);
+    const headerLines = result.plan.lines.filter((line) => line.page === observation.page && line.flowId === 'header');
+    const measuredBottom = Math.max(
+      page.bands.header.y + page.bands.header.height,
+      ...headerLines.map((line) => line.box.y + line.box.height),
+    );
+    assert.equal(observation.metrics.headerBottom, measuredBottom, 'dynamic header spacing must start below whichever is lower: the reserved band or the measured header content');
+    assert.equal(observation.metrics.headerContentGap, observation.metrics.firstContentTop - measuredBottom, 'header spacing must be derived from measured chrome and first-material boxes');
+    assert.ok(observation.fromBox.y <= page.bands.header.y, 'header-gap evidence must include the reserved header band');
+    assert.ok(observation.fromBox.y + observation.fromBox.height >= measuredBottom, 'header-gap evidence must include any header content extending below its reserved band');
+  }
   const insertionPlacements = result.plan.graphicPlacements.filter((placement) => placement.graphicId.startsWith('insertion:'));
   const insertionObservations = spacing.observations.filter((observation) => observation.kind === 'insertion-rhythm');
   assert.equal(insertionObservations.length, insertionPlacements.length, 'every insertion obstacle must have rhythm evidence');
@@ -74,6 +95,7 @@ function assertSpacingEvidence(result) {
     assert.ok(observation.flowId && observation.blockId && observation.graphicId, 'insertion rhythm must identify its exact content placement for score attribution');
     assert.ok(observation.templateRef, 'insertion rhythm must identify the supplying template');
     assert.ok(Number.isFinite(observation.metrics.referenceGap), 'insertion rhythm must expose a numeric reference gap');
+    assert.ok(Number.isFinite(observation.metrics.contentInsetTop) && Number.isFinite(observation.metrics.contentInsetBottom), 'insertion content inset must be measured once for spacing scoring');
     assert.ok(observation.profile === 'normal' || observation.profile === 'compact' || observation.profile === 'open', 'insertion rhythm must expose a known profile');
   }
   for (const slot of spacing.slots) {
@@ -91,10 +113,13 @@ function assertSpacingEvidence(result) {
     'spacing-rhythm',
     'narrow-text-interval',
     'fit-content-envelope',
+    'header-spacing',
+    'insertion-spacing',
     'footer-gap',
     'main-start-delay',
     'element-proximity',
     'glyph-overlap',
+    'orphan-lines',
   ];
   const scoreCodes = new Set(result.evaluation.scoreBreakdown.map((component) => component.code));
   for (const code of expectedQualityCodes) assert.ok(scoreCodes.has(code), `evaluation must include quality component ${code}`);
@@ -123,6 +148,7 @@ try {
     quoteMarkGap: renderConfig.pdf.quote_mark_gap,
     quoteMarkOffsetX: renderConfig.pdf.quote_mark_offset_x,
     quoteMarkOffsetY: renderConfig.pdf.quote_mark_offset_y,
+    quoteMarkCloseOffsetY: renderConfig.pdf.quote_mark_close_offset_y,
   });
   const styles = compositionStylesFromRenderConfig({
     foreground: [25, 51, 79],
@@ -131,18 +157,59 @@ try {
     quote: [232, 117, 61],
   });
   const pdf = newPdf('portrait', [geometry.width, geometry.height]);
-  const result = planReportComposition(
+  const seedStartedAt = performance.now();
+  const seedResult = planReportComposition(
     pdf,
     compiled,
     geometry,
     fixture.input,
     { family: 'DejaVu', maxPages: 6, styles },
   );
+  reportTiming('seed planning + evaluation', seedStartedAt, {
+    planningTimeMs: seedResult.plan.trace?.candidateSearch?.planningTimeMs,
+    candidates: seedResult.plan.trace?.candidateSearch?.evaluatedCandidates,
+  });
+  const movementWindow = geometry.height * renderConfig.composition_search.movable_window_ratio;
+  const movableInsertionBounds = Object.fromEntries(seedResult.plan.graphicPlacements
+    .filter((placement) => placement.graphicId === 'insertion:quote-market')
+    .map((placement) => {
+      const minimumY = Math.max(geometry.content.top, placement.box.y - movementWindow);
+      const maximumY = Math.min(geometry.content.bottom - placement.box.height, placement.box.y + movementWindow);
+      return [`quotes:${placement.graphicId.slice('insertion:'.length)}`, {
+        bounds: {
+          x: placement.box.x,
+          y: minimumY,
+          width: placement.box.width,
+          height: maximumY - minimumY + placement.box.height,
+        },
+        axis: 'y',
+        preferred: { y: placement.box.y },
+        candidateCount: renderConfig.composition_search.movable_candidate_count,
+        refinementRounds: renderConfig.composition_search.movable_refinement_rounds,
+        refinementCandidateCount: Math.min(2, renderConfig.composition_search.movable_refinement_candidate_count),
+      }];
+    }));
+  const optimizedStartedAt = performance.now();
+  const result = planReportComposition(
+    pdf,
+    compiled,
+    geometry,
+    fixture.input,
+    { family: 'DejaVu', maxPages: 6, styles, policy: { movableInsertionBounds } },
+  );
+  reportTiming('optimized planning + evaluation loop', optimizedStartedAt, {
+    planningTimeMs: result.plan.trace?.candidateSearch?.planningTimeMs,
+    rounds: result.plan.trace?.candidateSearch?.rounds.map(({ round, generatedCandidates, evaluatedCandidates, stopReason }) => ({ round, generatedCandidates, evaluatedCandidates, stopReason })),
+    candidates: result.plan.trace?.candidateSearch?.evaluatedCandidates,
+  });
+  assert.ok(result.evaluation.score >= seedResult.evaluation.score, `optional movement candidates must retain the unmoved seed plan so a move cannot force a lower-scoring result: ${JSON.stringify({ optimizedScore: result.evaluation.score, seedScore: seedResult.evaluation.score, selected: result.plan.trace?.candidateSearch?.selectedCandidate, seedComponents: seedResult.evaluation.scoreBreakdown.map(({ code, points }) => [code, points]) })}`);
+  assert.ok((result.plan.trace?.candidateSearch?.generatedCandidates ?? 0) > (seedResult.plan.trace?.candidateSearch?.generatedCandidates ?? 0), 'the declared quote movement window must generate additional complete-plan candidates');
   const tightQuoteSource = qualitySource(source);
   tightQuoteSource.id = 'pages/editorial-inset-tight-quote-quality-check';
   tightQuoteSource.slots['quote-capability'].frame = { ...tightQuoteSource.slots['quote-capability'].frame, y: 0.255, height: 0.24 };
   const tightQuoteTemplate = compileTemplateSource(tightQuoteSource);
   const tightQuoteGeometry = pageGeometryFromTemplate(tightQuoteTemplate);
+  const tightStartedAt = performance.now();
   const tightQuoteResult = planReportComposition(
     pdf,
     tightQuoteTemplate,
@@ -150,13 +217,38 @@ try {
     fixture.input,
     { family: 'DejaVu', maxPages: 6, styles },
   );
+  reportTiming('comparison planning + evaluation', tightStartedAt, {
+    planningTimeMs: tightQuoteResult.plan.trace?.candidateSearch?.planningTimeMs,
+    candidates: tightQuoteResult.plan.trace?.candidateSearch?.evaluatedCandidates,
+  });
   assert.equal(result.evaluation.status, 'accepted', JSON.stringify(result.evaluation));
   assert.equal(tightQuoteResult.evaluation.status, 'accepted', JSON.stringify(tightQuoteResult.evaluation));
   assert.deepEqual(result.plan.residualContent, []);
   assert.deepEqual(tightQuoteResult.plan.residualContent, []);
-  assert.ok(result.evaluation.score > tightQuoteResult.evaluation.score, 'the caller must prefer the more balanced legal insertion template');
+  const baselineMainDelay = result.evaluation.scoreBreakdown.find((component) => component.code === 'main-start-delay')?.points ?? 0;
+  const tightMainDelay = tightQuoteResult.evaluation.scoreBreakdown.find((component) => component.code === 'main-start-delay')?.points ?? 0;
+  assert.ok(Math.abs(baselineMainDelay) === 0, 'the content-first template must let main flow start at the top of its declared body placement');
+  assert.ok(Math.abs(tightMainDelay) === 0, 'a quote below the first main line must not count as delaying main flow');
+  const footerGapScore = result.evaluation.scoreBreakdown.find((component) => component.code === 'footer-gap');
+  assert.ok(Math.abs(footerGapScore?.points ?? 0) === 0, 'the editorial content frame must preserve the configured minimum distance from the footer');
   const selectedTemplate = compareCompositionEvaluations(result.evaluation, tightQuoteResult.evaluation) <= 0 ? result : tightQuoteResult;
-  assert.equal(selectedTemplate, result, 'a caller comparing legal template alternatives must select the higher-scoring insertion rhythm');
+  assert.equal(selectedTemplate.evaluation.score, Math.max(result.evaluation.score, tightQuoteResult.evaluation.score), 'a caller comparing legal template alternatives must select the higher-scoring candidate');
+  const plannedLines = [...selectedTemplate.plan.lines, ...(selectedTemplate.plan.insertionLines ?? [])];
+  for (const glyph of selectedTemplate.plan.glyphPlacements ?? []) {
+    if (glyph.anchor !== 'text-start' && glyph.anchor !== 'text-end') continue;
+    const targetLines = plannedLines.filter((line) => line.page === glyph.page && line.blockId === glyph.targetId)
+      .sort((left, right) => left.box.y - right.box.y || left.box.x - right.box.x);
+    const targetLine = glyph.anchor === 'text-start' ? targetLines[0] : targetLines.at(-1);
+    const cells = targetLine?.glyphSamplingBoxes?.map((sample) => sample.box) ?? [];
+    if (!targetLine || cells.length === 0) continue;
+    const textLeft = Math.min(...cells.map((box) => box.x));
+    const textRight = Math.max(...cells.map((box) => box.x + box.width));
+    if (glyph.anchor === 'text-start') {
+      assert.ok(glyph.box.x + glyph.box.width <= textLeft + 0.001, `opening glyph ${glyph.glyphId} must be anchored outside the first painted character`);
+    } else {
+      assert.ok(glyph.box.x >= textRight - 0.001, `closing glyph ${glyph.glyphId} must be anchored outside the last painted character`);
+    }
+  }
   assert.deepEqual(result.plan.residualContent, [], JSON.stringify(result.plan.residualContent));
   assert.equal(typeof result.evaluation.scoreBase, 'number', 'legal evaluation must expose the configured score base');
   assert.ok(Array.isArray(result.evaluation.placementScores), 'legal evaluation must expose score contributions by material placement');
@@ -176,6 +268,60 @@ try {
   assert.deepEqual(publicQuality.placementScores, selectedTemplate.evaluation.placementScores, 'the public quality summary must expose per-placement contributions');
   assert.deepEqual(publicQuality.repairProposals, selectedTemplate.evaluation.repairProposals, 'the public quality summary must expose evaluator repair proposals');
   assert.deepEqual(publicQuality.candidateSearch, selectedTemplate.plan.trace?.candidateSearch, 'the public quality summary must expose the complete-plan candidate trace');
+  const rejectedRepairDiagnostics = publicQuality.candidateSearch.rounds
+    .flatMap((round) => round.candidateResults ?? [])
+    .filter((candidate) => !candidate.legal)
+    .flatMap((candidate) => candidate.diagnostics ?? []);
+  const refinementRound = publicQuality.candidateSearch.rounds.find((round) => round.round === 1);
+  assert.ok(refinementRound, 'the configured movement policy must produce a recorded refinement round');
+  assert.ok(refinementRound.generatedCandidates > 0 && (refinementRound.candidateResults?.length ?? 0) > 0, 'the configured movement policy must expose complete refinement outcomes');
+  for (const diagnostic of rejectedRepairDiagnostics) {
+    assert.ok(diagnostic.why && diagnostic.remedies?.length, `the public candidate trace must explain why ${diagnostic.code} rejected a repair and how to address it`);
+    if (diagnostic.code === 'FLOW_SLOT_UNDERFILLED' || diagnostic.code === 'FLOW_FRAGMENT_UNDERFILLED') {
+      assert.match(diagnostic.message, /before block .+, exceeding the underfilled threshold/u, 'underfilled diagnostics must name the next authored block and the tested threshold');
+      assert.ok(Number.isFinite(diagnostic.details.details.underfilledThresholdLines), 'underfilled diagnostics must expose their line threshold');
+      assert.ok(Number.isFinite(diagnostic.details.details.usableLines), 'underfilled diagnostics must expose measured usable capacity');
+    }
+    if (diagnostic.code === 'LINE_OVERLAP') {
+      assert.ok(diagnostic.details.firstBox && diagnostic.details.secondBox, 'line-overlap diagnostics must expose both measured boxes');
+      assert.ok(Number.isFinite(diagnostic.details.tolerance), 'line-overlap diagnostics must expose the geometry tolerance');
+    }
+    if (diagnostic.code === 'LINE_GRAPHIC_OVERLAP') {
+      assert.ok(diagnostic.details.lineBox && diagnostic.details.graphicBox, 'line-graphic diagnostics must expose both measured boxes');
+      assert.ok(Array.isArray(diagnostic.details.intersections), 'line-graphic diagnostics must expose measured intersections');
+    }
+  }
+  const glyphOverlapComponent = selectedTemplate.evaluation.scoreBreakdown.find((component) => component.code === 'glyph-overlap');
+  assert.equal(glyphOverlapComponent?.value, 0, 'font-specific quote-mark outlines must not report the false text collision previously caused by whole-font ascender/descender bounds');
+  const glyphOverlapSuggestion = publicQuality.suggestions.find((suggestion) => suggestion.code === 'GLYPH_TEXT_OVERLAP');
+  assert.equal(glyphOverlapSuggestion, undefined, 'the public quality summary must not report a glyph collision when the measured glyph outline clears all text cells');
+  const largeHeaderGapSuggestion = publicQuality.suggestions.find((suggestion) => suggestion.code === 'HEADER_GAP_TOO_LARGE');
+  assert.equal(largeHeaderGapSuggestion, undefined, 'the corrected editorial template must no longer report its previous excessive chrome-to-content gap');
+  const excessiveGapSource = qualitySource(source);
+  const pageHeight = source.page.height;
+  const headerBandBottom = source.page.reserved_bands.header.y + source.page.reserved_bands.header.height;
+  const targetGap = renderConfig.composition_score.spacing_profile_normal_target_mm
+    + renderConfig.composition_score.spacing_profile_tolerance_mm + 1;
+  const contentFrame = excessiveGapSource.slots.content.frame;
+  const footerTop = excessiveGapSource.slots.footer.frame.y;
+  contentFrame.y = headerBandBottom + (targetGap / pageHeight);
+  contentFrame.height = footerTop - contentFrame.y;
+  excessiveGapSource.regions.body = { ...contentFrame };
+  excessiveGapSource.id = 'pages/editorial-inset-excessive-header-gap-quality-check';
+  const excessiveGapTemplate = compileTemplateSource(excessiveGapSource);
+  const excessiveGapGeometry = pageGeometryFromTemplate(excessiveGapTemplate);
+  const excessiveGapResult = planReportComposition(
+    pdf,
+    excessiveGapTemplate,
+    excessiveGapGeometry,
+    fixture.input,
+    { family: 'DejaVu', maxPages: 6, styles },
+  );
+  assert.equal(excessiveGapResult.evaluation.status, 'accepted', JSON.stringify(excessiveGapResult.evaluation));
+  const excessiveGapPublicQuality = compositionQualitySummary(excessiveGapResult.evaluation, excessiveGapResult.plan);
+  const excessiveGapSuggestion = excessiveGapPublicQuality.suggestions.find((suggestion) => suggestion.code === 'HEADER_GAP_TOO_LARGE');
+  assert.ok(excessiveGapSuggestion?.evidence?.pages?.some((record) => record.cause === 'header-content-gap'
+    && record.excess > 0 && record.fromBox && record.toBox && record.templateRef), 'the ordinary public quality summary must identify an excessive chrome-to-content gap, its template and both measured boxes');
   assert.match(compositionQualityText(selectedTemplate.evaluation, selectedTemplate.plan), /"candidateSearch"/u, 'human-facing MCP quality text must expose the same candidate trace as structured output');
   const quoteSlots = selectedTemplate.plan.slots.filter((slot) => slot.id.includes('quote-capability#'));
   assert.ok(quoteSlots.length > 0, 'fluid insertion capability must materialize page-local slot instances in the actual plan');
@@ -198,17 +344,36 @@ try {
   const proximityEvaluation = evaluateCompositionPlan(selectedTemplate.document, proximityPlan);
   const proximitySuggestion = proximityEvaluation.suggestions?.find((suggestion) => suggestion.code === 'ELEMENTS_TOO_CLOSE');
   assert.ok(proximitySuggestion, 'a measured pairwise gap must become a public evaluator suggestion');
-  assert.equal(proximitySuggestion.evidence.records[0].fromBox.y, 40, 'the public suggestion must expose measured geometry');
-  assert.equal(proximitySuggestion.evidence.records[0].to.blockId, 'quote-near-intro', 'the public suggestion must name both source elements');
+  const proximityEvidence = proximitySuggestion.evidence.records.find((record) => record.from?.id === 'intro-lead' && record.to?.blockId === 'quote-near-intro');
+  assert.ok(proximityEvidence, 'the public suggestion must include the authored intro/insertion pair');
+  assert.equal(proximityEvidence.fromBox.y, 40, 'the public suggestion must expose measured geometry');
+  assert.equal(proximityEvidence.to.blockId, 'quote-near-intro', 'the public suggestion must name both source elements');
+  const renderPdf = newPdf('portrait', [geometry.width, geometry.height]);
+  const renderStartedAt = performance.now();
   const artifact = renderComposition(selectedTemplate.document, selectedTemplate, createJsPdfTextBackend(
-    pdf,
+    renderPdf,
     'DejaVu',
     styles,
     compositionPdfBackendOptionsFromRenderConfig(),
   ));
+  reportTiming('selected PDF rendering', renderStartedAt, { bytes: artifact.length, pages: selectedTemplate.plan.pages.length });
+  reportTiming('complete quality scenario', timingStartedAt, { pages: result.plan.pages.length });
   const artifactPath = '/tmp/report-baby-composition-quality-e2e.pdf';
   await writeFile(artifactPath, artifact);
   assert.equal(artifact.subarray(0, 5).toString(), '%PDF-', 'the representative composition must render as a PDF');
+  let comparisonArtifactPath;
+  if (process.env.COMPOSITION_QUALITY_COMPARE_ARTIFACTS === '1') {
+    const comparisonPdf = newPdf('portrait', [tightQuoteGeometry.width, tightQuoteGeometry.height]);
+    const comparisonArtifact = renderComposition(tightQuoteResult.document, tightQuoteResult, createJsPdfTextBackend(
+      comparisonPdf,
+      'DejaVu',
+      styles,
+      compositionPdfBackendOptionsFromRenderConfig(),
+    ));
+    comparisonArtifactPath = '/tmp/report-baby-composition-quality-e2e-tight-quotes.pdf';
+    await writeFile(comparisonArtifactPath, comparisonArtifact);
+    assert.equal(comparisonArtifact.subarray(0, 5).toString(), '%PDF-', 'the legal comparison alternative must also render as a PDF');
+  }
   console.log(JSON.stringify({
     status: 'passed',
     mode: 'plan-and-representative-artifact',
@@ -220,13 +385,57 @@ try {
       template: candidate.template.id,
       score: candidate.evaluation.score,
       status: candidate.evaluation.status,
-      insertionQuality: candidate.evaluation.scoreBreakdown
-        .filter((component) => ['insertion-symmetry', 'insertion-distribution', 'spacing-rhythm'].includes(component.code))
+      qualitySignals: candidate.evaluation.scoreBreakdown
+        .filter((component) => ['main-start-delay', 'empty-regions', 'glyph-overlap', 'insertion-symmetry', 'insertion-distribution', 'spacing-rhythm'].includes(component.code))
         .map(({ code, points }) => ({ code, points })),
+      firstPageHeaderLines: candidate.plan.lines
+        .filter((line) => line.page === 1 && line.flowId === 'header')
+        .map(({ blockId, text, box }) => ({ blockId, text, box })),
     })),
     selectedTemplate: selectedTemplate.template.id,
+    ...(comparisonArtifactPath === undefined ? {} : { comparisonArtifactPath }),
     scoreBreakdown: selectedTemplate.evaluation.scoreBreakdown.map(({ code, value, points }) => ({ code, value, points })),
-    suggestions: selectedTemplate.evaluation.suggestions?.map(({ code, why, remedies, evidence }) => ({ code, why, remedies, evidence })) ?? [],
+    glyphOverlapEvidence: selectedTemplate.evaluation.scoreBreakdown
+      .find((component) => component.code === 'glyph-overlap')?.details.records.map((record) => ({
+        page: record.page,
+        glyph: record.glyphId,
+        glyphPlacementId: record.glyphPlacementId,
+        targetId: record.targetId,
+        textBlockId: record.blockId,
+        textSlotId: record.textSlotId,
+        glyphBox: record.glyphBox,
+        textCell: record.textCell,
+        overlapBox: record.overlapBox,
+        overlapArea: record.overlapArea,
+      })) ?? [],
+    candidateSearch: selectedTemplate.plan.trace?.candidateSearch && {
+      selectedCandidate: selectedTemplate.plan.trace.candidateSearch.selectedCandidate,
+      generatedCandidates: selectedTemplate.plan.trace.candidateSearch.generatedCandidates,
+      evaluatedCandidates: selectedTemplate.plan.trace.candidateSearch.evaluatedCandidates,
+      rounds: selectedTemplate.plan.trace.candidateSearch.rounds.map((round) => ({
+        round: round.round,
+        generatedCandidates: round.generatedCandidates,
+        evaluatedCandidates: round.evaluatedCandidates,
+        legalCandidates: round.legalCandidates,
+        bestScore: round.bestScore,
+        improved: round.improved,
+        stopReason: round.stopReason,
+        repairProposals: round.repairProposals?.map(({ id, code, placement, action }) => ({ id, code, placement, action })),
+        repairAttempts: round.repairAttempts?.map(({ proposalId, status, testedDistance, scoreDelta }) => ({ proposalId, status, testedDistance, scoreDelta })),
+        candidateResults: round.candidateResults?.map(({ legal, score, scoreDelta, repairProposalIds, diagnostics }) => ({
+          legal,
+          score,
+          scoreDelta,
+          repairProposalIds,
+          diagnostics: diagnostics?.map(({ severity, code, message, flowId, blockId, page, slotId, details, remedies }) => ({ severity, code, message, flowId, blockId, page, slotId, details, remedies })),
+        })),
+      })),
+    },
+    refinementInputs: {
+      movableInsertionFrames: selectedTemplate.plan.movableInsertionFrames?.map(({ blockId, flowId, page, box, axis }) => ({ blockId, flowId, page, box, axis })),
+      repairProposals: selectedTemplate.evaluation.repairProposals?.map(({ id, sourceCode, placement, action, axis, direction, distance, estimatedPoints }) => ({ id, sourceCode, placement, action, axis, direction, distance, estimatedPoints })),
+    },
+    suggestions: selectedTemplate.evaluation.suggestions?.map(({ code, why, remedies }) => ({ code, why, remedies })) ?? [],
     artifactPath,
   }, null, 2));
 } finally {

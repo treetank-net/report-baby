@@ -295,6 +295,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
             signature,
             legal,
             ...(repairProposalIds === undefined ? {} : { repairProposalIds }),
+            ...(candidateEvaluation.diagnostics.length === 0 ? {} : { diagnostics: candidateEvaluation.diagnostics }),
             ...(legal ? {
               score: candidateEvaluation.score,
               scoreDelta: candidateEvaluation.score - selectedEvaluation.score,

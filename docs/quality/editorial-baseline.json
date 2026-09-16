@@ -3,7 +3,7 @@
   "template": "pages/editorial-inset-two-column",
   "brand": "Editorial QA",
   "fixture": {
-    "mainWords": 1242,
+    "mainWords": 2084,
     "quoteWords": 94,
     "headings": [
       {
@@ -50,103 +50,103 @@
       },
       {
         "id": "body-market-1",
-        "words": 54
+        "words": 190
       },
       {
         "id": "body-market-2",
-        "words": 24
+        "words": 85
       },
       {
         "id": "body-market-3",
-        "words": 48
+        "words": 170
       },
       {
         "id": "body-market-4",
-        "words": 26
-      },
-      {
-        "id": "body-drivers-1",
-        "words": 33
-      },
-      {
-        "id": "body-drivers-2",
-        "words": 19
-      },
-      {
-        "id": "body-drivers-3",
-        "words": 38
-      },
-      {
-        "id": "body-drivers-4",
-        "words": 47
-      },
-      {
-        "id": "body-costs-1",
-        "words": 13
-      },
-      {
-        "id": "body-costs-2",
         "words": 90
       },
       {
+        "id": "body-drivers-1",
+        "words": 51
+      },
+      {
+        "id": "body-drivers-2",
+        "words": 29
+      },
+      {
+        "id": "body-drivers-3",
+        "words": 60
+      },
+      {
+        "id": "body-drivers-4",
+        "words": 73
+      },
+      {
+        "id": "body-costs-1",
+        "words": 20
+      },
+      {
+        "id": "body-costs-2",
+        "words": 141
+      },
+      {
         "id": "body-costs-3",
-        "words": 63
+        "words": 100
       },
       {
         "id": "body-diesel-1",
-        "words": 10
-      },
-      {
-        "id": "body-diesel-2",
-        "words": 45
-      },
-      {
-        "id": "body-diesel-3",
-        "words": 33
-      },
-      {
-        "id": "body-diesel-4",
-        "words": 35
-      },
-      {
-        "id": "body-adblue-1",
         "words": 16
       },
       {
+        "id": "body-diesel-2",
+        "words": 71
+      },
+      {
+        "id": "body-diesel-3",
+        "words": 51
+      },
+      {
+        "id": "body-diesel-4",
+        "words": 56
+      },
+      {
+        "id": "body-adblue-1",
+        "words": 25
+      },
+      {
         "id": "body-adblue-2",
-        "words": 31
+        "words": 49
       },
       {
         "id": "body-adblue-3",
-        "words": 45
+        "words": 71
       },
       {
         "id": "body-outlook-1",
-        "words": 47
+        "words": 73
       },
       {
         "id": "body-outlook-2",
-        "words": 26
+        "words": 40
       },
       {
         "id": "body-outlook-3",
-        "words": 54
+        "words": 84
       },
       {
         "id": "body-autumn-1",
-        "words": 40
+        "words": 62
       },
       {
         "id": "body-autumn-2",
-        "words": 44
+        "words": 69
       },
       {
         "id": "body-autumn-3",
-        "words": 44
+        "words": 69
       },
       {
         "id": "body-autumn-4",
-        "words": 40
+        "words": 62
       }
     ],
     "quotes": [
@@ -175,15 +175,15 @@
       "sourceHeightPx": 900
     }
   },
-  "pages": 6,
+  "pages": 5,
   "ink": {
     "rasterDpi": 110,
-    "lineChecks": 344,
-    "occupiedLines": 344,
+    "lineChecks": 330,
+    "occupiedLines": 330,
     "slotChecks": 15
   },
   "pdf": {
     "normalization": "pdf-content",
-    "hash": "254f8db726ceaf1a04a4020f158ca51dad826af11c84385b7d0a93b0d49eb7a8"
+    "hash": "d8b5cdf0b7637c6dd7daf23db4c19e26783e4d5ccb1c6f67bd9353127e25171e"
   }
 }

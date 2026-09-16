@@ -21,9 +21,21 @@ function basePlan() {
   };
 }
 
-function insertionPlan(metrics) {
+function insertionPlan(metrics, blockId = 'quote') {
+  const graphicId = `insertion:${blockId}`;
+  const box = { x: 40, y: 40, width: 20, height: 10 };
   return {
     ...basePlan(),
+    slots: [{ id: blockId, page: 1, regionId: 'main', kind: 'graphic', box, state: 'open' }],
+    graphicPlacements: [{
+      id: `graphic:${blockId}`,
+      graphicId,
+      slotId: blockId,
+      page: 1,
+      shape: 'rectangle',
+      wrap: 'around',
+      box,
+    }],
     spacing: {
       pages: [],
       slots: [],
@@ -32,7 +44,9 @@ function insertionPlan(metrics) {
         kind: 'insertion-rhythm',
         page: 1,
         regionId: 'main',
-        slotId: 'quote',
+        slotId: blockId,
+        blockId,
+        graphicId,
         metrics,
         profile: 'normal',
       }],
@@ -41,13 +55,20 @@ function insertionPlan(metrics) {
 }
 
 function imagePlan(leftHeight, rightHeight) {
+  const leftSlot = { id: 'main-left', page: 1, regionId: 'main', flowId: 'main', routeIndex: 0, kind: 'text', box: { x: 0, y: 0, width: 50, height: 100 }, state: 'partial' };
+  const rightSlot = { id: 'main-right', page: 1, regionId: 'main', flowId: 'main', routeIndex: 1, kind: 'text', box: { x: 50, y: 0, width: 50, height: 100 }, state: 'partial' };
   return {
     ...basePlan(),
+    slots: [leftSlot, rightSlot],
+    lines: [
+      { blockId: 'left-content', flowId: 'main', slotId: leftSlot.id, page: 1, text: 'left', box: { x: 0, y: 0, width: 50, height: leftHeight }, routeIndex: 0, naturalWidth: 20, startWord: 0, endWord: 1 },
+      { blockId: 'right-content', flowId: 'main', slotId: rightSlot.id, page: 1, text: 'right', box: { x: 50, y: 0, width: 50, height: rightHeight }, routeIndex: 1, naturalWidth: 25, startWord: 0, endWord: 1 },
+    ],
     spacing: {
       pages: [],
       slots: [
-        { page: 1, slotId: 'main-left', regionId: 'main', flowId: 'main', box: { x: 0, y: 0, width: 50, height: 100 }, occupiedHeight: leftHeight, remainingHeight: 100 - leftHeight, gapBefore: 0, gapAfter: 100 - leftHeight },
-        { page: 1, slotId: 'main-right', regionId: 'main', flowId: 'main', box: { x: 50, y: 0, width: 50, height: 100 }, occupiedHeight: rightHeight, remainingHeight: 100 - rightHeight, gapBefore: 0, gapAfter: 100 - rightHeight },
+        { page: 1, slotId: leftSlot.id, regionId: 'main', flowId: 'main', box: leftSlot.box, occupiedHeight: leftHeight, remainingHeight: 100 - leftHeight, gapBefore: 0, gapAfter: 100 - leftHeight },
+        { page: 1, slotId: rightSlot.id, regionId: 'main', flowId: 'main', box: rightSlot.box, occupiedHeight: rightHeight, remainingHeight: 100 - rightHeight, gapBefore: 0, gapAfter: 100 - rightHeight },
       ],
       textPlacements: [],
       observations: [],
@@ -60,9 +81,11 @@ function illegalPlan() {
 }
 
 function fitContentPlan(growthMaxHeight, occupiedHeight) {
+  const slot = { id: 'intro', page: 1, regionId: 'intro', flowId: 'intro', routeIndex: 0, kind: 'text', box: { x: 0, y: 0, width: 100, height: growthMaxHeight }, growthMaxHeight, state: 'partial' };
   return {
     ...basePlan(),
-    slots: [{ id: 'intro', page: 1, regionId: 'intro', flowId: 'intro', box: { x: 0, y: 0, width: 100, height: growthMaxHeight }, growthMaxHeight, state: 'partial' }],
+    slots: [slot],
+    lines: [{ blockId: 'intro-content', flowId: 'intro', slotId: slot.id, page: 1, text: 'intro', box: { x: 0, y: 0, width: 100, height: Math.min(occupiedHeight, growthMaxHeight) }, routeIndex: 0, naturalWidth: 20, startWord: 0, endWord: 1 }],
     spacing: {
       pages: [],
       slots: [{ page: 1, slotId: 'intro', regionId: 'intro', flowId: 'intro', box: { x: 0, y: 0, width: 100, height: growthMaxHeight }, occupiedHeight, remainingHeight: growthMaxHeight - occupiedHeight, gapBefore: 0, gapAfter: growthMaxHeight - occupiedHeight }],
@@ -73,15 +96,27 @@ function fitContentPlan(growthMaxHeight, occupiedHeight) {
 }
 
 function conflictingInsertionPlan(metrics) {
+  const insertion = (blockId) => ({
+    id: `graphic:${blockId}`,
+    graphicId: `insertion:${blockId}`,
+    slotId: blockId,
+    page: 1,
+    shape: 'rectangle',
+    wrap: 'around',
+    box: { x: 40, y: blockId === 'quote-a' ? 30 : 60, width: 20, height: 10 },
+  });
+  const graphicPlacements = [insertion('quote-a'), insertion('quote-b')];
   return {
     ...basePlan(),
+    slots: graphicPlacements.map((graphic) => ({ id: graphic.slotId, page: 1, regionId: 'body', kind: 'graphic', box: graphic.box, state: 'open' })),
+    graphicPlacements,
     spacing: {
       pages: [],
       slots: [],
       textPlacements: [],
       observations: [
-        { kind: 'insertion-rhythm', page: 1, regionId: 'body', slotId: 'quote-a', metrics, profile: 'normal' },
-        { kind: 'insertion-rhythm', page: 1, regionId: 'body', slotId: 'quote-b', metrics, profile: 'normal' },
+        { kind: 'insertion-rhythm', page: 1, regionId: 'body', slotId: 'quote-a', blockId: 'quote-a', graphicId: 'insertion:quote-a', metrics, profile: 'normal' },
+        { kind: 'insertion-rhythm', page: 1, regionId: 'body', slotId: 'quote-b', blockId: 'quote-b', graphicId: 'insertion:quote-b', metrics, profile: 'normal' },
       ],
     },
   };

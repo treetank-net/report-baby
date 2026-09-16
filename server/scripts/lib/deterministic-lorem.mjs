@@ -1,38 +1,55 @@
 import { LoremIpsum } from 'lorem-ipsum';
 
-/**
- * Create a repeatable lorem-ipsum generator for fixtures.
- *
- * Tests should use generated prose rather than repeating one token: word
- * lengths and punctuation exercise wrapping while the seeded PRNG keeps the
- * expected page geometry stable between runs.
- */
-/**
- * @test-decision plan-fixture-or-assertion
- * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
- */
+/** Create repeatable natural-language filler for planning and rendering tests. */
 export function createDeterministicLorem(seed = 0x6d2b79f5) {
-  let state = seed | 0;
   return new LoremIpsum({
     random: () => {
-      state = (Math.imul(state ^ (state >>> 15), 1 | state) + 0x6d2b79f5) | 0;
-      return ((state ^ (state >>> 7)) >>> 0) / 0x100000000;
+      seed = (Math.imul(seed ^ (seed >>> 15), 1 | seed) + 0x6d2b79f5) | 0;
+      return ((seed ^ (seed >>> 7)) >>> 0) / 0x100000000;
     },
   });
 }
 
-/**
- * @test-decision plan-fixture-or-assertion
- * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
- */
+/** Generate deterministic natural-language words for a fixture. */
 export function loremWords(lorem, count) {
   return lorem.generateWords(count);
 }
 
+/** Generate a heading/title-sized word sequence with a sentence-case start. */
+export function loremHeading(lorem, count) {
+  const text = loremWords(lorem, count);
+  return text.length === 0 ? text : `${text[0].toUpperCase()}${text.slice(1)}`;
+}
+
 /**
- * @test-decision plan-fixture-or-assertion
- * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ * Generate a deterministic paragraph with sentence boundaries while keeping
+ * the requested word count exact. The lorem-ipsum package's word generator is
+ * intentionally punctuation-free; using it directly for paragraph blocks
+ * makes every block look like one sentence fragment when it is rendered.
  */
+export function loremParagraph(lorem, count) {
+  const words = loremWords(lorem, count).split(/\s+/u).filter(Boolean);
+  if (words.length === 0) return '';
+  const sentenceLengths = [10, 12, 9, 11, 8, 13, 10];
+  const sentences = [];
+  let offset = 0;
+  let sentenceIndex = 0;
+  while (offset < words.length) {
+    const remaining = words.length - offset;
+    const preferredLength = sentenceLengths[sentenceIndex % sentenceLengths.length];
+    const length = remaining <= preferredLength + 3
+      ? remaining
+      : preferredLength;
+    const sentence = words.slice(offset, offset + length);
+    sentence[0] = `${sentence[0][0].toUpperCase()}${sentence[0].slice(1)}`;
+    sentences.push(`${sentence.join(' ')}.`);
+    offset += length;
+    sentenceIndex += 1;
+  }
+  return sentences.join(' ');
+}
+
+/** Generate deterministic natural-language sentences for a fixture. */
 export function loremSentence(lorem, lowerBound = 8, upperBound = 14) {
   return lorem.generateSentences(1, lowerBound, upperBound);
 }

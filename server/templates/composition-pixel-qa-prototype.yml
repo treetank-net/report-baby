@@ -69,7 +69,7 @@ numbered_flow:
   obstacles:
     - { id: quote-a, x: 5, y: 28, width: 90, height: 10 }
     - { id: quote-b, x: 5, y: 63, width: 90, height: 10 }
-  expected_words: 1000
+  expected_words: 1500
   expected_pages_with_obstacles: [1, 2]
   expected_zones:
     - { id: left-before-a, x: 5, y: 2, width: 40, height: 26 }

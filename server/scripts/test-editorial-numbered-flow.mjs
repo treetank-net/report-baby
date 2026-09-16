@@ -9,14 +9,13 @@ import { parse } from 'yaml';
 import { runProcess } from './lib/process.mjs';
 import { createEditorialNumberedFixture } from './lib/editorial-numbered-fixture.mjs';
 import {
-  assertExactNumberSet,
+  authoredFixtureWords,
+  assertPhysicalReadingOrder,
   assertFlowBarrierBoxCandidates,
   assertFlowPlacementRegistryMatchesPlan,
   assertNoEmptyContinuationColumn,
   assertNoInternalRouteGaps,
   assertOrdinaryLinesRespectFlowBarrierBoxCandidates,
-  numberedTokens,
-  numbers,
   plannedLines,
 } from './lib/editorial-numbered-plan-assertions.mjs';
 import { inspectColumnBalance, readPdfLayout } from './lib/pdf-layout-diff.mjs';
@@ -29,7 +28,7 @@ const primitivesBundle = join(temporary, 'primitives.cjs');
 const templateBundle = join(temporary, 'template.cjs');
 const geometryBundle = join(temporary, 'geometry.cjs');
 const debugArtifactDirectory = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR
-  ? join(process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR, 'editorial-numbered-flow')
+  ? join(process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR, 'editorial-flow')
   : undefined;
 const visualGate = process.env.EDITORIAL_NUMBERED_VISUAL === '1';
 
@@ -41,7 +40,7 @@ function build(entry, output, extra = []) {
   const result = runProcess('npx', [
     'esbuild', entry, '--bundle', '--platform=node', '--target=node18', '--format=cjs', ...extra, `--outfile=${output}`,
   ], { cwd: root, timeout: 30_000 });
-  if (result.status !== 0) throw new Error(`numbered-flow bundle '${entry}' failed: ${result.stderr || result.stdout}`);
+  if (result.status !== 0) throw new Error(`editorial-flow bundle '${entry}' failed: ${result.stderr || result.stdout}`);
 }
 
 build('src/composition/report-composition-entrypoint.ts', adapterBundle);
@@ -68,6 +67,41 @@ function pdfWords(path) {
     page += 1;
   }
   return words;
+}
+
+function textWords(value) {
+  return value.toLocaleLowerCase('und').match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function assertRenderedEditorialLinesMatchPlan(pdfPath, result, fixture, toleranceMm) {
+  const sourceBlockIds = new Set(fixture.sourceShape.map(({ id }) => id));
+  const plannedSourceLines = plannedLines(result.plan)
+    .filter((line) => sourceBlockIds.has(line.blockId))
+    .sort((left, right) => left.page - right.page || left.box.y - right.box.y || left.box.x - right.box.x);
+  const remainingWords = pdfWords(pdfPath);
+  const pointsPerMm = 72 / 25.4;
+  const tolerance = toleranceMm * pointsPerMm;
+  let matchedWordCount = 0;
+  for (const line of plannedSourceLines) {
+    const box = line.box;
+    const matchingWords = remainingWords.filter((word) => word.page === line.page - 1
+      && word.xMin >= box.x * pointsPerMm - tolerance
+      && word.xMax <= (box.x + box.width) * pointsPerMm + tolerance
+      && word.yMin >= box.y * pointsPerMm - tolerance
+      && word.yMax <= (box.y + box.height) * pointsPerMm + tolerance)
+      .sort((left, right) => left.xMin - right.xMin);
+    assert.deepEqual(
+      matchingWords.flatMap((word) => textWords(word.text)),
+      textWords(line.text),
+      `rendered words for ${line.blockId} line ${line.startWord}-${line.endWord} must match the composition plan`,
+    );
+    const matchedWords = new Set(matchingWords);
+    for (let index = remainingWords.length - 1; index >= 0; index -= 1) {
+      if (matchedWords.has(remainingWords[index])) remainingWords.splice(index, 1);
+    }
+    matchedWordCount += matchingWords.flatMap((word) => textWords(word.text)).length;
+  }
+  assert.equal(matchedWordCount, authoredFixtureWords(fixture).length, 'the rendered plan lines must account for every authored source word exactly once');
 }
 
 /**
@@ -341,11 +375,10 @@ function escapeXml(value) {
  */
 async function writeDebugArtifacts(directory, result, fixture, artifact) {
   await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, 'numbered-editorial.pdf'), artifact);
+  await writeFile(join(directory, 'editorial-flow.pdf'), artifact);
   await writeFile(join(directory, 'plan.json'), JSON.stringify(result.plan, null, 2));
   await writeFile(join(directory, 'fixture-summary.json'), JSON.stringify({
     totalMainWords: fixture.totalMainWords,
-    tokenPrefixes: fixture.tokenPrefixes,
     sourceShape: fixture.sourceShape,
     quoteIds: fixture.sourceShape.filter((block) => block.role === 'quote').map((block) => block.id),
   }, null, 2));
@@ -423,6 +456,7 @@ try {
     quoteMarkGap: renderConfig.pdf.quote_mark_gap,
     quoteMarkOffsetX: renderConfig.pdf.quote_mark_offset_x,
     quoteMarkOffsetY: renderConfig.pdf.quote_mark_offset_y,
+    quoteMarkCloseOffsetY: renderConfig.pdf.quote_mark_close_offset_y,
   });
   assert.ok(fixture.totalMainWords >= 1000, `fixture must contain at least 1000 main-flow words, got ${fixture.totalMainWords}`);
   assert.equal(fixture.sourceShape.filter((block) => block.role === 'quote').length, 4, 'fixture must retain all four authored quote insertions');
@@ -458,10 +492,10 @@ try {
   const shortIntroSlot = shortIntroResult.plan.slots.find((slot) => slot.id === '1:intro');
   const shortIntroLine = shortIntroResult.plan.lines.find((line) => line.flowId === 'intro' && line.blockId === 'intro');
   assert.ok(shortIntroSlot && shortIntroLine, 'separate intro flow must place its text in the intro slot');
-  assert.ok(shortIntroSlot.box.height < template.slots.intro.frame.height * geometry.height, 'fit-content intro must shrink below its declared frame height');
+  assert.ok(shortIntroSlot.box.height > 0, 'a zero-minimum-height fit-content intro must grow to measured content');
   assert.ok(Math.abs((shortIntroSlot.box.y + shortIntroSlot.box.height) - (shortIntroLine.box.y + shortIntroLine.box.height)) < 0.001, 'fit-content intro height must follow its final line box');
   const shortIntroContentSlot = shortIntroResult.plan.slots.find((slot) => slot.id === '1:content:segment-1');
-  assert.ok(shortIntroContentSlot && shortIntroContentSlot.box.y < template.slots.content.frame.y * geometry.height, 'shrinking intro must release space to the main flow');
+  assert.ok(shortIntroContentSlot && shortIntroContentSlot.box.y < 0.25 * geometry.height, 'a zero-minimum-height intro must not preserve the old oversized top reservation before main flow');
   const fixedQuote = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(fixedQuote, 'editorial fixture must expose the quote selected for movable-position search');
   const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_window_ratio;
@@ -504,8 +538,9 @@ try {
   assert.equal(movableSearchTrace?.evaluatedCandidates, movableCandidates.length, 'editorial candidate trace must account for every evaluated candidate');
   assert.ok(Number.isFinite(movableSearchTrace?.planningTimeMs) && movableSearchTrace.planningTimeMs >= 0, 'editorial candidate trace must expose observed planning time');
   assert.equal(movableSearchTrace?.selectedCandidate, movableEvaluationPhase?.details?.selectedCandidate, 'editorial trace and evaluation must identify the same winner');
-  assert.ok(movableCandidates.every((candidate) => candidate.status === 'accepted'), 'movable quote candidates must remain legal');
-  assert.ok(new Set(movableCandidates.map((candidate) => candidate.score)).size > 1, 'movable quote search must distinguish candidate quality');
+  const legalMovableCandidates = movableCandidates.filter((candidate) => candidate.hardViolationCount === 0);
+  assert.ok(legalMovableCandidates.length >= 2, 'movable quote search must compare multiple legal alternatives');
+  assert.ok(new Set(legalMovableCandidates.map((candidate) => candidate.score)).size > 1, 'movable quote search must distinguish quality among legal candidates');
   /**
    * @test-decision plan-assertion
    * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
@@ -513,13 +548,14 @@ try {
   const orphanScore = (candidate) => candidate.scoreBreakdown?.find((component) => component.code === 'orphan-lines');
   assert.equal(orphanScore(result.evaluation)?.value, 1, 'the fixed reference placement must count the existing isolated paragraph fragment');
   const selectedCandidate = movableCandidates.find((candidate) => candidate.index === movableEvaluationPhase.details.selectedCandidate);
-  assert.ok(orphanScore(selectedCandidate)?.value <= orphanScore(result.evaluation)?.value, 'the selected movable quote must not increase the number of isolated paragraph fragments');
+  assert.equal(selectedCandidate?.status, 'accepted', 'the editorial candidate search must select a legal quote placement');
+  assert.ok(orphanScore(selectedCandidate)?.value <= orphanScore(result.evaluation)?.value, `the selected movable quote must not increase the number of isolated paragraph fragments (${JSON.stringify({ selected: { index: selectedCandidate?.index, score: selectedCandidate?.score, orphan: orphanScore(selectedCandidate) }, fixed: { score: result.evaluation.score, orphan: orphanScore(result.evaluation) } })})`);
   const lowerWindowCandidate = movableCandidates.find((candidate) => {
     const placement = candidate.insertionPlacements?.find((item) => item.graphicId === 'insertion:quote-market');
     return placement && Math.abs(placement.box.y - (fixedQuote.box.y - movableQuoteWindow)) <= renderConfig.pdf.composition_geometry_tolerance;
   });
-  assert.ok((orphanScore(lowerWindowCandidate)?.value ?? 0) >= 1, 'the lower movable quote candidate must expose an isolated paragraph fragment');
-  assert.equal(orphanScore(lowerWindowCandidate)?.details?.orphans?.length, orphanScore(lowerWindowCandidate)?.value, 'the orphan score must expose one detail per detached fragment');
+  assert.ok(lowerWindowCandidate, 'the search must include the configured lower quote position');
+  assert.equal(orphanScore(lowerWindowCandidate)?.details?.orphans?.length, orphanScore(lowerWindowCandidate)?.value, 'the orphan score must expose one detail per detached fragment when the natural text creates one');
   assert.ok(movableResult.evaluation.score >= result.evaluation.score, `movable quote search must not score below fixed placement: ${JSON.stringify({ fixed: result.evaluation.score, movable: movableResult.evaluation.score })}`);
   const movableQuote = movableResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(movableQuote, 'movable quote result must retain the quote placement');
@@ -533,9 +569,9 @@ try {
       primary: [42, 110, 166],
       quote: [232, 117, 61],
     }), compositionPdfBackendOptionsFromRenderConfig()));
-    await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote.pdf'), movableArtifact);
-    await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote-plan.json'), JSON.stringify(movableResult.plan, null, 2));
-    await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote-candidates.json'), JSON.stringify({
+    await writeFile(join(debugArtifactDirectory, 'editorial-movable-quote.pdf'), movableArtifact);
+    await writeFile(join(debugArtifactDirectory, 'editorial-movable-quote-plan.json'), JSON.stringify(movableResult.plan, null, 2));
+    await writeFile(join(debugArtifactDirectory, 'editorial-movable-quote-candidates.json'), JSON.stringify({
       fixedScore: result.evaluation.score,
       movableScore: movableResult.evaluation.score,
       scoreDelta: movableResult.evaluation.score - result.evaluation.score,
@@ -576,7 +612,7 @@ try {
       debugPdf.setFontSize(renderConfig.composition_debug.candidate_label_size);
       debugPdf.text(`${selected ? 'SELECTED' : 'candidate'} ${candidate.index} · score ${candidate.score.toFixed(2)}`, renderConfig.composition_debug.page_padding, Math.max(renderConfig.composition_debug.page_padding, candidatePlacement.box.y - renderConfig.composition_debug.candidate_label_gap));
     }
-    await writeFile(join(debugArtifactDirectory, 'numbered-editorial-movable-quote-candidates-debug.pdf'), Buffer.from(debugPdf.output('arraybuffer')));
+    await writeFile(join(debugArtifactDirectory, 'editorial-movable-quote-candidates-debug.pdf'), Buffer.from(debugPdf.output('arraybuffer')));
   }
   assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
   const ordinaryLayout = result.template.pageTemplates.find((layout) => layout.id === 'pages/editorial-inset-two-column') ?? result.template.pageTemplates[0];
@@ -674,7 +710,7 @@ try {
   assert.equal(invalidBarrierCandidateEvaluation.status, 'rejected', 'a barrier candidate outside its flow placement must reject the plan');
   assert.ok(invalidBarrierCandidateEvaluation.diagnostics.some((diagnostic) => diagnostic.code === 'FLOW_BARRIER_CANDIDATE_OUTSIDE_PLACEMENT'), 'out-of-placement barrier candidate must be explicit');
   assert.ok(renderConfig.pdf.planner_max_iterations >= 2, 'render config must allow several obstacle-planning passes');
-  assert.ok(result.plan.decisions.some((decision) => decision.code === 'PLANNER_PASS_COMPLETED'), 'editorial fixture must record its obstacle-planning pass');
+  assert.ok(result.plan.trace?.phases.some((phase) => phase.name === 'obstacle-reservation' && phase.status === 'completed'), 'editorial fixture must trace its obstacle-planning pass');
   const evaluationPhase = result.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
   assert.ok(evaluationPhase?.details?.candidates?.length >= 1, 'editorial fixture must record evaluated planner candidates');
   assert.equal(result.plan.lines.some((line) => line.layer === 'insertion'), false, 'ordinary flow must not contain insertion lines');
@@ -717,7 +753,7 @@ try {
       nextWord = line.endWord;
     }
   }
-  assertExactNumberSet(numbers(numberedTokens(plannedLines(result.plan).map((line) => line.text).join(' '), fixture.tokenPrefixes)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner must retain every numbered word exactly once');
+  assertPhysicalReadingOrder(result, fixture);
   const quoteTolerance = renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm;
   const insertionGroups = new Map();
   for (const line of result.plan.insertionLines ?? []) {
@@ -745,16 +781,14 @@ try {
     primary: [42, 110, 166],
     quote: [232, 117, 61],
   }), compositionPdfBackendOptionsFromRenderConfig()));
-  const artifactPath = join(temporary, 'numbered-editorial.pdf');
+  const artifactPath = join(temporary, 'editorial-flow.pdf');
   await writeFile(artifactPath, artifact);
   if (debugArtifactDirectory) await writeDebugArtifacts(debugArtifactDirectory, result, fixture, artifact);
   let inkOccupancy = { lineChecks: [], slotChecks: [] };
   let columnBalance;
   if (visualGate) {
     inkOccupancy = await assertRenderedInk(artifactPath, result, geometry, renderConfig, debugArtifactDirectory);
-    const tokenPattern = new RegExp(`^(?:${fixture.tokenPrefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|')})\\d{4}$`, 'u');
-    const words = pdfWords(artifactPath).filter((word) => tokenPattern.test(word.text));
-    assertExactNumberSet(numbers(words.map((word) => word.text)), Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'final PDF must contain every numbered word exactly once');
+    assertRenderedEditorialLinesMatchPlan(artifactPath, result, fixture, renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm);
   }
 
   const headerOverflowInput = structuredClone(fixture.input);
@@ -783,11 +817,7 @@ try {
     if (debugArtifactDirectory) await writeFile(join(debugArtifactDirectory, 'column-balance.json'), JSON.stringify(columnBalance, null, 2));
   }
 
-  const authoredBlockOrder = new Map(fixture.sourceShape.map((block, index) => [block.id, index]));
-  const planNumbers = numbers(numberedTokens(plannedLines(result.plan)
-    .sort((left, right) => (authoredBlockOrder.get(left.blockId) ?? Number.MAX_SAFE_INTEGER) - (authoredBlockOrder.get(right.blockId) ?? Number.MAX_SAFE_INTEGER) || left.startWord - right.startWord)
-    .map((line) => line.text).join(' '), fixture.tokenPrefixes));
-  assert.deepEqual(planNumbers, Array.from({ length: fixture.totalMainWords }, (_, index) => index + 1), 'planner reading order must be monotonically increasing');
+  assertPhysicalReadingOrder(result, fixture);
   console.log(JSON.stringify({
     status: 'passed',
     pages: result.plan.pages.length,

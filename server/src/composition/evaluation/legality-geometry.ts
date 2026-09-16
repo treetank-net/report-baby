@@ -30,6 +30,12 @@ export function fitsInside(inner: RectLike, outer: RectLike): boolean {
     && inner.y + inner.height <= outer.y + outer.height + tolerance;
 }
 
+/** Return the precision threshold used when testing rectangle overlap. */
+export function overlapTolerance(a: RectLike, b: RectLike): number {
+  const scale = Math.max(1, Math.abs(a.x), Math.abs(a.y), Math.abs(a.width), Math.abs(a.height), Math.abs(b.x), Math.abs(b.y), Math.abs(b.width), Math.abs(b.height));
+  return Number.EPSILON * scale * 32;
+}
+
 /** Determine whether two boxes overlap using evaluator precision. */
 /**
  * @planner-target composition/evaluation/legality-geometry.ts
@@ -38,9 +44,24 @@ export function fitsInside(inner: RectLike, outer: RectLike): boolean {
 export function overlaps(a: RectLike, b: RectLike): boolean {
   const horizontal = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
   const vertical = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
-  const scale = Math.max(1, Math.abs(a.x), Math.abs(a.y), Math.abs(a.width), Math.abs(a.height), Math.abs(b.x), Math.abs(b.y), Math.abs(b.width), Math.abs(b.height));
-  const precision = Number.EPSILON * scale * 32;
+  const precision = overlapTolerance(a, b);
   return horizontal > precision && vertical > precision;
+}
+
+/** Return the exact wrapping-graphic intervals intersected by a text line, with the precision used. */
+export function lineGraphicOverlapEvidence(
+  line: CompositionPlan['lines'][number],
+  graphic: CompositionPlan['graphicPlacements'][number],
+): { blockedIntervals: Array<{ start: number; end: number }>; intersections: Array<{ start: number; end: number; tolerance: number }> } | undefined {
+  const blockedIntervals = graphicIntervalsForLine(graphic, line.box.y, line.box.height);
+  const intersections = blockedIntervals.flatMap((interval) => {
+    const start = Math.max(line.box.x, interval.start);
+    const end = Math.min(line.box.x + line.box.width, interval.end);
+    const scale = Math.max(1, Math.abs(line.box.x), Math.abs(line.box.width), Math.abs(interval.start), Math.abs(interval.end));
+    const tolerance = Number.EPSILON * scale * 32;
+    return end - start > tolerance ? [{ start, end, tolerance }] : [];
+  });
+  return intersections.length > 0 ? { blockedIntervals, intersections } : undefined;
 }
 
 /** Determine whether a text line enters the painted interval of a wrapping graphic. */

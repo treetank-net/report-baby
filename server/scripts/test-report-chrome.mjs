@@ -125,15 +125,15 @@ try {
     template_ref: 'pages/editorial-two-column',
     brand_ref: 'brand://orbit/primary',
     data: { flows: {
-      header: { continuation: 'forbidden', blocks: [
+      header: { blocks: [
         { type: 'heading', role: 'header', text: 'CHROME_HEADER_ANCHOR' },
         { type: 'text', role: 'header', text: 'CHROME_HEADER_SUBTITLE' },
       ] },
-      main: { continuation: 'allowed', blocks: [
+      main: { blocks: [
         { type: 'heading', role: 'heading', text: 'MAIN_HEADING_ANCHOR', keep_with_next_lines: 1 },
         { type: 'text', role: 'body', text: body },
       ] },
-      footer: { continuation: 'forbidden', blocks: [{ type: 'text', role: 'footer', text: 'CHROME_FOOTER_ANCHOR' }] },
+      footer: { blocks: [{ type: 'text', role: 'footer', text: 'CHROME_FOOTER_ANCHOR' }] },
     } },
   }, outputPath, brandStore);
 
@@ -193,12 +193,12 @@ try {
     template_ref: 'pages/editorial-dynamic-chrome',
     brand_ref: 'brand://orbit/primary',
     data: { flows: {
-      header: { continuation: 'forbidden', blocks: [
+      header: { blocks: [
         { type: 'lockup', id: 'dynamic-lockup', role: 'header', lockup: { mark_asset_id: 'header-mark', label: 'Orbit Logistics' } },
         { type: 'text', role: 'header', text: 'DYNAMIC_HEADER_ANCHOR with a deliberately long title that wraps inside the fit-content header.' },
       ] },
-      main: { continuation: 'allowed', blocks: [{ type: 'text', role: 'body', text: Array.from({ length: 260 }, (_, index) => `dynamic${index}`).join(' ') }] },
-      footer: { continuation: 'forbidden', blocks: [] },
+      main: { blocks: [{ type: 'text', role: 'body', text: Array.from({ length: 260 }, (_, index) => `dynamic${index}`).join(' ') }] },
+      footer: { blocks: [] },
     }, assets: [{ id: 'header-mark', source: 'brand://orbit/releases/chrome-test/brand/assets/logos/logo-mark.svg' }] },
   }, dynamicOutputPath, brandStore, false);
   assert.equal(dynamicRendered.result.compositionEvaluation.status, 'accepted', JSON.stringify(dynamicRendered.result.compositionEvaluation));

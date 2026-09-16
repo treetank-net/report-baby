@@ -273,7 +273,15 @@ function placementsForComponent(
   }
   if (component.code === 'header-spacing' && isRecord(component.details) && Array.isArray(component.details.pages)) {
     for (const pageRecord of component.details.pages) {
-      if (isRecord(pageRecord) && finiteNumber(pageRecord.page)) {
+      if (!isRecord(pageRecord) || !finiteNumber(pageRecord.page)) continue;
+      let pairPlacements = 0;
+      for (const subject of [pageRecord.from, pageRecord.to]) {
+        if (!isRecord(subject)) continue;
+        const matches = matchingPlacements(index, { page: pageRecord.page, ...subject });
+        for (const placement of matches) affected.add(placement);
+        pairPlacements += matches.length;
+      }
+      if (pairPlacements === 0) {
         for (const placement of index.byPage.get(pageRecord.page) ?? []) affected.add(placement);
       }
     }

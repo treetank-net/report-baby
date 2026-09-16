@@ -1,13 +1,13 @@
-import { LoremIpsum } from 'lorem-ipsum';
+import { createDeterministicLorem, loremHeading, loremParagraph } from './deterministic-lorem.mjs';
 
 /**
  * Large editorial-flow fixture.
  *
  * The shape mirrors the source article's semantic sequence: introductory
  * paragraphs, seven headings, body paragraphs, and four authored quotes. The
- * counts are source word counts; body paragraphs are deliberately expanded by
- * 1.4x so the fixture exercises continuation pages rather than only fitting a
- * short smoke-test page.
+ * counts are source word counts. The opening section is expanded enough to
+ * span the first page in natural Lorem Ipsum; later paragraphs retain a lower
+ * expansion so the fixture covers several continuation pages without markers.
  */
 const SOURCE_SHAPE = [
   ['intro-1', 'intro', 'paragraph', 2],
@@ -52,64 +52,50 @@ const SOURCE_SHAPE = [
 ];
 
 const TITLE_WORDS = 12;
-const BODY_SCALE = 1.4;
+const INTRO_SCALE = 1.4;
+const BODY_SCALE = 2.2;
+const OPENING_SECTION_SCALE = 5;
 /**
  * @test-decision plan-fixture-or-assertion
  * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
  */
-function createLoremGenerator() {
-  let seed = 0x6d2b79f5;
-  return new LoremIpsum({
-    random: () => {
-      seed = (Math.imul(seed ^ (seed >>> 15), 1 | seed) + 0x6d2b79f5) | 0;
-      return ((seed ^ (seed >>> 7)) >>> 0) / 0x100000000;
-    },
-  });
+/**
+ * @test-decision plan-fixture-or-assertion
+ * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
+ */
+function editorialParagraphText(count, lorem) {
+  return loremParagraph(lorem, count);
 }
 
 /**
  * @test-decision plan-fixture-or-assertion
  * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
  */
-function nextToken(state, word) {
-  const number = state.next;
-  state.next += 1;
-  return `${word.toLowerCase()}${String(number).padStart(4, '0')}`;
+function countFor(id, role, kind, sourceWords) {
+  if (kind !== 'paragraph') return sourceWords;
+  const scale = role === 'intro'
+    ? INTRO_SCALE
+    : id.startsWith('body-market-') ? OPENING_SECTION_SCALE : BODY_SCALE;
+  return Math.ceil(sourceWords * scale);
 }
 
 /**
  * @test-decision plan-fixture-or-assertion
  * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
  */
-function numberedText(count, state, lorem) {
-  return lorem.generateWords(count).split(/\s+/u).map((word) => nextToken(state, word)).join(' ');
-}
-
-/**
- * @test-decision plan-fixture-or-assertion
- * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
- */
-function countFor(kind, sourceWords) {
-  return kind === 'paragraph' ? Math.ceil(sourceWords * BODY_SCALE) : sourceWords;
-}
-
-/**
- * @test-decision plan-fixture-or-assertion
- * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
- */
-export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX, quoteMarkOffsetY, illustration }) {
-  const state = { next: 1 };
-  const lorem = createLoremGenerator();
+export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX, quoteMarkOffsetY, quoteMarkCloseOffsetY, illustration }) {
+  const lorem = createDeterministicLorem();
   const blocks = SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({
     id,
     type: kind === 'heading' ? 'heading' : 'text',
     role,
     ...(kind === 'heading' ? { level: 1, keep_with_next_lines: 3 } : {}),
-    text: numberedText(countFor(kind, sourceWords), state, lorem),
+    text: kind === 'heading'
+      ? loremHeading(lorem, countFor(id, role, kind, sourceWords))
+      : editorialParagraphText(countFor(id, role, kind, sourceWords), lorem),
   }));
-  const totalMainWords = state.next - 1;
-  const title = numberedText(TITLE_WORDS, state, lorem);
-  const tokenPrefixes = [...new Set(blocks.flatMap((block) => block.text.split(/\s+/u).map((token) => token.replace(/\d{4}$/u, ''))))];
+  const totalMainWords = blocks.reduce((sum, block) => sum + block.text.trim().split(/\s+/u).filter(Boolean).length, 0);
+  const title = loremHeading(lorem, TITLE_WORDS);
   const introBlocks = blocks.filter((block) => block.role === 'intro');
   const quoteBlocks = blocks.filter((block) => block.role === 'quote');
   const mainBlocks = blocks.filter((block) => block.role !== 'intro' && block.role !== 'quote');
@@ -147,8 +133,8 @@ export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX,
       anchor: 'text-end',
       target_mode: 'last-line',
       offset_x: quoteMarkGap + quoteMarkOffsetX,
-      offset_y: quoteMarkOffsetY,
-      clamp_to_target: true,
+      offset_y: quoteMarkCloseOffsetY,
+      clamp_to_target: false,
     },
   ]);
   return {
@@ -160,25 +146,24 @@ export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX,
         header: {
           continuation: 'forbidden',
           blocks: [
-            { id: 'header-title', type: 'heading', role: 'header', text: 'Editorial numbered-flow fixture' },
+            { id: 'header-title', type: 'heading', role: 'header', text: 'Editorial flow quality fixture' },
             { id: 'header-meta', type: 'text', role: 'header', text: 'Layout integrity test' },
           ],
         },
         footer: {
           continuation: 'forbidden',
-          blocks: [{ id: 'footer', type: 'text', role: 'footer', text: 'Numbered-flow fixture' }],
+          blocks: [{ id: 'footer', type: 'text', role: 'footer', text: 'Editorial quality fixture' }],
         },
       },
       ...(illustration ? { assets: [illustration.asset] } : {}),
       glyphs,
     },
     title,
-    sourceShape: SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({ id, role, kind, sourceWords, words: countFor(kind, sourceWords) })),
+    sourceShape: SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({ id, role, kind, sourceWords, words: countFor(id, role, kind, sourceWords) })),
     totalMainWords,
     ordinaryWordCount: [...introBlocks, ...mainBlocks].reduce((sum, block) => sum + block.text.split(/\s+/u).length, 0),
     quoteWordCount: quoteBlocks.reduce((sum, block) => sum + block.text.split(/\s+/u).length, 0),
     totalWordsIncludingTitle: totalMainWords + TITLE_WORDS,
-    tokenPrefixes,
     illustration: illustration ? {
       blockId: illustration.blockId,
       assetId: illustration.assetId,
