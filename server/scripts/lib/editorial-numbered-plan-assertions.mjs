@@ -160,8 +160,8 @@ export function assertFlowPlacementRegistryMatchesPlan(result) {
     assert.equal(placement.lineCount, lines.length, `flow placement ${placement.id} lineCount must match its actual lines`);
     assert.deepEqual(placement.blockIds, blockIds, `flow placement ${placement.id} must identify its actual blocks`);
     assert.ok(Number.isFinite(placement.box.x) && Number.isFinite(placement.box.y)
-      && placement.box.width > 0 && placement.box.height > 0,
-    `flow placement ${placement.id} must expose usable geometry`);
+      && placement.box.width > 0 && (placement.box.height > 0 || placement.state === 'exhausted' && placement.hasContent === false),
+    `flow placement ${placement.id} must expose usable geometry or an exhausted zero-height fit-content capacity`);
     assert.ok(lines.every((line) => line.routeIndex === undefined || line.routeIndex === placement.routeIndex), `flow placement ${placement.id} must own all routed lines from its route index`);
   }
 }
@@ -212,11 +212,17 @@ export function assertQuoteFlowOwnership(result, fixture, renderConfig) {
  */
 export function assertEditorialTemplateContract(result) {
   assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
-  const ordinaryLayout = result.template.pageTemplates.find((layout) => layout.id === 'pages/editorial-inset-two-column') ?? result.template.pageTemplates[0];
+  const ordinaryLayout = result.template.pageTemplates[0];
   const ordinaryRoute = result.template.routes.main.slots;
   assert.equal(ordinaryRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');
   assert.equal(result.template.routes.main.insertionSlots, undefined, 'main flow must not own quote insertions');
-  assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b', 'quote-c'], 'quotes must be declared as a separate obstacle flow with three per-page insertion slots');
+  const quoteInsertionSlots = result.template.routes.quotes.insertionSlots ?? [];
+  assert.equal(quoteInsertionSlots.length, 3, 'quotes must be declared as a separate obstacle flow with three materialized per-page insertion slots');
+  assert.ok(quoteInsertionSlots.every((slotId) => slotId.startsWith('quote-pool#')), 'quotes must use one reusable fluid capability rather than authored static slot positions');
+  const quoteCapability = result.template.pageTemplates.flatMap((layout) => layout.slots)
+    .find((slot) => slot.id === 'quote-pool' || slot.id.startsWith('quote-pool#'));
+  assert.equal(quoteCapability?.placement?.mode, 'fluid-y', 'quote capability must allow planner-controlled vertical placement');
+  assert.equal(quoteCapability?.placement?.maxInstancesPerPage, 3, 'quote capability must expose its per-page capacity');
   assert.deepEqual(result.template.routes.intro.slots, ['intro'], 'intro Markdown image and lead must share a dedicated flow');
   assert.equal(result.template.routes.chart, undefined, 'editorial inset template must not reserve a chart section');
 }

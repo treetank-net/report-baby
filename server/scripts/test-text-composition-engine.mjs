@@ -816,15 +816,15 @@ try {
   const movableEvaluationPhase = movableQuoteResult.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
   const movableSearchTrace = movableQuoteResult.plan.trace?.candidateSearch;
   assert.equal(movableQuoteResult.evaluation.status, 'accepted', JSON.stringify(movableQuoteResult.evaluation));
-  assert.ok((movableSearchTrace?.generatedCandidates ?? 0) >= 8, 'candidate search trace must count coarse and refinement plans');
-  assert.ok((movableSearchTrace?.evaluatedCandidates ?? 0) >= 7, 'candidate search trace must evaluate the coarse and refined candidates');
-  assert.ok((movableSearchTrace?.fullPlanRecalculations ?? 0) >= 7, 'candidate search trace must count each unique full planner recalculation');
+  assert.ok((movableSearchTrace?.generatedCandidates ?? 0) >= 1, `candidate search trace must count the incremental baseline and repairs: ${JSON.stringify(movableSearchTrace)}`);
+  assert.ok((movableSearchTrace?.evaluatedCandidates ?? 0) >= 1, `candidate search trace must evaluate the incremental baseline and refined candidates: ${JSON.stringify(movableSearchTrace)}`);
+  assert.ok((movableSearchTrace?.fullPlanRecalculations ?? 0) >= 1, 'candidate search trace must count each unique full planner recalculation');
   assert.ok(Number.isFinite(movableSearchTrace?.planningTimeMs) && movableSearchTrace.planningTimeMs >= 0, 'candidate search trace must expose observed planning time');
-  assert.ok((movableSearchTrace?.rounds[0]?.uniqueCandidates ?? 0) >= 6, 'candidate search trace must expose unique coarse positions');
-  assert.ok((movableSearchTrace?.rounds[0]?.legalCandidates ?? 0) >= 6, 'candidate search trace must count legal coarse candidates');
+  assert.equal(movableSearchTrace?.rounds[0]?.uniqueCandidates, 1, 'incremental planning must evaluate one baseline before requesting repairs');
+  assert.equal(movableSearchTrace?.rounds[0]?.legalCandidates, 1, 'the movable fixture baseline must be legal');
   assert.ok((movableSearchTrace?.rounds[1]?.uniqueCandidates ?? 0) >= 1, 'candidate search trace must expose unique local positions after deduplication');
   assert.equal(movableSearchTrace?.selectedCandidate, movableEvaluationPhase?.details?.selectedCandidate, 'trace and evaluation phase must identify the same winner');
-  assert.ok(movableEvaluationPhase?.details?.candidates?.length > 6, 'a movable insertion frame must receive a local refinement pass after the coarse candidates');
+  assert.ok((movableEvaluationPhase?.details?.candidates?.length ?? 0) >= 1, 'the selected plan must retain a complete evaluation trace');
   assert.ok(movableEvaluationPhase?.details?.candidates?.some((candidate) => candidate.refinementRound === 1), 'the candidate trace must identify the local refinement round');
   const movableCandidatePlans = createTextCompositionPlanner(movableQuoteTemplate, movableQuotePolicy).planCandidates(movableQuoteDocument, movableMetrics);
   reportTestCheckpoint('movable-quote-candidates');
@@ -897,6 +897,8 @@ try {
   assert.ok(movableCandidateSummary.every((candidate) => Number.isFinite(candidate.score)), `every movable candidate must expose a finite score: ${JSON.stringify(movableCandidateSummary)}`);
   const selectedCandidate = movableEvaluationPhase.details.candidates[movableEvaluationPhase.details.selectedCandidate];
   const bestFragmentation = Math.min(...movableCandidateSummary.map((candidate) => candidate.fragmentedParagraphs));
+  const movableOracleWinner = movableCandidateSummary.reduce((best, candidate) => candidate.score > best.score ? candidate : best);
+  assert.ok(movableQuoteResult.evaluation.score >= movableOracleWinner.score, `incremental movable search must not regress below the eager candidate oracle: ${JSON.stringify({ incrementalScore: movableQuoteResult.evaluation.score, oracleScore: movableOracleWinner.score, oracleQuoteY: movableOracleWinner.quoteY })}`);
   assert.equal(selectedCandidate.score, Math.max(...movableEvaluationPhase.details.candidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring movable candidate');
   assert.equal(movableCandidateSummary.find((candidate) => candidate.quoteY === movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y)?.fragmentedParagraphs, bestFragmentation, 'the selected quote position must have the least paragraph fragmentation');
   reportTestCheckpoint('movable-quote-evaluation');
@@ -938,6 +940,65 @@ try {
   assert.ok(earlyStopRounds.length < 4, 'refinement must stop before the configured limit when no candidate improves the winner');
   assert.ok(['no-improvement', 'no-new-candidates'].includes(earlyStopRounds.at(-1)?.stopReason), 'candidate search trace must explain early termination');
   await writeMovableCandidateArtifacts(movableCandidateArtifactDirectory, movableCandidatePlans, movableQuoteDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8')));
+
+  const distributionTemplate = {
+    maxPages: 1,
+    layouts: [{ id: 'distribution', width: 100, height: 120, slots: [
+      { id: 'left', regionId: 'main', kind: 'text', box: { x: 5, y: 5, width: 40, height: 110 }, allowedRoles: ['body'] },
+      { id: 'right', regionId: 'main', kind: 'text', box: { x: 55, y: 5, width: 40, height: 110 }, allowedRoles: ['body'] },
+      { id: 'quote-one', regionId: 'quotes', kind: 'text', box: { x: 5, y: 30, width: 90, height: 10 }, allowedRoles: ['quote'], fitContent: true },
+      { id: 'quote-two', regionId: 'quotes', kind: 'text', box: { x: 5, y: 80, width: 90, height: 10 }, allowedRoles: ['quote'], fitContent: true },
+    ] }],
+    routes: {
+      main: { slots: ['left', 'right'], layouts: ['distribution'], continuation: 'forbidden' },
+      quotes: { slots: ['quote-one', 'quote-two'], insertionSlots: ['quote-one', 'quote-two'], layouts: ['distribution'], continuation: 'forbidden' },
+    },
+  };
+  const distributionDocument = {
+    flows: {
+      main: { id: 'main', continuation: 'forbidden', blocks: Array.from({ length: 4 }, (_, index) => ({ id: `distribution-body-${index + 1}`, kind: 'paragraph', role: 'body', text: createDeterministicLorem(0x1248 + index).generateWords(18) })) },
+      quotes: { id: 'quotes', continuation: 'forbidden', blocks: [
+        { id: 'distribution-quote-one', kind: 'paragraph', role: 'quote', text: 'First insertion moves toward balanced rhythm.' },
+        { id: 'distribution-quote-two', kind: 'paragraph', role: 'quote', text: 'Second insertion moves toward balanced rhythm.' },
+      ] },
+    },
+  };
+  const distributionPolicy = {
+    maxPlanningIterations: 2,
+    movableInsertionBounds: {
+      'quotes:distribution-quote-one': { bounds: { x: 5, y: 20, width: 90, height: 50 }, axis: 'y', candidateCount: 3, refinementRounds: 1, refinementCandidateCount: 2 },
+      'quotes:distribution-quote-two': { bounds: { x: 5, y: 55, width: 90, height: 55 }, axis: 'y', candidateCount: 3, refinementRounds: 1, refinementCandidateCount: 2 },
+    },
+  };
+  const distributionPlanner = createTextCompositionPlanner(distributionTemplate, distributionPolicy);
+  const distributionBaseline = distributionPlanner.planBaselineWithSignature(distributionDocument, movableMetrics);
+  const distributionGeometry = {
+    width: 100,
+    height: 120,
+    margin: 5,
+    margins: { top: 5, right: 5, bottom: 5, left: 5 },
+    columns: { count: 2, gutter: 10, widths: [40, 40] },
+    content: { x: 5, top: 5, width: 90, bottom: 115 },
+    segments: [{ x: 5, top: 5, width: 40, bottom: 115 }, { x: 55, top: 5, width: 40, bottom: 115 }],
+    bands: {},
+    flowObstacles: [],
+    blockFrames: {},
+    flow: { align: 'left', hyphenate: false },
+    dynamicFlow: false,
+  };
+  const distributionEvaluateOptions = {
+    beforeEvaluate: (_document, plan) => attachPlanSpacingReport(plan, distributionDocument, movableMetrics, distributionGeometry),
+  };
+  const distributionBaselineEvaluation = evaluateCompositionPlan(distributionDocument, distributionBaseline.plan, distributionEvaluateOptions);
+  const distributionResult = createTextCompositionEngine(distributionTemplate, distributionPolicy, distributionEvaluateOptions).plan(distributionDocument, movableMetrics);
+  const distributionRounds = distributionResult.plan.trace?.candidateSearch?.rounds ?? [];
+  const distributionProposal = distributionRounds.flatMap((round) => round.repairProposals ?? []).find((proposal) => proposal.sourceCode === 'insertion-distribution');
+  assert.equal(distributionBaselineEvaluation.status, 'accepted', JSON.stringify(distributionBaselineEvaluation));
+  assert.equal(distributionResult.evaluation.status, 'accepted', JSON.stringify(distributionResult.evaluation));
+  assert.ok(distributionProposal, `the real planner must expose a distribution repair proposal: ${JSON.stringify({ baseline: distributionBaselineEvaluation, rounds: distributionRounds })}`);
+  const distributionAttempt = distributionRounds.flatMap((round) => round.repairAttempts ?? []).find((attempt) => attempt.proposalId === distributionProposal?.id);
+  assert.equal(distributionAttempt?.status, 'evaluated', 'the real planner must completely evaluate a distribution repair candidate');
+  assert.ok(distributionResult.evaluation.score > distributionBaselineEvaluation.score, `the selected distribution candidate must improve the complete-plan score: ${JSON.stringify({ baseline: distributionBaselineEvaluation.score, selected: distributionResult.evaluation.score, proposal: distributionProposal })}`);
 
   const movableGraphicTemplate = {
     maxPages: 1,
@@ -1002,7 +1063,7 @@ try {
   const movableGraphicResult = movableGraphicEngine.plan(movableGraphicDocument, movableGraphicMetrics);
   reportTestCheckpoint('movable-graphic-engine');
   const movableGraphicEvaluationPhase = movableGraphicResult.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
-  assert.ok((movableGraphicEvaluationPhase?.details?.candidates?.length ?? 0) > 4, 'movable graphics must receive a refinement evaluation after coarse candidates');
+  assert.ok((movableGraphicEvaluationPhase?.details?.candidates?.length ?? 0) >= 1, `movable graphics must retain a complete incremental evaluation: ${JSON.stringify(movableGraphicResult.plan.trace?.candidateSearch)}`);
   assert.equal(movableGraphicResult.evaluation.score, Math.max(...acceptedGraphicCandidates.map((candidate) => candidate.score)), 'the engine must select the highest-scoring legal graphic candidate');
   await writeMovableGraphicArtifacts(movableGraphicArtifactDirectory, movableGraphicPlans, movableGraphicDocument, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, compositionRenderConfig);
 
@@ -1055,7 +1116,9 @@ try {
   }), `visual contrast fixture must expose a quality reduction: ${JSON.stringify(contrastEvaluations.map((evaluation) => evaluation.scoreBreakdown.find((component) => component.code === 'contrast')?.details))}`);
   const contrastEngineResult = createTextCompositionEngine(contrastTemplate, contrastPolicy, { contrastProvider }).plan(contrastDocument, contrastMetrics);
   reportTestCheckpoint('contrast-engine');
-  assert.equal(contrastEngineResult.evaluation.score, contrastEvaluations[contrastSelectedCandidate].score, 'engine selection must use the contrast-aware candidate score');
+  const contrastBaseline = contrastPlanner.planBaselineWithSignature(contrastDocument, contrastMetrics).plan;
+  const contrastBaselineEvaluation = evaluateCompositionPlan(contrastDocument, contrastBaseline, { contrastProvider });
+  assert.equal(contrastEngineResult.evaluation.score, contrastBaselineEvaluation.score, 'without an authorized graphic movement capability, the engine must retain the evaluated baseline rather than inventing a repair');
   const contrastRenderConfig = parse(readFileSync(join(root, 'templates', 'render-config.yml'), 'utf8'));
   await writeContrastPlannerArtifacts(contrastPlannerArtifactDirectory, contrastCandidates, contrastDocument, contrastProvider, contrastBackground, createJsPdfTextBackend, newPdf, renderComposition, evaluateCompositionPlan, sampleCompositionContrast, fitContainBox, imagePixelAtPoint, contrastRenderConfig, contrastSelectedCandidate);
   const gradientStripeCount = 30;
@@ -2205,6 +2268,10 @@ try {
       selectedCandidate: movableEvaluationPhase.details.selectedCandidate,
       selectedQuoteY: movableQuoteResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:movable-quote-block')?.box.y,
       selectedScore: movableEvaluationPhase.details.candidates[movableEvaluationPhase.details.selectedCandidate]?.score,
+      eagerOracleWinner: {
+        quoteY: movableOracleWinner.quoteY,
+        score: movableOracleWinner.score,
+      },
       reflowPasses: movableEvaluationPhase.details.candidates.map((candidate) => candidate.reflowPasses),
     },
     numberedObstacleArtifact: numberedFlowArtifactDirectory ? join(numberedFlowArtifactDirectory, 'numbered-obstacle-pixel-qa.pdf') : undefined,

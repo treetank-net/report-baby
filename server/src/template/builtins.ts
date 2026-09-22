@@ -24,6 +24,12 @@ export interface RenderConfig {
     maxCandidatesPerRefinement: number;
     maxFullPlanRecalculations: number;
     minimumGeometryStepMm: number;
+    maxPageLocalRefinementRounds: number;
+    gravityIterations: number;
+    gravityDamping: number;
+    gravityConvergenceMm: number;
+    gravitySourcePreferWeight: number;
+    gravitySourceRequireWeight: number;
     movableWindowRatio?: number;
     movableCandidateCount?: number;
     movableRefinementRounds?: number;
@@ -183,6 +189,12 @@ export function readRenderConfig(): RenderConfig {
   const compositionSearch = camelDictionary('composition_search');
   if (!(compositionSearch.minimumGeometryStepMm > 0)) {
     throw new Error('Built-in template render-config.composition_search.minimum_geometry_step_mm must be greater than zero.');
+  }
+  for (const key of ['gravityDamping', 'gravitySourcePreferWeight', 'gravitySourceRequireWeight']) {
+    const value = compositionSearch[key];
+    if (typeof value !== 'number' || value < 0 || value > 1) {
+      throw new Error(`Built-in template render-config.composition_search.${key} must be between zero and one.`);
+    }
   }
   return {
     canvas: { width: get(canvas, 'width'), height: get(canvas, 'height'), pptxWidth: get(canvas, 'pptx_width'), pptxHeight: get(canvas, 'pptx_height'), pdfWidthMm: get(canvas, 'pdf_width_mm'), pdfHeightMm: get(canvas, 'pdf_height_mm'), pointsPerInch: get(canvas, 'points_per_inch') },

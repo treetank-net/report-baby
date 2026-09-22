@@ -3,6 +3,7 @@ import type {
   CompositionBackend,
   CompositionEvaluation,
   CompositionCandidateSearchRound,
+  CompositionCandidateSearchStopReason,
   CompositionCandidateSearchTrace,
   CompositionEvaluator,
   CompositionPlan,
@@ -10,6 +11,7 @@ import type {
   CompositionPlanResult,
   CompositionPlanner,
   CompositionRepairAttempt,
+  CompositionRefinementScope,
 } from './contracts/engine-contracts.js';
 import type { CompositionDocument } from './contracts/model.js';
 
@@ -65,8 +67,27 @@ function repairStepsBelowMinimum(
         : proposal.distance / (2 ** Math.max(0, round - 1)) < minimumStep));
 }
 
+function repairTouchesScope(
+  proposal: NonNullable<CompositionEvaluation['repairProposals']>[number],
+  scope?: CompositionRefinementScope,
+): boolean {
+  if (!scope || scope.kind === 'document') return true;
+  return proposal.placement.page === scope.page
+    || (proposal.action === 'relocate' && proposal.destination.page === scope.page);
+}
+
+function scopedPage(scope: CompositionRefinementScope | undefined): number | undefined {
+  return scope?.kind === 'page' ? scope.page : undefined;
+}
+
 function reflowPassCount(plan: CompositionPlan): number {
   return plan.trace?.phases.filter((phase) => phase.name === 'reflow').length ?? 0;
+}
+
+function planTimingTotal(plans: CompositionPlan[], name: string): number {
+  return plans.reduce((total, plan) => total + (plan.trace?.timings ?? [])
+    .filter((timing) => timing.name === name)
+    .reduce((planTotal, timing) => planTotal + timing.elapsedMs, 0), 0);
 }
 
 function testedRepairDistance(
@@ -95,6 +116,7 @@ function candidateRound(
   repairProposals?: CompositionCandidateSearchRound['repairProposals'],
   candidateResults?: CompositionCandidateSearchRound['candidateResults'],
   repairAttempts?: CompositionRepairAttempt[],
+  scope?: CompositionRefinementScope,
 ): CompositionCandidateSearchRound {
   const legalCandidates = evaluations.filter(evaluationIsLegal).length;
   const legalScores = evaluations.filter(evaluationIsLegal).map((evaluation) => evaluation.score);
@@ -112,6 +134,7 @@ function candidateRound(
     ...(repairProposals === undefined ? {} : { repairProposals }),
     ...(repairAttempts === undefined ? {} : { repairAttempts }),
     ...(candidateResults === undefined ? {} : { candidateResults }),
+    ...(scope === undefined ? {} : { scope }),
     ...(stopReason === undefined ? {} : { stopReason }),
   };
 }
@@ -139,6 +162,41 @@ function candidateDetails(
         box: { ...graphic.box },
       })),
   };
+}
+
+function candidateSearchResults(
+  evaluations: CompositionEvaluation[],
+  signatures: string[],
+): CompositionCandidateSearchRound['candidateResults'] {
+  return evaluations.map((evaluation, index) => {
+    const legal = evaluationIsLegal(evaluation);
+    return {
+      signature: signatures[index] ?? `candidate:${index}`,
+      legal,
+      ...(evaluation.diagnostics.length === 0 ? {} : { diagnostics: evaluation.diagnostics }),
+      ...(legal ? { score: evaluation.score } : {}),
+    };
+  });
+}
+
+function searchStopReason(
+  evaluation: CompositionEvaluation,
+  rounds: CompositionCandidateSearchRound[],
+): CompositionCandidateSearchStopReason {
+  const lastRound = rounds.at(-1);
+  if (evaluationIsLegal(evaluation)) return lastRound?.stopReason ?? 'legal-incumbent';
+  if (lastRound?.stopReason === 'calculation-budget' || lastRound?.stopReason === 'round-limit') return 'search-budget-exhausted';
+  return 'unsupported-hard-diagnostics';
+}
+
+function searchHasUntestedAlternatives(
+  evaluation: CompositionEvaluation,
+  rounds: CompositionCandidateSearchRound[],
+): boolean {
+  if (!evaluationIsLegal(evaluation)) return true;
+  const lastRound = rounds.at(-1);
+  return lastRound?.stopReason === 'calculation-budget'
+    || lastRound?.stopReason === 'round-limit';
 }
 
 /**
@@ -170,11 +228,15 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
     /**
      * @planner-target composition/composition-engine.ts
      * @planner-responsibility Keep the current plan implementation intact until its target seam is extracted.
-     */
+    */
     plan(document, metrics) {
       const startedAt = Date.now();
-      const generatedRecords = planner.planCandidatesWithSignatures?.(document, metrics)
-        ?? (planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)]).map((plan, index) => ({ signature: index === 0 ? 'seed' : `compat-${index}`, plan }));
+      const planningStartedAt = Date.now();
+      const generatedRecords = planner.planBaselineWithSignature
+        ? [planner.planBaselineWithSignature(document, metrics)]
+        : planner.planCandidatesWithSignatures?.(document, metrics)
+          ?? (planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)]).map((plan, index) => ({ signature: index === 0 ? 'seed' : `compat-${index}`, plan }));
+      const planningMs = Math.max(0, Date.now() - planningStartedAt);
       if (generatedRecords.length === 0) throw new Error('Composition planner returned no candidates.');
       const initialUnique = uniqueCandidateRecords(generatedRecords);
       const maxRecalculations = positiveBudget(planner.searchBudget?.maxFullPlanRecalculations);
@@ -184,7 +246,11 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
       const candidates = [...initialCandidates];
       const candidateSignatures = initialRecords.map(({ signature }) => signature);
       const candidateRounds = candidates.map(() => 0);
+      const initialEvaluationStartedAt = Date.now();
       const evaluations = candidates.map((candidate) => evaluator.evaluate(document, candidate));
+      const initialEvaluationMs = Math.max(0, Date.now() - initialEvaluationStartedAt);
+      let materializationMs = planTimingTotal(initialCandidates, 'document-materialization');
+      let refinementEvaluationMs = 0;
       const evaluatedSignatures = new Set(initialRecords.map(({ signature }) => signature));
       let selectedCandidate = 0;
       for (let index = 1; index < evaluations.length; index += 1) {
@@ -195,6 +261,19 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         configuredRefinementRounds,
         planner.searchBudget?.maxRefinementRounds ?? Number.MAX_SAFE_INTEGER,
       );
+      const configuredPageLocalRounds = planner.searchBudget?.maxPageLocalRefinementRounds
+        ?? (planner.searchBudget?.maxRefinementRounds === 0 ? 0 : 1);
+      const pageLocalRounds = Number.isInteger(configuredPageLocalRounds) && configuredPageLocalRounds > 0
+        ? configuredPageLocalRounds
+        : 0;
+      const pageNumbers = [...new Set(candidates[selectedCandidate]!.pages.map(({ page }) => page))].sort((left, right) => left - right);
+      const pageLocalScopes: CompositionRefinementScope[] = pageNumbers.flatMap((page) =>
+        Array.from({ length: pageLocalRounds }, () => ({ kind: 'page' as const, page })));
+      const globalScopes: Array<CompositionRefinementScope | undefined> = Array.from({ length: refinementRounds }, () => undefined);
+      const initialSelectedIsLegal = evaluationIsLegal(evaluations[selectedCandidate]!);
+      const refinementSchedule = initialSelectedIsLegal
+        ? [...pageLocalScopes, ...globalScopes]
+        : [...globalScopes, ...pageLocalScopes];
       const initialBudgetExhausted = initialUnique.records.length > initialRecords.length;
       const searchRounds: CompositionCandidateSearchRound[] = [candidateRound(
         0,
@@ -205,6 +284,8 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         initialBudgetExhausted ? 'calculation-budget' : undefined,
         initialUnique.duplicateCount + Math.max(0, initialUnique.records.length - initialRecords.length),
         initialRecords.map(({ signature }) => signature),
+        undefined,
+        candidateSearchResults(evaluations, candidateSignatures),
       )];
       if (initialBudgetExhausted) {
         const plan = candidates[selectedCandidate];
@@ -215,6 +296,17 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
           evaluatedCandidates: evaluations.length,
           fullPlanRecalculations: evaluations.length,
           planningTimeMs: Math.max(0, Date.now() - startedAt),
+          phaseTimings: {
+            planningMs,
+            materializationMs,
+            proposalGenerationMs: Math.max(0, planningMs - materializationMs),
+            initialEvaluationMs,
+            evaluationMs: initialEvaluationMs,
+            refinementMs: 0,
+          },
+          stopReason: searchStopReason(evaluation, searchRounds),
+          remainingBudget: Math.max(0, maxRecalculations - evaluations.length),
+          untestedAlternatives: searchHasUntestedAlternatives(evaluation, searchRounds),
           selectedCandidate,
           selectedProposalSignature: initialRecords[selectedCandidate]?.signature ?? 'seed',
         };
@@ -231,18 +323,38 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         if (plan.trace) plan.trace.candidateSearch = candidateSearch;
         return { plan, evaluation };
       }
-      for (let round = 1; round <= refinementRounds; round += 1) {
+      const refinementStartedAt = Date.now();
+      for (let scheduleIndex = 0; scheduleIndex < refinementSchedule.length; scheduleIndex += 1) {
+        const round = scheduleIndex + 1;
+        const scope = refinementSchedule[scheduleIndex];
+        const pageLocalPass = scope?.kind === 'page';
         const selectedPlan = candidates[selectedCandidate];
         const selectedEvaluation = evaluations[selectedCandidate];
-        const repairProposals = selectedEvaluation.repairProposals ?? [];
-        const refinedGenerated: CompositionPlanCandidate[] = planner.planRefinedCandidatesWithSignatures?.(document, metrics, selectedPlan, round, selectedEvaluation)
-          ?? (planner.planRefinedCandidates?.(document, metrics, selectedPlan, round, selectedEvaluation) ?? []).map((plan, index) => ({ signature: `compat-${round}-${index}`, plan }));
+        const repairProposals = (selectedEvaluation.repairProposals ?? []).filter((proposal) => repairTouchesScope(proposal, scope));
+        const remainingBudget = Math.max(0, maxRecalculations - evaluations.length);
+        const effectiveScope = evaluationIsLegal(selectedEvaluation) ? scope : undefined;
+        const dedicatedRefinements = evaluationIsLegal(selectedEvaluation)
+          ? planner.planQualityRepairsWithSignatures?.(document, metrics, selectedPlan, selectedEvaluation, round, remainingBudget, effectiveScope)
+          : planner.planLegalityCorrectionsWithSignatures?.(document, metrics, selectedPlan, selectedEvaluation, round, remainingBudget);
+        const allowLegacyRefinementFallback = !pageLocalPass
+          && (planner.planBaselineWithSignature === undefined || evaluationIsLegal(selectedEvaluation));
+        const refinedGenerated: CompositionPlanCandidate[] = dedicatedRefinements
+          ?? (allowLegacyRefinementFallback
+            ? planner.planRefinedCandidatesWithSignatures?.(document, metrics, selectedPlan, round, selectedEvaluation)
+              ?? (planner.planRefinedCandidates?.(document, metrics, selectedPlan, round, selectedEvaluation) ?? []).map((plan, index) => ({ signature: `compat-${round}-${index}`, plan }))
+            : []);
         if (refinedGenerated.length === 0) {
           const stopReason = repairStepsBelowMinimum(repairProposals, round, planner.searchBudget?.minimumGeometryStepMm)
             ? 'minimum-step'
             : 'no-new-candidates';
           const repairAttempts = repairProposals.map(({ id }) => ({ proposalId: id, status: 'not-materialized' as const }));
-          searchRounds.push(candidateRound(round, 0, [], [], false, stopReason, 0, [], repairProposals, undefined, repairAttempts));
+          searchRounds.push(candidateRound(round, 0, [], [], false, stopReason, 0, [], repairProposals, undefined, repairAttempts, scope));
+          if (pageLocalPass) {
+            while (scheduleIndex + 1 < refinementSchedule.length
+              && refinementSchedule[scheduleIndex + 1]?.kind === 'page'
+              && scopedPage(refinementSchedule[scheduleIndex + 1]) === scopedPage(scope)) scheduleIndex += 1;
+            continue;
+          }
           break;
         }
         const previouslyEvaluatedSignatures = new Set(evaluatedSignatures);
@@ -251,7 +363,6 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
           evaluatedSignatures.add(candidate.signature);
           return true;
         });
-        const remainingBudget = Math.max(0, maxRecalculations - evaluations.length);
         const refinedRecords = refinedUnique.slice(0, remainingBudget);
         const refined = refinedRecords.map(({ plan }) => plan);
         const skippedRefined = refinedGenerated.length - refined.length;
@@ -267,10 +378,19 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
               ...(testedDistance === undefined ? {} : { testedDistance }),
             };
           });
-          searchRounds.push(candidateRound(round, refinedGenerated.length, [], [], false, remainingBudget === 0 ? 'calculation-budget' : 'no-new-candidates', skippedRefined, [], repairProposals, [], repairAttempts));
+          searchRounds.push(candidateRound(round, refinedGenerated.length, [], [], false, remainingBudget === 0 ? 'calculation-budget' : 'no-new-candidates', skippedRefined, [], repairProposals, [], repairAttempts, scope));
+          if (pageLocalPass) {
+            while (scheduleIndex + 1 < refinementSchedule.length
+              && refinementSchedule[scheduleIndex + 1]?.kind === 'page'
+              && scopedPage(refinementSchedule[scheduleIndex + 1]) === scopedPage(scope)) scheduleIndex += 1;
+            continue;
+          }
           break;
         }
+        const refinedEvaluationStartedAt = Date.now();
         const refinedEvaluations = refined.map((candidate) => evaluator.evaluate(document, candidate));
+        refinementEvaluationMs += Math.max(0, Date.now() - refinedEvaluationStartedAt);
+        materializationMs += planTimingTotal(refined, 'document-materialization');
         const previousSelected = selectedCandidate;
         for (let index = 0; index < refined.length; index += 1) {
           candidates.push(refined[index]);
@@ -283,11 +403,14 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         const improved = selectedCandidate !== previousSelected
           && compareCompositionEvaluations(evaluations[selectedCandidate], evaluations[previousSelected]) < 0;
         const budgetExhausted = evaluations.length >= maxRecalculations;
+        const nextPassIsSamePage = pageLocalPass
+          && refinementSchedule[scheduleIndex + 1]?.kind === 'page'
+          && scopedPage(refinementSchedule[scheduleIndex + 1]) === scopedPage(scope);
         const stopReason = budgetExhausted
           ? 'calculation-budget'
           : improved
-            ? round === refinementRounds ? 'round-limit' : undefined
-            : round === refinementRounds ? 'no-improvement' : undefined;
+            ? !nextPassIsSamePage && scheduleIndex === refinementSchedule.length - 1 ? 'round-limit' : undefined
+            : !nextPassIsSamePage ? 'no-improvement' : undefined;
         const candidateResults = refinedRecords.map(({ signature, repairProposalIds }, index) => {
           const candidateEvaluation = refinedEvaluations[index]!;
           const legal = evaluationIsLegal(candidateEvaluation);
@@ -345,9 +468,16 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
           repairProposals,
           candidateResults,
           repairAttempts,
+          scope,
         ));
         if (budgetExhausted) break;
+        if (pageLocalPass && !improved) {
+          while (scheduleIndex + 1 < refinementSchedule.length
+            && refinementSchedule[scheduleIndex + 1]?.kind === 'page'
+            && scopedPage(refinementSchedule[scheduleIndex + 1]) === scopedPage(scope)) scheduleIndex += 1;
+        }
       }
+      const refinementMs = Math.max(0, Date.now() - refinementStartedAt);
       const plan = candidates[selectedCandidate];
       const evaluation = evaluations[selectedCandidate];
       const candidateSearch: CompositionCandidateSearchTrace = {
@@ -356,6 +486,17 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
         evaluatedCandidates: searchRounds.reduce((total, round) => total + round.evaluatedCandidates, 0),
         fullPlanRecalculations: evaluations.length,
         planningTimeMs: Math.max(0, Date.now() - startedAt),
+        phaseTimings: {
+          planningMs,
+          materializationMs,
+          proposalGenerationMs: Math.max(0, planningMs + refinementMs - materializationMs),
+          initialEvaluationMs,
+          evaluationMs: initialEvaluationMs + refinementEvaluationMs,
+          refinementMs,
+        },
+        stopReason: searchStopReason(evaluation, searchRounds),
+        remainingBudget: Math.max(0, maxRecalculations - evaluations.length),
+        untestedAlternatives: searchHasUntestedAlternatives(evaluation, searchRounds),
         selectedCandidate,
         selectedProposalSignature: candidateSignatures[selectedCandidate] ?? 'seed',
       };

@@ -3,6 +3,7 @@ import type {
   CompositionDecision,
   CompositionDiagnostic,
   CompositionPlan,
+  CompositionPlanTimingName,
   CompositionWordRange,
 } from '../contracts/engine-contracts.js';
 import type { FlowPlanningContext, FlowRuntime, FlowTarget } from '../contracts/flow-planning.js';
@@ -125,6 +126,16 @@ export function recordPlanningPhase(
   iteration?: number,
 ): void {
   plan.trace?.phases.push({ name, status, ...(iteration === undefined ? {} : { iteration }), ...(details ? { details } : {}) });
+}
+
+/** Record elapsed time without changing planning state or candidate identity. */
+export function recordPlanTiming(plan: CompositionPlan, name: CompositionPlanTimingName, elapsedMs: number): void {
+  if (!plan.trace || !Number.isFinite(elapsedMs) || elapsedMs < 0) return;
+  // Evaluation is a read-only operation for an already materialized plan.
+  // Keep the first timing sample attached to the trace, but do not append a
+  // second sample when a caller reevaluates the same plan for inspection.
+  if (plan.trace.timings?.some((timing) => timing.name === name)) return;
+  plan.trace.timings = [...(plan.trace.timings ?? []), { name, elapsedMs }];
 }
 
 /**

@@ -18,6 +18,7 @@ import { insertionBlocksForFlow, insertionSlotAcceptsBlock } from './insertion-p
 import { insertionContentHeight, insertionContentIsComplete, measureInsertionContent, type InsertionContentMeasurement } from './insertion-measurement.js';
 import { placeAtomicBlock, placeTableFragment } from './structured-block-placement.js';
 import type { CompositionSlotTemplate } from '../contracts/model.js';
+import { resolvePlacementPolicy } from './placement-policy.js';
 
 function reserveInsertionObstacle(
   template: CompositionLayout,
@@ -213,6 +214,16 @@ function placeInsertionBlock(
   decision.lineCount = measurement.kind === 'text' ? measurement.text.lines.length : undefined;
   decision.kind = measurement.kind;
   decision.box = { ...target.slot.box };
+  const resolvedPolicy = resolvePlacementPolicy(template, flowId, block, target.definition);
+  const obstacle = plan.graphicPlacements.find((graphic) => graphic.graphicId === `insertion:${block.id}`
+    && graphic.page === target.page.page);
+  if (obstacle) obstacle.placementPolicy = resolvedPolicy;
+  decision.distribution = resolvedPolicy.distribution;
+  if (resolvedPolicy.rhythmGroup !== undefined) decision.rhythmGroup = resolvedPolicy.rhythmGroup;
+  decision.distributionSource = resolvedPolicy.distributionSource;
+  if (resolvedPolicy.rhythmGroupSource !== undefined) decision.rhythmGroupSource = resolvedPolicy.rhythmGroupSource;
+  if (resolvedPolicy.sourceRelationSource !== undefined) decision.sourceRelationSource = resolvedPolicy.sourceRelationSource;
+  if (resolvedPolicy.source !== undefined) decision.source = { ...resolvedPolicy.source };
   return target.key;
 }
 

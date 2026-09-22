@@ -5,6 +5,8 @@
  */
 export {
   insertionBlocksForFlow,
+  insertionProposalCorrections,
+  assignInsertionGroupsFromPlan,
   insertionSlotAcceptsBlock,
   insertionProposalsFromPlan,
   nextInsertionBoundary,

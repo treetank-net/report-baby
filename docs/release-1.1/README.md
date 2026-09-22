@@ -20,6 +20,7 @@ needs to become explicit.
 | [08–10](08-composition-quality-diagnostics-and-optimization.md) | reusable insertion capabilities plus one evidence, scoring and iterative candidate-refinement process | implemented and verified in 1.0.2; representative artifact and public CLI/MCP evidence covered |
 | [11](11-document-layout-contract.md) | one public document `layout`; removal of route-owned template selection | implemented in 1.0.2 |
 | [12](12-constructive-planning-and-guided-micro-optimization.md) | legal baseline first, then bounded evaluator-guided local quality repairs | planned |
+| [13](13-placement-policy-contract.md) | automatic content-progress distribution, cross-flow rhythm, visual-load balancing, cheap gravity relaxation and optional placement-policy overrides | implementation checkpoint: policy evidence, measured score components, bounded stable group assignment, source-relation legality and weighted gravity implemented; representative PDF accepted, mixed-flow calibration remains |
 
 Floats, RTL/CJK and broad visual calibration are deferred to
 [`docs/release-1.2`](../release-1.2/README.md). Runtime planner telemetry has no
@@ -90,6 +91,12 @@ Ownership remains procedural:
    Replace broad complete-plan enumeration in the common path with one legal
    baseline followed by bounded evaluator-guided repairs. Preserve a final
    whole-document legality and score decision.
+10. **Content-aware placement policies (13 — implementation checkpoint).** Replace ambiguous
+    page-local `balanced` insertion handling with automatic content-progress
+    distribution, mixed-flow visual-load balancing and page-local rhythm. Use
+    bounded geometry-only gravity relaxation to stabilize equal spacing before
+    paying for complete reflow/evaluation. Keep ordinary input policy-free
+    while allowing narrow flow/block overrides.
 
 ## Definition of ready for implementation
 

@@ -15,9 +15,10 @@ attributed and actionable.
   source coverage and order are checked from authored block IDs, planned word
   ranges and the actual words on the planned lines, not synthetic numeric
   suffixes.
-- Template: `editorial-inset-two-column` with one `fluid-y` quote capability,
-  materialized as two bounded quote slots per page.
-- Content: 2,084 main-flow words and four authored quote insertions.
+- Template: `pages/editorial-dynamic-inset-two-column` with one reusable
+  `quote-pool` `fluid-y` capability, materialized as bounded page-local quote
+  slots.
+- Content: 2,025 main-flow words and four authored quote insertions.
 - Planning result: five pages, no residual content, `accepted` evaluation.
 - Movement search: 5% of page height, five coarse candidates, and the configured
   refinement step/budget.

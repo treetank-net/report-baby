@@ -385,7 +385,8 @@ function buildInsertionRhythmReport(
     ...(neighbourGaps.next === undefined ? {} : { nextInsertionGap: neighbourGaps.next }),
     referenceGap,
     ...insertionContentMetrics(plan, placement),
-    ...insertionTextStreamMetrics(plan, placement, ordinaryLines),
+    ...insertionVisualLoadMetrics(plan, placement, geometry, ordinaryLines),
+    ...insertionTextStreamMetrics(plan, placement, geometry, ordinaryLines),
   };
   return {
     kind: 'insertion-rhythm',
@@ -399,6 +400,7 @@ function buildInsertionRhythmReport(
     owner: attribution.owner,
     cause: attribution.cause,
     ...(attribution.templateRef === undefined ? {} : { templateRef: attribution.templateRef }),
+    ...(placement.placementPolicy === undefined ? {} : { placementPolicy: { ...placement.placementPolicy } }),
     box: { ...placement.box },
     metrics,
     ...(explanations === undefined ? {} : { reasons: explanations }),
@@ -428,30 +430,95 @@ function insertionContentMetrics(plan: CompositionPlan, placement: InsertionPlac
 function insertionTextStreamMetrics(
   plan: CompositionPlan,
   placement: InsertionPlacement,
+  geometry: PageGeometry,
   ordinaryLines: ReturnType<typeof plannedLines>,
 ): Record<string, number> {
+  const insertionSlot = plan.slots.find((slot) => slot.page === placement.page
+    && (slot.id === placement.slotId || placement.slotId.startsWith(`${slot.id}:`)));
   const overlappingSlots = plan.slots.filter((slot) => slot.page === placement.page
     && slot.id !== placement.slotId
     && slot.kind === 'text'
+    && slot.flowId === 'main'
+    && (insertionSlot?.regionId === undefined || slot.regionId === insertionSlot.regionId)
     && horizontalOverlap(slot.box, placement.box));
-  const streamGaps = overlappingSlots.flatMap((slot) => {
-    const linesInSlot = ordinaryLines.filter((line) => line.page === placement.page && line.slotId === slot.id);
-    const previous = linesInSlot
-      .filter((line) => bottom(line.box) <= placement.box.y)
-      .sort((left, right) => bottom(right.box) - bottom(left.box))[0];
-    const next = linesInSlot
-      .filter((line) => line.box.y >= bottom(placement.box))
-      .sort((left, right) => left.box.y - right.box.y)[0];
-    if (!previous || !next) return [];
-    const before = placement.box.y - bottom(previous.box);
-    const after = next.box.y - bottom(placement.box);
-    if (before <= 0 || after <= 0) return [];
-    return [{ slotId: slot.id, before, after }];
+  const pageColumns = columnBoxes(geometry).filter((column) => horizontalOverlap(column, placement.box));
+  const streamGroups = pageColumns.length > 0
+    ? pageColumns.map((column, index) => {
+      const columnSlots = overlappingSlots.filter((slot) => horizontalOverlap(slot.box, column));
+      return {
+        slotId: columnSlots[0]?.id ?? `column:${index + 1}`,
+        box: column,
+        lines: ordinaryLines.filter((line) => line.page === placement.page
+          && line.flowId === 'main'
+          && horizontalOverlap(line.box, column)),
+      };
+    })
+    : overlappingSlots.map((slot) => ({
+      slotId: slot.id,
+      box: slot.box,
+      lines: ordinaryLines.filter((line) => line.page === placement.page && line.slotId === slot.id),
+    }));
+  const streamGaps = streamGroups.flatMap(({ slotId, box, lines: linesInSlot }) => {
+    const beforeLines = linesInSlot.filter((line) => bottom(line.box) <= placement.box.y);
+    const afterLines = linesInSlot.filter((line) => line.box.y >= bottom(placement.box));
+    const previous = beforeLines.sort((left, right) => bottom(right.box) - bottom(left.box))[0];
+    const next = afterLines.sort((left, right) => left.box.y - right.box.y)[0];
+    const before = previous ? placement.box.y - bottom(previous.box) : undefined;
+    const after = next ? next.box.y - bottom(placement.box) : undefined;
+    const slotHeight = Math.max(1, box.height);
+    const beforeMass = Math.min(1, beforeLines.reduce((sum, line) => sum + line.box.height, 0) / slotHeight);
+    const afterMass = Math.min(1, afterLines.reduce((sum, line) => sum + line.box.height, 0) / slotHeight);
+    const totalLines = beforeLines.length + afterLines.length;
+    return [{
+      slotId,
+      ...(before === undefined ? {} : { before }),
+      ...(after === undefined ? {} : { after }),
+      beforeMass,
+      afterMass,
+      beforeLines: beforeLines.length,
+      afterLines: afterLines.length,
+      totalLines,
+      slotHeight,
+    }];
   });
-  return Object.fromEntries(streamGaps.flatMap(({ slotId, before, after }) => [
-    [`textStreamBefore:${slotId}`, before],
-    [`textStreamAfter:${slotId}`, after],
+  return Object.fromEntries(streamGaps.flatMap(({ slotId, before, after, beforeMass, afterMass, beforeLines, afterLines, totalLines, slotHeight }) => [
+    ...(before === undefined ? [] : [[`textStreamBefore:${slotId}`, before]]),
+    ...(after === undefined ? [] : [[`textStreamAfter:${slotId}`, after]]),
+    [`textStreamBeforeMass:${slotId}`, beforeMass],
+    [`textStreamAfterMass:${slotId}`, afterMass],
+    [`textStreamBeforeLines:${slotId}`, beforeLines],
+    [`textStreamAfterLines:${slotId}`, afterLines],
+    [`textStreamTotalLines:${slotId}`, totalLines],
+    [`textStreamSlotHeight:${slotId}`, slotHeight],
   ]));
+}
+
+function insertionVisualLoadMetrics(
+  plan: CompositionPlan,
+  placement: InsertionPlacement,
+  geometry: PageGeometry,
+  ordinaryLines: ReturnType<typeof plannedLines>,
+): Record<string, number> {
+  const region = boxFromSegment(geometry.content);
+  const regionArea = Math.max(1, region.width * region.height);
+  const areaShare = (placement.box.width * placement.box.height) / regionArea;
+  const verticalShare = placement.box.height / Math.max(1, region.height);
+  const pageLines = ordinaryLines.filter((line) => line.page === placement.page);
+  const affectedLines = pageLines.filter((line) => {
+    const slot = plan.slots.find((candidate) => candidate.page === line.page
+      && (candidate.id === line.slotId || line.slotId.startsWith(`${candidate.id}:`)));
+    const verticalOverlap = line.box.y < bottom(placement.box) && placement.box.y < bottom(line.box);
+    const horizontalOverlapWithLane = slot
+      ? slot.box.x < right(placement.box) && placement.box.x < right(slot.box)
+      : line.box.x < right(placement.box) && placement.box.x < right(line.box);
+    return verticalOverlap && horizontalOverlapWithLane;
+  }).length;
+  const affectedLineShare = pageLines.length > 0 ? affectedLines / pageLines.length : 0;
+  const score = readRenderConfig().compositionScore;
+  const weighted = areaShare * score.visualLoadAreaWeight
+    + verticalShare * score.visualLoadVerticalWeight
+    + affectedLineShare * score.visualLoadTextWeight;
+  return { visualLoadAreaShare: areaShare, visualLoadVerticalShare: verticalShare, visualLoadAffectedLineShare: affectedLineShare, visualLoad: weighted };
 }
 
 function insertionRhythmForPlacement(

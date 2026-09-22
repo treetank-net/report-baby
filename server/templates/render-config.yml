@@ -53,6 +53,12 @@ composition_score:
   insertion_internal_spacing_penalty: 1
   insertion_external_spacing_penalty: 1
   insertion_cross_stream_spacing_penalty: 1
+  insertion_text_continuity_min_mass_ratio: 0.04
+  insertion_text_continuity_coverage_penalty: 12
+  insertion_text_continuity_mass_penalty: 2
+  insertion_text_continuity_cross_stream_penalty: 2
+  insertion_text_continuity_edge_gap_penalty: 2
+  insertion_text_continuity_visual_load_weight: 1
   header_content_gap_min_mm: 4
   header_content_gap_penalty: 2
   list_item_fragmentation_penalty: 3
@@ -80,6 +86,14 @@ composition_score:
   insertion_symmetry_penalty: 1
   insertion_distribution_tolerance_mm: 3
   insertion_distribution_penalty: 1
+  content_spread_tolerance: 0.12
+  content_spread_penalty: 8
+  page_load_balance_tolerance: 0.15
+  page_load_balance_penalty: 8
+  visual_load_area_weight: 0.50
+  visual_load_vertical_weight: 0.30
+  visual_load_text_weight: 0.20
+  source_relation_preference_penalty: 4
   spacing_profile_compact_target_mm: 4
   spacing_profile_normal_target_mm: 6
   spacing_profile_open_target_mm: 10
@@ -104,6 +118,12 @@ composition_search:
   max_candidates_per_refinement: 16
   max_full_plan_recalculations: 128
   minimum_geometry_step_mm: 0.5
+  max_page_local_refinement_rounds: 1
+  gravity_iterations: 4
+  gravity_damping: 0.65
+  gravity_convergence_mm: 0.5
+  gravity_source_prefer_weight: 0.55
+  gravity_source_require_weight: 0.85
   movable_window_ratio: 0.05
   movable_candidate_count: 5
   movable_refinement_rounds: 1

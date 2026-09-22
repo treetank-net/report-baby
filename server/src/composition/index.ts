@@ -20,6 +20,10 @@ export type {
   CompositionRect,
   CompositionSlotKind,
   CompositionSpacingProfile,
+  CompositionPlacementDistribution,
+  CompositionPlacementSourceRelation,
+  CompositionPlacementPolicyPreference,
+  CompositionPlacementPolicyOverrides,
   CompositionSlotPlacement,
   CompositionSlotTemplate,
   CompositionTable,
@@ -46,15 +50,20 @@ export type {
   CompositionPlan,
   CompositionPlanCandidate,
   CompositionPlanTrace,
+  CompositionPlanTiming,
+  CompositionPlanTimingName,
   CompositionPlacementScore,
   CompositionPlacementScoreContribution,
   CompositionRepairProposal,
   CompositionMoveRepairProposal,
+  CompositionRelocateRepairProposal,
   CompositionOmitRepairProposal,
   CompositionScorePlacement,
   CompositionCandidateSearchCandidate,
   CompositionCandidateSearchRound,
   CompositionCandidateSearchTrace,
+  CompositionRefinementScope,
+  CompositionCandidateSearchStopReason,
   CompositionRepairAttempt,
   CompositionPlanningPhase,
   CompositionPlanningPhaseName,
@@ -78,13 +87,15 @@ export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './ev
 export { attributeCompositionScore } from './evaluation/score-attribution.js';
 export { compositionRepairProposals } from './evaluation/repair-proposals.js';
 export { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './evaluation/structure-scoring.js';
-export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, scoreParagraphFragmentation, scoreOrphanLines, scoreLegalPlan } from './evaluation/scoring.js';
+export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSpacing, scoreInsertionTextContinuity, scoreInsertionSymmetry, scoreInsertionDistribution, scoreContentSpread, scorePageLoadBalance, scoreSourceRelations, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, scoreParagraphFragmentation, scoreOrphanLines, scoreLegalPlan } from './evaluation/scoring.js';
 export { elementProximityReports } from './observability/proximity-report.js';
 export { compositionDocumentFromInput } from './adapters/input.js';
 export { compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, type PageTemplateCompositionOptions, type PageTemplateSource } from './adapters/page-template.js';
 export { documentLayoutVariantsWithinPageLimit, normalizeDocumentLayout, pageTemplateAssignmentForPage, type DocumentLayoutVariant } from './adapters/document-layout.js';
 export { applyDynamicInsertionRequests } from './adapters/request-insertion-slots.js';
 export { createTextCompositionPlanner } from './layout/text-planner.js';
+export { resolvePlacementPolicy } from './layout/placement-policy.js';
+export { relaxInsertionPlacementGravity } from './layout/placement-gravity.js';
 export type { MovableGraphicPolicy, MovableInsertionBounds, TextCompositionPlannerPolicy } from './contracts/planner-policy.js';
 export { createTextCompositionEngine, type TextCompositionEngineOptions } from './adapters/text-engine.js';
 export { fitContainBox, imagePixelAtPoint } from './geometry/visual-geometry.js';

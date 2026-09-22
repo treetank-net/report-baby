@@ -109,10 +109,12 @@ completeness, column order, and zone occupancy are checked independently.
 The same editorial shape is also covered by `npm run test:editorial-parity`.
 This is the stable neutral regression fixture: lorem tokens retain the source
 block lengths, four quote insertions and a 1600×900 illustration retain their
-geometry, and the `pages/editorial-inset-two-column` template is rendered with
-the trademark-free `Editorial QA` theme. Its expected normalized PDF hash is
-tracked in `docs/quality/editorial-baseline.json`; changing it is therefore an
-explicit parity decision, not an accidental change to the showcase corpus.
+geometry, and the `pages/editorial-dynamic-inset-two-column` template is
+rendered with the trademark-free `Editorial QA` theme. The quote flow uses a
+single reusable `quote-pool` `fluid-y` capability with bounded per-page
+materialization. Its expected normalized PDF hash is tracked in
+`docs/quality/editorial-baseline.json`; changing it is therefore an explicit
+parity decision, not an accidental change to the showcase corpus.
 
 `ink-occupancy.json` is positional, not just a counter. Every line and checked
 slot contains `boxMm`, the measured `boundsMm`, and `rowBands` with `x`, `y`,

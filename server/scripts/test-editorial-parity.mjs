@@ -16,7 +16,7 @@ const rendererBundle = join(temporary, 'report-renderer.cjs');
 const sourceBundle = join(temporary, 'source-context.cjs');
 const brandBundle = join(temporary, 'brand-context.cjs');
 const baselinePath = join(root, '..', 'docs/quality/editorial-baseline.json');
-const templateRef = 'pages/editorial-inset-two-column';
+const templateRef = 'pages/editorial-dynamic-inset-two-column';
 const illustrationPath = join(root, 'scripts/fixtures/editorial-neutral-illustration.svg');
 const debugArtifactDirectory = process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR
   ? join(process.env.REPORT_BABY_DEBUG_ARTIFACT_DIR, 'editorial-parity')
@@ -43,6 +43,7 @@ try {
   const { createSourceContext } = await import(sourceBundle);
   const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
   const fixture = createEditorialNumberedFixture({
+    introScale: 0.8,
     quoteMarkGap: renderConfig.pdf.quote_mark_gap,
     quoteMarkOffsetX: renderConfig.pdf.quote_mark_offset_x,
     quoteMarkOffsetY: renderConfig.pdf.quote_mark_offset_y,

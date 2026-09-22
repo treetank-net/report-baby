@@ -25,6 +25,14 @@ export interface CompositionSearchBudget {
   movableRefinementRounds?: number;
   /** Finest geometry movement tested during bounded local refinement. */
   minimumGeometryStepMm?: number;
+  /** Maximum evaluator-directed micro-optimization rounds per page. */
+  maxPageLocalRefinementRounds?: number;
+  /** Maximum cheap geometry-only gravity iterations before full evaluation. */
+  gravityIterations?: number;
+  /** Damped fraction of the calculated gravity displacement applied per iteration. */
+  gravityDamping?: number;
+  /** Convergence threshold for a gravity iteration in planner units. */
+  gravityConvergenceMm?: number;
 }
 
 /** Configuration knobs shared by document and flow planning. */

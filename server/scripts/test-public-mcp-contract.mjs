@@ -84,6 +84,10 @@ try {
   assert.equal(dryRun.structuredContent?.dryRun, true);
   assert.equal(dryRun.structuredContent?.compositionEvaluation?.status, 'accepted');
   assert.ok((dryRun.structuredContent?.compositionPlan?.lines?.length ?? 0) > 0);
+  const publicPlanTimingNames = new Set((dryRun.structuredContent?.compositionPlan?.trace?.timings ?? []).map(({ name }) => name));
+  for (const name of ['document-materialization', 'contrast-assessment', 'legality-evaluation', 'spacing-evidence', 'scoring-and-repair-proposals']) {
+    assert.ok(publicPlanTimingNames.has(name), `full public diagnostics must expose ${name} timing`);
+  }
 
   const reportPath = join(outputDir, 'report.pdf');
   const rendered = await client.callTool({
@@ -105,6 +109,10 @@ try {
   assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.placementScores), 'normal render responses must expose per-placement score contributions');
   assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.repairProposals), 'normal render responses must expose machine-readable repair proposals');
   assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.candidateSearch?.rounds), 'normal render responses must expose the planner candidate-search trace');
+  assert.equal(typeof renderedSummary.structuredContent?.compositionQuality?.candidateSearch?.stopReason, 'string', 'normal render responses must expose the planner stop reason');
+  assert.equal(typeof renderedSummary.structuredContent?.compositionQuality?.candidateSearch?.untestedAlternatives, 'boolean', 'normal render responses must expose whether search alternatives remain');
+  assert.equal(typeof renderedSummary.structuredContent?.compositionQuality?.highestImpactFinding?.kind, 'string', 'normal render responses must expose the highest-impact unresolved finding');
+  assert.equal(typeof renderedSummary.structuredContent?.compositionQuality?.highestImpactFinding?.code, 'string', 'highest-impact findings must identify their scoring or diagnostic code');
   assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.diagnostics), 'normal render responses must expose composition diagnostics');
   assert.ok(Array.isArray(renderedSummary.structuredContent?.compositionQuality?.suggestions), 'normal render responses must expose composition suggestions');
   assert.match(renderedSummary.content?.map((item) => item.text ?? '').join('\n') ?? '', /Composition quality/, 'normal render content must expose the quality report to clients');

@@ -68,56 +68,43 @@ function editorialStyles(compositionStylesFromRenderConfig) {
  * @test-decision plan-assertion
  * @test-action Keep candidate-search assertions here because they exercise the real editorial template; detailed evaluator unit cases belong to engine tests.
  */
-function assertMovableQuoteCandidateSearch(result, fixedResult, geometry, renderConfig, planReportComposition, newPdf, compiled, fixture, styles) {
-  const fixedQuote = fixedResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
+function assertMovableQuoteCandidateSearch(result, geometry, renderConfig, planReportComposition, newPdf, compiled, fixture, styles) {
+  const fixedQuote = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(fixedQuote, 'editorial fixture must expose the quote selected for movable-position search');
   const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_window_ratio;
-  const movableQuotePolicy = {
-    movableInsertionBounds: {
-      'quotes:quote-market': {
-        bounds: {
-          x: fixedQuote.box.x,
-          y: fixedQuote.box.y - movableQuoteWindow,
-          width: fixedQuote.box.width,
-          height: fixedQuote.box.height + (2 * movableQuoteWindow),
-        },
-        axis: 'y',
-        preferred: { y: fixedQuote.box.y },
-        // The engine contract owns the full coarse/refinement matrix. The
-        // real-editorial integration only needs two legal alternatives to
-        // prove that the template route carries candidate search correctly.
-        candidateCount: Math.min(2, renderConfig.composition_search.movable_candidate_count),
-        refinementRounds: 0,
-        refinementCandidateCount: 0,
-      },
-    },
-  };
   const movableResult = planReportComposition(
     newPdf('portrait', [geometry.width, geometry.height]),
     compiled,
     geometry,
     fixture.input,
-    { family: 'DejaVu', maxPages: 12, policy: movableQuotePolicy, styles },
+    { family: 'DejaVu', maxPages: 12, styles },
   );
   const evaluationPhase = movableResult.plan.trace?.phases.findLast((phase) => phase.name === 'evaluation');
   const candidates = evaluationPhase?.details?.candidates ?? [];
   const searchTrace = movableResult.plan.trace?.candidateSearch;
   assert.equal(movableResult.evaluation.status, 'accepted', JSON.stringify(movableResult.evaluation));
-  assert.ok(candidates.length >= 2, 'real editorial candidate search must evaluate more than the fixed placement');
+  assert.ok(candidates.length >= 2, 'real editorial candidate search must evaluate more than the seed placement');
   assert.ok((searchTrace?.generatedCandidates ?? 0) >= candidates.length, 'editorial candidate trace must account for every generated candidate');
   assert.equal(searchTrace?.evaluatedCandidates, candidates.length, 'editorial candidate trace must account for every evaluated candidate');
   assert.ok(Number.isFinite(searchTrace?.planningTimeMs) && searchTrace.planningTimeMs >= 0, 'editorial candidate trace must expose observed planning time');
   assert.equal(searchTrace?.selectedCandidate, evaluationPhase?.details?.selectedCandidate, 'editorial trace and evaluation must identify the same winner');
   const legalCandidates = candidates.filter((candidate) => candidate.hardViolationCount === 0);
-  assert.ok(legalCandidates.length >= 2, 'movable quote search must compare at least two legal alternatives');
+  assert.ok(legalCandidates.length >= 2, 'automatic movable quote search must compare at least two legal alternatives');
   assert.ok(new Set(legalCandidates.map((candidate) => candidate.score)).size > 1, 'movable quote search must distinguish quality among legal candidates');
   const selectedCandidate = candidates.find((candidate) => candidate.index === evaluationPhase.details.selectedCandidate);
   assert.ok(selectedCandidate?.status === 'accepted', 'real editorial candidate search must select a legal candidate');
   assert.ok(Number.isFinite(movableResult.evaluation.score), 'real editorial candidate search must produce a finite score');
   const movableQuote = movableResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(movableQuote, 'movable quote result must retain the quote placement');
-  assert.ok(Math.abs(movableQuote.box.y - fixedQuote.box.y) <= movableQuoteWindow + renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm, 'selected movable quote must remain inside its configured micro-window');
-  if (movableResult.evaluation.score === fixedResult.evaluation.score) assert.ok(Math.abs(movableQuote.box.y - fixedQuote.box.y) <= renderConfig.pdf.composition_geometry_tolerance, 'a score tie must preserve the preferred fixed quote position');
+  const selectedSlot = movableResult.plan.slots.find((slot) => slot.page === movableQuote.page && slot.id === movableQuote.slotId);
+  assert.equal(selectedSlot?.placement?.mode, 'fluid-y', 'selected quote must remain inside a template-declared fluid capability');
+  const selectedFrame = movableResult.plan.movableInsertionFrames?.find((frame) => frame.blockId === 'quote-market');
+  if (selectedFrame) {
+    assert.ok(movableQuote.box.y >= selectedFrame.box.y - renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm
+      && movableQuote.box.y + movableQuote.box.height <= selectedFrame.box.y + selectedFrame.box.height + renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm,
+    'selected movable quote must remain inside its template-derived movement frame');
+    assert.ok(selectedFrame.box.height >= fixedQuote.box.height, 'template-derived movement frame must retain the quote geometry envelope');
+  }
   return movableResult;
 }
 
@@ -202,7 +189,7 @@ try {
   const { newPdf } = await import(bundles.primitives);
   const { compileTemplateSource } = await import(bundles.template);
   const { pageGeometryFromTemplate } = await import(bundles.geometry);
-  const source = parse(await readFile(join(root, 'templates/pages/editorial-inset-two-column/template.yml'), 'utf8'));
+  const source = parse(await readFile(join(root, 'templates/pages/editorial-dynamic-inset-two-column/template.yml'), 'utf8'));
   const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
   const compiled = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(compiled);
@@ -212,6 +199,7 @@ try {
     quoteMarkOffsetX: renderConfig.pdf.quote_mark_offset_x,
     quoteMarkOffsetY: renderConfig.pdf.quote_mark_offset_y,
     quoteMarkCloseOffsetY: renderConfig.pdf.quote_mark_close_offset_y,
+    introScale: 0.4,
   });
   assert.ok(fixture.totalMainWords >= 1000, `fixture must contain at least 1000 main-flow words, got ${fixture.totalMainWords}`);
   assert.equal(fixture.sourceShape.filter((block) => block.role === 'quote').length, 4, 'fixture must retain all four authored quote insertions');
@@ -240,7 +228,7 @@ try {
   assert.ok(compiled.slots.intro.frame.height === 0 && shortIntroSlot.box.height > 0, 'fit-content intro must have no reserved minimum height and must grow to measured content');
   assert.ok(Math.abs((shortIntroSlot.box.y + shortIntroSlot.box.height) - (shortIntroLine.box.y + shortIntroLine.box.height)) < 0.001, 'fit-content intro height must follow its final line box');
 
-  const movableResult = assertMovableQuoteCandidateSearch(result, result, geometry, renderConfig, planReportComposition, newPdf, compiled, fixture, styles);
+  const movableResult = assertMovableQuoteCandidateSearch(result, geometry, renderConfig, planReportComposition, newPdf, compiled, fixture, styles);
   assert.equal(movableResult.plan.lines.some((line) => line.flowId === 'quotes'), false, 'movable quote search must keep quote text outside ordinary flow');
   console.log(JSON.stringify({
     status: 'passed',

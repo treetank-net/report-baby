@@ -55,6 +55,7 @@ composition_search:
   max_refinement_rounds: <number>
   max_candidates_per_refinement: <number>
   max_full_plan_recalculations: <number>
+  max_page_local_refinement_rounds: <number>
   movable_window_ratio: <number>
   movable_candidate_count: <number>
   movable_refinement_rounds: <number>

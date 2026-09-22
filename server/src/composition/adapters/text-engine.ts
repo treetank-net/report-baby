@@ -37,6 +37,10 @@ export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
       maxFullPlanRecalculations: search.maxFullPlanRecalculations,
       movableRefinementRounds: search.movableRefinementRounds,
       minimumGeometryStepMm: search.minimumGeometryStepMm,
+      maxPageLocalRefinementRounds: search.maxPageLocalRefinementRounds,
+      gravityIterations: search.gravityIterations,
+      gravityDamping: search.gravityDamping,
+      gravityConvergenceMm: search.gravityConvergenceMm,
     },
   };
 }

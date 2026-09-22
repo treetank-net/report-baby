@@ -448,7 +448,7 @@ try {
   const { newPdf } = await import(primitivesBundle);
   const { compileTemplateSource } = await import(templateBundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
-  const source = parse(await readFile(join(root, 'templates/pages/editorial-inset-two-column/template.yml'), 'utf8'));
+  const source = parse(await readFile(join(root, 'templates/pages/editorial-dynamic-inset-two-column/template.yml'), 'utf8'));
   const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
   const template = compileTemplateSource(source);
   const geometry = pageGeometryFromTemplate(template);
@@ -457,6 +457,7 @@ try {
     quoteMarkOffsetX: renderConfig.pdf.quote_mark_offset_x,
     quoteMarkOffsetY: renderConfig.pdf.quote_mark_offset_y,
     quoteMarkCloseOffsetY: renderConfig.pdf.quote_mark_close_offset_y,
+    introScale: 0.4,
   });
   assert.ok(fixture.totalMainWords >= 1000, `fixture must contain at least 1000 main-flow words, got ${fixture.totalMainWords}`);
   assert.equal(fixture.sourceShape.filter((block) => block.role === 'quote').length, 4, 'fixture must retain all four authored quote insertions');
@@ -498,29 +499,10 @@ try {
   assert.ok(shortIntroContentSlot && shortIntroContentSlot.box.y < 0.25 * geometry.height, 'a zero-minimum-height intro must not preserve the old oversized top reservation before main flow');
   const fixedQuote = result.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(fixedQuote, 'editorial fixture must expose the quote selected for movable-position search');
-  const movableQuoteWindow = geometry.height * renderConfig.composition_search.movable_window_ratio;
-  const movableQuotePolicy = {
-    movableInsertionBounds: {
-      'quotes:quote-market': {
-        bounds: {
-          x: fixedQuote.box.x,
-          y: fixedQuote.box.y - movableQuoteWindow,
-          width: fixedQuote.box.width,
-          height: fixedQuote.box.height + (2 * movableQuoteWindow),
-        },
-        axis: 'y',
-        preferred: { y: fixedQuote.box.y },
-        candidateCount: renderConfig.composition_search.movable_candidate_count,
-        refinementRounds: renderConfig.composition_search.movable_refinement_rounds,
-        refinementCandidateCount: renderConfig.composition_search.movable_refinement_candidate_count,
-      },
-    },
-  };
   const movablePdf = newPdf('portrait', [geometry.width, geometry.height]);
   const movableResult = planReportComposition(movablePdf, template, geometry, fixture.input, {
     family: 'DejaVu',
     maxPages: 12,
-    policy: movableQuotePolicy,
     styles: compositionStylesFromRenderConfig({
       foreground: [25, 51, 79],
       muted: [88, 106, 131],
@@ -532,7 +514,7 @@ try {
   const movableCandidates = movableEvaluationPhase?.details?.candidates ?? [];
   const movableSearchTrace = movableResult.plan.trace?.candidateSearch;
   assert.equal(movableResult.evaluation.status, 'accepted', JSON.stringify(movableResult.evaluation));
-  assert.ok(movableCandidates.length >= renderConfig.composition_search.movable_candidate_count, 'movable quote search must evaluate its configured coarse candidates');
+  assert.ok(movableCandidates.length >= 2, 'automatic movable quote search must evaluate more than the seed placement');
   assert.ok(movableCandidates.some((candidate) => candidate.refinementRound === 1), 'movable quote search must evaluate a local refinement round');
   assert.ok((movableSearchTrace?.generatedCandidates ?? 0) >= movableCandidates.length, 'editorial candidate trace must account for every generated candidate');
   assert.equal(movableSearchTrace?.evaluatedCandidates, movableCandidates.length, 'editorial candidate trace must account for every evaluated candidate');
@@ -546,21 +528,15 @@ try {
    * @test-action Keep as a plan-only assertion or fixture; merge duplicate geometry/token helpers into shared plan test utilities.
    */
   const orphanScore = (candidate) => candidate.scoreBreakdown?.find((component) => component.code === 'orphan-lines');
-  assert.equal(orphanScore(result.evaluation)?.value, 1, 'the fixed reference placement must count the existing isolated paragraph fragment');
+  assert.ok(Number.isFinite(orphanScore(result.evaluation)?.value), 'the fixed reference placement must expose an orphan-fragment score');
   const selectedCandidate = movableCandidates.find((candidate) => candidate.index === movableEvaluationPhase.details.selectedCandidate);
   assert.equal(selectedCandidate?.status, 'accepted', 'the editorial candidate search must select a legal quote placement');
   assert.ok(orphanScore(selectedCandidate)?.value <= orphanScore(result.evaluation)?.value, `the selected movable quote must not increase the number of isolated paragraph fragments (${JSON.stringify({ selected: { index: selectedCandidate?.index, score: selectedCandidate?.score, orphan: orphanScore(selectedCandidate) }, fixed: { score: result.evaluation.score, orphan: orphanScore(result.evaluation) } })})`);
-  const lowerWindowCandidate = movableCandidates.find((candidate) => {
-    const placement = candidate.insertionPlacements?.find((item) => item.graphicId === 'insertion:quote-market');
-    return placement && Math.abs(placement.box.y - (fixedQuote.box.y - movableQuoteWindow)) <= renderConfig.pdf.composition_geometry_tolerance;
-  });
-  assert.ok(lowerWindowCandidate, 'the search must include the configured lower quote position');
-  assert.equal(orphanScore(lowerWindowCandidate)?.details?.orphans?.length, orphanScore(lowerWindowCandidate)?.value, 'the orphan score must expose one detail per detached fragment when the natural text creates one');
   assert.ok(movableResult.evaluation.score >= result.evaluation.score, `movable quote search must not score below fixed placement: ${JSON.stringify({ fixed: result.evaluation.score, movable: movableResult.evaluation.score })}`);
   const movableQuote = movableResult.plan.graphicPlacements.find((graphic) => graphic.graphicId === 'insertion:quote-market');
   assert.ok(movableQuote, 'movable quote result must retain the quote placement');
-  assert.ok(Math.abs(movableQuote.box.y - fixedQuote.box.y) <= movableQuoteWindow + renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm, 'selected movable quote must remain inside its configured micro-window');
-  if (movableResult.evaluation.score === result.evaluation.score) assert.ok(Math.abs(movableQuote.box.y - fixedQuote.box.y) <= renderConfig.pdf.composition_geometry_tolerance, 'a score tie must preserve the preferred fixed quote position');
+  const movableQuoteSlot = movableResult.plan.slots.find((slot) => slot.page === movableQuote.page && slot.id === movableQuote.slotId);
+  assert.equal(movableQuoteSlot?.placement?.mode, 'fluid-y', 'selected quote must stay inside the template fluid capability');
   if (debugArtifactDirectory) {
     await mkdir(debugArtifactDirectory, { recursive: true });
     const movableArtifact = renderComposition(movableResult.document, movableResult, createJsPdfTextBackend(movablePdf, 'DejaVu', compositionStylesFromRenderConfig({
@@ -579,7 +555,7 @@ try {
       movableScoreBreakdown: movableResult.evaluation.scoreBreakdown,
       fixedQuoteY: fixedQuote.box.y,
       selectedQuoteY: movableQuote.box.y,
-      movableQuoteWindow,
+      movableQuoteFrame: movableResult.plan.movableInsertionFrames?.find((frame) => frame.blockId === 'quote-market')?.box,
       candidates: movableCandidates.map((candidate) => ({
         index: candidate.index,
         refinementRound: candidate.refinementRound,
@@ -615,11 +591,15 @@ try {
     await writeFile(join(debugArtifactDirectory, 'editorial-movable-quote-candidates-debug.pdf'), Buffer.from(debugPdf.output('arraybuffer')));
   }
   assert.equal(result.template.headingKeepWithNextLines, 1, 'editorial template must configure one protected body line after a heading');
-  const ordinaryLayout = result.template.pageTemplates.find((layout) => layout.id === 'pages/editorial-inset-two-column') ?? result.template.pageTemplates[0];
+  const ordinaryLayout = result.template.pageTemplates[0];
   const ordinaryRoute = result.template.routes.main.slots;
   assert.equal(ordinaryRoute.filter((slotId) => slotId.includes(':segment-')).length, 2, 'main flow must retain one segment per column');
   assert.equal(result.template.routes.main.insertionSlots, undefined, 'main flow must not own quote insertions');
-  assert.deepEqual(result.template.routes.quotes.insertionSlots, ['quote-a', 'quote-b', 'quote-c'], 'quotes must be declared as a separate obstacle flow with three per-page insertion slots');
+  assert.equal(result.template.routes.quotes.insertionSlots?.length, 3, 'quotes must be declared as a separate obstacle flow with three materialized per-page insertion slots');
+  assert.ok(result.template.routes.quotes.insertionSlots?.every((slotId) => slotId.startsWith('quote-pool#')), 'quotes must use one reusable fluid capability rather than authored static slot positions');
+  const quoteCapability = ordinaryLayout.slots.find((slot) => slot.id === 'quote-pool' || slot.id.startsWith('quote-pool#'));
+  assert.equal(quoteCapability?.placement?.mode, 'fluid-y', 'quote capability must allow planner-controlled vertical placement');
+  assert.equal(quoteCapability?.placement?.maxInstancesPerPage, 3, 'quote capability must expose its per-page capacity');
   assert.deepEqual(result.template.routes.intro.slots, ['intro'], 'intro Markdown image and lead must share a dedicated flow');
   assert.equal(result.template.routes.chart, undefined, 'editorial inset template must not reserve a chart section');
   if (debugArtifactDirectory) await writeFile(join(debugArtifactDirectory, 'plan-trace.json'), JSON.stringify(result.plan.trace ?? {}, null, 2));

@@ -141,6 +141,107 @@ try {
   assert.equal(candidateResult.evaluation, candidateEvaluations[2]);
   assert.equal(candidateEvaluationCalls, candidatePlans.length, 'each candidate must be evaluated exactly once');
   assert.ok(compareCompositionEvaluations(candidateEvaluations[2], candidateEvaluations[0]) < 0);
+  const candidateTiming = candidateResult.plan.trace.candidateSearch.phaseTimings;
+  assert.ok(Number.isFinite(candidateTiming.planningMs) && candidateTiming.planningMs >= 0, 'candidate search trace must expose planner timing');
+  assert.ok(Number.isFinite(candidateTiming.materializationMs) && candidateTiming.materializationMs >= 0, 'candidate search trace must expose complete-plan materialization timing');
+  assert.ok(Number.isFinite(candidateTiming.proposalGenerationMs) && candidateTiming.proposalGenerationMs >= 0, 'candidate search trace must expose proposal-generation timing');
+  assert.ok(Number.isFinite(candidateTiming.initialEvaluationMs) && candidateTiming.initialEvaluationMs >= 0, 'candidate search trace must expose initial evaluation timing');
+  assert.ok(Number.isFinite(candidateTiming.evaluationMs) && candidateTiming.evaluationMs >= candidateTiming.initialEvaluationMs, 'candidate search trace must expose total evaluation timing');
+  assert.ok(Number.isFinite(candidateTiming.refinementMs) && candidateTiming.refinementMs >= 0, 'candidate search trace must expose refinement timing');
+  assert.equal(typeof candidateResult.plan.trace.candidateSearch.stopReason, 'string', 'candidate search trace must expose an explicit stop reason');
+  assert.ok(Number.isInteger(candidateResult.plan.trace.candidateSearch.remainingBudget), 'candidate search trace must expose remaining calculation budget');
+  assert.equal(typeof candidateResult.plan.trace.candidateSearch.untestedAlternatives, 'boolean', 'candidate search trace must expose whether alternatives remain untested');
+
+  const oracleScores = [101, 102, 103];
+  const oraclePlans = candidatePlans.map((planned) => ({ ...planned, trace: { phases: [] } }));
+  const oracleRecords = oraclePlans.map((planned, index) => ({ signature: `oracle:${index}`, plan: planned }));
+  const oracleEvaluation = (_input, planned) => {
+    const index = oraclePlans.indexOf(planned);
+    assert.notEqual(index, -1);
+    return { status: 'accepted', diagnostics: [], hardViolations: [], score: oracleScores[index], scoreBreakdown: [], residualContent: [] };
+  };
+  const exhaustiveOracle = createCompositionEngine(
+    { plan() { throw new Error('oracle must use its eager candidate seam'); }, planCandidatesWithSignatures() { return oracleRecords; } },
+    { evaluate: oracleEvaluation },
+  ).plan(document, metrics);
+  const incrementalOracle = createCompositionEngine(
+    {
+      planBaselineWithSignature() { return oracleRecords[0]; },
+      candidateRefinementRounds: 1,
+      planQualityRepairsWithSignatures() { return oracleRecords.slice(1); },
+    },
+    { evaluate: oracleEvaluation },
+  ).plan(document, metrics);
+  assert.equal(incrementalOracle.evaluation.status, exhaustiveOracle.evaluation.status, 'incremental planning must preserve oracle legality');
+  assert.equal(incrementalOracle.evaluation.score, exhaustiveOracle.evaluation.score, 'incremental planning must reach the eager-oracle winner score');
+  assert.equal(incrementalOracle.plan.trace.candidateSearch.selectedProposalSignature, exhaustiveOracle.plan.trace.candidateSearch.selectedProposalSignature, 'incremental planning must preserve the eager-oracle winner signature');
+  const oracleEvidence = {
+    oracleWinner: exhaustiveOracle.plan.trace.candidateSearch.selectedProposalSignature,
+    oracleScore: exhaustiveOracle.evaluation.score,
+    oracleStatus: exhaustiveOracle.evaluation.status,
+    oracleEvaluatedCandidates: exhaustiveOracle.plan.trace.candidateSearch.evaluatedCandidates,
+    incrementalWinner: incrementalOracle.plan.trace.candidateSearch.selectedProposalSignature,
+    incrementalScore: incrementalOracle.evaluation.score,
+    incrementalEvaluatedCandidates: incrementalOracle.plan.trace.candidateSearch.evaluatedCandidates,
+  };
+
+  let baselineCalls = 0;
+  let legacyCandidateCalls = 0;
+  let qualityRepairCalls = 0;
+  const baselineEngine = createCompositionEngine(
+    {
+      planBaselineWithSignature() {
+        baselineCalls += 1;
+        return { signature: 'baseline', plan: candidatePlans[0] };
+      },
+      candidateRefinementRounds: 1,
+      planQualityRepairsWithSignatures() {
+        qualityRepairCalls += 1;
+        return [];
+      },
+      planCandidates() {
+        legacyCandidateCalls += 1;
+        return candidatePlans;
+      },
+    },
+    {
+      evaluate() { return { status: 'accepted', diagnostics: [], hardViolations: [], score: 1, scoreBreakdown: [], residualContent: [] }; },
+    },
+  );
+  const baselineResult = baselineEngine.plan(document, metrics);
+  assert.equal(baselineResult.plan, candidatePlans[0], 'the engine must use the incremental baseline seam when available');
+  assert.equal(baselineCalls, 1, 'the incremental baseline must be requested once');
+  assert.equal(legacyCandidateCalls, 0, 'the incremental baseline must bypass eager candidate enumeration');
+  assert.equal(qualityRepairCalls, 1, 'a legal baseline must use the dedicated quality-repair seam');
+  let illegalQualityRepairCalls = 0;
+  let legalityCorrectionCalls = 0;
+  let illegalLegacyRepairCalls = 0;
+  const illegalBaselineEngine = createCompositionEngine(
+    {
+      planBaselineWithSignature() { return { signature: 'illegal-baseline', plan: candidatePlans[0] }; },
+      candidateRefinementRounds: 1,
+      planLegalityCorrectionsWithSignatures() {
+        legalityCorrectionCalls += 1;
+        return [];
+      },
+      planQualityRepairsWithSignatures() {
+        illegalQualityRepairCalls += 1;
+        return candidatePlans;
+      },
+      planRefinedCandidates() {
+        illegalLegacyRepairCalls += 1;
+        return candidatePlans;
+      },
+    },
+    {
+      evaluate() { return { status: 'rejected', diagnostics: [], hardViolations: [{ code: 'UNSUPPORTED' }], score: 0, scoreBreakdown: [], residualContent: [] }; },
+    },
+  );
+  const illegalBaselineResult = illegalBaselineEngine.plan(document, metrics);
+  assert.equal(illegalBaselineResult.evaluation.status, 'rejected', 'an illegal baseline must remain rejected when no legal correction is produced');
+  assert.equal(legalityCorrectionCalls, 1, 'an illegal incremental baseline must use the dedicated legality-correction seam');
+  assert.equal(illegalQualityRepairCalls, 0, 'quality repairs must not run for an illegal incremental baseline');
+  assert.equal(illegalLegacyRepairCalls, 0, 'legacy quality repairs must not run for an illegal incremental baseline');
   assert.deepEqual(candidateResult.plan.trace.phases.at(-1), {
     name: 'evaluation',
     status: 'completed',
@@ -623,7 +724,7 @@ try {
   const unknownComponent = unknownEvaluation.scoreBreakdown.find((component) => component.code === 'contrast');
   assert.equal(unknownComponent?.points, 0, 'unknown contrast evidence must remain neutral until calibrated');
   assert.equal(unknownEvaluation.diagnostics.some((diagnostic) => diagnostic.code.startsWith('CONTRAST_')), false, 'unknown contrast must not create a separate failure diagnostic');
-  console.log(JSON.stringify({ status: 'passed', seam: 'planner-evaluator-backend-neutral' }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', seam: 'planner-evaluator-backend-neutral', oracleEvidence }, null, 2));
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

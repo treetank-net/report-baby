@@ -35,11 +35,11 @@ slots:
     grow: { axis: y, max_height: 0.14, pushes: [intro, content] }
   intro:
     type: text
-    frame: { x: 0.081, y: 0.12, width: 0.838, height: 0 }
+    frame: { x: 0.081, y: 0.06, width: 0.838, height: 0 }
     role: intro
     allowed_block_kinds: [paragraph, image]
     fit_content: true
-    grow: { axis: y, max_height: 0.18, pushes: [content] }
+    grow: { axis: y, pushes: [content] }
   quote-pool:
     type: text
     frame: { x: 0.081, y: 0.30, width: 0.838, height: 0.58 }
@@ -49,10 +49,11 @@ slots:
       mode: fluid-y
       region: body
       max_instances_per_page: 3
-      distribution: balanced
+      distribution: spread-through-content
+      rhythm_group: editorial-material
   content:
     type: text
-    frame: { x: 0.081, y: 0.16, width: 0.838, height: 0.77 }
+    frame: { x: 0.081, y: 0.06, width: 0.838, height: 0.87 }
   footer:
     type: text
     frame: { x: 0.081, y: 0.93, width: 0.838, height: 0.04 }
@@ -74,7 +75,7 @@ flows:
     slots: [quote-pool]
     insertion_slots: [quote-pool]
     priority: 400
-    start_page: 1
+    start_page: 2
     continuation: allowed
   footer:
     slots: [footer]

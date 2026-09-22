@@ -108,6 +108,32 @@ try {
   assert.equal(artifact.subarray(0, 5).toString(), '%PDF-');
   assert.equal(pdf.getNumberOfPages(), result.plan.pages.length);
 
+  const variantSource = structuredClone(source);
+  variantSource.id = 'pages/editorial-variant';
+  const variantCompiled = compileTemplateSource(variantSource);
+  const variantGeometry = pageGeometryFromTemplate(variantCompiled);
+  const variantPdf = newPdf('portrait', [geometry.width, geometry.height]);
+  const variantResult = planReportComposition(variantPdf, compiled, geometry, legacyFixtureToCompositionInput({
+    intro,
+    sections: [{ heading: 'A measured continuation', body }],
+    footer: 'Prepared for the editorial team.',
+  }), {
+    family: 'DejaVu',
+    maxPages: 3,
+    layout: [
+      { pages: { count: { min: 1, max: 2 } }, template: compiled.id },
+      { pages: 'remaining', template: variantCompiled.id },
+    ],
+    pageTemplateSources: [
+      { templateRef: compiled.id, compiled, geometry },
+      { templateRef: variantCompiled.id, compiled: variantCompiled, geometry: variantGeometry },
+    ],
+  });
+  assert.notEqual(variantResult.evaluation.status, 'rejected', JSON.stringify(variantResult.evaluation));
+  assert.ok(variantResult.plan.trace?.candidateSearch?.layoutVariant, 'selected layout variant must remain visible in the candidate trace');
+  assert.ok(variantResult.plan.pages.some((page) => page.templateRef !== undefined
+    && variantResult.plan.trace?.candidateSearch?.layoutVariant?.includes(page.templateRef)), 'the selected plan must use a template identity reported by the search trace');
+
   const graphicSource = structuredClone(source);
   graphicSource.id = 'pages/editorial-public-graphic-composition';
   graphicSource.slots['public-graphic'] = { type: 'graphic', frame: { x: 0.40, y: 0.35, width: 0.20, height: 0.10 } };

@@ -486,7 +486,7 @@ type TemplateSlotPlacement =
       mode: 'fluid-y';
       region: string;
       maxInstancesPerPage: number;
-      distribution?: 'free' | 'balanced';
+      distribution?: 'spread-through-content' | 'spread-across-pages' | 'clustered' | 'free';
     };
 ```
 
@@ -516,7 +516,7 @@ slots:
       mode: fluid-y
       region: body
       max_instances_per_page: 2
-      distribution: balanced
+      distribution: spread-through-content
     spacing_profile: normal
 
   quote-column:
@@ -528,7 +528,7 @@ slots:
       mode: fluid-y
       region: body
       max_instances_per_page: 4
-      distribution: balanced
+      distribution: spread-through-content
     spacing_profile: compact
 
   image-wide:

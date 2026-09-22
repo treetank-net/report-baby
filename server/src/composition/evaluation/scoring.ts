@@ -69,6 +69,7 @@ function observationContext(observation: CompositionSpacingObservation): Record<
     ...(observation.templateRef === undefined ? {} : { templateRef: observation.templateRef }),
     ...(observation.owner === undefined ? {} : { owner: observation.owner }),
     ...(observation.cause === undefined ? {} : { cause: observation.cause }),
+    ...(observation.placementPolicy === undefined ? {} : { placementPolicy: observation.placementPolicy }),
   };
 }
 
@@ -206,6 +207,204 @@ export function scoreInsertionDistribution(plan: CompositionPlan): CompositionSc
   });
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.dispersion - tolerance), 0);
   return negativeComponent('insertion-distribution', excess, scoreConfigNumber('insertionDistributionPenalty'), { tolerance, records });
+}
+
+type MainPageProgress = { start: number; end: number; center: number };
+
+function mainPageProgress(plan: CompositionPlan): Map<number, MainPageProgress> {
+  const mainLines = allLines(plan).filter((line) => line.flowId === 'main' && line.layer !== 'insertion');
+  const totalWords = Math.max(1, ...mainLines.map((line) => line.endWord));
+  const pages = new Map<number, MainPageProgress>();
+  for (const page of new Set(mainLines.map((line) => line.page))) {
+    const lines = mainLines.filter((line) => line.page === page);
+    const start = Math.min(...lines.map((line) => line.startWord)) / totalWords;
+    const end = Math.max(...lines.map((line) => line.endWord)) / totalWords;
+    pages.set(page, { start, end, center: (start + end) / 2 });
+  }
+  return pages;
+}
+
+function insertionPolicyRecords(plan: CompositionPlan): Array<{
+  graphic: CompositionPlan['graphicPlacements'][number];
+  policy: NonNullable<CompositionPlan['graphicPlacements'][number]['placementPolicy']>;
+  blockId: string;
+  flowId?: string;
+  regionId?: string;
+}> {
+  return plan.graphicPlacements.flatMap((graphic) => {
+    const policy = graphic.placementPolicy;
+    if (!graphic.graphicId.startsWith('insertion:') || !policy) return [];
+    return [{ graphic, policy, blockId: graphic.graphicId.slice('insertion:'.length), flowId: undefined as string | undefined, regionId: undefined as string | undefined }];
+  }).map((record) => ({
+    ...record,
+    ...(() => {
+      const slot = plan.slots.find((candidate) => candidate.page === record.graphic.page
+        && (candidate.id === record.graphic.slotId || record.graphic.slotId.startsWith(`${candidate.id}:`)));
+      return { flowId: slot?.flowId, regionId: slot?.regionId };
+    })(),
+  }));
+}
+
+function policyGroupKey(record: ReturnType<typeof insertionPolicyRecords>[number]): string | undefined {
+  if (!record.policy.rhythmGroup) return undefined;
+  return `${record.regionId ?? ''}:${record.policy.rhythmGroup}`;
+}
+
+function progressForPage(progress: Map<number, MainPageProgress>, page: number): number {
+  const measured = progress.get(page);
+  if (measured) return measured.center;
+  const before = [...progress.entries()]
+    .filter(([candidate]) => candidate < page)
+    .sort((left, right) => right[0] - left[0])[0];
+  if (before) return before[1].end;
+  const after = [...progress.entries()]
+    .filter(([candidate]) => candidate > page)
+    .sort((left, right) => left[0] - right[0])[0];
+  return after?.[1].start ?? 0;
+}
+
+/** Compare insertion order with measured main-flow progress without reflowing the plan. */
+export function scoreContentSpread(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
+  const progress = mainPageProgress(plan);
+  const groups = new Map<string, ReturnType<typeof insertionPolicyRecords>>();
+  for (const record of insertionPolicyRecords(plan)) {
+    if (record.policy.distribution !== 'spread-through-content') continue;
+    const key = policyGroupKey(record);
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) ?? []), record]);
+  }
+  const records: Array<Record<string, unknown>> = [];
+  for (const [key, group] of groups) {
+    if (group.length < 2) continue;
+    const order = new Map<string, number>();
+    for (const flowId of new Set(group.map((record) => record.flowId).filter((value): value is string => value !== undefined))) {
+      for (const [index, block] of (document.flows[flowId]?.blocks ?? []).entries()) order.set(`${flowId}:${block.id}`, index);
+    }
+    const ordered = [...group].sort((left, right) => (order.get(`${left.flowId}:${left.blockId}`) ?? Number.MAX_SAFE_INTEGER) - (order.get(`${right.flowId}:${right.blockId}`) ?? Number.MAX_SAFE_INTEGER)
+      || left.blockId.localeCompare(right.blockId));
+    const weighted = ordered.map((record) => ({ record, weight: Math.max(1, visualLoad(plan, record.graphic).weighted) }));
+    const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+    let accumulatedWeight = 0;
+    weighted.forEach(({ record, weight }) => {
+      const expected = (accumulatedWeight + weight / 2) / Math.max(1, totalWeight);
+      const actual = progressForPage(progress, record.graphic.page);
+      records.push({
+        key,
+        blockId: record.blockId,
+        flowId: record.flowId,
+        graphicId: record.graphic.graphicId,
+        page: record.graphic.page,
+        expectedProgress: expected,
+        actualProgress: actual,
+        visualLoad: weight,
+        deviation: Math.abs(expected - actual),
+        placementPolicy: record.policy,
+      });
+      accumulatedWeight += weight;
+    });
+  }
+  const tolerance = scoreConfigNumber('contentSpreadTolerance');
+  const excess = records.reduce((sum, record) => sum + Math.max(0, (record.deviation as number) - tolerance), 0);
+  return negativeComponent('content-spread', excess, scoreConfigNumber('contentSpreadPenalty'), { tolerance, records });
+}
+
+interface VisualLoadMetrics {
+  areaShare: number;
+  verticalShare: number;
+  affectedLineShare: number;
+  weighted: number;
+}
+
+function visualLoad(plan: CompositionPlan, graphic: CompositionPlan['graphicPlacements'][number]): VisualLoadMetrics {
+  const measured = plan.spacing?.observations?.find((observation) => observation.kind === 'insertion-rhythm'
+    && observation.page === graphic.page
+    && observation.graphicId === graphic.graphicId
+    && observation.metrics.visualLoadAreaShare !== undefined
+    && observation.metrics.visualLoadVerticalShare !== undefined
+    && observation.metrics.visualLoadAffectedLineShare !== undefined
+    && observation.metrics.visualLoad !== undefined);
+  if (measured) return {
+    areaShare: measured.metrics.visualLoadAreaShare!,
+    verticalShare: measured.metrics.visualLoadVerticalShare!,
+    affectedLineShare: measured.metrics.visualLoadAffectedLineShare!,
+    weighted: measured.metrics.visualLoad!,
+  };
+  const page = plan.spacing?.pages.find((candidate) => candidate.page === graphic.page);
+  const regionArea = Math.max(1, (page?.contentBox.width ?? graphic.box.width) * (page?.contentBox.height ?? graphic.box.height));
+  const areaShare = (graphic.box.width * graphic.box.height) / regionArea;
+  const verticalShare = graphic.box.height / Math.max(1, page?.contentBox.height ?? graphic.box.height);
+  const mainLines = allLines(plan).filter((line) => line.flowId === 'main' && line.layer !== 'insertion' && line.page === graphic.page);
+  const affectedLines = mainLines.filter((line) => {
+    const slot = plan.slots.find((candidate) => candidate.page === line.page && (candidate.id === line.slotId || line.slotId.startsWith(`${candidate.id}:`)));
+    const verticalOverlap = line.box.y < graphic.box.y + graphic.box.height
+      && graphic.box.y < line.box.y + line.box.height;
+    const horizontalOverlapWithLane = slot ? horizontalOverlap(slot.box, graphic.box) : horizontalOverlap(line.box, graphic.box);
+    return verticalOverlap && horizontalOverlapWithLane;
+  }).length;
+  const textShare = mainLines.length > 0 ? affectedLines / mainLines.length : 0;
+  const weighted = areaShare * scoreConfigNumber('visualLoadAreaWeight')
+    + verticalShare * scoreConfigNumber('visualLoadVerticalWeight')
+    + textShare * scoreConfigNumber('visualLoadTextWeight');
+  return { areaShare, verticalShare, affectedLineShare: textShare, weighted };
+}
+
+/** Penalize groups that concentrate visual mass on one eligible page. */
+export function scorePageLoadBalance(plan: CompositionPlan): CompositionScoreComponent {
+  const byGroup = new Map<string, ReturnType<typeof insertionPolicyRecords>>();
+  for (const record of insertionPolicyRecords(plan)) {
+    if (record.policy.distribution !== 'spread-across-pages') continue;
+    const key = policyGroupKey(record);
+    if (!key) continue;
+    byGroup.set(key, [...(byGroup.get(key) ?? []), record]);
+  }
+  const records: Array<Record<string, unknown>> = [];
+  const finalPage = Math.max(0, ...plan.pages.map((page) => page.page));
+  for (const [key, group] of byGroup) {
+    if (group.length < 2) continue;
+    const first = group[0]!;
+    const firstSlot = plan.slots.find((slot) => slot.page === first.graphic.page
+      && (slot.id === first.graphic.slotId || first.graphic.slotId.startsWith(`${slot.id}:`)));
+    const groupFlowIds = new Set(group.map((record) => record.flowId));
+    const eligiblePages = [...new Set(plan.slots
+      .filter((slot) => groupFlowIds.has(slot.flowId) && slot.regionId === firstSlot?.regionId && slot.placement?.mode === 'fluid-y')
+      .map((slot) => slot.page))]
+      .filter((page) => page !== finalPage || allLines(plan).some((line) => line.page === page && line.flowId === 'main' && line.layer !== 'insertion'));
+    if (eligiblePages.length < 2) continue;
+    const loads = eligiblePages.map((page) => {
+      const pageRecords = group.filter((record) => record.graphic.page === page);
+      const elements = pageRecords.map((record) => ({ graphicId: record.graphic.graphicId, ...visualLoad(plan, record.graphic) }));
+      return { page, load: elements.reduce((sum, item) => sum + item.weighted, 0), graphicIds: pageRecords.map((record) => record.graphic.graphicId), elements };
+    });
+    const target = loads.reduce((sum, item) => sum + item.load, 0) / loads.length;
+    const imbalance = loads.reduce((sum, item) => sum + Math.abs(item.load - target), 0) / loads.length;
+    records.push({ key, rhythmGroup: first.policy.rhythmGroup, targetLoad: target, imbalance, loads });
+  }
+  const tolerance = scoreConfigNumber('pageLoadBalanceTolerance');
+  const excess = records.reduce((sum, record) => sum + Math.max(0, (record.imbalance as number) - tolerance), 0);
+  return negativeComponent('page-load-balance', excess, scoreConfigNumber('pageLoadBalancePenalty'), { tolerance, records });
+}
+
+/** Penalize a soft source relation only when the source page is known. */
+export function scoreSourceRelations(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
+  const placementBelongsToFlow = (placement: { page: number; slotId: string }, flowId: string): boolean => {
+    const slot = plan.slots.find((candidate) => candidate.page === placement.page
+      && (candidate.id === placement.slotId || placement.slotId.startsWith(`${candidate.id}:`)));
+    return slot?.flowId === flowId;
+  };
+  const pagesFor = (flowId: string, blockId: string): Set<number> => new Set([
+    ...allLines(plan).filter((line) => line.flowId === flowId && line.blockId === blockId).map((line) => line.page),
+    ...plan.placements.filter((placement) => placement.blockId === blockId && placementBelongsToFlow(placement, flowId)).map((placement) => placement.page),
+    ...plan.blockPlacements.filter((placement) => placement.blockId === blockId && placementBelongsToFlow(placement, flowId)).map((placement) => placement.page),
+    ...plan.tablePlacements.filter((placement) => placement.blockId === blockId && placementBelongsToFlow(placement, flowId)).map((placement) => placement.page),
+  ]);
+  const records = insertionPolicyRecords(plan).flatMap((record) => {
+    const relation = record.policy.source;
+    if (!relation || relation.strength !== 'prefer-same-page') return [];
+    const sourcePages = pagesFor(relation.flowId, relation.blockId);
+    if (sourcePages.size === 0 || sourcePages.has(record.graphic.page)) return [];
+    return [{ insertionGraphicId: record.graphic.graphicId, insertionPage: record.graphic.page, sourceFlowId: relation.flowId, sourceBlockId: relation.blockId, sourcePages: [...sourcePages], placementPolicy: record.policy }];
+  });
+  return negativeComponent('source-relation', records.length, scoreConfigNumber('sourceRelationPreferencePenalty'), { records });
 }
 
 /** Penalize insertion gaps that deviate from the configured normal rhythm. */
@@ -496,6 +695,35 @@ type InsertionSpacingDetail = {
   crossStreamSpread: number;
 };
 
+type InsertionTextStreamDetail = {
+  slotId: string;
+  beforeGap?: number;
+  afterGap?: number;
+  beforeMass: number;
+  afterMass: number;
+  beforeLines: number;
+  afterLines: number;
+  totalLines: number;
+  hasBefore: boolean;
+  hasAfter: boolean;
+  edgeGapDeficit: number;
+  massBalance: number;
+};
+
+type InsertionTextContinuityDetail = {
+  blockId: string;
+  page: number;
+  placementMass: number;
+  textMassBefore: number;
+  textMassAfter: number;
+  streamCount: number;
+  streamCoverage: number;
+  coverageDeficit: number;
+  massImbalance: number;
+  crossStreamMassImbalance: number;
+  streams: InsertionTextStreamDetail[];
+};
+
 type HeaderSpacingDetail = {
   page: number;
   headerBottom: number;
@@ -644,7 +872,10 @@ export function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreCo
       const streams = streamIds.flatMap((slotId) => {
         const before = observation.metrics[`textStreamBefore:${slotId}`];
         const after = observation.metrics[`textStreamAfter:${slotId}`];
-        if (before === undefined || after === undefined) return [];
+        // A zero edge gap is scored by insertion-text-continuity together with
+        // the measured line coverage. Keep this component focused on the
+        // legacy positive-gap asymmetry so the same defect is not counted twice.
+        if (before === undefined || after === undefined || before <= 0 || after <= 0) return [];
         return [{ slotId, before, after, imbalance: Math.abs(before - after) }];
       });
       const beforeGaps = streams.map((stream) => stream.before);
@@ -676,6 +907,106 @@ export function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreCo
     value: internalImbalance + externalImbalance + crossStreamSpread,
     points,
     details: { insertions: details },
+  };
+}
+
+/** Prefer distributed insertion candidates that leave usable text above and below the obstacle in every overlapping text stream. */
+export function scoreInsertionTextContinuity(plan: CompositionPlan): CompositionScoreComponent {
+  const minimumMass = scoreConfigNumber('insertionTextContinuityMinMassRatio');
+  const edgeGapTarget = scoreConfigNumber('spacingProfileNormalTargetMm');
+  const details: InsertionTextContinuityDetail[] = spacingObservations(plan)
+    .filter((observation) => observation.kind === 'insertion-rhythm')
+    .flatMap((observation) => {
+      const blockId = observation.blockId;
+      if (!blockId) return [];
+      // A template/input must opt into a content/page distribution policy before
+      // cross-column continuity can influence ranking. Fixed/free insertions keep
+      // their existing local spacing semantics and do not acquire a hidden
+      // global constraint.
+      const distribution = observation.placementPolicy?.distribution;
+      if (distribution !== 'spread-through-content' && distribution !== 'spread-across-pages') return [];
+      const streamIds = [...new Set(Object.keys(observation.metrics)
+        .filter((key) => key.startsWith('textStreamTotalLines:'))
+        .map((key) => key.slice('textStreamTotalLines:'.length)))];
+      const streams = streamIds.flatMap((slotId): InsertionTextStreamDetail[] => {
+        const beforeGap = observation.metrics[`textStreamBefore:${slotId}`];
+        const afterGap = observation.metrics[`textStreamAfter:${slotId}`];
+        const totalLines = observation.metrics[`textStreamTotalLines:${slotId}`] ?? 0;
+        const beforeMass = observation.metrics[`textStreamBeforeMass:${slotId}`] ?? 0;
+        const afterMass = observation.metrics[`textStreamAfterMass:${slotId}`] ?? 0;
+        const beforeLines = observation.metrics[`textStreamBeforeLines:${slotId}`] ?? 0;
+        const afterLines = observation.metrics[`textStreamAfterLines:${slotId}`] ?? 0;
+        const hasBefore = beforeMass >= minimumMass && beforeLines > 0;
+        const hasAfter = afterMass >= minimumMass && afterLines > 0;
+        const edgeGapDeficit = hasBefore && hasAfter
+          ? [beforeGap, afterGap]
+            .filter((gap): gap is number => gap !== undefined)
+            .reduce((sum, gap) => sum + Math.max(0, edgeGapTarget - gap) / Math.max(edgeGapTarget, Number.EPSILON), 0)
+          : 0;
+        const massTotal = beforeMass + afterMass;
+        return [{
+          slotId,
+          ...(beforeGap === undefined ? {} : { beforeGap }),
+          ...(afterGap === undefined ? {} : { afterGap }),
+          beforeMass,
+          afterMass,
+          beforeLines,
+          afterLines,
+          totalLines,
+          hasBefore,
+          hasAfter,
+          edgeGapDeficit,
+          massBalance: massTotal > 0 ? Math.abs(beforeMass - afterMass) / massTotal : 0,
+        }];
+      });
+      if (streams.length === 0 || streams.every((stream) => stream.totalLines === 0)) return [];
+      const coveredStreams = streams.filter((stream) => stream.hasBefore && stream.hasAfter).length;
+      const coverage = coveredStreams / streams.length;
+      const coverageDeficit = 1 - coverage;
+      const textMassBefore = streams.reduce((sum, stream) => sum + stream.beforeMass, 0);
+      const textMassAfter = streams.reduce((sum, stream) => sum + stream.afterMass, 0);
+      const totalTextMass = textMassBefore + textMassAfter;
+      const massImbalance = totalTextMass > 0 ? Math.abs(textMassBefore - textMassAfter) / totalTextMass : 0;
+      const streamMasses = streams.map((stream) => stream.beforeMass + stream.afterMass);
+      const crossStreamMassImbalance = streamMasses.length > 1
+        ? spread(streamMasses) / Math.max(...streamMasses, minimumMass)
+        : 0;
+      const placementMass = observation.metrics.visualLoad ?? 0;
+      return [{
+        ...observationContext(observation),
+        blockId,
+        page: observation.page,
+        placementMass,
+        textMassBefore,
+        textMassAfter,
+        streamCount: streams.length,
+        streamCoverage: coverage,
+        coverageDeficit,
+        massImbalance,
+        crossStreamMassImbalance,
+        streams,
+      }];
+    });
+  const coveragePenalty = scoreConfigNumber('insertionTextContinuityCoveragePenalty');
+  const massPenalty = scoreConfigNumber('insertionTextContinuityMassPenalty');
+  const crossStreamPenalty = scoreConfigNumber('insertionTextContinuityCrossStreamPenalty');
+  const edgeGapPenalty = scoreConfigNumber('insertionTextContinuityEdgeGapPenalty');
+  const visualLoadWeight = scoreConfigNumber('insertionTextContinuityVisualLoadWeight');
+  const records = details.map((detail) => ({
+    ...detail,
+    edgeGapDeficit: detail.streams.reduce((sum, stream) => sum + stream.edgeGapDeficit, 0),
+    weightedDeficit: detail.coverageDeficit * coveragePenalty
+      + detail.massImbalance * massPenalty
+      + detail.crossStreamMassImbalance * crossStreamPenalty
+      + detail.streams.reduce((sum, stream) => sum + stream.edgeGapDeficit, 0) * edgeGapPenalty,
+    placementMassMultiplier: 1 + detail.placementMass * visualLoadWeight,
+  }));
+  const points = -records.reduce((sum, record) => sum + record.weightedDeficit * record.placementMassMultiplier, 0);
+  return {
+    code: 'insertion-text-continuity',
+    value: records.reduce((sum, record) => sum + record.coverageDeficit + record.massImbalance + record.crossStreamMassImbalance + record.edgeGapDeficit, 0),
+    points,
+    details: { minimumMass, edgeGapTarget, coveragePenalty, massPenalty, crossStreamPenalty, edgeGapPenalty, visualLoadWeight, records },
   };
 }
 
@@ -781,7 +1112,7 @@ export function scoreContrast(assessments: CompositionContrastAssessment[]): Com
  * @planner-responsibility Keep the current scoreLegalPlan implementation intact until its target seam is extracted.
  */
 export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; base: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreSiblingColumnImbalance(plan), scoreEmptyRegions(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreInsertionSymmetry(plan), scoreInsertionDistribution(plan), scoreSpacingRhythm(plan), scoreNarrowTextIntervals(plan), scoreFitContentEnvelope(plan), scoreHeaderSpacing(plan), scoreMainStartDelay(plan), scoreElementProximity(plan), scoreFooterGap(plan), scoreGlyphOverlap(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
+  const breakdown = [scoreColumnBalance(plan), scoreSiblingColumnImbalance(plan), scoreEmptyRegions(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreInsertionTextContinuity(plan), scoreInsertionSymmetry(plan), scoreInsertionDistribution(plan), scoreContentSpread(document, plan), scorePageLoadBalance(plan), scoreSourceRelations(document, plan), scoreSpacingRhythm(plan), scoreNarrowTextIntervals(plan), scoreFitContentEnvelope(plan), scoreHeaderSpacing(plan), scoreMainStartDelay(plan), scoreElementProximity(plan), scoreFooterGap(plan), scoreGlyphOverlap(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
   const base = scoreConfigNumber('base');
   return {
     score: base + breakdown.reduce((sum, component) => sum + component.points, 0),

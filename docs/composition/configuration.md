@@ -100,6 +100,12 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.insertion_internal_spacing_penalty` | Weight for uneven spacing inside an insertion. It interacts with insertion content height and the two padding edges. |
 | `composition_score.insertion_external_spacing_penalty` | Weight for the gap between an insertion and surrounding main-flow content. It interacts with preceding/following line geometry. |
 | `composition_score.insertion_cross_stream_spacing_penalty` | Weight for unequal gaps between insertion streams or columns. It interacts with same-page stream geometry and the other insertion-spacing weights. |
+| `composition_score.insertion_text_continuity_min_mass_ratio` | Minimum normalized text mass on one side of a distributed insertion that counts as usable adjacency. It prevents a single residual line from being treated as a filled stream. The component is evaluated only for explicit `spread-through-content` or `spread-across-pages` policies. |
+| `composition_score.insertion_text_continuity_coverage_penalty` | Penalty for a distributed insertion that leaves one or more overlapping text streams without usable text on both sides. It favors candidates that let every affected column continue above and below the insertion. |
+| `composition_score.insertion_text_continuity_mass_penalty` | Penalty for unequal aggregate text mass above and below a distributed insertion. It keeps a visually heavy obstacle from creating a lopsided text envelope. |
+| `composition_score.insertion_text_continuity_cross_stream_penalty` | Penalty for unequal total text mass between the columns crossed by one distributed insertion. It favors comparable text participation in each affected stream. |
+| `composition_score.insertion_text_continuity_edge_gap_penalty` | Penalty for normalized missing breathing room when a distributed insertion has usable text immediately above and below it. A zero measured edge remains visible in the report and is scored here without duplicating the legacy positive-gap asymmetry penalty. |
+| `composition_score.insertion_text_continuity_visual_load_weight` | Multiplier for the insertion's measured visual load when converting distributed-continuity deficits into points. Larger placements therefore need stronger continuity evidence. |
 | `composition_score.header_content_gap_min_mm` | Minimum preferred gap, in millimetres, between the measured bottom of repeated header content and the first ordinary content line. It produces a soft score deficit when a legal plan leaves less room. |
 | `composition_score.header_content_gap_penalty` | Penalty multiplier applied to the header/content gap deficit. It changes candidate ranking only; slot containment and overlap remain hard planner checks. |
 | `composition_score.empty_region_ratio_threshold` | Maximum unexplained empty-area ratio before a material region contributes a soft penalty. It interacts with `empty_region_height_threshold_mm` and `empty_region_penalty`. |
@@ -111,6 +117,14 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.insertion_symmetry_penalty` | Penalty multiplier for insertion text-gap asymmetry above tolerance. |
 | `composition_score.insertion_distribution_tolerance_mm` | Allowed mean absolute dispersion among insertion outer and neighbour gaps. |
 | `composition_score.insertion_distribution_penalty` | Penalty multiplier for insertion-group distribution dispersion above tolerance. |
+| `composition_score.content_spread_tolerance` | Normalized tolerance for the difference between authored insertion order and measured main-flow progress. |
+| `composition_score.content_spread_penalty` | Penalty multiplier for content-spread deviation above the configured tolerance. |
+| `composition_score.page_load_balance_tolerance` | Allowed normalized visual-load imbalance between eligible pages in a spread-across-pages group. |
+| `composition_score.page_load_balance_penalty` | Penalty multiplier for page visual-load imbalance above tolerance. |
+| `composition_score.visual_load_area_weight` | Weight of insertion area share in the renderer-neutral visual-load estimate. |
+| `composition_score.visual_load_vertical_weight` | Weight of insertion vertical-span share in the renderer-neutral visual-load estimate. |
+| `composition_score.visual_load_text_weight` | Weight of the main-flow line share affected by an insertion in the visual-load estimate. |
+| `composition_score.source_relation_preference_penalty` | Penalty for a soft `prefer-same-page` source relation when the source page is known and differs from the insertion page. |
 | `composition_score.spacing_profile_compact_target_mm` | Reference gap used by the compact spacing profile. |
 | `composition_score.spacing_profile_normal_target_mm` | Reference gap used by the normal spacing profile and the default when no profile is declared. |
 | `composition_score.spacing_profile_open_target_mm` | Reference gap used by the open spacing profile. |
@@ -192,6 +206,12 @@ than its slot; otherwise there is no meaningful position to vary.
 | `composition_search.movable_refinement_rounds` | Number of local refinement passes after coarse candidates are evaluated. It interacts with refinement candidate count and deterministic candidate ordering. |
 | `composition_search.movable_refinement_candidate_count` | Number of local positions sampled during each refinement pass. It interacts with refinement rounds and geometry tolerance used to compare positions. |
 | `composition_search.minimum_geometry_step_mm` | Smallest movement distance worth materializing as a refinement candidate. It prevents repeated sub-pixel reflows while allowing the evaluator to request bounded local repairs. |
+| `composition_search.max_page_local_refinement_rounds` | Maximum page-scoped micro-optimization rounds for each page. Stage G applies these rounds in page order, but every candidate is still reflowed and evaluated as a complete document. A non-positive value disables page-local rounds explicitly; omitted caller policy defaults to one round. |
+| `composition_search.gravity_iterations` | Maximum cheap geometry-only relaxation steps used to improve fluid insertion coordinates before the complete planner/evaluator pass. It never replaces legality or text reflow. |
+| `composition_search.gravity_damping` | Fraction of each calculated attraction/repulsion displacement applied per gravity step. Values are clamped to the inclusive range 0–1 by the planner. |
+| `composition_search.gravity_convergence_mm` | Maximum remaining geometry movement considered converged for the cheap gravity pass. A full plan is still evaluated after convergence. |
+| `composition_search.gravity_source_prefer_weight` | Attraction fraction toward a source block for a soft `prefer-same-page` relation during cheap gravity relaxation. It changes only the seed geometry; final placement remains evaluator-ranked. |
+| `composition_search.gravity_source_require_weight` | Attraction fraction toward a source block for a hard `require-same-page` relation after page compatibility has been established. The hard legality check remains authoritative. |
 
 ## PDF values that implement composition rules
 
@@ -250,10 +270,10 @@ The configuration is intentionally consumed through different seams:
 - `pdf.composition_max_pages` and `pdf.plan_coverage_max_gap` are outer
   renderer/report-plan gates. They are not score terms and are not evaluated by
   `composition/evaluation/evaluator.ts`.
-- `composition_search` currently supplies movable-candidate policies to tests
-  and experiments. The production planner accepts those policies through its
-  interface; the runtime does not yet load this group automatically. That is
-  an explicit integration gap, not a reason to make the planner read YAML.
+- `composition_search` supplies global candidate and refinement budgets through
+  the render-config adapter. The planner still receives a typed policy and does
+  not read YAML directly. Stage G's page-local scope is an engine/planner
+  contract, while this group owns only its bounded round budget.
 
 The architecture check protects import cycles and broad layer violations. This
 documentation test protects the semantic side of the seam: when a policy

@@ -325,10 +325,10 @@ insertions:
     collision: { wrap: around }
 ```
 
-Dokładna składnia powinna pasować do obecnej składni YAML, ale semantyka musi
-być niezależna od nazw `quote-a/b/c`. Dotychczasowe sloty zostawić jako
-`legacy insertion slots`, aby można było porównać render i stopniowo migrować
-profile.
+The exact syntax should match the current YAML contract, but its semantics must
+not depend on names such as `quote-a/b/c`. Static quote slots are not retained
+as a shipped runtime template; migration profiles use the reusable fluid
+capability instead.
 
 ### 5. Wspólny model dla grafik
 

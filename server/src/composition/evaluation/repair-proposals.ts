@@ -4,6 +4,7 @@ import type {
   CompositionBox,
   CompositionPlan,
   CompositionMoveRepairProposal,
+  CompositionRelocateRepairProposal,
   CompositionOmitRepairProposal,
   CompositionPlacementScore,
   CompositionRepairProposal,
@@ -262,6 +263,69 @@ function insertionSymmetryProposals(
   return proposals;
 }
 
+function insertionDistributionProposals(
+  plan: CompositionPlan,
+  component: CompositionScoreComponent,
+  placementScores: CompositionPlacementScore[],
+): CompositionMoveRepairProposal[] {
+  const config = readRenderConfig();
+  const tolerance = config.compositionScore.insertionDistributionToleranceMm;
+  const penalty = config.compositionScore.insertionDistributionPenalty;
+  const minimumStep = config.compositionSearch.minimumGeometryStepMm;
+  const proposals: CompositionMoveRepairProposal[] = [];
+  for (const record of recordsAt(component, 'records')) {
+    const key = textAt(record, 'key');
+    if (!key) continue;
+    const separator = key.indexOf(':');
+    const page = Number(separator < 0 ? key : key.slice(0, separator));
+    const regionId = separator < 0 ? undefined : key.slice(separator + 1);
+    if (!Number.isInteger(page)) continue;
+    const observations = (plan.spacing?.observations ?? [])
+      .filter((observation) => observation.kind === 'insertion-rhythm'
+        && observation.page === page
+        && (regionId === undefined || (observation.regionId ?? '') === regionId))
+      .sort((left, right) => (left.box?.y ?? 0) - (right.box?.y ?? 0));
+    for (let index = 0; index < observations.length; index += 1) {
+      const observation = observations[index]!;
+      const previousGap = index === 0 ? observation.metrics.regionStartGap : observation.metrics.previousInsertionGap;
+      const nextGap = index === observations.length - 1 ? observation.metrics.regionEndGap : observation.metrics.nextInsertionGap;
+      if (previousGap === undefined || nextGap === undefined) continue;
+      const asymmetry = Math.abs(previousGap - nextGap);
+      if (asymmetry <= tolerance) continue;
+      const placement = placementForInsertionRecord({
+        page: observation.page,
+        graphicId: observation.graphicId,
+        slotId: observation.slotId,
+      }, placementScores);
+      if (!placement) continue;
+      const movable = movableGraphic(plan, placement);
+      if (!movable || movable.axis !== 'y') continue;
+      const direction: CompositionMoveRepairProposal['direction'] = previousGap < nextGap ? 'down' : 'up';
+      const distance = Math.min(asymmetry / 2, availableMovement(movable, 'y', direction));
+      if (distance < minimumStep) continue;
+      const remainingAsymmetry = Math.max(0, asymmetry - distance * 2);
+      const estimatedPoints = (Math.max(0, asymmetry - tolerance) - Math.max(0, remainingAsymmetry - tolerance)) * penalty;
+      if (estimatedPoints <= 0) continue;
+      proposals.push({
+        id: `${component.code}:${placement.id}:${direction}:${distance}`,
+        placement,
+        action: 'move',
+        axis: 'y',
+        direction,
+        distance,
+        sourceCode: component.code,
+        estimatedPoints,
+        estimateKind: 'local-geometry',
+        legalCapability: 'declared-movable-frame',
+        legalBounds: { ...movable.bounds },
+        measuredGap: asymmetry,
+        targetGap: tolerance,
+      });
+    }
+  }
+  return proposals;
+}
+
 function spacingRhythmProposals(
   plan: CompositionPlan,
   component: CompositionScoreComponent,
@@ -495,6 +559,110 @@ function orphanProposals(
   return proposals;
 }
 
+/** Find unoccupied insertion-capability instances that can accept one block. */
+function relocationDestinations(
+  plan: CompositionPlan,
+  placement: CompositionScorePlacement,
+): Array<{ page: number; slotId: string; box: CompositionBox }> {
+  const flowId = placement.flowId;
+  const blockId = placement.blockId;
+  if (!flowId || !blockId || !placement.graphicId?.startsWith('insertion:')) return [];
+  const occupiedSlotIds = new Set(plan.graphicPlacements
+    .filter((candidate) => candidate.graphicId.startsWith('insertion:'))
+    .map((candidate) => candidate.slotId));
+  const currentSlotId = placement.slotId;
+  return plan.slots
+    .filter((slot) => slot.flowId === flowId
+      && slot.id !== currentSlotId
+      && !occupiedSlotIds.has(slot.id)
+      && slot.kind === 'text'
+      && (slot.allowedRoles === undefined || slot.allowedRoles.includes('quote') || slot.allowedRoles.length === 0)
+      && (slot.allowedBlockIds === undefined || slot.allowedBlockIds.includes(blockId)))
+    .sort((left, right) => left.page - right.page
+      || left.box.y - right.box.y
+      || left.box.x - right.box.x
+      || left.id.localeCompare(right.id))
+    .map((slot) => ({
+      page: slot.page,
+      slotId: slot.id.replace(/^\d+:/u, ''),
+      box: { ...slot.box },
+    }));
+}
+
+/** Propose relocating an insertion when its current page causes a named quality defect. */
+function relocationProposals(
+  plan: CompositionPlan,
+  component: CompositionScoreComponent,
+  placementScores: CompositionPlacementScore[],
+): CompositionRelocateRepairProposal[] {
+  const config = readRenderConfig();
+  const limit = config.compositionSearch.maxCandidatesPerRefinement;
+  const proposals: CompositionRelocateRepairProposal[] = [];
+  const records = component.code === 'orphan-lines'
+    ? recordsAt(component, 'orphans')
+    : recordsAt(component, 'records');
+  const candidateRecords = component.code === 'content-spread'
+    ? [...records].sort((left, right) => (numberAt(right, 'deviation') ?? 0) - (numberAt(left, 'deviation') ?? 0)).slice(0, 1)
+    : records;
+  for (const record of candidateRecords) {
+    const page = numberAt(record, 'page');
+    const insertionSubject = component.code === 'orphan-lines'
+      ? undefined
+      : [record.from, record.to]
+        .filter(isRecord)
+        .find((subject) => textAt(subject, 'id')?.startsWith('insertion:'));
+    const graphicId = component.code === 'orphan-lines' || component.code === 'content-spread'
+      ? textAt(record, 'graphicId')
+      : insertionSubject ? textAt(insertionSubject, 'id') : undefined;
+    const blockId = component.code === 'orphan-lines' || component.code === 'content-spread'
+      ? textAt(record, 'blockId')
+      : insertionSubject ? textAt(insertionSubject, 'blockId') : undefined;
+    if (!graphicId || page === undefined || !blockId) continue;
+    const placement = placementScores.find((entry) => entry.placement.page === page
+      && entry.placement.graphicId === graphicId)?.placement;
+    if (!placement) continue;
+    const destinations = relocationDestinations(plan, placement);
+    const destinationsToTry = component.code === 'content-spread'
+      ? [...destinations]
+        .sort((left, right) => Math.abs(left.page / Math.max(1, plan.pages.length) - (numberAt(record, 'expectedProgress') ?? 0))
+          - Math.abs(right.page / Math.max(1, plan.pages.length) - (numberAt(record, 'expectedProgress') ?? 0))
+          || left.page - right.page
+          || left.slotId.localeCompare(right.slotId))
+        .slice(0, 1)
+      : destinations;
+    const evidencePlacement = component.code === 'orphan-lines'
+      ? placementScores.find((entry) => entry.placement.page === page && entry.placement.blockId === blockId)?.placement
+      : [record.from, record.to]
+        .filter(isRecord)
+        .map((subject) => placementForSubject(subject, page, placementScores))
+        .find((candidate) => candidate !== undefined && candidate.id !== placement.id);
+    const lineHeight = component.code === 'orphan-lines' ? numberAt(record, 'lineHeight') : undefined;
+    const estimatedPoints = component.code === 'orphan-lines'
+      ? config.compositionScore.orphanPenalty
+      : component.code === 'content-spread'
+        ? Math.max(0, (numberAt(record, 'deviation') ?? 0) - config.compositionScore.contentSpreadTolerance) * config.compositionScore.contentSpreadPenalty
+        : Math.max(0, numberAt(record, 'deficit') ?? 0) * config.compositionScore.elementProximityPenalty;
+    if (estimatedPoints <= 0) continue;
+    for (const destination of destinationsToTry) {
+      proposals.push({
+        id: `${component.code}:relocate:${placement.id}:${destination.page}:${destination.slotId}`,
+        placement,
+        action: 'relocate',
+        destination,
+        sourceCode: component.code,
+        estimatedPoints,
+        estimateKind: 'relocation',
+        legalCapability: 'compatible-slot',
+        ...(evidencePlacement === undefined ? {} : { evidencePlacementId: evidencePlacement.id }),
+        ...(component.code === 'orphan-lines' ? { orphanCount: numberAt(record, 'orphanCount') ?? 1 } : {}),
+        ...(lineHeight === undefined ? {} : { lineHeight }),
+      });
+      if (proposals.length >= limit) return proposals;
+    }
+  }
+  return proposals;
+}
+
 function fragmentedBlockIds(component: CompositionScoreComponent): string[] {
   if (!isRecord(component.details) || !Array.isArray(component.details.fragmentedBlockIds)) return [];
   return component.details.fragmentedBlockIds.filter((value): value is string => typeof value === 'string');
@@ -602,6 +770,8 @@ export function compositionRepairProposals(
 ): CompositionRepairProposal[] {
   const proximity = breakdown.find((component) => component.code === 'element-proximity');
   const symmetry = breakdown.find((component) => component.code === 'insertion-symmetry');
+  const distribution = breakdown.find((component) => component.code === 'insertion-distribution');
+  const contentSpread = breakdown.find((component) => component.code === 'content-spread');
   const spacingRhythm = breakdown.find((component) => component.code === 'spacing-rhythm');
   const fragmentation = breakdown.find((component) => component.code === 'paragraph-fragmentation');
   const orphan = breakdown.find((component) => component.code === 'orphan-lines');
@@ -609,9 +779,13 @@ export function compositionRepairProposals(
   const proposals = [
     ...(proximity ? proximityProposals(document, plan, proximity, placementScores) : []),
     ...(symmetry ? insertionSymmetryProposals(plan, symmetry, placementScores) : []),
+    ...(distribution ? insertionDistributionProposals(plan, distribution, placementScores) : []),
     ...(spacingRhythm ? spacingRhythmProposals(plan, spacingRhythm, placementScores) : []),
     ...(fragmentation ? paragraphFragmentationProposals(document, plan, fragmentation, placementScores) : []),
     ...(orphan ? orphanProposals(plan, orphan, placementScores) : []),
+    ...(orphan ? relocationProposals(plan, orphan, placementScores) : []),
+    ...(proximity ? relocationProposals(plan, proximity, placementScores) : []),
+    ...(contentSpread ? relocationProposals(plan, contentSpread, placementScores) : []),
     ...(glyphOverlap ? glyphOverlapProposals(document, plan, glyphOverlap, placementScores) : []),
     ...optionalOmissionProposals(document, placementScores),
   ];

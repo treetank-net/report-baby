@@ -71,10 +71,10 @@ function editorialParagraphText(count, lorem) {
  * @test-decision plan-fixture-or-assertion
  * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
  */
-function countFor(id, role, kind, sourceWords) {
+function countFor(id, role, kind, sourceWords, introScale = INTRO_SCALE) {
   if (kind !== 'paragraph') return sourceWords;
   const scale = role === 'intro'
-    ? INTRO_SCALE
+    ? introScale
     : id.startsWith('body-market-') ? OPENING_SECTION_SCALE : BODY_SCALE;
   return Math.ceil(sourceWords * scale);
 }
@@ -83,7 +83,7 @@ function countFor(id, role, kind, sourceWords) {
  * @test-decision plan-fixture-or-assertion
  * @test-action Keep deterministic fixture construction here; merge repeated scenario data while preserving the input contract.
  */
-export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX, quoteMarkOffsetY, quoteMarkCloseOffsetY, illustration }) {
+export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX, quoteMarkOffsetY, quoteMarkCloseOffsetY, illustration, introScale = INTRO_SCALE }) {
   const lorem = createDeterministicLorem();
   const blocks = SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({
     id,
@@ -92,7 +92,7 @@ export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX,
     ...(kind === 'heading' ? { level: 1, keep_with_next_lines: 3 } : {}),
     text: kind === 'heading'
       ? loremHeading(lorem, countFor(id, role, kind, sourceWords))
-      : editorialParagraphText(countFor(id, role, kind, sourceWords), lorem),
+      : editorialParagraphText(countFor(id, role, kind, sourceWords, introScale), lorem),
   }));
   const totalMainWords = blocks.reduce((sum, block) => sum + block.text.trim().split(/\s+/u).filter(Boolean).length, 0);
   const title = loremHeading(lorem, TITLE_WORDS);
@@ -159,7 +159,7 @@ export function createEditorialNumberedFixture({ quoteMarkGap, quoteMarkOffsetX,
       glyphs,
     },
     title,
-    sourceShape: SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({ id, role, kind, sourceWords, words: countFor(id, role, kind, sourceWords) })),
+    sourceShape: SOURCE_SHAPE.map(([id, role, kind, sourceWords]) => ({ id, role, kind, sourceWords, words: countFor(id, role, kind, sourceWords, introScale) })),
     totalMainWords,
     ordinaryWordCount: [...introBlocks, ...mainBlocks].reduce((sum, block) => sum + block.text.split(/\s+/u).length, 0),
     quoteWordCount: quoteBlocks.reduce((sum, block) => sum + block.text.split(/\s+/u).length, 0),

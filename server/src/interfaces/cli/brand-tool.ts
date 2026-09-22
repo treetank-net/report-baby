@@ -191,7 +191,6 @@ showcase:
               - { type: text, role: subtitle, text: A starter report generated from the brandbook }
               - { type: text, role: subtitle, text: Q2 2026 }
           main:
-            continuation: allowed
             blocks:
               - { type: text, role: intro, text: ${JSON.stringify('This report is intentionally ordinary. Change the profile, assets and template, then render it again to see which decisions belong to the brand.')} }
               - { type: heading, text: ${JSON.stringify('The first useful signal')} }
@@ -201,7 +200,6 @@ showcase:
               - { type: list-item, text: ${JSON.stringify('Add a real profile only for a real use case.')} }
               - { type: list-item, text: ${JSON.stringify('Inspect PDF, PNG and PPTX before publishing.')} }
           footer:
-            continuation: forbidden
             blocks:
               - { type: text, role: footer, text: ${name} starter · report-baby }
   decks:

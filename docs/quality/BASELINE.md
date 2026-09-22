@@ -108,10 +108,12 @@ npm run test:editorial-parity
 
 Its fixture preserves the editorial shape rather than the source wording:
 the same heading, paragraph, quote and illustration dimensions are represented
-with numbered lorem tokens, the template is `pages/editorial-inset-two-column`,
-and the brand is the neutral `Editorial QA` theme. The test checks accepted
-planning, complete quote/glyph and barrier output, measured image geometry and
-the normalized PDF content hash.
+with numbered lorem tokens, the template is
+`pages/editorial-dynamic-inset-two-column`, and the brand is the neutral
+`Editorial QA` theme. Quotes are served through the reusable `quote-pool`
+`fluid-y` capability rather than authored per-position slots. The test checks
+accepted planning, complete quote/glyph and barrier output, measured image
+geometry and the normalized PDF content hash.
 
 Keep it to that. A parity harness that grows a configuration surface has become
 the project instead of protecting it.

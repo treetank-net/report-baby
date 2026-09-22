@@ -30,6 +30,7 @@ const policy = {
   'paragraph-fragmentation': { kind: 'penalty', configKey: 'paragraph_fragmentation_penalty', explanation: 'Penalty per paragraph split across placements.' },
   'orphan-lines': { kind: 'penalty', configKey: 'orphan_penalty', explanation: 'Penalty per isolated text fragment beside an obstacle.' },
   'insertion-spacing': { kind: 'penalty', configKeys: ['insertion_internal_spacing_penalty', 'insertion_external_spacing_penalty', 'insertion_cross_stream_spacing_penalty'], explanation: 'Aggregated penalty for internal, external and cross-stream insertion gaps.' },
+  'insertion-text-continuity': { kind: 'penalty', configKeys: ['insertion_text_continuity_coverage_penalty', 'insertion_text_continuity_mass_penalty', 'insertion_text_continuity_cross_stream_penalty', 'insertion_text_continuity_edge_gap_penalty', 'insertion_text_continuity_visual_load_weight'], explanation: 'Penalty for explicit spread policies when an insertion leaves crossed text columns without balanced usable text or breathing room above and below it.' },
   'insertion-symmetry': { kind: 'penalty', configKey: 'insertion_symmetry_penalty', explanation: 'Penalty for insertion gaps outside the symmetry tolerance.' },
   'insertion-distribution': { kind: 'penalty', configKey: 'insertion_distribution_penalty', explanation: 'Penalty for uneven outer and inter-insertion distribution.' },
   'spacing-rhythm': { kind: 'penalty', configKey: 'spacing_profile_penalty', explanation: 'Penalty for deviation from the configured spacing profile.' },

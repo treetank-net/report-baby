@@ -9,10 +9,33 @@ export interface CompositionRect {
 
 export type CompositionSlotKind = 'text' | 'graphic' | 'block';
 export type CompositionSpacingProfile = 'compact' | 'normal' | 'open';
+export type CompositionPlacementDistribution = 'spread-through-content' | 'spread-across-pages' | 'clustered' | 'free';
+export type CompositionPlacementPolicySource = 'input-block' | 'input-flow' | 'template' | 'planner-default';
+export interface CompositionPlacementSourceRelation {
+  flowId: string;
+  blockId: string;
+  strength: 'prefer-same-page' | 'require-same-page';
+}
+export interface CompositionPlacementPolicyPreference {
+  distribution?: CompositionPlacementDistribution;
+  rhythmGroup?: string;
+  source?: CompositionPlacementSourceRelation;
+}
+/** Effective placement intent recorded on a materialized insertion. */
+export interface CompositionResolvedPlacementPolicy extends CompositionPlacementPolicyPreference {
+  distribution: CompositionPlacementDistribution;
+  distributionSource: CompositionPlacementPolicySource;
+  rhythmGroupSource?: CompositionPlacementPolicySource;
+  sourceRelationSource?: CompositionPlacementPolicySource;
+}
+export interface CompositionPlacementPolicyOverrides {
+  flows?: Record<string, CompositionPlacementPolicyPreference>;
+  blocks?: Record<string, Record<string, CompositionPlacementPolicyPreference>>;
+}
 export type CompositionSlotPlacement =
   | { mode: 'fixed' }
   | { mode: 'anchored-fit-content' }
-  | { mode: 'fluid-y'; region: string; maxInstancesPerPage: number; distribution?: 'free' | 'balanced' };
+  | { mode: 'fluid-y'; region: string; maxInstancesPerPage: number; distribution?: CompositionPlacementDistribution; rhythmGroup?: string };
 export type CompositionGraphicShape = 'rectangle' | 'ellipse' | 'triangle' | 'star' | 'polygon';
 
 export interface CompositionGraphic {
@@ -150,6 +173,8 @@ export interface CompositionLayout {
   pageSlotOverlays?: Record<number, CompositionSlotTemplate[]>;
   /** Template-owned heading cluster policy; it overrides renderer defaults. */
   headingKeepWithNextLines?: number;
+  /** Soft placement preferences; hard slot/frame legality remains template-owned. */
+  placementPolicies?: CompositionPlacementPolicyOverrides;
 }
 
 export type CompositionBlockKind = 'heading' | 'paragraph' | 'list-item' | 'image' | 'table' | 'chart' | 'metric' | 'lockup';

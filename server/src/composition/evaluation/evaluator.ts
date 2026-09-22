@@ -5,6 +5,7 @@ import { scoreLegalPlan } from './scoring.js';
 import { attributeCompositionScore } from './score-attribution.js';
 import { compositionRepairProposals } from './repair-proposals.js';
 import { decorateCompositionDiagnostics, suggestionFromScore } from './diagnostic-catalogue.js';
+import { recordPlanTiming } from '../observability/planning-observability.js';
 import {
   appendDocumentDiagnostics,
   checkEarlyRouteTransitions,
@@ -12,6 +13,7 @@ import {
   checkEmptyFlowPlacements,
   checkFlowBarrierBoxCandidates,
   checkInsertionSourceOrder,
+  checkInsertionSourceRelations,
   validateAtomicPlacements,
   validateBlockPlacementTargets,
   validateGraphicPlacements,
@@ -70,11 +72,23 @@ function suggestionsFromScore(breakdown: CompositionScoreComponent[]): Compositi
     if (component.code === 'insertion-spacing') return [{
       ...suggestionFromScore('INSERTION_SPACING_IMBALANCE', 'Insertion spacing is visibly imbalanced around the surrounding text streams.', component.details, ['Evaluate a nearby insertion candidate.', 'Adjust the insertion position or measured content height.'], 'The measured gaps around one or more insertion obstacles are asymmetric.'),
     }];
+    if (component.code === 'insertion-text-continuity') return [{
+      ...suggestionFromScore('INSERTION_TEXT_CONTINUITY', 'A distributed insertion leaves uneven text mass or insufficient breathing room in one or more affected text streams.', component.details, ['Compare a candidate that keeps all crossed columns active on both sides of the insertion.', 'Move or resize the insertion when one column would otherwise become an isolated fragment or touch the following text.', 'Prefer the candidate with the strongest text-mass balance and edge gaps when legality is unchanged.'], 'The evaluator compares per-column text coverage, normalized text mass and measured edge gaps, including exact zero gaps, only for explicit spread-through-content or spread-across-pages policies; it does not mutate a placement by itself.'),
+    }];
     if (component.code === 'insertion-symmetry') return [{
       ...suggestionFromScore('INSERTION_SPACING_IMBALANCE', 'Insertion gaps are asymmetric around the surrounding text.', component.details, ['Evaluate a nearby legal insertion candidate.', 'Adjust the insertion position or content height.'], 'The before and after text gaps differ beyond the configured tolerance.'),
     }];
     if (component.code === 'insertion-distribution') return [{
       ...suggestionFromScore('INSERTION_DISTRIBUTION_IMBALANCE', 'Multiple insertions are unevenly distributed in their usable region.', component.details, ['Choose a candidate with more even outer and inter-insertion gaps.', 'Allow another page or insertion capability.'], 'Outer and inter-insertion gaps have excessive dispersion.'),
+    }];
+    if (component.code === 'content-spread') return [{
+      ...suggestionFromScore('INSERTION_CONTENT_SPREAD_IMBALANCE', 'Insertion positions do not follow the measured progress of the main flow.', component.details, ['Evaluate a candidate that keeps the insertion order monotonic with main-flow progress.', 'Use a different rhythm group or allow another compatible page.'], 'The evaluator compares authored insertion order with measured main-flow word progress; it does not move content or reflow the document by itself.'),
+    }];
+    if (component.code === 'page-load-balance') return [{
+      ...suggestionFromScore('INSERTION_PAGE_LOAD_IMBALANCE', 'Visual insertion load is concentrated on fewer pages than the selected distribution policy allows.', component.details, ['Distribute insertions across eligible pages with comparable text capacity.', 'Reduce the size of the largest insertion or choose a template with more fluid insertion capacity.'], 'The report includes per-page area, vertical-span and affected-text shares, so the planner can compare candidate placements without raster rendering.'),
+    }];
+    if (component.code === 'source-relation') return [{
+      ...suggestionFromScore('INSERTION_SOURCE_PAGE_PREFERENCE', 'An insertion is separated from the source content it prefers to accompany.', component.details, ['Move the insertion to the source block page when a compatible slot exists.', 'Relax the relation only when the source and insertion are intentionally independent.'], 'This is a soft preference; a require-same-page relation is reported as a legality error instead.'),
     }];
     if (component.code === 'spacing-rhythm') return [{
       ...suggestionFromScore('INSERTION_RHYTHM_DEVIATION', 'Insertion spacing deviates from the selected spacing rhythm.', component.details, ['Use a candidate closer to the configured spacing profile.', 'Adjust the template spacing profile.'], 'Measured insertion gaps exceed the configured profile tolerance.'),
@@ -143,13 +157,17 @@ export interface CompositionEvaluationOptions {
  */
 export function evaluateCompositionPlan(document: CompositionDocument, plan: CompositionPlan, options: CompositionEvaluationOptions = {}): CompositionEvaluation {
   const diagnostics = [...plan.diagnostics];
+  const contrastStartedAt = Date.now();
   const contrastAssessments = options.contrastProvider?.assess(plan) ?? [];
+  recordPlanTiming(plan, 'contrast-assessment', Math.max(0, Date.now() - contrastStartedAt));
   const repeatedFlows = new Set(plan.repeatFlowIds ?? []);
+  const legalityStartedAt = Date.now();
   checkEmptyFlowPlacements(document, plan, diagnostics);
   checkFlowBarrierBoxCandidates(plan, diagnostics);
   checkEmptyAndUnderfilledSlots(document, plan, diagnostics);
   checkEarlyRouteTransitions(document, plan, diagnostics);
   checkInsertionSourceOrder(document, plan, diagnostics);
+  checkInsertionSourceRelations(document, plan, diagnostics);
   appendDocumentDiagnostics(document, diagnostics);
   validateLineTargets(plan, repeatedFlows, diagnostics);
   validateLineSlotOverlaps(plan, diagnostics);
@@ -164,6 +182,12 @@ export function evaluateCompositionPlan(document: CompositionDocument, plan: Com
   validateContentCoverage(document, plan, repeatedFlows, diagnostics);
   const decoratedDiagnostics = decorateCompositionDiagnostics(diagnostics);
   plan.diagnostics = decoratedDiagnostics;
+  recordPlanTiming(plan, 'legality-evaluation', Math.max(0, Date.now() - legalityStartedAt));
+  const evidenceStartedAt = Date.now();
   options.beforeEvaluate?.(document, plan);
-  return buildCompositionEvaluation(document, plan, decoratedDiagnostics, contrastAssessments);
+  recordPlanTiming(plan, 'spacing-evidence', Math.max(0, Date.now() - evidenceStartedAt));
+  const scoringStartedAt = Date.now();
+  const evaluation = buildCompositionEvaluation(document, plan, decoratedDiagnostics, contrastAssessments);
+  recordPlanTiming(plan, 'scoring-and-repair-proposals', Math.max(0, Date.now() - scoringStartedAt));
+  return evaluation;
 }

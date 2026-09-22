@@ -5,14 +5,90 @@ import type {
   CompositionPageTemplate,
   CompositionSlotTemplate,
   CompositionLayout,
+  CompositionPlacementPolicyPreference,
+  CompositionPlacementPolicyOverrides,
 } from '../contracts/model.js';
 import { rectsOverlap } from '../geometry/rectangles.js';
 import { routeLayout } from '../layout/page-state.js';
 
 type PlacementSlot = NonNullable<PlacementRequests['insertion_flows']>[number]['slots'][number];
 type PlacementFlow = NonNullable<PlacementRequests['insertion_flows']>[number];
+type PlacementPolicyPreferenceInput = NonNullable<NonNullable<PlacementRequests['policies']>['flows']>[string];
 type OneOffPlacementSlot = PlacementSlot & { page: number };
 type RequestedPlacementFlow = PlacementFlow & { oneOff?: boolean; slots: Array<PlacementSlot | OneOffPlacementSlot> };
+
+function normalizePlacementPreference(
+  preference: PlacementPolicyPreferenceInput,
+  document: { flows?: Record<string, { blocks?: CompositionBlock[] }> },
+  owner: string,
+): CompositionPlacementPolicyPreference {
+  const source = preference.source;
+  if (source !== undefined) {
+    const sourceFlow = document.flows?.[source.flow_id];
+    if (!sourceFlow) throw new Error(`Placement policy '${owner}' references unknown source flow '${source.flow_id}'.`);
+    const sourceBlock = sourceFlow.blocks?.some((block) => block.id === source.block_id || block.id.startsWith(`${source.block_id}:`));
+    if (!sourceBlock) throw new Error(`Placement policy '${owner}' references unknown source block '${source.block_id}' in flow '${source.flow_id}'.`);
+  }
+  return {
+    ...(preference.distribution === undefined ? {} : { distribution: preference.distribution }),
+    ...(preference.rhythm_group === undefined ? {} : { rhythmGroup: preference.rhythm_group }),
+    ...(preference.source === undefined ? {} : { source: {
+      flowId: preference.source.flow_id,
+      blockId: preference.source.block_id,
+      strength: preference.source.strength,
+    } }),
+  };
+}
+
+function placementPolicyOverrides(
+  requests: PlacementRequests,
+  document: { flows?: Record<string, { blocks?: CompositionBlock[] }> },
+): CompositionPlacementPolicyOverrides | undefined {
+  const source = requests.policies;
+  if (!source) return undefined;
+  const flowIds = new Set(Object.keys(document.flows ?? {}));
+  const flows = Object.fromEntries(Object.entries(source.flows ?? []).map(([flowId, preference]) => {
+    if (!flowIds.has(flowId)) throw new Error(`Placement policy references unknown flow '${flowId}'.`);
+    return [flowId, normalizePlacementPreference(preference, document, `flow '${flowId}'`)];
+  }));
+  const blocks: CompositionPlacementPolicyOverrides['blocks'] = {};
+  for (const [flowId, flowPolicies] of Object.entries(source.blocks ?? {})) {
+    const flow = document.flows?.[flowId];
+    if (!flow) throw new Error(`Placement policy references unknown flow '${flowId}'.`);
+    const blockIds = new Set((flow.blocks ?? []).map((block) => block.id));
+    blocks[flowId] = Object.fromEntries(Object.entries(flowPolicies).map(([blockId, preference]) => {
+      if (!blockIds.has(blockId) && !(flow.blocks ?? []).some((block) => block.id.startsWith(`${blockId}:`))) {
+        throw new Error(`Placement policy references unknown block '${blockId}' in flow '${flowId}'.`);
+      }
+      return [blockId, normalizePlacementPreference(preference, document, `block '${blockId}' in flow '${flowId}'`)];
+    }));
+  }
+  return {
+    ...(Object.keys(flows).length === 0 ? {} : { flows }),
+    ...(Object.keys(blocks).length === 0 ? {} : { blocks }),
+  };
+}
+
+function mergePlacementPolicies(
+  template: CompositionLayout,
+  overrides: CompositionPlacementPolicyOverrides | undefined,
+): CompositionPlacementPolicyOverrides | undefined {
+  if (!overrides) return template.placementPolicies;
+  const blockFlowIds = [...new Set([
+    ...Object.keys(template.placementPolicies?.blocks ?? {}),
+    ...Object.keys(overrides.blocks ?? {}),
+  ])];
+  const blocks = Object.fromEntries(blockFlowIds.map((flowId) => [flowId, {
+    ...(template.placementPolicies?.blocks?.[flowId] ?? {}),
+    ...(overrides.blocks?.[flowId] ?? {}),
+  }]));
+  return {
+    ...(template.placementPolicies?.flows || overrides.flows ? {
+      flows: { ...(template.placementPolicies?.flows ?? {}), ...(overrides.flows ?? {}) },
+    } : {}),
+    ...(blockFlowIds.length === 0 ? {} : { blocks }),
+  };
+}
 
 function requestFlows(requests: PlacementRequests): RequestedPlacementFlow[] {
   const flows: RequestedPlacementFlow[] = [...(requests.insertion_flows ?? [])];
@@ -72,6 +148,7 @@ function physicalSlot(
   slot: PlacementSlot,
   flowId: string,
   layout: CompositionPageTemplate,
+  movable = true,
 ): CompositionSlotTemplate {
   const sizing = slot.sizing;
   const fitContent = sizing?.mode !== 'fixed' || slot.frame.height === 'auto' || slot.frame.height === undefined;
@@ -95,6 +172,13 @@ function physicalSlot(
     ...(slot.allowed_block_ids ? { allowedBlockIds: [...slot.allowed_block_ids] } : {}),
     ...(slot.allowed_block_kinds ? { allowedBlockKinds: [...slot.allowed_block_kinds] } : {}),
     ...(fitContent ? { fitContent: true, grow: { axis: 'y', maxHeight, ...(sizing?.pushes ? { pushes: [...sizing.pushes] } : {}) } } : {}),
+    ...(fitContent && movable ? {
+      placement: {
+        mode: 'fluid-y' as const,
+        region: `insertion:${flowId}`,
+        maxInstancesPerPage: 1,
+      },
+    } : {}),
   };
   if (definition.box.height <= 0) throw new Error(`Insertion slot '${slot.id}' has no usable vertical capacity on layout '${layout.id}'.`);
   if (!fitContent && definition.box.y + definition.box.height > contentBottom + Number.EPSILON) {
@@ -171,7 +255,10 @@ export function applyDynamicInsertionRequests(
 ): CompositionLayout {
   if (!requests) return template;
   const flows = requestFlows(requests);
-  if (flows.length === 0) return template;
+  const policies = placementPolicyOverrides(requests, document);
+  if (flows.length === 0) {
+    return policies === undefined ? template : { ...template, placementPolicies: mergePlacementPolicies(template, policies) };
+  }
   const oneOffAssignments = new Set<string>();
   for (const insertion of requests.insertions ?? []) {
     const key = `${insertion.flow_id}:${insertion.block_id}`;
@@ -206,14 +293,14 @@ export function applyDynamicInsertionRequests(
       for (const page of slotPagesForRequest) validatePage(page, template.maxPages, flow.flow_id);
       const firstLayout = routeLayout(route, template, slotPagesForRequest[0] ?? defaultStartPage) ?? template.pageTemplates[0];
       if (!firstLayout) throw new Error(`Insertion flow '${flow.flow_id}' has no page layout.`);
-      const firstDefinition = physicalSlot(slot, flow.flow_id, firstLayout);
+      const firstDefinition = physicalSlot(slot, flow.flow_id, firstLayout, !flow.oneOff);
       if (firstDefinition.grow?.pushes?.some((id) => !normalizedSlots.some((candidate) => candidate.id === id))) {
         throw new Error(`Insertion slot '${slot.id}' pushes an unknown request slot.`);
       }
       for (const page of slotPagesForRequest) {
         const pageLayout = routeLayout(route, template, page);
         if (!pageLayout) throw new Error(`Insertion flow '${flow.flow_id}' has no layout for page ${page}.`);
-        const pageDefinition = physicalSlot(slot, flow.flow_id, pageLayout);
+        const pageDefinition = physicalSlot(slot, flow.flow_id, pageLayout, !flow.oneOff);
         validateStaticOverlaps(template, pageDefinition, page, route);
         const pageSlots = overlays[page] ?? (overlays[page] = []);
         if (pageSlots.some((candidate) => candidate.id === pageDefinition.id)) throw new Error(`Insertion slot id '${pageDefinition.id}' is duplicated on page ${page}.`);
@@ -233,5 +320,10 @@ export function applyDynamicInsertionRequests(
       ...(flow.start_page === undefined ? {} : { startPage: flow.start_page }),
     };
   }
-  return { ...template, routes, pageSlotOverlays: overlays };
+  return {
+    ...template,
+    routes,
+    pageSlotOverlays: overlays,
+    ...(policies === undefined ? {} : { placementPolicies: mergePlacementPolicies(template, policies) }),
+  };
 }

@@ -11,6 +11,7 @@ import type {
   CompositionSlotPlacement,
   CompositionSlotKind,
   CompositionSpacingProfile,
+  CompositionResolvedPlacementPolicy,
 } from './model.js';
 import type { CompositionSearchBudget } from './planner-policy.js';
 
@@ -173,13 +174,24 @@ interface CompositionRepairProposalBase {
   placement: CompositionScorePlacement;
   sourceCode: string;
   estimatedPoints: number;
-  estimateKind: 'local-geometry' | 'orphan-recovery' | 'fragmentation-recovery' | 'optional-omission';
+  estimateKind: 'local-geometry' | 'relocation' | 'orphan-recovery' | 'fragmentation-recovery' | 'optional-omission';
   evidencePlacementId?: string;
   measuredGap?: number;
   targetGap?: number;
   overlapArea?: number;
   orphanCount?: number;
   lineHeight?: number;
+}
+
+/** Move an insertion to another compatible, materialized slot/page. */
+export interface CompositionRelocateRepairProposal extends CompositionRepairProposalBase {
+  action: 'relocate';
+  destination: {
+    page: number;
+    slotId: string;
+    box: CompositionBox;
+  };
+  legalCapability: 'compatible-slot';
 }
 
 /** A bounded movement that is legal inside an explicitly declared frame. */
@@ -198,7 +210,7 @@ export interface CompositionOmitRepairProposal extends CompositionRepairProposal
   legalCapability: 'input-allows-omission';
 }
 
-export type CompositionRepairProposal = CompositionMoveRepairProposal | CompositionOmitRepairProposal;
+export type CompositionRepairProposal = CompositionMoveRepairProposal | CompositionRelocateRepairProposal | CompositionOmitRepairProposal;
 
 /** Explainable, extensible facts derived from one plan region or obstacle. */
 export interface CompositionSpacingObservation {
@@ -226,6 +238,8 @@ export interface CompositionSpacingObservation {
   movementAvailable?: boolean;
   /** Axis along which this pair's spacing deficit was measured. */
   axis?: 'x' | 'y';
+  /** Effective insertion policy that explains the observation's intended distribution. */
+  placementPolicy?: CompositionResolvedPlacementPolicy;
 }
 
 /** Explainable geometry and spacing projection attached to a composition plan. */
@@ -325,6 +339,8 @@ export interface CompositionGraphicPlacement {
   points?: Array<{ x: number; y: number }>;
   vertexCount?: number;
   innerRatio?: number;
+  /** Effective policy used to choose this insertion's materialized position. */
+  placementPolicy?: CompositionResolvedPlacementPolicy;
 }
 
 export interface CompositionGlyphSpec {
@@ -523,9 +539,23 @@ export interface CompositionPlanTrace {
   phases: CompositionPlanningPhase[];
   blocks: CompositionBlockTrace[];
   slots: CompositionSlotTrace[];
+  timings?: CompositionPlanTiming[];
   flowPlacements?: CompositionFlowPlacement[];
   flowBarrierBoxCandidates?: CompositionFlowBarrierBoxCandidate[];
   candidateSearch?: CompositionCandidateSearchTrace;
+}
+
+/** Elapsed time for one renderer-neutral planning operation. */
+export type CompositionPlanTimingName =
+  | 'document-materialization'
+  | 'contrast-assessment'
+  | 'legality-evaluation'
+  | 'spacing-evidence'
+  | 'scoring-and-repair-proposals';
+
+export interface CompositionPlanTiming {
+  name: CompositionPlanTimingName;
+  elapsedMs: number;
 }
 
 export interface CompositionCandidateSearchRound {
@@ -542,8 +572,20 @@ export interface CompositionCandidateSearchRound {
   repairProposals?: CompositionRepairProposal[];
   repairAttempts?: CompositionRepairAttempt[];
   candidateResults?: CompositionCandidateSearchCandidate[];
+  /** Refinement scope; page passes are still evaluated as complete documents. */
+  scope?: CompositionRefinementScope;
   stopReason?: 'no-movable-placements' | 'no-new-candidates' | 'no-improvement' | 'minimum-step' | 'round-limit' | 'calculation-budget';
 }
+
+/** Limit evaluator-directed repairs to one page while preserving full-plan validation. */
+export type CompositionRefinementScope =
+  | { kind: 'document' }
+  | { kind: 'page'; page: number };
+
+export type CompositionCandidateSearchStopReason = CompositionCandidateSearchRound['stopReason']
+  | 'legal-incumbent'
+  | 'unsupported-hard-diagnostics'
+  | 'search-budget-exhausted';
 
 /** Connect one evaluator proposal to its generated and measured candidate, if any. */
 export interface CompositionRepairAttempt {
@@ -573,6 +615,23 @@ export interface CompositionCandidateSearchTrace {
   evaluatedCandidates: number;
   fullPlanRecalculations: number;
   planningTimeMs: number;
+  /** Coarse request timings; evaluator legality/scoring subphases remain combined. */
+  phaseTimings: {
+    planningMs: number;
+    /** Time spent materializing complete plans inside planner calls. */
+    materializationMs: number;
+    /** Planner-call time not accounted for by complete-plan materialization. */
+    proposalGenerationMs: number;
+    initialEvaluationMs: number;
+    /** Total evaluator time across the initial and refinement phases. */
+    evaluationMs: number;
+    refinementMs: number;
+  };
+  stopReason: CompositionCandidateSearchStopReason;
+  remainingBudget: number;
+  untestedAlternatives: boolean;
+  /** Page-template variant evaluated by an application-level layout scheduler. */
+  layoutVariant?: string;
   selectedCandidate: number;
   selectedProposalSignature?: string;
 }
@@ -648,6 +707,27 @@ export interface CompositionScoreComponent {
 
 export interface CompositionPlanner {
   plan(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan;
+  /** Produce one deterministic baseline without pre-materializing alternatives. */
+  planBaselineWithSignature?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlanCandidate;
+  /** Produce bounded corrections for an illegal selected plan. */
+  planLegalityCorrectionsWithSignatures?(
+    document: CompositionDocument,
+    metrics: CompositionTextMetrics,
+    selected: CompositionPlan,
+    rejectedEvaluation: CompositionEvaluation,
+    round: number,
+    remainingBudget: number,
+  ): CompositionPlanCandidate[];
+  /** Produce bounded evaluator-directed repairs for a legal selected plan. */
+  planQualityRepairsWithSignatures?(
+    document: CompositionDocument,
+    metrics: CompositionTextMetrics,
+    selected: CompositionPlan,
+    legalEvaluation: CompositionEvaluation,
+    round: number,
+    remainingBudget: number,
+    scope?: CompositionRefinementScope,
+  ): CompositionPlanCandidate[];
   planCandidates?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan[];
   planCandidatesWithSignatures?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlanCandidate[];
   candidateRefinementRounds?: number;

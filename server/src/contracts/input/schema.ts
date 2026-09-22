@@ -107,11 +107,29 @@ const placementInsertionSchema = z.object({
   sizing: placementSizingSchema.optional(),
 }).strict();
 
+const placementSourceRelationSchema = z.object({
+  flow_id: z.string().min(1),
+  block_id: z.string().min(1),
+  strength: z.enum(['prefer-same-page', 'require-same-page']),
+}).strict();
+
+const placementPolicyPreferenceSchema = z.object({
+  distribution: z.enum(['spread-through-content', 'spread-across-pages', 'clustered', 'free']).optional(),
+  rhythm_group: z.string().min(1).optional(),
+  source: placementSourceRelationSchema.optional(),
+}).strict();
+
+const placementPolicyOverridesSchema = z.object({
+  flows: z.record(z.string().min(1), placementPolicyPreferenceSchema).optional(),
+  blocks: z.record(z.string().min(1), z.record(z.string().min(1), placementPolicyPreferenceSchema)).optional(),
+}).strict();
+
 export const placementRequestsSchema = z.object({
   insertion_flows: z.array(placementInsertionFlowSchema).optional(),
   insertions: z.array(placementInsertionSchema).optional(),
-}).strict().refine((value) => (value.insertion_flows?.length ?? 0) > 0 || (value.insertions?.length ?? 0) > 0, {
-  message: 'At least one insertion flow or insertion request is required.',
+  policies: placementPolicyOverridesSchema.optional(),
+}).strict().refine((value) => (value.insertion_flows?.length ?? 0) > 0 || (value.insertions?.length ?? 0) > 0 || value.policies !== undefined, {
+  message: 'At least one insertion flow, insertion request or placement policy is required.',
 });
 
 export type PlacementRequests = z.infer<typeof placementRequestsSchema>;

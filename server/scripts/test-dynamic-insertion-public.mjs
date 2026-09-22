@@ -47,12 +47,20 @@ try {
             { id: 'quote-bottom', frame: { x: 0.1, y: 0.55, width: 0.8, height: 'auto' }, allowed_roles: ['quote'] },
           ],
         }],
+        policies: {
+          flows: {
+            quotes: { distribution: 'clustered', rhythm_group: 'public-quotes' },
+          },
+        },
       },
     },
   });
   assert.notEqual(result.isError, true, JSON.stringify(result.content));
   assert.equal(result.structuredContent?.compositionEvaluation?.status, 'accepted', JSON.stringify(result.structuredContent));
   assert.equal(result.structuredContent?.compositionPlan?.insertionLines?.length, 7);
+  const policyDecisions = result.structuredContent?.compositionPlan?.decisions?.filter((decision) => decision.code === 'INSERTION_LAYER_PLACED');
+  assert.ok(policyDecisions?.length > 0, 'dynamic insertion placement must record resolved policy evidence');
+  assert.ok(policyDecisions.every((decision) => decision.distribution === 'clustered' && decision.rhythmGroup === 'public-quotes'), 'request policy must override the template capability for insertion placement');
   console.log(JSON.stringify({ status: 'passed', insertionLines: result.structuredContent?.compositionPlan?.insertionLines?.length, pages: result.structuredContent?.compositionPlan?.pages?.length }, null, 2));
 } finally {
   await client.close().catch(() => {});

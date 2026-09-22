@@ -544,6 +544,52 @@ export function checkInsertionSourceOrder(document: CompositionDocument, plan: C
 }
 
 /**
+ * Enforce hard source-page relations after both the source flow and insertion
+ * layer have been materialized. The placement policy is intentionally read
+ * from the plan artifact so a renderer or client can explain the same fact.
+ */
+export function checkInsertionSourceRelations(document: CompositionDocument, plan: CompositionPlan, diagnostics: CompositionDiagnostic[]): void {
+  const placementBelongsToFlow = (placement: { page: number; slotId: string }, flowId: string): boolean => {
+    const slot = plan.slots.find((candidate) => candidate.page === placement.page
+      && (candidate.id === placement.slotId || placement.slotId.startsWith(`${candidate.id}:`)));
+    return slot?.flowId === flowId;
+  };
+  const sourcePages = (flowId: string, blockId: string): number[] => {
+    const pages = [
+      ...allLines(plan).filter((line) => line.flowId === flowId && line.blockId === blockId).map((line) => line.page),
+      ...plan.placements.filter((placement) => placement.blockId === blockId && placementBelongsToFlow(placement, flowId)).map((placement) => placement.page),
+      ...plan.blockPlacements.filter((placement) => placement.blockId === blockId && placementBelongsToFlow(placement, flowId)).map((placement) => placement.page),
+      ...plan.tablePlacements.filter((placement) => placement.blockId === blockId && placementBelongsToFlow(placement, flowId)).map((placement) => placement.page),
+    ];
+    return [...new Set(pages)].sort((left, right) => left - right);
+  };
+  for (const insertion of plan.graphicPlacements.filter((graphic) => graphic.graphicId.startsWith('insertion:') && graphic.placementPolicy?.source)) {
+    const relation = insertion.placementPolicy?.source;
+    if (!relation || relation.strength !== 'require-same-page') continue;
+    const pages = sourcePages(relation.flowId, relation.blockId);
+    if (pages.includes(insertion.page)) continue;
+    pushEvaluationError(diagnostics,
+      'INSERTION_SOURCE_RELATION_VIOLATION',
+      `Insertion '${insertion.graphicId}' requires source '${relation.flowId}/${relation.blockId}' on the same page.`,
+      {
+        flowId: relation.flowId,
+        blockId: relation.blockId,
+        page: insertion.page,
+        slotId: insertion.slotId,
+        details: {
+          insertionGraphicId: insertion.graphicId,
+          sourceFlowId: relation.flowId,
+          sourceBlockId: relation.blockId,
+          sourcePages: pages,
+          strength: relation.strength,
+          remedy: 'Move the insertion to a page containing the source block, or relax the relation to prefer-same-page.',
+        },
+      },
+    );
+  }
+}
+
+/**
  * @planner-target composition/evaluation/legality.ts
  * @planner-responsibility Add document-level warnings to evaluator diagnostics.
  */

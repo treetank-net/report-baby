@@ -10,10 +10,11 @@ export type TemplateFlowContinuation = 'allowed' | 'forbidden';
 export type TemplateVerticalAlign = 'top' | 'middle' | 'bottom';
 export type TemplateLengthUnit = 'percent' | 'px' | 'mm';
 export type TemplateSpacingProfile = 'compact' | 'normal' | 'open';
+export type TemplatePlacementDistribution = 'spread-through-content' | 'spread-across-pages' | 'clustered' | 'free';
 export type TemplateSlotPlacement =
   | { mode: 'fixed' }
   | { mode: 'anchored-fit-content' }
-  | { mode: 'fluid-y'; region: string; maxInstancesPerPage: number; distribution?: 'free' | 'balanced' };
+  | { mode: 'fluid-y'; region: string; maxInstancesPerPage: number; distribution?: TemplatePlacementDistribution; rhythmGroup?: string };
 
 export interface TemplateLength {
   value: number;
@@ -209,10 +210,17 @@ function slotPlacementAt(value: unknown, path: string): TemplateSlotPlacement | 
   const region = stringAt(value.region, `${path}.region`);
   const maxInstancesPerPage = optionalPositiveInteger(value.max_instances_per_page, `${path}.max_instances_per_page`);
   if (maxInstancesPerPage === undefined) fail(`${path}.max_instances_per_page`, 'is required for fluid-y placement.');
-  const distribution = value.distribution === undefined || value.distribution === 'free' || value.distribution === 'balanced'
+  const distribution = value.distribution === undefined || value.distribution === 'free' || value.distribution === 'spread-through-content' || value.distribution === 'spread-across-pages' || value.distribution === 'clustered'
     ? value.distribution
-    : fail(`${path}.distribution`, "must be 'free' or 'balanced'.");
-  return { mode: 'fluid-y', region, maxInstancesPerPage, ...(distribution === undefined ? {} : { distribution }) };
+    : fail(`${path}.distribution`, "must be 'free', 'spread-through-content', 'spread-across-pages' or 'clustered'.");
+  const rhythmGroup = value.rhythm_group === undefined ? undefined : stringAt(value.rhythm_group, `${path}.rhythm_group`);
+  return {
+    mode: 'fluid-y',
+    region,
+    maxInstancesPerPage,
+    ...(distribution === undefined ? {} : { distribution }),
+    ...(rhythmGroup === undefined ? {} : { rhythmGroup }),
+  };
 }
 
 function positiveNumberAt(value: unknown, path: string): number {

@@ -44,7 +44,7 @@ try {
   const attachPlanSpacingReport = spacingReportModule.attachPlanSpacingReport ?? spacingReportModule.default.attachPlanSpacingReport;
   const scoringBundle = await import(scoringBundlePath);
   const scoring = scoringBundle.default ?? scoringBundle;
-  const { scoreInsertionSpacing, scoreHeaderSpacing, scoreMainStartDelay } = scoring;
+  const { scoreInsertionSpacing, scoreInsertionTextContinuity, scoreHeaderSpacing, scoreMainStartDelay } = scoring;
   const { scoreListContinuity, scoreTableContinuity, scoreTinyFragments, scoreParagraphFragmentation, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, elementProximityReports, scoreOrphanLines, attributeCompositionScore, compositionRepairProposals, scoreSiblingColumnImbalance, scoreEmptyRegions, scoreFitContentEnvelope, rectUnionArea } = composition;
   assert.equal(rectUnionArea([{ x: 0, y: 0, width: 10, height: 10 }, { x: 5, y: 0, width: 10, height: 10 }]), 150, 'overlapping geometry must be counted once');
   /**
@@ -152,6 +152,39 @@ try {
   assert.equal(insertionSpacing.details.insertions[0].internal.imbalance, 0, 'insertion inset scoring must consume measured spacing-report metrics');
   assert.equal(insertionSpacing.details.insertions[0].externalImbalance, 4, 'stream gap imbalance must be scored from the shared observation');
   assert.equal(insertionSpacing.details.insertions[0].crossStreamSpread, 2, 'cross-stream spread must be scored from the shared observation');
+  const zeroEdgeContinuity = scoreInsertionTextContinuity({
+    ...basePlan,
+    spacing: {
+      ...spacingPlan.spacing,
+      observations: [{
+        kind: 'insertion-rhythm',
+        page: 1,
+        flowId: 'quotes',
+        blockId: 'quote-copy',
+        graphicId: 'insertion:quote-copy',
+        slotId: 'quote',
+        regionId: 'main',
+        box: { x: 10, y: 45, width: 80, height: 8 },
+        placementPolicy: { distribution: 'spread-through-content', distributionSource: 'template' },
+        metrics: {
+          contentTop: 47,
+          contentBottom: 51,
+          contentInsetTop: 2,
+          contentInsetBottom: 2,
+          'textStreamBefore:column-a': 4,
+          'textStreamAfter:column-a': 0,
+          'textStreamBeforeMass:column-a': 0.3,
+          'textStreamAfterMass:column-a': 0.4,
+          'textStreamBeforeLines:column-a': 6,
+          'textStreamAfterLines:column-a': 8,
+          'textStreamTotalLines:column-a': 14,
+        },
+      }],
+    },
+  });
+  assert.ok(zeroEdgeContinuity.points < 0, 'a distributed insertion touching following text must lose quality points');
+  assert.equal(zeroEdgeContinuity.details.records[0].streams[0].afterGap, 0, 'an exact zero edge gap must remain in continuity evidence');
+  assert.ok(zeroEdgeContinuity.details.records[0].edgeGapDeficit > 0, 'an exact zero edge gap must produce a normalized deficit');
   const headerSpacing = scoreHeaderSpacing(spacingPlan);
   assert.equal(headerSpacing.details.pages[0].headerBottom, 10, 'header spacing must consume report-owned geometry');
   assert.equal(headerSpacing.details.pages[0].gap, 2, 'header spacing must use the shared gap measurement');
@@ -342,6 +375,7 @@ try {
     slots: [
       { id: 'intro-slot', page: 1, regionId: 'intro', flowId: 'intro', kind: 'text', box: { x: 10, y: 5, width: 80, height: 20 }, state: 'partial' },
       { id: 'quote-slot', page: 1, regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 5, width: 80, height: 60 }, state: 'partial' },
+      { id: 'quote-slot-later', page: 1, regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 70, width: 80, height: 20 }, state: 'open' },
       { id: 'main-slot', page: 1, regionId: 'main', flowId: 'main', kind: 'text', box: { x: 10, y: 5, width: 80, height: 70 }, state: 'partial' },
     ],
     lines: [
@@ -380,6 +414,13 @@ try {
   assert.equal(proximityMove.estimatedPoints, 5, 'isolated linear proximity improvement is estimated from the measured gap');
   assert.equal(proximityMove.legalCapability, 'declared-movable-frame');
   assert.deepEqual(proximityMove.legalBounds, { x: 10, y: 5, width: 80, height: 60 });
+  const proximityRelocation = proximityRepairs.find((proposal) => proposal.action === 'relocate');
+  assert.ok(proximityRelocation, 'a same-page proximity conflict must also propose a compatible free insertion capability');
+  assert.equal(proximityRelocation.placement.graphicId, 'insertion:quote-copy');
+  assert.equal(proximityRelocation.destination.slotId, 'quote-slot-later');
+  assert.equal(proximityRelocation.legalCapability, 'compatible-slot');
+  assert.equal(proximityRelocation.estimateKind, 'relocation');
+  assert.equal(proximityRelocation.evidencePlacementId, proximityAttribution.find((entry) => entry.placement.blockId === 'intro-copy')?.placement.id);
   assert.ok(proximityOmission, 'an explicitly optional insertion with a negative attribution may also be evaluated as omitted');
   assert.equal(proximityOmission.legalCapability, 'input-allows-omission');
   assert.ok(proximityOmission.estimatedPoints > 0);
@@ -429,6 +470,25 @@ try {
   assert.equal(rhythmRepair.direction, 'down', 'an undersized before-gap should propose moving the insertion down');
   assert.equal(rhythmRepair.measuredGap, 2);
   assert.equal(rhythmRepair.targetGap, 6);
+
+  const distributionDocument = structuredClone(repairDocument);
+  distributionDocument.flows.quotes.blocks.push({ id: 'quote-copy-2', kind: 'paragraph', role: 'quote', text: 'A second short quote.' });
+  const distributionPlan = structuredClone(repairPlan);
+  distributionPlan.slots.push({ id: 'quote-slot-2', page: 1, regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 45, width: 80, height: 20 }, state: 'open' });
+  distributionPlan.graphicPlacements.push({ id: 'graphic:insertion:quote-copy-2', graphicId: 'insertion:quote-copy-2', slotId: 'quote-slot-2', page: 1, shape: 'rectangle', wrap: 'around', box: { x: 10, y: 50, width: 80, height: 8 } });
+  distributionPlan.movableInsertionFrames.push({ id: 'quotes:quote-copy-2', flowId: 'quotes', blockId: 'quote-copy-2', page: 1, box: { x: 10, y: 5, width: 80, height: 60 }, axis: 'y', candidateCount: 5 });
+  distributionPlan.spacing.observations = [
+    { kind: 'insertion-rhythm', page: 1, regionId: 'body', flowId: 'quotes', blockId: 'quote-copy', graphicId: 'insertion:quote-copy', slotId: 'quote-slot', box: { x: 10, y: 16, width: 80, height: 8 }, metrics: { regionStartGap: 5, nextInsertionGap: 30 } },
+    { kind: 'insertion-rhythm', page: 1, regionId: 'body', flowId: 'quotes', blockId: 'quote-copy-2', graphicId: 'insertion:quote-copy-2', slotId: 'quote-slot-2', box: { x: 10, y: 50, width: 80, height: 8 }, metrics: { previousInsertionGap: 30, regionEndGap: 5 } },
+  ];
+  const distributionComponent = scoreInsertionDistribution(distributionPlan);
+  const distributionAttribution = attributeCompositionScore(distributionDocument, distributionPlan, [distributionComponent]);
+  const distributionRepairs = compositionRepairProposals(distributionDocument, distributionPlan, [distributionComponent], distributionAttribution);
+  assert.ok(distributionComponent.points < 0, 'uneven insertion gaps must produce a distribution penalty');
+  const distributionMoves = distributionRepairs.filter((proposal) => proposal.sourceCode === 'insertion-distribution' && proposal.action === 'move');
+  assert.ok(distributionMoves.length >= 2, `each movable edge insertion should receive a local distribution correction: ${JSON.stringify({ component: distributionComponent, proposals: distributionRepairs })}`);
+  assert.ok(distributionMoves.some((proposal) => proposal.direction === 'down') && distributionMoves.some((proposal) => proposal.direction === 'up'), 'distribution correction must consider the direction that equalizes each adjacent gap pair');
+  assert.ok(distributionMoves.every((proposal) => proposal.estimatedPoints > 0 && proposal.legalCapability === 'declared-movable-frame'), 'distribution corrections must expose positive bounded local estimates');
 
   const fragmentationDocument = {
     flows: {
@@ -494,6 +554,7 @@ try {
   const orphanMoveRepairs = orphanRepairs.filter((proposal) => proposal.estimateKind === 'orphan-recovery');
   assert.ok(orphanMoveRepairs.length > 0 && orphanMoveRepairs.every((proposal) => proposal.orphanCount === 1 && proposal.lineHeight === 5 && proposal.estimatedPoints === configuredOrphanPenalty), 'orphan probes must expose the configured per-orphan recovery as an estimate');
   assert.ok(orphanMoveRepairs.every((proposal) => Number.isInteger(proposal.distance / proposal.lineHeight)), 'orphan movement probes must remain in whole measured-line increments across refinement rounds');
+  assert.ok(orphanRepairs.filter((proposal) => proposal.action === 'relocate').every((proposal) => proposal.estimateKind === 'relocation'), 'slot relocation estimates must remain distinct from line-step orphan movement estimates');
   console.log(JSON.stringify({ status: 'passed', listSplit: listSplit.value, tableSplit: tableSplit.value, tinyFragments: tiny.value, qualityComponents: 6 }, null, 2));
 } finally {
   await rm(temporary, { recursive: true, force: true });

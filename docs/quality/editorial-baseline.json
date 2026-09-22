@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "template": "pages/editorial-inset-two-column",
+  "template": "pages/editorial-dynamic-inset-two-column",
   "brand": "Editorial QA",
   "fixture": {
-    "mainWords": 2084,
+    "mainWords": 2025,
     "quoteWords": 94,
     "headings": [
       {
@@ -38,15 +38,15 @@
     "paragraphs": [
       {
         "id": "intro-1",
-        "words": 3
+        "words": 2
       },
       {
         "id": "intro-2",
-        "words": 105
+        "words": 60
       },
       {
         "id": "intro-3",
-        "words": 31
+        "words": 18
       },
       {
         "id": "body-market-1",
@@ -178,12 +178,12 @@
   "pages": 5,
   "ink": {
     "rasterDpi": 110,
-    "lineChecks": 330,
-    "occupiedLines": 330,
-    "slotChecks": 15
+    "lineChecks": 326,
+    "occupiedLines": 326,
+    "slotChecks": 14
   },
   "pdf": {
     "normalization": "pdf-content",
-    "hash": "d8b5cdf0b7637c6dd7daf23db4c19e26783e4d5ccb1c6f67bd9353127e25171e"
+    "hash": "f7e80f5240b2cffe961077814ce1e471d97efe1d0971229ab693352df2c50fda"
   }
 }

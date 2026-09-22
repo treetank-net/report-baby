@@ -3,7 +3,7 @@ import type { PageGeometry } from '../template/geometry.js';
 import type { CompositionInput, DocumentLayoutInput, PlacementRequests } from '../contracts/input/schema.js';
 import type { CompiledTemplate } from '../template/contracts.js';
 import type { CompositionLayout } from './contracts/model.js';
-import type { CompositionEvaluation, CompositionPlan, CompositionTextMetrics } from './contracts/engine-contracts.js';
+import type { CompositionEvaluation, CompositionPlan, CompositionPlanResult, CompositionTextMetrics } from './contracts/engine-contracts.js';
 import type { CompositionContrastProvider } from './evaluation/contrast.js';
 import { compositionDocumentFromInput } from './adapters/input.js';
 import { compositionTemplateFromDocumentLayout, compositionTemplateFromPageGeometry, type PageTemplateSource } from './adapters/page-template.js';
@@ -60,6 +60,29 @@ export interface ReportCompositionResult {
   metrics: CompositionTextMetrics;
   plan: CompositionPlan;
   evaluation: CompositionEvaluation;
+}
+
+function baselineOnlyPolicy(policy: TextCompositionPlannerPolicy): TextCompositionPlannerPolicy {
+  if (!policy.searchBudget) return { ...policy };
+  return {
+    ...policy,
+    searchBudget: {
+      ...policy.searchBudget,
+      maxRefinementRounds: 0,
+      maxFullPlanRecalculations: 1,
+      maxPageLocalRefinementRounds: 0,
+    },
+  };
+}
+
+interface PlannedTemplateVariant {
+  template: CompositionLayout;
+  result: CompositionPlanResult;
+}
+
+function templateVariantIdentity(template: CompositionLayout): string {
+  return template.pageTemplateAssignments?.map((assignment) => `${assignment.from}-${assignment.to ?? 'remaining'}:${assignment.templateRef}`).join('|')
+    ?? template.pageTemplates.map((pageTemplate) => pageTemplate.templateRef ?? pageTemplate.id).join('|');
 }
 
 /**
@@ -122,16 +145,41 @@ export function planReportComposition(
     if (!pageTemplateSources || page.templateRef === undefined) return geometry;
     return pageTemplateSources.find((source) => source.templateRef === page.templateRef)?.geometry ?? geometry;
   };
-  const planned = templates.map((candidateTemplate) => {
-    const template = applyDynamicInsertionRequests(candidateTemplate, document, options.insertionRequests);
-    return {
-      template,
-      result: createTextCompositionEngine(template, policy, {
+  const preparedTemplates = templates.map((candidateTemplate) => applyDynamicInsertionRequests(candidateTemplate, document, options.insertionRequests));
+  const planVariant = (candidateTemplate: CompositionLayout, candidatePolicy: TextCompositionPlannerPolicy): PlannedTemplateVariant => {
+    const result = createTextCompositionEngine(candidateTemplate, candidatePolicy, {
         ...(options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}),
         beforeEvaluate: (_document, candidatePlan) => attachPlanSpacingReport(candidatePlan, document, metrics, geometry, geometryForPage),
-      }).plan(document, metrics),
-    };
-  });
+      }).plan(document, metrics);
+    if (result.plan.trace?.candidateSearch) result.plan.trace.candidateSearch.layoutVariant = templateVariantIdentity(candidateTemplate);
+    return { template: candidateTemplate, result };
+  };
+  let planned: PlannedTemplateVariant[];
+  if (preparedTemplates.length <= 1) {
+    planned = preparedTemplates.map((candidateTemplate) => planVariant(candidateTemplate, policy));
+  } else {
+    const baselines = preparedTemplates.map((candidateTemplate) => planVariant(candidateTemplate, baselineOnlyPolicy(policy)));
+    const legalBaselines = baselines.filter(({ result }) => result.evaluation.status !== 'rejected'
+      && result.evaluation.hardViolations.length === 0
+      && result.evaluation.residualContent.length === 0);
+    if (legalBaselines.length > 0) {
+      const bestBaseline = legalBaselines.reduce((best, candidate) => compareCompositionEvaluations(candidate.result.evaluation, best.result.evaluation) < 0 ? candidate : best);
+      const refined = planVariant(bestBaseline.template, policy);
+      const byTemplate = new Map(baselines.map((candidate) => [templateVariantIdentity(candidate.template), candidate]));
+      byTemplate.set(templateVariantIdentity(refined.template), refined);
+      planned = [...byTemplate.values()];
+    } else {
+      const byTemplate = new Map(baselines.map((candidate) => [templateVariantIdentity(candidate.template), candidate]));
+      for (const baseline of baselines) {
+        const refined = planVariant(baseline.template, policy);
+        byTemplate.set(templateVariantIdentity(refined.template), refined);
+        if (refined.result.evaluation.status !== 'rejected'
+          && refined.result.evaluation.hardViolations.length === 0
+          && refined.result.evaluation.residualContent.length === 0) break;
+      }
+      planned = [...byTemplate.values()];
+    }
+  }
   const selected = planned.reduce((best, candidate) => compareCompositionEvaluations(candidate.result.evaluation, best.result.evaluation) < 0 ? candidate : best);
   const template = selected.template;
   const result = selected.result;

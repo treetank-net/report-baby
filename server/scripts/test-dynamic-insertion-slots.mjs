@@ -59,6 +59,11 @@ function fixture() {
           { id: 'quote-bottom', frame: { x: 0.1, y: 0.55, width: 0.8, height: 'auto' }, allowed_roles: ['quote'] },
         ],
       }],
+      policies: {
+        flows: {
+          quotes: { distribution: 'clustered', rhythm_group: 'test-quotes' },
+        },
+      },
     },
   };
 }
@@ -71,9 +76,12 @@ try {
   assert.equal(Object.keys(overlaid.pageSlotOverlays ?? {}).length, 5, 'a repeated pool must materialize five page overlays');
   assert.deepEqual(overlaid.pageSlotOverlays?.[1]?.map((slot) => slot.id), ['quote-top', 'quote-bottom']);
   assert.equal(overlaid.routes.quotes?.insertionSlots?.length, 2, 'the request creates one insertion route with a two-slot pool');
+  assert.equal(overlaid.placementPolicies?.flows?.quotes?.distribution, 'clustered');
+  assert.equal(overlaid.placementPolicies?.flows?.quotes?.rhythmGroup, 'test-quotes');
 
   const result = createTextCompositionEngine(overlaid).plan(document, metrics);
   assert.equal(result.evaluation.status, 'accepted', JSON.stringify(result.evaluation));
+  assert.ok(result.plan.decisions.some((decision) => decision.code === 'INSERTION_LAYER_PLACED' && decision.distribution === 'clustered' && decision.rhythmGroup === 'test-quotes'), 'resolved request placement policy must be exposed in the plan');
   assert.equal(result.plan.residualContent.length, 0, JSON.stringify(result.plan.residualContent));
   assert.equal(result.plan.pages.length, 5, 'the main story must use the five-page fixture');
   const dynamicSlots = result.plan.slots.filter((slot) => slot.id.endsWith(':quote-top') || slot.id.endsWith(':quote-bottom'));
@@ -149,6 +157,16 @@ try {
     'growth policies cannot push a slot outside their request pool',
   );
   assert.throws(
+    () => applyDynamicInsertionRequests(template, document, { policies: { flows: { quotes: { source: { flow_id: 'missing', block_id: 'story', strength: 'require-same-page' } } } } }),
+    /unknown source flow/u,
+    'a source relation must reference an existing flow',
+  );
+  assert.throws(
+    () => applyDynamicInsertionRequests(template, document, { policies: { flows: { quotes: { source: { flow_id: 'main', block_id: 'missing', strength: 'prefer-same-page' } } } } }),
+    /unknown source block/u,
+    'a source relation must reference an existing source block',
+  );
+  assert.throws(
     () => applyDynamicInsertionRequests(template, document, { insertion_flows: [{ flow_id: 'quotes', slots: [{ id: 'overlap-a', frame: { x: 0.1, y: 0.2, width: 0.8, height: 0.4 }, sizing: { mode: 'fixed' } }, { id: 'overlap-b', frame: { x: 0.1, y: 0.3, width: 0.8, height: 0.2 }, sizing: { mode: 'fixed' } }] }] }),
     /overlaps dynamic slot/u,
     'two fixed dynamic frames cannot overlap without an explicit growth relation',
@@ -196,6 +214,38 @@ try {
   const fixedResult = createTextCompositionEngine(applyDynamicInsertionRequests(fixed.template, fixed.document, fixed.requests)).plan(fixed.document, fixed.metrics);
   assert.equal(fixedResult.evaluation.status, 'rejected', 'fixed insertion boxes reject content overflow');
   assert.ok(fixedResult.plan.diagnostics.some((diagnostic) => diagnostic.code === 'INSERTION_OVERFLOW'), JSON.stringify(fixedResult.plan.diagnostics));
+
+  const recovery = fixture();
+  recovery.document.flows.quotes.blocks = [{ id: 'recoverable-quote', kind: 'paragraph', role: 'quote', text: 'This quote should skip the undersized first capability and use the later compatible slot.' }];
+  recovery.requests = { insertion_flows: [{ flow_id: 'quotes', slots: [
+    { id: 'undersized', frame: { x: 0.1, y: 0.2, width: 0.8, height: 0.02 }, allowed_roles: ['quote'], sizing: { mode: 'fixed', max_height: 0.02 } },
+    { id: 'recoverable', frame: { x: 0.1, y: 0.5, width: 0.8, height: 0.45 }, allowed_roles: ['quote'], sizing: { mode: 'fixed', max_height: 0.45 } },
+  ] }] };
+  const recoveryTemplate = applyDynamicInsertionRequests(recovery.template, recovery.document, recovery.requests);
+  const recoveryResult = createTextCompositionEngine(recoveryTemplate).plan(recovery.document, recovery.metrics);
+  assert.equal(recoveryResult.evaluation.status, 'accepted', JSON.stringify(recoveryResult.evaluation));
+  assert.ok(recoveryResult.plan.insertionLines?.some((line) => line.blockId === 'recoverable-quote' && line.slotId === '1:recoverable'), 'legality recovery must select the later compatible insertion slot');
+  assert.ok(recoveryResult.plan.trace?.candidateSearch?.rounds.some((round) => round.candidateResults?.some((candidate) => candidate.repairProposalIds?.some((id) => id.includes('legality:insertion-correction')))), 'legality recovery must expose the affected insertion correction in the search trace');
+
+  const impossibleSource = fixture();
+  impossibleSource.template.pageTemplates = [
+    { id: 'cover', width: 100, height: 100, slots: [] },
+    impossibleSource.template.pageTemplates[0],
+  ];
+  impossibleSource.template.pageTemplateAssignments = [
+    { from: 1, to: 1, templateRef: 'cover', pageTemplateId: 'cover' },
+    { from: 2, to: 5, templateRef: 'article', pageTemplateId: 'article' },
+  ];
+  impossibleSource.requests = {
+    insertions: [{ flow_id: 'quotes', block_id: 'quote-1', page: 1, frame: { x: 0.1, y: 0.2, width: 0.8, height: 0.1 } }],
+    policies: { flows: { quotes: { source: { flow_id: 'main', block_id: 'story', strength: 'require-same-page' } } } },
+  };
+  const impossibleSourceTemplate = applyDynamicInsertionRequests(impossibleSource.template, impossibleSource.document, impossibleSource.requests);
+  const impossibleSourceResult = createTextCompositionEngine(impossibleSourceTemplate).plan(impossibleSource.document, impossibleSource.metrics);
+  assert.equal(impossibleSourceResult.evaluation.status, 'rejected', 'a hard source relation without a compatible source page must reject the plan');
+  assert.ok(impossibleSourceResult.plan.diagnostics.some((diagnostic) => diagnostic.code === 'INSERTION_SOURCE_RELATION_VIOLATION'
+    && diagnostic.details?.details?.sourcePages?.length > 0
+    && diagnostic.details?.details?.remedy), JSON.stringify(impossibleSourceResult.plan.diagnostics));
 
   console.log(JSON.stringify({ status: 'passed', pages: result.plan.pages.length, quotes: result.plan.insertionLines?.length, slotsPerPage: 2 }, null, 2));
 } finally {

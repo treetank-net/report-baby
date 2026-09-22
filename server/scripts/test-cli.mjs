@@ -66,7 +66,7 @@ function compositionPlanForParity(result) {
     if (Array.isArray(value)) return value.map(stripTiming);
     if (!value || typeof value !== 'object') return value;
     return Object.fromEntries(Object.entries(value)
-      .filter(([key]) => key !== 'planningTimeMs')
+      .filter(([key]) => !key.endsWith('Ms'))
       .map(([key, entry]) => [key, stripTiming(entry)]));
   };
   return stripTiming(result.compositionPlan);

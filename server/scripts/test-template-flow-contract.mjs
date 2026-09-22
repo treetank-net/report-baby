@@ -10,6 +10,8 @@ const temporary = await mkdtemp(join(tmpdir(), 'report-baby-template-flow-'));
 const bundle = join(temporary, 'contracts.cjs');
 const geometryBundle = join(temporary, 'geometry.cjs');
 const compositionAdapterBundle = join(temporary, 'page-template.cjs');
+const gravityBundle = join(temporary, 'placement-gravity.cjs');
+const insertionPlanningBundle = join(temporary, 'insertion-planning.cjs');
 await build({
   entryPoints: ['src/template/contracts.ts'],
   bundle: true,
@@ -19,11 +21,15 @@ await build({
 });
 await build({ entryPoints: ['src/template/geometry.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: geometryBundle });
 await build({ entryPoints: ['src/composition/adapters/page-template.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: compositionAdapterBundle });
+await build({ entryPoints: ['src/composition/layout/placement-gravity.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: gravityBundle });
+await build({ entryPoints: ['src/composition/layout/insertion-planning.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: insertionPlanningBundle });
 
 try {
   const { compileTemplateSource, resolvePlan } = await import(bundle);
   const { pageGeometryFromTemplate } = await import(geometryBundle);
   const { compositionTemplateFromPageGeometry } = await import(compositionAdapterBundle);
+  const { relaxInsertionPlacementGravity } = await import(gravityBundle);
+  const { assignInsertionGroupsFromPlan, seedInsertionProposals } = await import(insertionPlanningBundle);
   const source = {
     schema_version: 1,
     id: 'pages/flow-contract',
@@ -67,15 +73,128 @@ try {
   const capabilitySource = structuredClone(source);
   capabilitySource.id = 'pages/capability-contract';
   capabilitySource.regions = { body: { x: 0.1, y: 0.2, width: 0.8, height: 0.7 } };
-  capabilitySource.slots.quote = { type: 'text', region: 'body', frame: { x: 0.1, width: 0.8 }, fit_content: true, placement: { mode: 'fluid-y', region: 'body', max_instances_per_page: 2, distribution: 'balanced' }, role: 'quote' };
+  capabilitySource.slots.quote = { type: 'text', region: 'body', frame: { x: 0.1, width: 0.8 }, fit_content: true, placement: { mode: 'fluid-y', region: 'body', max_instances_per_page: 2, distribution: 'spread-through-content', rhythm_group: 'editorial-material' }, role: 'quote' };
   capabilitySource.flows.quotes = { slots: ['quote'], insertion_slots: ['quote'], continuation: 'allowed' };
   const capabilityCompiled = compileTemplateSource(capabilitySource);
-  assert.deepEqual(capabilityCompiled.slots.quote.placement, { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'balanced' });
+  assert.deepEqual(capabilityCompiled.slots.quote.placement, { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'spread-through-content', rhythmGroup: 'editorial-material' });
   assert.equal(resolvePlan(capabilityCompiled).slotRules.quote.placement.mode, 'fluid-y');
   const capabilityGeometry = pageGeometryFromTemplate(capabilityCompiled);
   const capabilityLayout = compositionTemplateFromPageGeometry(capabilityCompiled, capabilityGeometry, { maxPages: 3 });
   assert.deepEqual(capabilityLayout.routes.quotes?.insertionSlots, ['quote#1', 'quote#2'], 'fluid capabilities must materialize bounded page-local slots');
   assert.deepEqual(capabilityLayout.pageTemplates.find((item) => item.id === capabilityCompiled.id)?.slots.filter((slot) => slot.id.startsWith('quote#')).map((slot) => slot.id), ['quote#1', 'quote#2']);
+  const gravityLayout = {
+    pageTemplates: [{ id: 'gravity', width: 100, height: 100, slots: [
+      { id: 'quote#1', regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 20, width: 80, height: 20 }, placement: { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'spread-through-content' } },
+      { id: 'quote#2', regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 60, width: 80, height: 20 }, placement: { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'spread-through-content' } },
+    ] }],
+    routes: { quotes: { slots: ['quote#1', 'quote#2'], insertionSlots: ['quote#1', 'quote#2'], continuation: 'allowed' } },
+    maxPages: 1,
+  };
+  const gravity = relaxInsertionPlacementGravity({ flows: { quotes: { blocks: [
+    { id: 'quote-1', kind: 'paragraph', role: 'quote', text: 'one' },
+    { id: 'quote-2', kind: 'paragraph', role: 'quote', text: 'two' },
+  ] } } }, gravityLayout, new Map([
+    ['quotes:quote-1', { flowId: 'quotes', blockId: 'quote-1', page: 1, slotId: 'quote#1', box: { x: 10, y: 20, width: 80, height: 20 } }],
+    ['quotes:quote-2', { flowId: 'quotes', blockId: 'quote-2', page: 1, slotId: 'quote#2', box: { x: 10, y: 60, width: 80, height: 20 } }],
+  ]));
+  assert.equal(gravity.trace.groupCount, 1, 'fluid insertions in one region must share one gravity group');
+  assert.equal(gravity.trace.movedCount, 2, 'gravity must move both members toward equal outer/inter-element gaps');
+  assert.ok(gravity.proposals.get('quotes:quote-1').box.y > 20 && gravity.proposals.get('quotes:quote-2').box.y < 60, 'gravity must move the first member down and the second member up');
+  const anchoredGravityLayout = structuredClone(gravityLayout);
+  anchoredGravityLayout.pageTemplates[0].slots.push({ id: 'fixed-image', regionId: 'body', kind: 'graphic', box: { x: 10, y: 45, width: 80, height: 10 } });
+  const anchoredGravity = relaxInsertionPlacementGravity({ flows: { quotes: { blocks: [
+    { id: 'quote-anchored', kind: 'paragraph', role: 'quote', text: 'one' },
+  ] } } }, anchoredGravityLayout, new Map([
+    ['quotes:quote-anchored', { flowId: 'quotes', blockId: 'quote-anchored', page: 1, slotId: 'quote#1', box: { x: 10, y: 40, width: 80, height: 20 } }],
+  ]));
+  assert.equal(anchoredGravity.trace.anchorCount, 1, 'gravity must expose fixed graphic slots as immovable anchors');
+  const anchoredBox = anchoredGravity.proposals.get('quotes:quote-anchored').box;
+  assert.ok(anchoredBox.y + anchoredBox.height <= 45 || anchoredBox.y >= 55, 'a movable insertion must yield to an overlapping fixed anchor');
+  const weightedGravity = relaxInsertionPlacementGravity({ flows: {
+    quotes: { blocks: [{ id: 'quote-light', kind: 'paragraph', role: 'quote', text: 'one' }] },
+    media: { blocks: [{ id: 'image-heavy', kind: 'image', role: 'body', text: 'image' }] },
+  } }, {
+    pageTemplates: [{ id: 'weighted', width: 100, height: 100, slots: [
+      { id: 'quote', regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 40, width: 80, height: 10 }, placement: { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'spread-through-content', rhythmGroup: 'editorial-material' } },
+      { id: 'image', regionId: 'body', flowId: 'media', kind: 'text', box: { x: 10, y: 35, width: 80, height: 40 }, placement: { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'spread-through-content', rhythmGroup: 'editorial-material' } },
+    ] }],
+    routes: {
+      quotes: { slots: ['quote'], insertionSlots: ['quote'], continuation: 'allowed' },
+      media: { slots: ['image'], insertionSlots: ['image'], continuation: 'allowed' },
+    },
+    maxPages: 1,
+  }, new Map([
+    ['quotes:quote-light', { flowId: 'quotes', blockId: 'quote-light', page: 1, slotId: 'quote', box: { x: 10, y: 40, width: 80, height: 10 } }],
+    ['media:image-heavy', { flowId: 'media', blockId: 'image-heavy', page: 1, slotId: 'image', box: { x: 10, y: 35, width: 80, height: 40 } }],
+  ]));
+  const lightMovement = Math.abs(weightedGravity.proposals.get('quotes:quote-light').box.y - 40);
+  const heavyMovement = Math.abs(weightedGravity.proposals.get('media:image-heavy').box.y - 35);
+  assert.ok(lightMovement > heavyMovement, 'gravity must let the lighter element yield more than the larger visual anchor');
+  const spreadLayout = {
+    pageTemplates: Array.from({ length: 4 }, (_, index) => ({ id: `spread-${index + 1}`, width: 100, height: 100, slots: [
+      { id: 'quote#1', regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 20, width: 80, height: 20 }, placement: { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'spread-through-content' } },
+      { id: 'quote#2', regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 60, width: 80, height: 20 }, placement: { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 2, distribution: 'spread-through-content' } },
+    ] })),
+    routes: { quotes: { slots: ['quote#1', 'quote#2'], insertionSlots: ['quote#1', 'quote#2'], continuation: 'allowed' } },
+    pageTemplateAssignments: [{ from: 1, templateRef: 'spread-1', pageTemplateId: 'spread-1' }],
+    maxPages: 4,
+  };
+  const spreadProposals = seedInsertionProposals({ flows: { quotes: { id: 'quotes', continuation: 'allowed', blocks: [
+    { id: 'quote-a', kind: 'paragraph', role: 'quote', text: 'one' },
+    { id: 'quote-b', kind: 'paragraph', role: 'quote', text: 'two' },
+    { id: 'quote-c', kind: 'paragraph', role: 'quote', text: 'three' },
+    { id: 'quote-d', kind: 'paragraph', role: 'quote', text: 'four' },
+  ] } } }, spreadLayout, { units: 'mm', measureText() { return 1; }, lineHeight() { return 5; }, textPadding() { return { top: 0, bottom: 0 }; } });
+  assert.deepEqual(
+    [...spreadProposals.values()].map((proposal) => proposal.page),
+    [1, 2, 3, 4],
+    'spread-through-content should distribute ordered insertions across eligible pages before full evaluation',
+  );
+  const mixedLayout = {
+    pageTemplates: Array.from({ length: 4 }, (_, index) => ({ id: `mixed-${index + 1}`, width: 100, height: 100, slots: [
+      { id: 'quote', regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 20, width: 80, height: 20 }, fitContent: true, placement: { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 1, distribution: 'spread-through-content', rhythmGroup: 'editorial-material' } },
+      { id: 'image', regionId: 'body', flowId: 'media', kind: 'text', box: { x: 10, y: 50, width: 80, height: 20 }, fitContent: true, placement: { mode: 'fluid-y', region: 'body', maxInstancesPerPage: 1, distribution: 'spread-through-content', rhythmGroup: 'editorial-material' } },
+    ] })),
+    routes: {
+      quotes: { slots: ['quote'], insertionSlots: ['quote'], continuation: 'allowed' },
+      media: { slots: ['image'], insertionSlots: ['image'], continuation: 'allowed' },
+    },
+    pageTemplateAssignments: Array.from({ length: 4 }, (_, index) => ({ from: index + 1, to: index + 1, templateRef: `mixed-${index + 1}`, pageTemplateId: `mixed-${index + 1}` })),
+    maxPages: 4,
+  };
+  const mixedDocument = { flows: {
+    main: { id: 'main', continuation: 'allowed', blocks: [{ id: 'main-body', kind: 'paragraph', role: 'body', text: 'main' }] },
+    quotes: { id: 'quotes', continuation: 'allowed', blocks: [{ id: 'quote-a', kind: 'paragraph', role: 'quote', text: 'quote' }] },
+    media: { id: 'media', continuation: 'allowed', blocks: [{ id: 'image-a', kind: 'image', role: 'body', text: 'image' }] },
+  } };
+  const mixedPlan = {
+    lines: [
+      { flowId: 'main', blockId: 'main-body', page: 1, layer: 'flow', startWord: 0, endWord: 10, box: { x: 0, y: 0, width: 1, height: 1 } },
+      { flowId: 'main', blockId: 'main-body', page: 2, layer: 'flow', startWord: 10, endWord: 35, box: { x: 0, y: 0, width: 1, height: 1 } },
+      { flowId: 'main', blockId: 'main-body', page: 3, layer: 'flow', startWord: 35, endWord: 70, box: { x: 0, y: 0, width: 1, height: 1 } },
+      { flowId: 'main', blockId: 'main-body', page: 4, layer: 'flow', startWord: 70, endWord: 100, box: { x: 0, y: 0, width: 1, height: 1 } },
+    ],
+    blockPlacements: [],
+    tablePlacements: [],
+    placements: [],
+  };
+  const mixedAssigned = assignInsertionGroupsFromPlan(mixedDocument, mixedLayout, mixedPlan, { units: 'mm', measureText() { return 1; }, lineHeight() { return 5; }, textPadding() { return { top: 0, bottom: 0 }; } }, new Map([
+    ['quotes:quote-a', { flowId: 'quotes', blockId: 'quote-a', page: 1, slotId: 'quote', box: { x: 10, y: 20, width: 80, height: 20 } }],
+    ['media:image-a', { flowId: 'media', blockId: 'image-a', page: 1, slotId: 'image', box: { x: 10, y: 50, width: 80, height: 20 } }],
+  ]));
+  assert.notEqual(mixedAssigned.get('quotes:quote-a')?.page, mixedAssigned.get('media:image-a')?.page, 'mixed-flow rhythm assignment should distribute elements instead of leaving a shared group on one page');
+  assert.ok(mixedAssigned.get('quotes:quote-a')?.page !== 1 || mixedAssigned.get('media:image-a')?.page !== 1, 'measured group assignment should be allowed to leave the first eligible page unused');
+  const sourceLayout = structuredClone(mixedLayout);
+  sourceLayout.placementPolicies = { flows: { quotes: { source: { flowId: 'main', blockId: 'main-body', strength: 'require-same-page' } } } };
+  const sourcePlan = {
+    ...mixedPlan,
+    lines: [{ flowId: 'main', blockId: 'main-body', page: 3, layer: 'flow', startWord: 0, endWord: 100, box: { x: 0, y: 0, width: 1, height: 1 } }],
+  };
+  const sourceAssigned = assignInsertionGroupsFromPlan(mixedDocument, sourceLayout, sourcePlan, { units: 'mm', measureText() { return 1; }, lineHeight() { return 5; }, textPadding() { return { top: 0, bottom: 0 }; } }, new Map([
+    ['quotes:quote-a', { flowId: 'quotes', blockId: 'quote-a', page: 1, slotId: 'quote', box: { x: 10, y: 20, width: 80, height: 20 } }],
+    ['media:image-a', { flowId: 'media', blockId: 'image-a', page: 1, slotId: 'image', box: { x: 10, y: 50, width: 80, height: 20 } }],
+  ]));
+  assert.equal(sourceAssigned.get('quotes:quote-a')?.page, 3, 'require-same-page must relocate a free-distribution insertion to the source page before soft group assignment');
   assert.throws(() => compileTemplateSource({ ...capabilitySource, slots: { ...capabilitySource.slots, quote: { ...capabilitySource.slots.quote, placement: { mode: 'fluid-y', region: 'body', max_instances_per_page: 0 } } } }), /max_instances_per_page.*positive integer/u);
   assert.throws(
     () => compileTemplateSource({ ...structuredClone(source), slots: { ...source.slots, zero: { type: 'text', frame: { x: 0.1, y: 0.1, width: 0.8, height: 0 } } } }),

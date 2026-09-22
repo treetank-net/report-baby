@@ -53,18 +53,15 @@ await writeFile(titleReportInput, JSON.stringify({
       ],
     },
     header: {
-      continuation: 'forbidden',
       blocks: [{ type: 'heading', role: 'header', text: 'A report with a real cover' }],
     },
     main: {
-      continuation: 'allowed',
       blocks: [
         { type: 'text', role: 'intro', text: 'The title page is separate from the report content.' },
         { type: 'metric', label: 'Reach', value: '184k', delta: '+23%', trend: 'up' },
       ],
     },
     footer: {
-      continuation: 'forbidden',
       blocks: [{ type: 'text', role: 'footer', text: 'Northstar showcase' }],
     },
   },

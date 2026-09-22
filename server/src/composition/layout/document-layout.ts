@@ -9,7 +9,7 @@ import type {
 } from '../contracts/engine-contracts.js';
 import { placeGlyphObjects } from './glyph-objects.js';
 import { registerFlowBarrierBoxCandidates, registerFlowPlacements } from './flow-space.js';
-import { recordPlanDecision, recordPlanningPhase, tracePlan } from '../observability/planning-observability.js';
+import { recordPlanDecision, recordPlanTiming, recordPlanningPhase, tracePlan } from '../observability/planning-observability.js';
 import { diagnostic } from '../observability/planning-observability.js';
 import {
   ensurePage,
@@ -370,6 +370,7 @@ export function planDocumentOnce(
   insertionProposals: Map<string, PlannedInsertion>,
   graphicProposals: Map<string, PlannedGraphic>,
 ): CompositionPlan {
+  const startedAt = Date.now();
   const plan = createPlan(policy.minimumFragmentLines);
   preparePlanForLayout(document, template, policy, insertionProposals, graphicProposals, plan);
   recordOptionalInsertionOmissions(document, template, insertionProposals, plan);
@@ -377,5 +378,6 @@ export function planDocumentOnce(
   placeDocumentInsertions(document, metrics, template, plan, pages, insertionProposals);
   planDocumentFlows(document, metrics, template, policy, pages, plan);
   finalizeDocumentPlan(document, metrics, template, pages, plan);
+  recordPlanTiming(plan, 'document-materialization', Math.max(0, Date.now() - startedAt));
   return plan;
 }
