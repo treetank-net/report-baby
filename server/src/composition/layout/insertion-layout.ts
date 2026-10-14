@@ -5,6 +5,8 @@
  */
 export {
   insertionBlocksForFlow,
+  insertionSlotCandidates,
+  fitInsertionProposal,
   insertionProposalCorrections,
   assignInsertionGroupsFromPlan,
   insertionSlotAcceptsBlock,
@@ -14,6 +16,8 @@ export {
   seedInsertionProposalCandidates,
   seedInsertionProposals,
 } from './insertion-planning.js';
+export type { MainProgress } from './insertion-planning.js';
+export type { InsertionSlotCandidate } from './insertion-planning.js';
 export {
   placeInsertionLayer,
   reserveInsertionObstacles,

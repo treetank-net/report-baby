@@ -350,7 +350,7 @@ export function selectTextLinesForPlacement(
   if (remainder > 0 && policy.minimumLinesAtEnd !== undefined && remainder < policy.minimumLinesAtEnd) {
     take -= policy.minimumLinesAtEnd - remainder;
   }
-  return wrapped.slice(0, take);
+  return wrapped.slice(0, Math.max(0, take));
 }
 
 /** Move the current block when wrapping found no legal line band. */

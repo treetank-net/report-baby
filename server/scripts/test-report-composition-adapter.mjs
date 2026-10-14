@@ -133,6 +133,15 @@ try {
   assert.ok(variantResult.plan.trace?.candidateSearch?.layoutVariant, 'selected layout variant must remain visible in the candidate trace');
   assert.ok(variantResult.plan.pages.some((page) => page.templateRef !== undefined
     && variantResult.plan.trace?.candidateSearch?.layoutVariant?.includes(page.templateRef)), 'the selected plan must use a template identity reported by the search trace');
+  const layoutVariantRuns = variantResult.plan.trace?.candidateSearch?.layoutVariantRuns ?? [];
+  const variantBaselineRuns = layoutVariantRuns.filter(({ stage }) => stage === 'baseline');
+  assert.equal(variantBaselineRuns.length, 2, 'the multi-template scheduler must measure one baseline run for each permitted template schedule');
+  assert.ok(variantBaselineRuns.every(({ fullPlanRecalculations }) => fullPlanRecalculations === 1), 'each permitted template baseline must be fully evaluated once before alternatives');
+  const selectedVariantRefinement = layoutVariantRuns.find(({ stage, layoutVariant }) => stage === 'refinement' && layoutVariant === variantResult.plan.trace?.candidateSearch?.layoutVariant);
+  assert.ok(selectedVariantRefinement, 'the selected template follow-up must be attributed to the winning baseline variant');
+  assert.equal(selectedVariantRefinement.fullPlanRecalculations, 0, 'continuing the selected baseline must not materialize or evaluate that same baseline again');
+  assert.equal(selectedVariantRefinement.baselineExactMaterializationCount, undefined, 'continuation must report no additional baseline exact materialization');
+  assert.equal(variantResult.plan.trace?.candidateSearch?.fullPlanRecalculations, 1, 'the combined selected-variant trace must count its original baseline once');
 
   const graphicSource = structuredClone(source);
   graphicSource.id = 'pages/editorial-public-graphic-composition';
@@ -339,6 +348,14 @@ try {
     chartPlacements: chartResult.plan.blockPlacements.length,
     tablePlacements: tableResult.plan.tablePlacements.length,
     artifactBytes: artifact.length,
+    layoutVariantRuns: layoutVariantRuns.map(({ layoutVariant, stage, evaluationStatus, score, fullPlanRecalculations, baselineExactMaterializationCount }) => ({
+      layoutVariant,
+      stage,
+      evaluationStatus,
+      score,
+      fullPlanRecalculations,
+      baselineExactMaterializationCount,
+    })),
   }, null, 2));
 } finally {
   await rm(temporary, { recursive: true, force: true });

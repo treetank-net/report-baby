@@ -2267,6 +2267,78 @@
                 "type": "object"
               },
               "type": "array"
+            },
+            "policies": {
+              "additionalProperties": false,
+              "properties": {
+                "blocks": {
+                  "additionalProperties": {
+                    "additionalProperties": {
+                      "$ref": "#/properties/placement_requests/properties/policies/properties/flows/additionalProperties"
+                    },
+                    "propertyNames": {
+                      "minLength": 1
+                    },
+                    "type": "object"
+                  },
+                  "propertyNames": {
+                    "minLength": 1
+                  },
+                  "type": "object"
+                },
+                "flows": {
+                  "additionalProperties": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "distribution": {
+                        "enum": [
+                          "spread-through-content",
+                          "spread-across-pages",
+                          "clustered",
+                          "free"
+                        ],
+                        "type": "string"
+                      },
+                      "rhythm_group": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "block_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "flow_id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "strength": {
+                            "enum": [
+                              "prefer-same-page",
+                              "require-same-page"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "flow_id",
+                          "block_id",
+                          "strength"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "propertyNames": {
+                    "minLength": 1
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
             }
           },
           "type": "object"

@@ -1,0 +1,522 @@
+{
+  "schemaVersion": 1,
+  "description": "Offline typography and geometry cases derived from public article block lengths. Source copy and images are not reproduced; all body text is deterministic Lorem Ipsum and figures are original synthetic diagrams.",
+  "sources": [
+    {
+      "id": "truck-review",
+      "title": "Electric truck exhibition review",
+      "url": "https://trans.info/pl/walka-gigantow-o-przyszlosc-transportu-ciezkiego-503190",
+      "shape": [
+        {
+          "kind": "paragraph",
+          "words": 32
+        },
+        {
+          "kind": "paragraph",
+          "words": 63
+        },
+        {
+          "kind": "heading",
+          "words": 8
+        },
+        {
+          "kind": "paragraph",
+          "words": 22
+        },
+        {
+          "kind": "paragraph",
+          "words": 21
+        },
+        {
+          "kind": "paragraph",
+          "words": 32
+        },
+        {
+          "kind": "paragraph",
+          "words": 27
+        },
+        {
+          "kind": "heading",
+          "words": 6
+        },
+        {
+          "kind": "paragraph",
+          "words": 35
+        },
+        {
+          "kind": "paragraph",
+          "words": 15
+        },
+        {
+          "kind": "paragraph",
+          "words": 28
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "heading",
+          "words": 9
+        },
+        {
+          "kind": "paragraph",
+          "words": 39
+        },
+        {
+          "kind": "paragraph",
+          "words": 31
+        },
+        {
+          "kind": "paragraph",
+          "words": 18
+        },
+        {
+          "kind": "paragraph",
+          "words": 16
+        },
+        {
+          "kind": "heading",
+          "words": 9
+        },
+        {
+          "kind": "paragraph",
+          "words": 38
+        },
+        {
+          "kind": "paragraph",
+          "words": 31
+        },
+        {
+          "kind": "paragraph",
+          "words": 15
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "heading",
+          "words": 10
+        },
+        {
+          "kind": "paragraph",
+          "words": 45
+        },
+        {
+          "kind": "paragraph",
+          "words": 46
+        },
+        {
+          "kind": "paragraph",
+          "words": 16
+        },
+        {
+          "kind": "heading",
+          "words": 7
+        },
+        {
+          "kind": "paragraph",
+          "words": 42
+        },
+        {
+          "kind": "paragraph",
+          "words": 23
+        },
+        {
+          "kind": "paragraph",
+          "words": 32
+        },
+        {
+          "kind": "paragraph",
+          "words": 25
+        },
+        {
+          "kind": "heading",
+          "words": 6
+        },
+        {
+          "kind": "paragraph",
+          "words": 55
+        },
+        {
+          "kind": "heading",
+          "words": 7
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "paragraph",
+          "words": 30
+        },
+        {
+          "kind": "paragraph",
+          "words": 44
+        },
+        {
+          "kind": "heading",
+          "words": 12
+        },
+        {
+          "kind": "paragraph",
+          "words": 36
+        },
+        {
+          "kind": "paragraph",
+          "words": 31
+        },
+        {
+          "kind": "paragraph",
+          "words": 23
+        },
+        {
+          "kind": "paragraph",
+          "words": 20
+        },
+        {
+          "kind": "heading",
+          "words": 7
+        },
+        {
+          "kind": "paragraph",
+          "words": 26
+        },
+        {
+          "kind": "paragraph",
+          "words": 39
+        },
+        {
+          "kind": "paragraph",
+          "words": 22
+        },
+        {
+          "kind": "paragraph",
+          "words": 16
+        },
+        {
+          "kind": "heading",
+          "words": 5
+        },
+        {
+          "kind": "paragraph",
+          "words": 43
+        },
+        {
+          "kind": "paragraph",
+          "words": 21
+        },
+        {
+          "kind": "paragraph",
+          "words": 33
+        },
+        {
+          "kind": "paragraph",
+          "words": 21
+        },
+        {
+          "kind": "heading",
+          "words": 5
+        },
+        {
+          "kind": "paragraph",
+          "words": 31
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "paragraph",
+          "words": 14
+        },
+        {
+          "kind": "heading",
+          "words": 6
+        },
+        {
+          "kind": "paragraph",
+          "words": 36
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "heading",
+          "words": 7
+        },
+        {
+          "kind": "paragraph",
+          "words": 40
+        },
+        {
+          "kind": "paragraph",
+          "words": 23
+        },
+        {
+          "kind": "paragraph",
+          "words": 39
+        },
+        {
+          "kind": "paragraph",
+          "words": 40
+        }
+      ],
+      "measurement": "approximate visible paragraph and heading lengths; synthetic text replaces source copy",
+      "content": "deterministic-lorem-shape"
+    },
+    {
+      "id": "warehouse-news",
+      "title": "Warehouse opening news",
+      "url": "https://trans.info/en/maersk-german-logistics-hub-505609",
+      "shape": [
+        {
+          "kind": "paragraph",
+          "words": 31
+        },
+        {
+          "kind": "paragraph",
+          "words": 41
+        },
+        {
+          "kind": "paragraph",
+          "words": 38
+        },
+        {
+          "kind": "paragraph",
+          "words": 28
+        },
+        {
+          "kind": "quote",
+          "words": 33
+        },
+        {
+          "kind": "paragraph",
+          "words": 30
+        },
+        {
+          "kind": "paragraph",
+          "words": 17
+        },
+        {
+          "kind": "paragraph",
+          "words": 25
+        }
+      ],
+      "measurement": "approximate visible paragraph and heading lengths; synthetic text replaces source copy",
+      "content": "deterministic-lorem-shape"
+    },
+    {
+      "id": "fleet-news",
+      "title": "Fleet procurement news",
+      "url": "https://trans.info/en/fedex-uk-truck-order-505972",
+      "shape": [
+        {
+          "kind": "paragraph",
+          "words": 24
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "paragraph",
+          "words": 52
+        },
+        {
+          "kind": "paragraph",
+          "words": 40
+        },
+        {
+          "kind": "paragraph",
+          "words": 21
+        },
+        {
+          "kind": "paragraph",
+          "words": 36
+        },
+        {
+          "kind": "paragraph",
+          "words": 34
+        }
+      ],
+      "measurement": "approximate visible paragraph and heading lengths; synthetic text replaces source copy",
+      "content": "deterministic-lorem-shape"
+    },
+    {
+      "id": "shipping-analysis",
+      "title": "Shipping route analysis",
+      "url": "https://trans.info/en/arctic-shipping-not-cheap-505386",
+      "shape": [
+        {
+          "kind": "paragraph",
+          "words": 23
+        },
+        {
+          "kind": "paragraph",
+          "words": 51
+        },
+        {
+          "kind": "paragraph",
+          "words": 39
+        },
+        {
+          "kind": "paragraph",
+          "words": 58
+        },
+        {
+          "kind": "heading",
+          "words": 4
+        },
+        {
+          "kind": "paragraph",
+          "words": 41
+        },
+        {
+          "kind": "paragraph",
+          "words": 25
+        },
+        {
+          "kind": "paragraph",
+          "words": 46
+        },
+        {
+          "kind": "heading",
+          "words": 5
+        },
+        {
+          "kind": "paragraph",
+          "words": 31
+        },
+        {
+          "kind": "paragraph",
+          "words": 53
+        },
+        {
+          "kind": "paragraph",
+          "words": 29
+        },
+        {
+          "kind": "paragraph",
+          "words": 39
+        }
+      ],
+      "measurement": "approximate visible paragraph and heading lengths; synthetic text replaces source copy",
+      "content": "deterministic-lorem-shape"
+    }
+  ],
+  "cases": [
+    {
+      "id": "fleet-short-text",
+      "source": "fleet-news",
+      "brand": "parcelia",
+      "paragraphScale": 1,
+      "quotes": [],
+      "figures": []
+    },
+    {
+      "id": "warehouse-short-dense",
+      "source": "warehouse-news",
+      "brand": "parcelia",
+      "paragraphScale": 2,
+      "quotes": [
+        18,
+        25,
+        31,
+        21,
+        28
+      ],
+      "figures": []
+    },
+    {
+      "id": "shipping-medium-wide",
+      "source": "shipping-analysis",
+      "brand": "parcelia",
+      "paragraphScale": 2,
+      "quotes": [
+        24,
+        34
+      ],
+      "figures": [
+        {
+          "asset": "route",
+          "placement": "main",
+          "width": "full"
+        }
+      ]
+    },
+    {
+      "id": "truck-long-sparse",
+      "source": "truck-review",
+      "brand": "parcelia",
+      "paragraphScale": 1,
+      "quotes": [
+        26,
+        36
+      ],
+      "figures": [
+        {
+          "asset": "truck",
+          "placement": "insertion",
+          "width": "full"
+        }
+      ]
+    },
+    {
+      "id": "truck-long-mixed",
+      "source": "truck-review",
+      "brand": "flux",
+      "paragraphScale": 1,
+      "quotes": [
+        16,
+        27,
+        39
+      ],
+      "figures": [
+        {
+          "asset": "route",
+          "placement": "insertion",
+          "width": "full"
+        },
+        {
+          "asset": "warehouse",
+          "placement": "insertion",
+          "width": "50%"
+        }
+      ]
+    },
+    {
+      "id": "shipping-medium-mixed",
+      "source": "shipping-analysis",
+      "brand": "flux",
+      "paragraphScale": 3,
+      "quotes": [
+        21,
+        32
+      ],
+      "figures": [
+        {
+          "asset": "warehouse",
+          "placement": "main",
+          "width": "50%"
+        }
+      ]
+    }
+  ],
+  "reference": {
+    "id": "accepted-five-page-tail",
+    "fixture": "server/scripts/test-composition-quality-e2e.mjs",
+    "acceptedBy": "user",
+    "decision": "The fifth page is correct. Its natural final main fragment must not receive a density-only penalty."
+  }
+}

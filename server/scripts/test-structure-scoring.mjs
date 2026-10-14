@@ -45,7 +45,7 @@ try {
   const scoringBundle = await import(scoringBundlePath);
   const scoring = scoringBundle.default ?? scoringBundle;
   const { scoreInsertionSpacing, scoreInsertionTextContinuity, scoreHeaderSpacing, scoreMainStartDelay } = scoring;
-  const { scoreListContinuity, scoreTableContinuity, scoreTinyFragments, scoreParagraphFragmentation, scoreInsertionSymmetry, scoreInsertionDistribution, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, elementProximityReports, scoreOrphanLines, attributeCompositionScore, compositionRepairProposals, scoreSiblingColumnImbalance, scoreEmptyRegions, scoreFitContentEnvelope, rectUnionArea } = composition;
+  const { scoreListContinuity, scoreTableContinuity, scoreTinyFragments, scoreParagraphFragmentation, scoreInsertionSymmetry, scoreInsertionDistribution, scoreContentSpread, scoreSpacingRhythm, scorePageLoadBalance, scoreMainPageOccupancyBalance, scoreNarrowTextIntervals, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, elementProximityReports, scoreOrphanLines, attributeCompositionScore, compositionRepairProposals, scoreSiblingColumnImbalance, scoreEmptyRegions, scoreFitContentEnvelope, rectUnionArea } = composition;
   assert.equal(rectUnionArea([{ x: 0, y: 0, width: 10, height: 10 }, { x: 5, y: 0, width: 10, height: 10 }]), 150, 'overlapping geometry must be counted once');
   /**
    * @test-decision plan-fixture-or-assertion
@@ -78,6 +78,69 @@ try {
     },
   };
   const basePlan = { pages: [], slots: [], placements: [], blockPlacements: [], tablePlacements: [], graphicPlacements: [], lines: [], insertionLines: [], decisions: [], diagnostics: [], residualContent: [] };
+
+  const gravityBlocks = ['quote-1', 'quote-2', 'quote-3', 'quote-4'].map((id) => ({ id, kind: 'paragraph', role: 'quote', text: 'Measured insertion.' }));
+  const gravityDocument = { flows: { main: { id: 'main', blocks: [{ id: 'main-body', kind: 'paragraph', role: 'body', text: Array(100).fill('word').join(' ') }] }, quotes: { id: 'quotes', blocks: gravityBlocks } } };
+  const gravityProgressLines = [
+    [0, 12, 0], [13, 25, 20], [26, 37, 40], [38, 50, 60],
+    [51, 62, 80], [63, 75, 100], [76, 87, 120], [88, 100, 140],
+  ].map(([startWord, endWord, y], index) => ({
+    ...line('main-body', 1, 'main-slot', startWord, endWord),
+    box: { x: 10, y, width: 80, height: 5 },
+  }));
+  const gravityPlan = {
+    ...basePlan,
+    pages: [{ page: 1 }],
+    slots: [
+      { id: 'main-slot', page: 1, regionId: 'body', flowId: 'main', kind: 'text', box: { x: 10, y: 0, width: 80, height: 150 }, state: 'partial' },
+      ...gravityBlocks.map((block, index) => ({ id: `quote-${index + 1}`, page: 1, regionId: 'body', flowId: 'quotes', kind: 'text', placement: { mode: 'fluid-y' }, box: { x: 10, y: 0, width: 80, height: 5 }, state: 'open' })),
+    ],
+    lines: gravityProgressLines,
+    graphicPlacements: gravityBlocks.map((block, index) => ({
+      id: `graphic:${block.id}`,
+      graphicId: `insertion:${block.id}`,
+      slotId: `quote-${index + 1}`,
+      page: 1,
+      shape: 'rectangle',
+      wrap: 'around',
+      box: { x: 10, y: [10, 50, 90, 130][index], width: 80, height: 5 },
+      placementPolicy: { distribution: 'spread-through-content', rhythmGroup: 'editorial-material' },
+    })),
+  };
+  const alignedGravity = scoreContentSpread(gravityDocument, gravityPlan);
+  assert.equal(alignedGravity.points, renderConfig.composition_score.content_spread_reward, 'exact insertion positions interpolated between neighboring line word ranges must earn the full gravity reward');
+  assert.deepEqual(alignedGravity.details.records.map((record) => record.actualProgress), [0.125, 0.375, 0.625, 0.875], 'gravity evidence must use each insertion box position, not only its page center');
+  const displacedGravityPlan = structuredClone(gravityPlan);
+  displacedGravityPlan.graphicPlacements[0].box.y = 100;
+  assert.ok(scoreContentSpread(gravityDocument, displacedGravityPlan).points < alignedGravity.points, 'moving one insertion away from its weighted body-progress target must reduce gravity points');
+  const tolerantGravityPlan = structuredClone(gravityPlan);
+  tolerantGravityPlan.graphicPlacements[0].box.y = 40;
+  assert.equal(scoreContentSpread(gravityDocument, tolerantGravityPlan).points, alignedGravity.points, 'positions inside the gravity tolerance must receive the full bounded reward');
+
+  const singleGravityDocument = { flows: { ...gravityDocument.flows, quotes: { id: 'quotes', blocks: [gravityBlocks[0]] } } };
+  const singleGravityPlan = structuredClone(gravityPlan);
+  singleGravityPlan.graphicPlacements = [{ ...singleGravityPlan.graphicPlacements[0], box: { x: 10, y: 70, width: 80, height: 5 }, placementPolicy: { distribution: 'spread-through-content' } }];
+  const singleGravity = scoreContentSpread(singleGravityDocument, singleGravityPlan);
+  assert.equal(singleGravity.points, renderConfig.composition_score.content_spread_reward, 'one centered insertion without an explicit rhythm group must earn gravity points');
+  assert.equal(singleGravity.details.records[0].expectedProgress, 0.5);
+  const detachedGravityPlan = structuredClone(singleGravityPlan);
+  detachedGravityPlan.pages.push({ page: 2 });
+  detachedGravityPlan.slots.find(({ id }) => id === 'quote-1').page = 2;
+  detachedGravityPlan.graphicPlacements[0].page = 2;
+  const detachedGravity = scoreContentSpread(singleGravityDocument, detachedGravityPlan);
+  assert.ok(detachedGravity.points < 0, 'moving the only distributed insertion beyond main content must incur measured gravity deviation');
+  assert.equal(detachedGravity.details.records[0].mainTextOnPage, false);
+  assert.equal(scoreContentSpread(singleGravityDocument, { ...singleGravityPlan, lines: [] }).details.records.length, 0, 'missing main progress must not be replaced with a fabricated target measurement');
+
+  const weightedGravityDocument = { flows: { ...gravityDocument.flows, quotes: { id: 'quotes', blocks: [gravityBlocks[0], gravityBlocks[2]] } } };
+  const weightedGravityPlan = { ...gravityPlan, graphicPlacements: [gravityPlan.graphicPlacements[0], gravityPlan.graphicPlacements[2]], spacing: {
+    pages: [], slots: [], textPlacements: [], observations: [0, 2].map((index, ordinal) => ({ kind: 'insertion-rhythm', page: 1, graphicId: gravityPlan.graphicPlacements[index].graphicId,
+      metrics: { visualLoadAreaShare: [0.1, 0.3][ordinal], visualLoadVerticalShare: [0.1, 0.3][ordinal], visualLoadAffectedLineShare: 0, visualLoad: [0.1, 0.3][ordinal] } })),
+  } };
+  const weightedGravity = scoreContentSpread(weightedGravityDocument, weightedGravityPlan);
+  assert.deepEqual(weightedGravity.details.records.map(({ visualLoad }) => visualLoad), [0.1, 0.3], 'measured relative loads must retain their proportions below one');
+  assert.deepEqual(weightedGravity.details.records.map(({ expectedProgress }) => expectedProgress), [0.125, 0.625], 'targets must follow cumulative insertion mass rather than equal item count');
+  assert.equal(weightedGravity.points, renderConfig.composition_score.content_spread_reward);
 
   const delayedMainPlan = {
     ...basePlan,
@@ -145,14 +208,14 @@ try {
   };
   assert.ok(scoreInsertionSymmetry(spacingPlan).points < 0);
   assert.ok(scoreInsertionDistribution(spacingPlan).points < 0);
-  assert.ok(scoreSpacingRhythm(spacingPlan).points < 0);
+  assert.ok(scoreSpacingRhythm(spacingPlan).details.records.some((record) => record.deviation > renderConfig.composition_score.spacing_profile_tolerance_mm), 'the spacing fixture must retain an exact out-of-target finding even when bounded target rewards affect its net points');
   assert.ok(scoreNarrowTextIntervals(spacingPlan).points < 0);
   assert.ok(scoreElementProximity(spacingPlan).points < 0, 'an intro and insertion below the breathing-room threshold must be penalized');
   const insertionSpacing = scoreInsertionSpacing(spacingPlan);
   assert.equal(insertionSpacing.details.insertions[0].internal.imbalance, 0, 'insertion inset scoring must consume measured spacing-report metrics');
   assert.equal(insertionSpacing.details.insertions[0].externalImbalance, 4, 'stream gap imbalance must be scored from the shared observation');
   assert.equal(insertionSpacing.details.insertions[0].crossStreamSpread, 2, 'cross-stream spread must be scored from the shared observation');
-  const zeroEdgeContinuity = scoreInsertionTextContinuity({
+  const zeroEdgeContinuityPlan = {
     ...basePlan,
     spacing: {
       ...spacingPlan.spacing,
@@ -181,10 +244,44 @@ try {
         },
       }],
     },
-  });
+  };
+  const zeroEdgeContinuity = scoreInsertionTextContinuity(zeroEdgeContinuityPlan);
   assert.ok(zeroEdgeContinuity.points < 0, 'a distributed insertion touching following text must lose quality points');
   assert.equal(zeroEdgeContinuity.details.records[0].streams[0].afterGap, 0, 'an exact zero edge gap must remain in continuity evidence');
   assert.ok(zeroEdgeContinuity.details.records[0].edgeGapDeficit > 0, 'an exact zero edge gap must produce a normalized deficit');
+  const balancedContinuityPlan = structuredClone(zeroEdgeContinuityPlan);
+  const balancedStreamMetrics = balancedContinuityPlan.spacing.observations[0].metrics;
+  balancedStreamMetrics['textStreamBefore:column-a'] = renderConfig.composition_score.spacing_profile_normal_target_mm;
+  balancedStreamMetrics['textStreamAfter:column-a'] = renderConfig.composition_score.spacing_profile_normal_target_mm;
+  balancedStreamMetrics['textStreamBeforeMass:column-a'] = balancedStreamMetrics['textStreamAfterMass:column-a'];
+  const balancedContinuity = scoreInsertionTextContinuity(balancedContinuityPlan);
+  assert.equal(balancedContinuity.points, renderConfig.composition_score.insertion_text_continuity_reward, 'balanced measured text participation with usable gaps must earn a bounded reward');
+  const repeatedContinuityPlan = structuredClone(balancedContinuityPlan);
+  repeatedContinuityPlan.spacing.observations.push({ ...repeatedContinuityPlan.spacing.observations[0], page: 2, blockId: 'second-quote' });
+  assert.equal(scoreInsertionTextContinuity(repeatedContinuityPlan).points, balancedContinuity.points, 'more measured insertions/pages must not multiply the continuity reward');
+  const detachedContinuityPlan = structuredClone(balancedContinuityPlan);
+  detachedContinuityPlan.lines = [line('main-body', 1, 'main-slot')];
+  detachedContinuityPlan.spacing.observations[0].page = 2;
+  const detachedMetrics = detachedContinuityPlan.spacing.observations[0].metrics;
+  for (const key of ['BeforeMass', 'AfterMass', 'BeforeLines', 'AfterLines', 'TotalLines']) detachedMetrics[`textStream${key}:column-a`] = 0;
+  delete detachedMetrics['textStreamBefore:column-a'];
+  delete detachedMetrics['textStreamAfter:column-a'];
+  const detachedContinuity = scoreInsertionTextContinuity(detachedContinuityPlan);
+  assert.ok(detachedContinuity.points < 0, 'measured zero text around a distributed insertion must not escape continuity scoring');
+  assert.equal(detachedContinuity.details.targetFitReward, 0);
+  assert.equal(detachedContinuity.details.records[0].coverageDeficit, 1);
+  assert.equal('massImbalance' in detachedContinuity.details.records[0], false, 'unmeasurable balance on an empty page remains absent');
+  assert.equal('massBalance' in detachedContinuity.details.records[0].streams[0], false);
+  const partiallyMeasuredContinuityPlan = structuredClone(balancedContinuityPlan);
+  partiallyMeasuredContinuityPlan.spacing.observations[0].metrics['textStreamTotalLines:column-b'] = 10;
+  const partiallyMeasuredContinuity = scoreInsertionTextContinuity(partiallyMeasuredContinuityPlan);
+  assert.equal(partiallyMeasuredContinuity.details.targetFitReward, 0, 'one known good stream must not earn a full continuity reward while another declared stream is unmeasured');
+  assert.equal(partiallyMeasuredContinuity.details.records[0].streamMeasurementComplete, false);
+  const missingContinuityPlan = structuredClone(detachedContinuityPlan);
+  delete missingContinuityPlan.spacing.observations[0].metrics['textStreamBeforeMass:column-a'];
+  assert.equal(scoreInsertionTextContinuity(missingContinuityPlan).details.records.length, 0, 'missing stream measurements must not be treated as measured zero text');
+  detachedContinuityPlan.spacing.observations[0].placementPolicy.distribution = 'free';
+  assert.equal(Math.abs(scoreInsertionTextContinuity(detachedContinuityPlan).points), 0, 'an explicitly free dedicated insertion page must remain outside distribution continuity scoring');
   const headerSpacing = scoreHeaderSpacing(spacingPlan);
   assert.equal(headerSpacing.details.pages[0].headerBottom, 10, 'header spacing must consume report-owned geometry');
   assert.equal(headerSpacing.details.pages[0].gap, 2, 'header spacing must use the shared gap measurement');
@@ -248,6 +345,38 @@ try {
   assert.equal(tooClose[0].axis, 'y', 'overlapping horizontal ranges must report their vertical breathing-room axis');
   assert.equal(tooClose[0].metrics.gapY, 2);
   assert.equal(tooClose[0].movementAvailable, false, 'a fluid-y capacity does not make each materialized instance freely movable');
+  for (const kind of ['image', 'table']) {
+    const materialPlan = structuredClone(proximityPlan);
+    const placement = { id: `${kind}:quote-1`, blockId: 'quote-1', kind, page: 1, slotId: '1:quotes', box: { ...materialPlan.graphicPlacements[0].box } };
+    materialPlan[kind === 'table' ? 'tablePlacements' : 'blockPlacements'] = [placement];
+    const materialDocument = structuredClone(proximityDocument);
+    materialDocument.flows.quotes.blocks[0].kind = kind;
+    assert.deepEqual(elementProximityReports(materialPlan, materialDocument), tooClose, 'an atomic/table insertion and its enclosing graphic must be one proximity subject, preserving real neighboring deficits');
+    materialPlan.graphicPlacements = [];
+    const standalone = elementProximityReports(materialPlan, materialDocument);
+    assert.equal(standalone.length, 1, 'an ordinary structured block without an insertion proxy must remain measurable');
+    assert.equal(standalone[0].to.kind, 'block');
+  }
+  const wellSpacedPairPlan = structuredClone(proximityPlan);
+  wellSpacedPairPlan.graphicPlacements[0].box.y = 30 + renderConfig.composition_score.spacing_profile_normal_target_mm;
+  const wellSpacedPairs = elementProximityReports(wellSpacedPairPlan, proximityDocument);
+  const pairRewardPlan = { ...wellSpacedPairPlan, spacing: { pages: [], slots: [], textPlacements: [], observations: wellSpacedPairs } };
+  assert.equal(wellSpacedPairs[0].adjacent, true);
+  assert.equal(wellSpacedPairs[0].metrics.deficit, 0);
+  assert.deepEqual(wellSpacedPairs[0].reasons, [], 'a well-spaced pair must not carry a violation reason');
+  const wellSpacedPairScore = scoreElementProximity(pairRewardPlan);
+  assert.equal(wellSpacedPairScore.points, renderConfig.composition_score.element_proximity_reward, 'measured neighboring boxes at the selected profile gap must earn positive points');
+  assert.deepEqual(wellSpacedPairScore.details.rewardRecords[0].fromBox, wellSpacedPairs[0].fromBox);
+  const withinPairTolerance = structuredClone(pairRewardPlan);
+  withinPairTolerance.spacing.observations[0].metrics.gap += renderConfig.composition_score.spacing_profile_tolerance_mm;
+  assert.equal(scoreElementProximity(withinPairTolerance).points, wellSpacedPairScore.points, 'the acceptable spacing interval must earn full reward');
+  pairRewardPlan.spacing.observations.push({ ...wellSpacedPairs[0], page: 2 });
+  assert.equal(scoreElementProximity(pairRewardPlan).points, wellSpacedPairScore.points, 'adding an equally good measured pair/page must not multiply reward');
+  const interveningPairPlan = structuredClone(wellSpacedPairPlan);
+  interveningPairPlan.graphicPlacements[0].box.y = 80;
+  interveningPairPlan.graphicPlacements.push({ ...interveningPairPlan.graphicPlacements[0], id: 'graphic:middle', graphicId: 'insertion:middle', box: { x: 10, y: 50, width: 80, height: 8 } });
+  const interveningPairs = elementProximityReports(interveningPairPlan, proximityDocument);
+  assert.equal(interveningPairs.find(({ from, to }) => from.id === 'intro-copy' && to.id === 'insertion:quote-1').adjacent, false, 'a box between two subjects must prevent scoring their distance as a local neighbor reward');
   proximityPlan.movableInsertionFrames = [{ id: 'quotes:quote-1', flowId: 'quotes', blockId: 'quote-1', page: 1, box: { x: 10, y: 0, width: 80, height: 60 }, axis: 'y', candidateCount: 3 }];
   assert.equal(elementProximityReports(proximityPlan, proximityDocument)[0].movementAvailable, true, 'a declared movable frame must be exposed in the observation');
   assert.ok(tooClose[0].metrics.movementNeeded <= tooClose[0].metrics.movementBudget);
@@ -293,9 +422,50 @@ try {
   balancedSpacingPlan.spacing.observations[0] = {
     ...balancedSpacingPlan.spacing.observations[0],
     profile: 'compact',
-    metrics: { beforeTextGap: 4, afterTextGap: 4, regionStartGap: 4, regionEndGap: 4, referenceGap: 4 },
+    metrics: { beforeTextGap: 4, afterTextGap: 4, textGapAsymmetry: 0, regionStartGap: 4, regionEndGap: 4, referenceGap: 4 },
   };
-  assert.ok(Math.abs(scoreSpacingRhythm(balancedSpacingPlan).points) === 0, 'a compact profile must use its compact reference gap');
+  assert.equal(scoreInsertionSymmetry(balancedSpacingPlan).points, renderConfig.composition_score.insertion_symmetry_reward, 'symmetric measured text gaps must earn the configured bounded reward');
+  assert.equal(scoreSpacingRhythm(balancedSpacingPlan).points, renderConfig.composition_score.spacing_profile_reward, 'gaps at the resolved compact target must earn the configured bounded reward');
+  const offTargetSpacingPlan = structuredClone(balancedSpacingPlan);
+  offTargetSpacingPlan.spacing.observations[0].metrics = { beforeTextGap: 10, afterTextGap: 10, regionStartGap: 10, regionEndGap: 10, referenceGap: 4 };
+  assert.ok(scoreSpacingRhythm(offTargetSpacingPlan).points < scoreSpacingRhythm(balancedSpacingPlan).points, 'spacing deviations must reduce the target-fit reward and apply the existing penalty beyond tolerance');
+
+  const occupancyPlan = {
+    ...basePlan,
+    lines: [1, 2, 3, 4, 5].map((page) => line(`main-${page}`, page, `main-${page}`)),
+    spacing: {
+      pages: [],
+      slots: [2, 3, 4].map((page) => ({ page, slotId: `main-${page}`, regionId: 'body', flowId: 'main', box: { x: 0, y: 0, width: 100, height: 100 }, occupiedHeight: renderConfig.composition_score.main_page_occupancy_target * 100, remainingHeight: 100 - (renderConfig.composition_score.main_page_occupancy_target * 100), gapBefore: 0, gapAfter: 25 })).concat([{ page: 5, slotId: 'main-5', regionId: 'body', flowId: 'main', box: { x: 0, y: 0, width: 100, height: 100 }, occupiedHeight: 5, remainingHeight: 95, gapBefore: 0, gapAfter: 90 }]),
+      textPlacements: [],
+      observations: [],
+    },
+  };
+  const balancedOccupancy = scoreMainPageOccupancyBalance(occupancyPlan);
+  assert.equal(balancedOccupancy.points, renderConfig.composition_score.main_page_occupancy_reward, 'a natural terminal fragment must preserve the full interior-page reward');
+  assert.equal(balancedOccupancy.details.terminalPenalty, 0, 'terminal density alone is not evidence of an avoidable layout defect');
+  assert.equal(balancedOccupancy.details.terminalPage.reason, 'natural-terminal-main-flow');
+  assert.equal(balancedOccupancy.details.terminalPage.occupancy, 0.05, 'terminal-page ink density must be exposed as score evidence');
+  const sparseInteriorPlan = structuredClone(occupancyPlan);
+  sparseInteriorPlan.spacing.slots[1].occupiedHeight = (renderConfig.composition_score.main_page_occupancy_target - renderConfig.composition_score.main_page_occupancy_tolerance * 1.5) * 100;
+  assert.ok(scoreMainPageOccupancyBalance(sparseInteriorPlan).points < scoreMainPageOccupancyBalance(occupancyPlan).points, 'a sparse interior page must reduce the planned-ink distribution reward');
+
+  const balancedPageLoadPlan = {
+    ...basePlan,
+    pages: [1, 2, 3, 4].map((page) => ({ page })),
+    lines: [2, 3].flatMap((page) => [0, 1, 2, 3].map((index) => ({ ...line(`main-${page}-${index}`, page, `main-${page}`), startWord: index, endWord: index + 1 }))),
+    slots: [2, 3].map((page) => ({ id: `quote-slot-${page}`, page, regionId: 'body', flowId: 'quotes', kind: 'text', placement: { mode: 'fluid-y' }, box: { x: 10, y: 40, width: 80, height: 12 }, state: 'open' })),
+    graphicPlacements: [2, 3].map((page) => ({ id: `graphic:${page}`, graphicId: `insertion:quote-${page}`, slotId: `quote-slot-${page}`, page, shape: 'rectangle', wrap: 'around', box: { x: 10, y: 40, width: 80, height: 12 }, placementPolicy: { distribution: 'spread-across-pages', rhythmGroup: 'materials' } })),
+  };
+  assert.equal(scorePageLoadBalance(balancedPageLoadPlan).points, renderConfig.composition_score.page_load_balance_reward, 'equal measured insertion loads across eligible pages must earn the configured reward');
+  const detachedPageLoadPlan = structuredClone(balancedPageLoadPlan);
+  detachedPageLoadPlan.slots.push({ ...detachedPageLoadPlan.slots[0], id: 'quote-slot-4', page: 4 });
+  detachedPageLoadPlan.graphicPlacements = detachedPageLoadPlan.graphicPlacements.map((graphic) => ({ ...graphic, page: 4, slotId: 'quote-slot-4' }));
+  const detachedPageLoad = scorePageLoadBalance(detachedPageLoadPlan);
+  assert.equal(detachedPageLoad.details.targetFitReward, 0, 'moving all insertion mass beyond the body must not earn full reward for two equally empty body pages');
+  assert.deepEqual(detachedPageLoad.details.records[0].unassociatedGraphicIds, detachedPageLoadPlan.graphicPlacements.map(({ graphicId }) => graphicId));
+  const imbalancedPageLoadPlan = structuredClone(balancedPageLoadPlan);
+  imbalancedPageLoadPlan.graphicPlacements.push({ ...imbalancedPageLoadPlan.graphicPlacements[0], id: 'graphic:extra', graphicId: 'insertion:extra', slotId: 'quote-slot-2' });
+  assert.ok(scorePageLoadBalance(imbalancedPageLoadPlan).points < scorePageLoadBalance(balancedPageLoadPlan).points, 'an imbalanced visual load must earn fewer points and can incur the existing penalty');
   const boundaryInsertionPlan = structuredClone(spacingPlan);
   boundaryInsertionPlan.spacing.observations[0] = {
     ...boundaryInsertionPlan.spacing.observations[0],
@@ -317,6 +487,13 @@ try {
   assert.equal(Math.abs(scoreInsertionSymmetry(boundaryInsertionPlan).points), 0, 'a boundary insertion without text on both sides must not be scored as asymmetric');
   assert.equal(Math.abs(scoreSpacingRhythm(boundaryInsertionPlan).points), 0, 'a boundary insertion without text on both sides must not be scored against ordinary text rhythm');
   assert.equal(Math.abs(scoreInsertionDistribution(boundaryInsertionPlan).points), 0, 'fluid capability distribution must not use the whole content envelope as an outer gap');
+  const evenInsertionDistributionPlan = structuredClone(boundaryInsertionPlan);
+  evenInsertionDistributionPlan.slots = evenInsertionDistributionPlan.slots.map(({ placement, ...slot }) => slot);
+  evenInsertionDistributionPlan.spacing.observations = evenInsertionDistributionPlan.spacing.observations.map((observation) => ({
+    ...observation,
+    metrics: { regionStartGap: 20, regionEndGap: 20, previousInsertionGap: 20, nextInsertionGap: 20 },
+  }));
+  assert.equal(scoreInsertionDistribution(evenInsertionDistributionPlan).points, renderConfig.composition_score.insertion_distribution_reward, 'even measured insertion gaps must earn the configured bounded reward');
   const plannerOwnedBoundaryPlan = structuredClone(boundaryInsertionPlan);
   plannerOwnedBoundaryPlan.spacing.observations = plannerOwnedBoundaryPlan.spacing.observations.map((observation) => ({
     ...observation,
@@ -515,6 +692,16 @@ try {
   const fragmentationAttribution = attributeCompositionScore(fragmentationDocument, fragmentationPlan, [fragmentationComponent]);
   const fragmentationRepairs = compositionRepairProposals(fragmentationDocument, fragmentationPlan, [fragmentationComponent], fragmentationAttribution);
   assert.equal(fragmentationComponent.value, 1, 'the split paragraph must be scored as one fragmentation');
+  const naturalFragmentation = scoreParagraphFragmentation(fragmentationDocument, { ...fragmentationPlan, graphicPlacements: [] });
+  assert.equal(Math.abs(naturalFragmentation.points), 0, 'a natural column transition must not acquire an obstacle-fragmentation cost');
+  assert.deepEqual(naturalFragmentation.details.naturalFragmentedBlockIds, ['fragmented-copy']);
+  const boundedScore = scoring.scoreLegalPlan(fragmentationDocument, fragmentationPlan);
+  const expectedCeiling = renderConfig.composition_score.base + renderConfig.composition_score.column_balance_weight
+    + ['insertion_text_continuity_reward', 'insertion_symmetry_reward', 'insertion_distribution_reward', 'content_spread_reward', 'page_load_balance_reward', 'main_page_occupancy_reward', 'spacing_profile_reward', 'element_proximity_reward'].reduce((sum, key) => sum + renderConfig.composition_score[key], 0);
+  assert.equal(boundedScore.scoreUpperBound, expectedCeiling, 'the document ceiling must be derived from all configured bounded rewards');
+  assert.ok(boundedScore.measuredRewardUpperBound <= boundedScore.scoreUpperBound);
+  assert.equal(boundedScore.breakdown.find(({ code }) => code === 'content-spread').rewardEvidence, 'not-applicable');
+  assert.equal(boundedScore.breakdown.find(({ code }) => code === 'content-spread').ceilingGap, undefined, 'unavailable evidence must not invent recoverable points');
   assert.ok(fragmentationRepairs.length > 0 && fragmentationRepairs.every((proposal) => proposal.estimateKind === 'fragmentation-recovery' && proposal.estimatedPoints === renderConfig.composition_score.paragraph_fragmentation_penalty && proposal.lineHeight === 5), `a movable insertion separating text intervals must receive labeled line-step fragmentation probes: ${JSON.stringify({ details: fragmentationComponent.details, attributed: fragmentationAttribution, proposals: fragmentationRepairs })}`);
   assert.deepEqual(new Set(fragmentationRepairs.map((proposal) => proposal.direction)), new Set(['up', 'down']), 'fragmentation proposals must consider both legal directions');
 
@@ -542,6 +729,39 @@ try {
     measureText: (text) => text.length,
     lineHeight: () => 5,
   }, geometry);
+  const terminalGapDocument = {
+    flows: {
+      main: { id: 'main', blocks: [{ id: 'terminal-body', kind: 'paragraph', role: 'body', text: 'Body text before the insertion.' }] },
+      quotes: { id: 'quotes', blocks: [{ id: 'terminal-quote', kind: 'paragraph', role: 'quote', text: 'A terminal quote.' }] },
+      footer: { id: 'footer', blocks: [{ id: 'terminal-footer', kind: 'paragraph', role: 'footer', text: 'Footer label.' }] },
+    },
+  };
+  const terminalGapPlan = {
+    ...basePlan,
+    pages: [{ page: 1 }],
+    slots: [
+      { id: 'terminal-main-slot', page: 1, regionId: 'body', flowId: 'main', kind: 'text', box: { x: 10, y: 10, width: 80, height: 80 }, state: 'partial' },
+      { id: 'terminal-quote-slot', page: 1, regionId: 'body', flowId: 'quotes', kind: 'text', box: { x: 10, y: 30, width: 80, height: 30 }, state: 'partial' },
+      { id: 'terminal-footer-slot', page: 1, regionId: 'chrome', flowId: 'footer', kind: 'text', box: { x: 10, y: 90, width: 80, height: 8 }, state: 'partial' },
+    ],
+    lines: [
+      { ...line('terminal-body', 1, 'terminal-main-slot'), flowId: 'main', box: { x: 10, y: 20, width: 80, height: 5 } },
+      { ...line('terminal-footer', 1, 'terminal-footer-slot'), flowId: 'footer', box: { x: 10, y: 95, width: 80, height: 5 } },
+    ],
+    graphicPlacements: [{ id: 'graphic:insertion:terminal-quote', graphicId: 'insertion:terminal-quote', slotId: 'terminal-quote-slot', page: 1, shape: 'rectangle', wrap: 'around', box: { x: 10, y: 40, width: 80, height: 10 } }],
+  };
+  attachPlanSpacingReport(terminalGapPlan, terminalGapDocument, {
+    units: 'mm',
+    measureText: (text) => text.length,
+    lineHeight: () => 5,
+  }, geometry);
+  const terminalGapObservation = terminalGapPlan.spacing.observations
+    .find((observation) => observation.kind === 'insertion-rhythm');
+  assert.equal(terminalGapObservation?.metrics.beforeTextGap, 15, 'the measured insertion gap must use body text in the same region');
+  assert.equal(terminalGapObservation?.metrics.afterTextGap, undefined, 'footer chrome must not be mistaken for text following a terminal insertion');
+  assert.equal(terminalGapObservation?.metrics.textGapAsymmetry, undefined, 'a terminal insertion with no following body text has no two-sided symmetry measurement');
+  assert.equal(scoreSpacingRhythm(terminalGapPlan).points, 0, 'a terminal insertion without body text on both sides must not be scored against text rhythm');
+  assert.equal(scoreInsertionSymmetry(terminalGapPlan).points, 0, 'a terminal insertion without body text on both sides must not receive an asymmetry penalty');
   const reportedOrphans = repairPlan.spacing.observations.filter((observation) => observation.kind === 'orphan-fragment');
   assert.equal(reportedOrphans.length, 2, 'the shared spacing report must identify each isolated fragment at a wrap obstacle');
   const orphanComponent = scoreOrphanLines(repairDocument, repairPlan);

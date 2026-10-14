@@ -19,6 +19,36 @@ if (build.status !== 0) throw new Error(`composition engine contract bundle fail
 
 try {
   const composition = await import(bundle);
+  const { createJsPdfImageBlockCapabilities } = composition.default ?? composition;
+  let captionFont;
+  let captionSize;
+  const captionSplits = [];
+  const captionDrawings = [];
+  const captionPdf = {
+    setFont(family, weight) { captionFont = { family, weight }; },
+    setFontSize(size) { captionSize = size; },
+    splitTextToSize(text, width) {
+      captionSplits.push({ text, width, font: captionFont, size: captionSize });
+      return ['First caption line', 'Second caption line'];
+    },
+    addImage() {},
+    text(text, x, y) { captionDrawings.push({ text, x, y }); },
+  };
+  const captionStyle = { captionGap: 1, captionBottomGap: 1, captionLineHeight: 4, captionBaselineOffset: 1, captionSize: 9, captionPaddingX: 2 };
+  const captionBlock = { id: 'portrait', kind: 'image', image: { assetId: 'portrait', width: '50%', fit: 'contain', caption: 'Two caption lines' } };
+  const captionCapabilities = createJsPdfImageBlockCapabilities(captionPdf, 'Caption font', new Map([['portrait', { width: 600, height: 900, data: '', format: 'PNG' }]]), captionStyle);
+  const captionMeasurement = captionCapabilities.measureBlock(captionBlock, { x: 0, y: 0, width: 100, height: 30 });
+  assert.equal(captionMeasurement.image.captionWidth, 50, 'caption width must follow the requested width before image contain scaling');
+  assert.ok(captionMeasurement.image.width < captionMeasurement.image.captionWidth, 'the constrained portrait must be narrower than its caption frame');
+  const measuredCaptionBox = { x: 25, y: captionMeasurement.image.height, width: captionMeasurement.image.captionWidth, height: captionMeasurement.image.captionHeight };
+  captionCapabilities.renderer(captionPdf, captionBlock, {
+    box: { x: 0, y: 0, width: 100, height: captionMeasurement.height },
+    imageBox: { x: 40, y: 0, width: captionMeasurement.image.width, height: captionMeasurement.image.height },
+    captionBox: measuredCaptionBox,
+  });
+  assert.deepEqual(captionSplits[0], captionSplits[1], 'caption measurement and drawing must use the same width, font and size');
+  assert.equal(captionDrawings.length, 2);
+  assert.ok(captionDrawings.every(({ x, y }) => x >= measuredCaptionBox.x && x <= measuredCaptionBox.x + measuredCaptionBox.width && y >= measuredCaptionBox.y && y <= measuredCaptionBox.y + measuredCaptionBox.height), 'height-constrained captions must remain inside their measured frame');
   const { combineJsPdfCompositionBlockCapabilities, compareCompositionEvaluations, contrastRatio, createCompositionContrastProvider, createCompositionEngine, evaluateCompositionPlan, fitContainBox, imagePixelAtPoint, relativeLuminance, renderComposition, sampleCompositionContrast } = composition.default ?? composition;
   assert.deepEqual(fitContainBox({ x: 10, y: 20, width: 4, height: 3 }, 4, 1), { x: 10, y: 21, width: 4, height: 1 }, 'contain geometry must preserve image aspect ratio and center the painted box');
   const paintedBox = fitContainBox({ x: 10, y: 20, width: 4, height: 3 }, 4, 1);
@@ -213,6 +243,19 @@ try {
   assert.equal(baselineCalls, 1, 'the incremental baseline must be requested once');
   assert.equal(legacyCandidateCalls, 0, 'the incremental baseline must bypass eager candidate enumeration');
   assert.equal(qualityRepairCalls, 1, 'a legal baseline must use the dedicated quality-repair seam');
+  let macroCalls = 0;
+  const macroResult = createCompositionEngine({
+    searchBudget: { maxInitialCandidates: 3, maxFullPlanRecalculations: 2, maxRefinementRounds: 0 },
+    planBaselineCandidatesWithSignatures(_document, _metrics, maximumCandidates) {
+      macroCalls += 1;
+      assert.equal(maximumCandidates, 2, 'macro materialization must respect the remaining exact budget');
+      return oracleRecords.slice(0, maximumCandidates);
+    },
+    planBaselineWithSignature() { throw new Error('the macro seam must take precedence over the single baseline'); },
+  }, { evaluate: oracleEvaluation }).plan(document, metrics);
+  assert.equal(macroCalls, 1, 'complete macro seeds must be requested in one batch');
+  assert.equal(macroResult.evaluation.score, oracleScores[1], 'exact total score must select the complete macro winner');
+  assert.equal(macroResult.plan.trace.candidateSearch.fullPlanRecalculations, 2, 'every materialized macro must consume the exact budget');
   let illegalQualityRepairCalls = 0;
   let legalityCorrectionCalls = 0;
   let illegalLegacyRepairCalls = 0;
@@ -284,6 +327,45 @@ try {
   assert.equal(refinementResult.plan.trace.candidateSearch.rounds[3].stopReason, 'no-improvement', 'a no-improvement round must not stop the search before finer configured rounds have been tested');
   assert.equal(refinementResult.plan.trace.candidateSearch.selectedCandidate, 1, 'trace must expose the refined winner index');
   assert.equal(refinementResult.plan.trace.candidateSearch.rounds[1].candidateResults[0].scoreDelta, 1, 'trace must report the measured score delta of a fully evaluated candidate');
+
+  let continuationEvaluationCalls = 0;
+  const continuationRepair = {
+    id: 'continuation-move',
+    placement: { id: 'placement', kind: 'graphic', page: 1, graphicId: 'search' },
+    action: 'move', axis: 'x', direction: 'right', distance: 1,
+    sourceCode: 'continuation-fixture', estimatedPoints: 1, estimateKind: 'local-geometry',
+    legalCapability: 'declared-movable-frame', legalBounds: { x: 0, y: 0, width: 2, height: 1 },
+  };
+  const baselineContinuationResult = createCompositionEngine({
+    searchBudget: { maxFullPlanRecalculations: 1, maxRefinementRounds: 0, maxPageLocalRefinementRounds: 0 },
+    planBaselineWithSignature() { return { signature: 'continuation-baseline', plan: coarsePlan }; },
+  }, {
+    evaluate() {
+      continuationEvaluationCalls += 1;
+      return { status: 'accepted', diagnostics: [], hardViolations: [], score: 0, scoreBreakdown: [], residualContent: [], repairProposals: [continuationRepair] };
+    },
+  }).plan(document, metrics);
+  const continuationEngine = createCompositionEngine({
+    searchBudget: { maxFullPlanRecalculations: 2, maxRefinementRounds: 1, maxPageLocalRefinementRounds: 0 },
+    candidateRefinementRounds: 1,
+    planBaselineWithSignature() { throw new Error('continuation must use the already materialized baseline'); },
+    planBaselineCandidatesWithSignatures() { throw new Error('continuation must not regenerate macro seeds'); },
+    planQualityRepairsWithSignatures(_input, _metrics, selected, evaluation, _round) {
+      assert.equal(selected, coarsePlan, 'repair generation must receive the retained exact baseline plan');
+      assert.equal(evaluation.score, 0, 'repair generation must receive the retained baseline evaluation');
+      return [{ signature: 'continuation-repair', plan: improvedPlan, repairProposalIds: [continuationRepair.id] }];
+    },
+  }, {
+    evaluate(_input, planned) {
+      continuationEvaluationCalls += 1;
+      return { status: 'accepted', diagnostics: [], hardViolations: [], score: planned.graphicPlacements[0].box.x, scoreBreakdown: [], residualContent: [] };
+    },
+  });
+  const continuedResult = continuationEngine.continueFromBaseline(document, metrics, baselineContinuationResult);
+  assert.equal(continuedResult.plan, improvedPlan, 'a repair generated from the reused baseline must still be selected by its exact score');
+  assert.equal(continuationEvaluationCalls, 2, 'continuation must reuse the prior baseline evaluation and evaluate only the new complete candidate');
+  assert.equal(continuedResult.plan.trace.candidateSearch.fullPlanRecalculations, 2, 'combined trace must count one baseline plus one new repair candidate');
+  assert.equal(continuedResult.plan.trace.candidateSearch.rounds[1].candidateResults[0].repairProposalIds[0], continuationRepair.id, 'continued search trace must retain the repair provenance');
 
   const repairTraceEngine = createCompositionEngine({
     planCandidatesWithSignatures() { return [{ signature: 'repair:seed', plan: coarsePlan }]; },

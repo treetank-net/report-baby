@@ -587,6 +587,41 @@ export function checkInsertionSourceRelations(document: CompositionDocument, pla
       },
     );
   }
+  const coarseDecision = plan.decisions.find((decision) => decision.code === 'COARSE_GEOMETRY_SEED_SELECTED');
+  const unassigned = Array.isArray(coarseDecision?.unassignedInsertions) ? coarseDecision.unassignedInsertions : [];
+  for (const candidate of unassigned) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const insertion = candidate as Record<string, unknown>;
+    const conflict = insertion.sourceRelationConflict;
+    if (!conflict || typeof conflict !== 'object') continue;
+    const relation = conflict as Record<string, unknown>;
+    if (relation.strength !== 'require-same-page'
+      || typeof relation.flowId !== 'string'
+      || typeof relation.blockId !== 'string'
+      || !Array.isArray(relation.candidatePages)
+      || !relation.candidatePages.every((page) => typeof page === 'number' && Number.isFinite(page))) continue;
+    const measuredSourcePages = sourcePages(relation.flowId, relation.blockId);
+    const candidatePages = relation.candidatePages as number[];
+    if (measuredSourcePages.length === 0 || candidatePages.some((page) => measuredSourcePages.includes(page))) continue;
+    pushEvaluationError(diagnostics,
+      'INSERTION_SOURCE_RELATION_VIOLATION',
+      `Insertion '${String(insertion.blockId ?? 'unknown')}' has no legal candidate page containing source '${relation.flowId}/${relation.blockId}'.`,
+      {
+        flowId: typeof insertion.flowId === 'string' ? insertion.flowId : undefined,
+        blockId: typeof insertion.blockId === 'string' ? insertion.blockId : undefined,
+        page: candidatePages[0],
+        details: {
+          sourceFlowId: relation.flowId,
+          sourceBlockId: relation.blockId,
+          sourcePages: measuredSourcePages,
+          candidatePages,
+          estimatedSourcePages: Array.isArray(relation.estimatedSourcePages) ? relation.estimatedSourcePages : [],
+          strength: relation.strength,
+          remedy: 'Move the insertion route to a page containing the source block, or relax the relation to prefer-same-page.',
+        },
+      },
+    );
+  }
 }
 
 /**

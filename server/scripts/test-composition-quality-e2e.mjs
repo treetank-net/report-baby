@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { build } from 'esbuild';
 import { parse } from 'yaml';
 import { createEditorialNumberedFixture } from './lib/editorial-numbered-fixture.mjs';
+import { decodePpm, inkProfileInBox, inspectPdfInk } from './lib/pdf-ink-occupancy.mjs';
 
 const root = process.cwd();
 const timingEnabled = process.env.REPORT_BABY_TEST_TIMING === '1';
@@ -26,6 +27,7 @@ const bundles = {
   primitives: join(temporary, 'rendering/primitives.cjs'),
   template: join(temporary, 'template/contracts.cjs'),
   geometry: join(temporary, 'template/geometry.cjs'),
+  coarseGeometry: join(temporary, 'composition/layout/coarse-geometry-planning.cjs'),
 };
 
 async function buildPlanningBundles() {
@@ -37,8 +39,9 @@ async function buildPlanningBundles() {
     'src/rendering/primitives.ts',
     'src/template/contracts.ts',
     'src/template/geometry.ts',
+    'src/composition/layout/coarse-geometry-planning.ts',
   ];
-  if (process.env.COMPOSITION_QUALITY_ORACLE === '1') entryPoints.push(
+  if (process.env.COMPOSITION_QUALITY_ORACLE === '1' || process.env.COMPOSITION_QUALITY_COMPARE_LEGACY === '1') entryPoints.push(
     'src/composition/adapters/text-engine.ts',
     'src/composition/observability/spacing-report.ts',
   );
@@ -71,6 +74,19 @@ function qualitySource(source) {
   result.flows.quotes.slots = [quoteSlotId];
   result.flows.quotes.insertion_slots = [quoteSlotId];
   return result;
+}
+
+function dynamicChromeQualitySource(source) {
+  const result = structuredClone(source);
+  result.slots['quote-pool'] = {
+    type: 'text',
+    frame: { ...result.slots.content.frame },
+    role: 'quote',
+    fit_content: true,
+  };
+  result.flows.quotes = { slots: ['quote-pool'], insertion_slots: ['quote-pool'], priority: 400, start_page: 2, continuation: 'allowed' };
+  result.id = 'pages/editorial-dynamic-chrome-quality-check';
+  return qualitySource(result);
 }
 
 function assertSpacingEvidence(result) {
@@ -123,6 +139,7 @@ function assertSpacingEvidence(result) {
     'insertion-distribution',
     'content-spread',
     'page-load-balance',
+    'main-page-occupancy-balance',
     'source-relation',
     'spacing-rhythm',
     'narrow-text-interval',
@@ -138,6 +155,17 @@ function assertSpacingEvidence(result) {
   ];
   const scoreCodes = new Set(result.evaluation.scoreBreakdown.map((component) => component.code));
   for (const code of expectedQualityCodes) assert.ok(scoreCodes.has(code), `evaluation must include quality component ${code}`);
+  for (const code of ['content-spread', 'page-load-balance', 'spacing-rhythm']) {
+    const component = result.evaluation.scoreBreakdown.find((candidate) => candidate.code === code);
+    assert.ok(Number.isFinite(component?.details?.targetFitReward), `${code} must expose its bounded exact-target reward when evidence is present or absent`);
+  }
+  assert.ok(result.evaluation.scoreBreakdown.find((candidate) => candidate.code === 'content-spread')?.details?.targetFitReward > 0, 'a gravity group partly inside its target tolerance must earn a positive bounded reward');
+  const occupancyComponent = result.evaluation.scoreBreakdown.find((candidate) => candidate.code === 'main-page-occupancy-balance');
+  assert.ok(Number.isFinite(occupancyComponent?.details?.targetFitReward), 'main-page occupancy must expose its bounded planned-ink reward');
+  assert.equal(occupancyComponent?.details?.terminalPenalty, 0, 'the accepted natural terminal page must not receive a density-only penalty');
+  if (occupancyComponent?.details?.terminalPage) {
+    assert.ok(Number.isFinite(occupancyComponent.details.terminalPage.occupancy), 'terminal-page underfill evidence must include a measured occupancy ratio');
+  }
   for (const suggestion of result.evaluation.suggestions ?? []) {
     assert.ok(suggestion.evidence, `suggestion ${suggestion.code} must include measured evidence`);
     assert.ok(Array.isArray(suggestion.remedies) && suggestion.remedies.length > 0, `suggestion ${suggestion.code} must include remediation`);
@@ -149,13 +177,21 @@ await buildPlanningBundles();
 
 try {
   const { planReportComposition, compositionPdfBackendOptionsFromRenderConfig, compositionStylesFromRenderConfig } = await import(bundles.adapter);
-  const { renderComposition, evaluateCompositionPlan, compareCompositionEvaluations, createTextCompositionPlanner } = await import(bundles.backend);
+  const { renderComposition, evaluateCompositionPlan, compareCompositionEvaluations, createTextCompositionEngine, createTextCompositionPlanner } = await import(bundles.backend);
   const { createJsPdfTextBackend } = await import(bundles.pdfBackend);
   const { newPdf } = await import(bundles.primitives);
   const { compileTemplateSource } = await import(bundles.template);
   const { pageGeometryFromTemplate } = await import(bundles.geometry);
+  const { estimateCoarseMainGeometry, projectCoarseInsertionDisplacement } = await import(bundles.coarseGeometry);
   const source = parse(await readFile(join(root, 'templates/pages/editorial-dynamic-inset-two-column/template.yml'), 'utf8'));
   const renderConfig = parse(await readFile(join(root, 'templates/render-config.yml'), 'utf8'));
+  const rasterSide = renderConfig.quality.pdf_pixel_qa.rectangle_inset_px * 2 + 2;
+  const whiteRaster = decodePpm(Buffer.concat([Buffer.from(`P6\n${rasterSide} ${rasterSide}\n255\n`), Buffer.alloc(rasterSide * rasterSide * 3, 255)]));
+  assert.ok(whiteRaster.pixels.every((value) => value === 255), 'the PPM delimiter must not enter the pixel data');
+  const whiteProfile = inkProfileInBox(whiteRaster, { x: 0, y: 0, width: rasterSide, height: rasterSide }, { width: rasterSide, height: rasterSide }, renderConfig.quality.pdf_pixel_qa);
+  assert.equal(whiteProfile.status, 'empty', 'a blank raster must not pass the line-ink gate');
+  const binaryWhitespaceRaster = decodePpm(Buffer.concat([Buffer.from('P6\n1 1\n255\n'), Buffer.from([10, 32, 13])]));
+  assert.deepEqual([...binaryWhitespaceRaster.pixels], [10, 32, 13], 'binary whitespace samples must remain intact after consuming the header delimiter');
   const dynamicSource = qualitySource(source);
   const quoteSlotId = Object.keys(dynamicSource.slots).find((slotId) => dynamicSource.slots[slotId]?.role === 'quote');
   if (!quoteSlotId) throw new Error('quality fixture requires a reusable quote capability');
@@ -199,11 +235,66 @@ try {
     rounds: result.plan.trace?.candidateSearch?.rounds.map(({ round, generatedCandidates, evaluatedCandidates, stopReason }) => ({ round, generatedCandidates, evaluatedCandidates, stopReason })),
     candidates: result.plan.trace?.candidateSearch?.evaluatedCandidates,
   });
+  // A coarse seed can already equal the best complete exact candidate; keep
+  // the no-regression contract here and assert strict repair improvements in
+  // the dedicated ranking corpus where a reachable defect is guaranteed.
   assert.ok(result.evaluation.score >= seedResult.evaluation.score, `optional movement candidates must retain the unmoved seed plan so a move cannot force a lower-scoring result: ${JSON.stringify({ optimizedScore: result.evaluation.score, seedScore: seedResult.evaluation.score, selected: result.plan.trace?.candidateSearch?.selectedCandidate, seedComponents: seedResult.evaluation.scoreBreakdown.map(({ code, points }) => [code, points]) })}`);
-  assert.ok(result.evaluation.score > seedResult.evaluation.score, `the quality fixture must exercise a strictly improving evaluator-directed repair: ${JSON.stringify({ optimizedScore: result.evaluation.score, seedScore: seedResult.evaluation.score, rounds: result.plan.trace?.candidateSearch?.rounds.map(({ round, bestScore, improved, stopReason }) => ({ round, bestScore, improved, stopReason })) })}`);
   assert.ok((result.plan.trace?.candidateSearch?.generatedCandidates ?? 0) > (seedResult.plan.trace?.candidateSearch?.generatedCandidates ?? 0), 'fluid quote capabilities must generate additional complete-plan movement candidates without per-block test wiring');
+  const candidateSearch = result.plan.trace?.candidateSearch;
+  const fullPlanRecalculationBudget = renderConfig.composition_search.max_full_plan_recalculations;
+  assert.ok(Number.isInteger(fullPlanRecalculationBudget) && fullPlanRecalculationBudget > 0, 'the complete-plan calculation budget must come from shared render configuration');
+  assert.ok((candidateSearch?.fullPlanRecalculations ?? 0) <= fullPlanRecalculationBudget,
+    `the representative coarse-first run must stay within the configured full-plan evaluation budget: ${JSON.stringify({ actual: candidateSearch?.fullPlanRecalculations, budget: fullPlanRecalculationBudget })}`);
+  const baselineSearchRound = candidateSearch?.rounds.find(({ round }) => round === 0);
+  assert.ok(baselineSearchRound?.evaluatedCandidates > 1 && baselineSearchRound.evaluatedCandidates <= renderConfig.composition_search.coarse_exact_candidate_count, 'the engine must compare a bounded set of complete coarse seeds before local refinements');
+  const evaluatedRepairResults = (candidateSearch?.rounds ?? [])
+    .filter(({ round }) => round > 0)
+    .flatMap((round) => (round.candidateResults ?? []).map((candidate) => ({ round, candidate })));
+  assert.ok(evaluatedRepairResults.length > 0, 'the representative candidate search must exercise measured post-baseline repairs');
+  assert.ok(evaluatedRepairResults.every(({ round, candidate }) => {
+    const roundRepairIds = new Set((round.repairProposals ?? []).map(({ id }) => id));
+    return candidate.repairProposalIds?.length > 0
+      && candidate.repairProposalIds.every((id) => roundRepairIds.has(id));
+  }), 'every evaluated post-baseline candidate must identify the exact evaluator repair that caused it');
+  const coarseSeedDecision = result.plan.decisions.find((decision) => decision.code === 'COARSE_GEOMETRY_SEED_SELECTED');
+  assert.ok(coarseSeedDecision, `the selected exact plan must retain the coarse seed evidence after stabilization: ${result.plan.decisions.map((decision) => decision.code).filter((code) => code.includes('COARSE') || code.includes('PLANNER'))}`);
+  assert.ok(Array.isArray(coarseSeedDecision.progressByPage) && Array.isArray(coarseSeedDecision.unobstructedProgressByPage), 'coarse diagnostics must distinguish unobstructed and insertion-projected main progress');
+  assert.ok(Array.isArray(coarseSeedDecision.insertionAssignments), 'coarse diagnostics must identify selected insertion rectangles');
+  assert.ok(coarseSeedDecision.coarseBlockMeasurements.length > 0 && coarseSeedDecision.coarseBreakSensitiveRegions.some(({ rule }) => rule === 'heading-following-lines'), 'normal diagnostics must expose intrinsic block heights and protected heading bands');
+  assert.ok(coarseSeedDecision.assignmentSearch.projectedLayoutsCompared > 1, 'the normal seed must compare complete alternatives after cut/push projection');
+  assert.ok(Array.isArray(coarseSeedDecision.coarseMainRegions) && Array.isArray(coarseSeedDecision.dynamicReservations), 'coarse diagnostics must expose resolved main rectangles and measured dynamic intro reservations');
+  const baselineExactComparison = coarseSeedDecision.baselineExactComparison;
+  const terminalPageErrorTolerance = renderConfig.composition_search.coarse_page_prediction_error_tolerance_pages;
+  assert.ok(Number.isFinite(terminalPageErrorTolerance) && terminalPageErrorTolerance >= 0, 'the representative coarse terminal-page tolerance must come from shared render configuration');
+  assert.ok(baselineExactComparison && Array.isArray(baselineExactComparison.pages), 'the coarse seed trace must compare its predicted page mass with exact baseline text lines');
+  assert.ok(Number.isFinite(baselineExactComparison.estimatedTerminalPage) && Number.isFinite(baselineExactComparison.exactMainTerminalPage), 'the estimate and exact baseline must each report their terminal main page when measurable');
+  assert.ok(Math.abs(baselineExactComparison.estimatedTerminalPage - baselineExactComparison.exactMainTerminalPage) <= terminalPageErrorTolerance, `the frozen representative fixture must stay within the configured terminal-page prediction tolerance: ${JSON.stringify({ estimated: baselineExactComparison.estimatedTerminalPage, exact: baselineExactComparison.exactMainTerminalPage, tolerance: terminalPageErrorTolerance, pageMass: baselineExactComparison.pages.map(({ page, estimatedMassUnits, exactTextWords }) => ({ page, estimatedMassUnits, exactTextWords })), insertionAssignments: coarseSeedDecision.insertionAssignments.map(({ flowId, blockId, page, slotId }) => ({ flowId, blockId, page, slotId })) })}`);
+  assert.ok(baselineExactComparison.exactTextWordCount > 0 && baselineExactComparison.pages.every((page) => Number.isFinite(page.estimatedMassUnits) && Number.isFinite(page.exactTextWords) && (Array.isArray(page.blocks) || (page.estimatedMassUnits === 0 && page.exactTextWords === 0))), 'per-page comparison must report measured coarse units, exact line word counts and block attribution where mass exists');
+  assert.ok(baselineExactComparison.pages.flatMap((page) => page.blocks ?? []).every((block) =>
+    (block.estimatedMassUnits === 0 || Number.isInteger(block.estimatedLineCount))
+      && (block.exactTextWords === 0 || Number.isInteger(block.exactLineCount))), 'text block attribution must expose estimated and exact line counts by page');
+  assert.ok(baselineExactComparison.pages.flatMap((page) => page.blocks ?? []).every((block) =>
+    block.estimatedBySlot.every((slot) => Number.isFinite(slot.leftX) && Number.isFinite(slot.rightX) && slot.rightX >= slot.leftX && Number.isFinite(slot.topY) && Number.isFinite(slot.bottomY) && Number.isFinite(slot.occupiedHeight) && slot.occupiedHeight >= 0 && Number.isFinite(slot.unoccupiedEnvelopeHeight) && slot.unoccupiedEnvelopeHeight >= 0)
+      && block.exactBySlot.every((slot) => Number.isFinite(slot.leftX) && Number.isFinite(slot.rightX) && slot.rightX >= slot.leftX && Number.isFinite(slot.topY) && Number.isFinite(slot.bottomY) && Number.isFinite(slot.occupiedHeight) && slot.occupiedHeight >= 0 && Number.isFinite(slot.unoccupiedEnvelopeHeight) && slot.unoccupiedEnvelopeHeight >= 0)), 'text block attribution must expose estimated and exact extents, occupied height and envelope slack by slot');
+  const selectedExactComparison = coarseSeedDecision.selectedExactComparison;
+  const unobstructedEstimate = estimateCoarseMainGeometry(result.document, result.metrics, result.template, renderConfig.pdf.orphan_min_lines);
+  const coarseInsertionMap = new Map(coarseSeedDecision.insertionAssignments.map(({ flowId, blockId, page, slotId, box }) => [
+    `${flowId}:${blockId}`,
+    { page, slotId, box },
+  ]));
+  const projectedEstimate = projectCoarseInsertionDisplacement(unobstructedEstimate, result.template, coarseInsertionMap);
+  const diagnosticFragments = (geometryEstimate) => geometryEstimate.contentMass
+    .filter(({ blockId }) => blockId === 'body-market-1')
+    .map(({ page, slotId, startWord, endWord, lineWordCounts }) => ({
+      page, slotId, wordCount: endWord - startWord, lineCount: lineWordCounts?.length ?? 0,
+    }));
+  assert.ok(selectedExactComparison && Array.isArray(selectedExactComparison.pages), 'the selected exact plan must retain a fresh comparison against the original coarse estimate');
+  assert.ok(Number.isFinite(selectedExactComparison.exactMainTerminalPage) && selectedExactComparison.exactTextWordCount > 0, 'the selected comparison must report its exact main terminal page and placed text mass');
+  assert.ok(Math.abs(selectedExactComparison.estimatedTerminalPage - selectedExactComparison.exactMainTerminalPage) <= terminalPageErrorTolerance, `the selected representative plan must stay within the configured terminal-page prediction tolerance: ${JSON.stringify({ estimated: selectedExactComparison.estimatedTerminalPage, exact: selectedExactComparison.exactMainTerminalPage, tolerance: terminalPageErrorTolerance })}`);
+  assert.ok(selectedExactComparison.pages.every(({ estimatedMassUnits, exactTextWords }) => estimatedMassUnits === exactTextWords), `the frozen representative fixture must preserve exact text mass per page after heading keep rules and insertion projection: ${JSON.stringify(selectedExactComparison.pages.map(({ page, estimatedMassUnits, exactTextWords }) => ({ page, estimatedMassUnits, exactTextWords })))}`);
 
   let oracleEvidence;
+  let terminalInsertionOraclePlan;
   if (process.env.COMPOSITION_QUALITY_ORACLE === '1') {
     const textEngineModule = await import(bundles.textEngine);
     const { plannerPolicyFromRenderConfig } = textEngineModule.default ?? textEngineModule;
@@ -216,6 +307,76 @@ try {
       attachPlanSpacingReport(plan, result.document, result.metrics, geometry);
       return evaluateCompositionPlan(result.document, plan);
     });
+    const terminalInsertionAlternatives = oracleRecords.flatMap(({ signature, plan }, index) => {
+      const evaluation = oracleEvaluations[index];
+      if (evaluation.status === 'rejected') return [];
+      const mainLines = plan.lines.filter((line) => line.flowId === 'main' && line.layer !== 'insertion');
+      const terminalMainPage = Math.max(0, ...mainLines.map(({ page }) => page));
+      if (terminalMainPage <= 0) return [];
+      const terminalInsertions = plan.graphicPlacements
+        .filter((graphic) => graphic.page === terminalMainPage && graphic.graphicId.startsWith('insertion:'))
+        .map(({ graphicId, box }) => ({ graphicId, box }));
+      if (terminalInsertions.length === 0) return [];
+      const component = (code) => evaluation.scoreBreakdown.find((candidate) => candidate.code === code);
+      const occupancy = component('main-page-occupancy-balance');
+      const pageLoad = component('page-load-balance');
+      return [{
+        signature,
+        score: evaluation.score,
+        terminalMainPage,
+        terminalMainLineCount: mainLines.filter(({ page }) => page === terminalMainPage).length,
+        terminalMainTextWords: mainLines.filter(({ page }) => page === terminalMainPage)
+          .reduce((sum, line) => sum + Math.max(0, line.endWord - line.startWord), 0),
+        terminalInsertions,
+        ...(occupancy?.details.terminalPage === undefined ? {} : {
+          terminalOccupancy: occupancy.details.terminalPage.occupancy,
+          terminalOccupancyPenalty: occupancy.details.terminalPage.penalty,
+        }),
+        terminalPageLoad: pageLoad?.details.records.flatMap((record) => record.loads)
+          .filter((load) => load.page === terminalMainPage)
+          .map(({ page, load, graphicIds }) => ({ page, load, graphicIds })) ?? [],
+        qualityPoints: evaluation.scoreBreakdown
+          .filter(({ code }) => ['content-spread', 'empty-regions', 'insertion-text-continuity', 'main-page-occupancy-balance', 'orphan-lines', 'page-load-balance'].includes(code))
+          .map(({ code, points }) => ({ code, points })),
+        allScoreComponents: evaluation.scoreBreakdown.map(({ code, value, points }) => ({ code, value, points })),
+        terminalSpacingEvidence: evaluation.scoreBreakdown
+          .filter(({ code }) => ['spacing-rhythm', 'insertion-symmetry', 'insertion-text-continuity'].includes(code))
+          .map(({ code, details }) => ({
+            code,
+            records: details.records?.filter((record) => record.page === terminalMainPage) ?? [],
+          })),
+      }];
+    }).sort((left, right) => right.score - left.score);
+    terminalInsertionOraclePlan = oracleRecords.find(({ signature }) =>
+      signature === terminalInsertionAlternatives[0]?.signature)?.plan;
+    const oracleCandidateSummaries = oracleRecords.flatMap(({ signature, plan }, index) => {
+      const evaluation = oracleEvaluations[index];
+      if (evaluation.status === 'rejected') return [];
+      const mainLines = plan.lines.filter((line) => line.flowId === 'main' && line.layer !== 'insertion');
+      const mainPages = [...new Set(mainLines.map(({ page }) => page))].sort((left, right) => left - right);
+      const terminalMainPage = mainPages.at(-1);
+      const terminalPage = evaluation.scoreBreakdown
+        .find((candidate) => candidate.code === 'main-page-occupancy-balance')?.details.terminalPage;
+      return [{
+        signature,
+        score: evaluation.score,
+        totalPages: plan.pages.length,
+        mainPages: mainPages.map((page) => {
+          const lines = mainLines.filter((line) => line.page === page);
+          return {
+            page,
+            lineCount: lines.length,
+            wordCount: lines.reduce((sum, line) => sum + Math.max(0, line.endWord - line.startWord), 0),
+          };
+        }),
+        terminalMainPage,
+        terminalOccupancy: terminalPage?.occupancy,
+        terminalPenalty: terminalPage?.penalty,
+        insertionPages: [...new Set(plan.graphicPlacements
+          .filter(({ graphicId }) => graphicId.startsWith('insertion:'))
+          .map(({ page }) => page))].sort((left, right) => left - right),
+      }];
+    }).sort((left, right) => right.score - left.score);
     let oracleWinner = 0;
     for (let index = 1; index < oracleEvaluations.length; index += 1) {
       if (compareCompositionEvaluations(oracleEvaluations[index], oracleEvaluations[oracleWinner]) < 0) oracleWinner = index;
@@ -229,6 +390,9 @@ try {
       oracleLegalCandidates: oracleEvaluations.filter((evaluation) => evaluation.status !== 'rejected').length,
       oracleWinner: oracleRecords[oracleWinner]?.signature,
       oracleScore: oracleEvaluation.score,
+      terminalInsertionAlternativeCount: terminalInsertionAlternatives.length,
+      bestTerminalInsertionAlternatives: terminalInsertionAlternatives.slice(0, 5),
+      bestExactPlanSummaries: oracleCandidateSummaries.slice(0, 10),
       incrementalWinner: result.plan.trace?.candidateSearch?.selectedProposalSignature,
       incrementalScore: result.evaluation.score,
       incrementalEvaluatedCandidates: result.plan.trace?.candidateSearch?.evaluatedCandidates,
@@ -275,6 +439,43 @@ try {
   const footerGapScore = result.evaluation.scoreBreakdown.find((component) => component.code === 'footer-gap');
   assert.ok(Number.isFinite(footerGapScore?.points), 'the editorial content frame must expose a measurable footer-gap score');
   const selectedTemplate = compareCompositionEvaluations(result.evaluation, tightQuoteResult.evaluation) <= 0 ? result : tightQuoteResult;
+  const dynamicChromeSource = dynamicChromeQualitySource(parse(await readFile(join(root, 'templates/pages/editorial-dynamic-chrome/template.yml'), 'utf8')));
+  const dynamicChromeTemplate = compileTemplateSource(dynamicChromeSource);
+  const dynamicChromeGeometry = pageGeometryFromTemplate(dynamicChromeTemplate);
+  const dynamicChromeInput = structuredClone(fixture.input);
+  dynamicChromeInput.flows.main.blocks = [...dynamicChromeInput.flows.intro.blocks, ...dynamicChromeInput.flows.main.blocks];
+  delete dynamicChromeInput.flows.intro;
+  const dynamicChromeResult = planReportComposition(
+    newPdf('portrait', [dynamicChromeGeometry.width, dynamicChromeGeometry.height]),
+    dynamicChromeTemplate,
+    dynamicChromeGeometry,
+    dynamicChromeInput,
+    { family: 'DejaVu', maxPages: renderConfig.pdf.composition_max_pages, styles },
+  );
+  assert.equal(dynamicChromeResult.evaluation.status, 'accepted', JSON.stringify(dynamicChromeResult.evaluation.hardViolations.map(({ code, flowId, message, details }) => ({ code, flowId, message, details }))));
+  assert.deepEqual(dynamicChromeResult.plan.residualContent, [], 'the independent dynamic-chrome fixture must preserve all authored content');
+  const dynamicChromeProgress = dynamicChromeResult.evaluation.scoreBreakdown.find((component) => component.code === 'content-spread');
+  const dynamicChromeOccupancy = dynamicChromeResult.evaluation.scoreBreakdown.find((component) => component.code === 'main-page-occupancy-balance');
+  assert.ok(dynamicChromeProgress?.details?.records?.length > 0 && dynamicChromeProgress.details.targetFitReward > 0, 'the independent dynamic-chrome plan must measure and reward insertion gravity fit');
+  assert.ok(dynamicChromeOccupancy?.details?.measuredInteriorPageCount > 1 && dynamicChromeOccupancy.details.targetFitReward > 0, 'the independent dynamic-chrome plan must reward measured occupancy across several exact interior pages');
+  const dynamicChromePdf = newPdf('portrait', [dynamicChromeGeometry.width, dynamicChromeGeometry.height]);
+  const dynamicChromeArtifact = renderComposition(dynamicChromeResult.document, dynamicChromeResult, createJsPdfTextBackend(
+    dynamicChromePdf,
+    'DejaVu',
+    styles,
+    compositionPdfBackendOptionsFromRenderConfig(),
+  ));
+  const dynamicChromeArtifactPath = '/tmp/report-baby-composition-quality-dynamic-chrome.pdf';
+  await writeFile(dynamicChromeArtifactPath, dynamicChromeArtifact);
+  const dynamicChromeInk = await inspectPdfInk({
+    artifactPath: dynamicChromeArtifactPath,
+    pages: dynamicChromeResult.plan.pages,
+    lines: dynamicChromeResult.plan.lines.map((line) => ({ page: line.page, id: line.blockId, slotId: line.slotId, box: line.box })),
+    slots: dynamicChromeResult.plan.slots.map((slot) => ({ page: slot.page, id: slot.id, box: slot.box })),
+    pageSize: { width: dynamicChromeGeometry.width, height: dynamicChromeGeometry.height },
+    qa: renderConfig.quality.pdf_pixel_qa,
+  });
+  assert.ok(dynamicChromeInk.lineChecks.length > 0 && dynamicChromeInk.lineChecks.every(({ status }) => status === 'occupied'), 'the independent dynamic-chrome PDF must render ink inside each exact planned line box');
   assert.equal(selectedTemplate.evaluation.score, Math.max(result.evaluation.score, tightQuoteResult.evaluation.score), 'a caller comparing legal template alternatives must select the higher-scoring candidate');
   const plannedLines = [...selectedTemplate.plan.lines, ...(selectedTemplate.plan.insertionLines ?? [])];
   for (const glyph of selectedTemplate.plan.glyphPlacements ?? []) {
@@ -299,16 +500,11 @@ try {
     .map((placement) => placement.page);
   assert.equal(quotePages.length, 4, 'the selected dynamic capability must retain every authored quote');
   assert.ok(quotePages[0] >= 2, 'the dynamic quote capability must respect its page-start policy');
-  assert.ok(new Set(quotePages).size >= 3, `the selected dynamic capability must distribute quotes across pages: ${JSON.stringify(quotePages)}`);
-  const autumnRelocations = selectedTemplate.plan.trace?.candidateSearch?.rounds
-    .flatMap((round) => round.repairAttempts ?? [])
-    .filter((attempt) => attempt.proposalId.includes('quotes:quote-autumn')) ?? [];
-  const page4AutumnAttempt = autumnRelocations.find((attempt) => attempt.proposalId.includes(`:4:${quoteSlotId}`));
-  const page5AutumnAttempt = autumnRelocations.find((attempt) => attempt.proposalId.includes(`:5:${quoteSlotId}`));
-  assert.ok(autumnRelocations.some((attempt) => Number.isFinite(attempt.scoreDelta)), 'the evaluator must score at least one dynamic quote relocation');
-  if (page4AutumnAttempt && page5AutumnAttempt) {
-    assert.notEqual(page4AutumnAttempt.scoreDelta, page5AutumnAttempt.scoreDelta, `the evaluator must compare dynamic quote relocations by score: ${JSON.stringify({ page4AutumnAttempt, page5AutumnAttempt })}`);
-  }
+  assert.ok(new Set(quotePages).size >= 3, 'the selected dynamic capability must distribute quotes across pages');
+  const scoredQuoteRelocations = selectedTemplate.plan.trace?.candidateSearch?.rounds
+    .flatMap((round) => round.candidateResults ?? [])
+    .filter((candidate) => candidate.repairProposalIds?.some((id) => id.includes('quotes:')) && Number.isFinite(candidate.scoreDelta)) ?? [];
+  assert.ok(scoredQuoteRelocations.length > 0, 'the evaluator must record score deltas for generated dynamic quote relocation candidates');
   const continuity = selectedTemplate.evaluation.scoreBreakdown.find((component) => component.code === 'insertion-text-continuity');
   const autumnContinuity = continuity?.details?.records?.find((record) => record.blockId === 'quote-autumn');
   assert.ok(autumnContinuity && autumnContinuity.streamCount >= 1, 'the selected dynamic quote must expose text-continuity evidence');
@@ -316,6 +512,7 @@ try {
   assert.ok(Number.isFinite(autumnContinuity.crossStreamMassImbalance), 'the selected dynamic quote must expose cross-stream mass evidence');
   assert.ok(autumnContinuity.streams?.some((stream) => stream.afterGap === 0 && stream.edgeGapDeficit > 0), 'the spacing report must preserve an exact zero text edge so the evaluator can penalize a quote that touches following text');
   assert.equal(typeof result.evaluation.scoreBase, 'number', 'legal evaluation must expose the configured score base');
+  assert.ok(result.evaluation.scoreUpperBound >= result.evaluation.score && result.evaluation.measuredRewardUpperBound <= result.evaluation.scoreUpperBound, 'public scoring bounds must be ceilings, not claimed attainable optima');
   assert.ok(Array.isArray(result.evaluation.placementScores), 'legal evaluation must expose score contributions by material placement');
   const attributedPoints = result.evaluation.placementScores.reduce((sum, placement) => sum + placement.points, 0);
   const attributionTolerance = Number.EPSILON * Math.max(1, Math.abs(result.evaluation.score)) * result.evaluation.placementScores.length * 4;
@@ -334,6 +531,12 @@ try {
     assert.ok(seedPublicQuality.placementGravity && typeof seedPublicQuality.placementGravity.iterations === 'number', 'the public quality summary must expose the cheap gravity trace whenever the baseline seed uses gravity');
   }
   assert.equal(publicQuality.scoreBase, selectedTemplate.evaluation.scoreBase, 'the public quality summary must expose the score base');
+  assert.equal(publicQuality.scoreUpperBound, selectedTemplate.evaluation.scoreUpperBound, 'MCP quality must expose the configured algebraic ceiling');
+  assert.equal(publicQuality.measuredRewardUpperBound, selectedTemplate.evaluation.measuredRewardUpperBound, 'MCP quality must preserve the evidence-based ceiling separately');
+  const publicGravityBound = publicQuality.qualityComponents.find(({ code }) => code === 'content-spread');
+  assert.equal(publicGravityBound.rewardCeiling, renderConfig.composition_score.content_spread_reward);
+  assert.equal(publicGravityBound.rewardEvidence, 'measured');
+  assert.ok(Number.isFinite(publicGravityBound.ceilingGap));
   assert.ok(Array.isArray(publicQuality.qualityComponents), 'the public quality summary must expose all measured score components');
   for (const code of ['content-spread', 'page-load-balance', 'source-relation', 'insertion-text-continuity']) {
     const component = publicQuality.qualityComponents.find((candidate) => candidate.code === code);
@@ -441,7 +644,133 @@ try {
   reportTiming('complete quality scenario', timingStartedAt, { pages: result.plan.pages.length });
   const artifactPath = '/tmp/report-baby-composition-quality-e2e.pdf';
   await writeFile(artifactPath, artifact);
+  await writeFile('/tmp/report-baby-composition-quality-e2e.json', `${JSON.stringify({ compositionPlan: selectedTemplate.plan, compositionEvaluation: selectedTemplate.evaluation }, null, 2)}\n`);
   assert.equal(artifact.subarray(0, 5).toString(), '%PDF-', 'the representative composition must render as a PDF');
+  let terminalInsertionOracleArtifactPath;
+  let terminalInsertionOracleInk;
+  if (terminalInsertionOraclePlan) {
+    const terminalOraclePdf = newPdf('portrait', [geometry.width, geometry.height]);
+    const terminalOracleArtifact = renderComposition(result.document, {
+      ...result,
+      plan: terminalInsertionOraclePlan,
+    }, createJsPdfTextBackend(
+      terminalOraclePdf,
+      'DejaVu',
+      styles,
+      compositionPdfBackendOptionsFromRenderConfig(),
+    ));
+    terminalInsertionOracleArtifactPath = '/tmp/report-baby-composition-quality-e2e-terminal-insertion-oracle.pdf';
+    await writeFile(terminalInsertionOracleArtifactPath, terminalOracleArtifact);
+    assert.equal(terminalOracleArtifact.subarray(0, 5).toString(), '%PDF-', 'the best legal terminal-insertion alternative must render as a PDF');
+    terminalInsertionOracleInk = await inspectPdfInk({
+      artifactPath: terminalInsertionOracleArtifactPath,
+      pages: terminalInsertionOraclePlan.pages,
+      lines: terminalInsertionOraclePlan.lines.map((line) => ({ page: line.page, id: line.blockId, slotId: line.slotId, box: line.box })),
+      slots: terminalInsertionOraclePlan.slots.map((slot) => ({ page: slot.page, id: slot.id, box: slot.box })),
+      pageSize: { width: geometry.width, height: geometry.height },
+      qa: renderConfig.quality.pdf_pixel_qa,
+    });
+    assert.ok(terminalInsertionOracleInk.lineChecks.length > 0
+      && terminalInsertionOracleInk.lineChecks.every(({ status }) => status === 'occupied'),
+    'the best legal terminal-insertion alternative must rasterize ink inside every exact main/insertion line box');
+  }
+  let legacyComparisonEvidence;
+  if (process.env.COMPOSITION_QUALITY_COMPARE_LEGACY === '1') {
+    const textEngineModule = await import(bundles.textEngine);
+    const { plannerPolicyFromRenderConfig } = textEngineModule.default ?? textEngineModule;
+    const spacingModule = await import(bundles.spacing);
+    const { attachPlanSpacingReport } = spacingModule.default ?? spacingModule;
+    const basePolicy = plannerPolicyFromRenderConfig();
+    const rollbackPolicy = {
+      ...basePolicy,
+      coarseGeometryFirst: false,
+      searchBudget: {
+        ...basePolicy.searchBudget,
+        maxInitialCandidates: 1,
+        maxRefinementRounds: 0,
+        maxPageLocalRefinementRounds: 0,
+        maxFullPlanRecalculations: 1,
+      },
+    };
+    const legacyResult = createTextCompositionEngine(result.template, rollbackPolicy).plan(result.document, result.metrics);
+    attachPlanSpacingReport(legacyResult.plan, result.document, result.metrics, geometry);
+    const legacyEvaluation = evaluateCompositionPlan(result.document, legacyResult.plan);
+    assert.equal(legacyEvaluation.status, 'accepted', `the configured legacy rollback baseline must be exactly legal: ${JSON.stringify(legacyEvaluation.hardViolations.map(({ code }) => code))}`);
+    const legacyPdf = newPdf('portrait', [geometry.width, geometry.height]);
+    const legacyArtifact = renderComposition(result.document, legacyResult, createJsPdfTextBackend(
+      legacyPdf,
+      'DejaVu',
+      styles,
+      compositionPdfBackendOptionsFromRenderConfig(),
+    ));
+    const legacyArtifactPath = '/tmp/report-baby-composition-quality-e2e-legacy.pdf';
+    await writeFile(legacyArtifactPath, legacyArtifact);
+    assert.equal(legacyArtifact.subarray(0, 5).toString(), '%PDF-', 'the legacy rollback baseline must render as a PDF');
+    const rasterEvidenceFor = (artifactPath, plan) => inspectPdfInk({
+      artifactPath,
+      pages: plan.pages,
+      lines: plan.lines.map((line) => ({ page: line.page, id: line.blockId, slotId: line.slotId, box: line.box })),
+      slots: plan.slots.map((slot) => ({ page: slot.page, id: slot.id, box: slot.box })),
+      pageSize: { width: geometry.width, height: geometry.height },
+      qa: renderConfig.quality.pdf_pixel_qa,
+    });
+    const [coarseInk, legacyInk] = await Promise.all([
+      rasterEvidenceFor(artifactPath, selectedTemplate.plan),
+      rasterEvidenceFor(legacyArtifactPath, legacyResult.plan),
+    ]);
+    assert.ok(coarseInk.lineChecks.length > 0 && coarseInk.lineChecks.every(({ status }) => status === 'occupied'), 'coarse-selected representative PDF must render ink inside each exact planned line box');
+    assert.ok(legacyInk.lineChecks.length > 0 && legacyInk.lineChecks.every(({ status }) => status === 'occupied'), 'legacy rollback representative PDF must render ink inside each exact planned line box');
+    const coarseMainPages = [...new Set(selectedTemplate.plan.lines.filter(({ flowId, layer }) => flowId === 'main' && layer !== 'insertion').map(({ page }) => page))];
+    const legacyMainPages = [...new Set(legacyResult.plan.lines.filter(({ flowId, layer }) => flowId === 'main' && layer !== 'insertion').map(({ page }) => page))];
+    const coarseInsertionPages = [...new Set(selectedTemplate.plan.graphicPlacements.filter(({ graphicId }) => graphicId.startsWith('insertion:')).map(({ page }) => page))];
+    const legacyInsertionPages = [...new Set(legacyResult.plan.graphicPlacements.filter(({ graphicId }) => graphicId.startsWith('insertion:')).map(({ page }) => page))];
+    assert.ok(selectedTemplate.plan.pages.length < legacyResult.plan.pages.length, `the coarse plan must avoid insertion-only spill pages on the frozen representative input: ${JSON.stringify({ coarsePages: selectedTemplate.plan.pages.length, legacyPages: legacyResult.plan.pages.length })}`);
+    assert.ok(selectedTemplate.evaluation.score > legacyEvaluation.score, `the exact evaluator must prefer the coarse plan on the frozen representative input: ${JSON.stringify({ coarseScore: selectedTemplate.evaluation.score, legacyScore: legacyEvaluation.score })}`);
+    assert.ok(coarseInsertionPages.every((page) => coarseMainPages.includes(page)), `every coarse insertion must share a page with main content: ${JSON.stringify({ coarseInsertionPages, coarseMainPages })}`);
+    assert.ok(legacyInsertionPages.some((page) => !legacyMainPages.includes(page)), `the frozen legacy path must retain its measured insertion-only page regression: ${JSON.stringify({ legacyInsertionPages, legacyMainPages })}`);
+    legacyComparisonEvidence = {
+      coarse: {
+        pages: selectedTemplate.plan.pages.length,
+        mainPages: coarseMainPages,
+        insertionPages: coarseInsertionPages,
+        score: selectedTemplate.evaluation.score,
+      generatedCandidates: selectedTemplate.plan.trace?.candidateSearch?.generatedCandidates,
+      phaseTimings: selectedTemplate.plan.trace?.candidateSearch?.phaseTimings,
+      fullPlanRecalculations: selectedTemplate.plan.trace?.candidateSearch?.fullPlanRecalculations,
+      searchRounds: selectedTemplate.plan.trace?.candidateSearch?.rounds.map((round) => ({
+        round: round.round,
+        scope: round.scope,
+        generatedCandidates: round.generatedCandidates,
+        evaluatedCandidates: round.evaluatedCandidates,
+        stopReason: round.stopReason,
+        candidateRepairIds: round.candidateResults?.map(({ repairProposalIds }) => repairProposalIds ?? []),
+      })),
+      exactBaselineMaterializations: coarseSeedDecision.baselineExactMaterializationCount,
+        renderedLineChecks: coarseInk.lineChecks.length,
+        occupiedLineChecks: coarseInk.lineChecks.filter(({ status }) => status === 'occupied').length,
+      },
+      legacy: {
+        pages: legacyResult.plan.pages.length,
+        mainPages: legacyMainPages,
+        insertionPages: legacyInsertionPages,
+        score: legacyEvaluation.score,
+        generatedCandidates: legacyResult.plan.trace?.candidateSearch?.generatedCandidates,
+        phaseTimings: legacyResult.plan.trace?.candidateSearch?.phaseTimings,
+        fullPlanRecalculations: legacyResult.plan.trace?.candidateSearch?.fullPlanRecalculations,
+        searchRounds: legacyResult.plan.trace?.candidateSearch?.rounds.map((round) => ({
+          round: round.round,
+          scope: round.scope,
+          generatedCandidates: round.generatedCandidates,
+          evaluatedCandidates: round.evaluatedCandidates,
+          stopReason: round.stopReason,
+          candidateRepairIds: round.candidateResults?.map(({ repairProposalIds }) => repairProposalIds ?? []),
+        })),
+        renderedLineChecks: legacyInk.lineChecks.length,
+        occupiedLineChecks: legacyInk.lineChecks.filter(({ status }) => status === 'occupied').length,
+      },
+      legacyArtifactPath,
+    };
+  }
   let comparisonArtifactPath;
   if (process.env.COMPOSITION_QUALITY_COMPARE_ARTIFACTS === '1') {
     const comparisonPdf = newPdf('portrait', [tightQuoteGeometry.width, tightQuoteGeometry.height]);
@@ -461,13 +790,68 @@ try {
     pages: result.plan.pages.length,
     insertionSlots: quoteSlots.length,
     insertionLines: selectedTemplate.plan.insertionLines?.length ?? 0,
+    insertionGeometry: {
+      coarseAssignments: coarseSeedDecision.insertionAssignments,
+      exactGraphics: result.plan.graphicPlacements
+        .filter(({ graphicId }) => graphicId.startsWith('insertion:'))
+        .map(({ graphicId, page, slotId, box }) => ({ graphicId, page, slotId, box })),
+    },
+    columnSplitDiagnostic: {
+      blockId: 'body-market-1',
+      configuredMinimumLinesAtEnd: renderConfig.pdf.orphan_min_lines,
+      unobstructedCoarseFragments: diagnosticFragments(unobstructedEstimate),
+      projectedCoarseFragments: diagnosticFragments(projectedEstimate),
+      exactFragments: [...selectedTemplate.plan.lines
+        .filter(({ blockId }) => blockId === 'body-market-1')
+        .reduce((fragments, line) => {
+          const key = `${line.page}:${line.slotId}`;
+          const fragment = fragments.get(key) ?? { page: line.page, slotId: line.slotId, lines: 0, words: 0, topY: line.box.y, bottomY: line.box.y + line.box.height };
+          fragment.lines += 1;
+          fragment.words += line.endWord - line.startWord;
+          fragment.topY = Math.min(fragment.topY, line.box.y);
+          fragment.bottomY = Math.max(fragment.bottomY, line.box.y + line.box.height);
+          fragments.set(key, fragment);
+          return fragments;
+        }, new Map()).values()],
+      pageOneWrappingGraphics: selectedTemplate.plan.graphicPlacements
+        .filter(({ page, wrap }) => page === 1 && wrap === 'around')
+        .map(({ graphicId, slotId, box }) => ({ graphicId, slotId, box })),
+    },
     observations: selectedTemplate.plan.spacing?.observations.length ?? 0,
+    coarseCalibration: {
+      baseline: {
+        estimatedTerminalPage: baselineExactComparison.estimatedTerminalPage,
+        exactMainTerminalPage: baselineExactComparison.exactMainTerminalPage,
+        exactTextWordCount: baselineExactComparison.exactTextWordCount,
+      },
+      selected: {
+        estimatedTerminalPage: selectedExactComparison.estimatedTerminalPage,
+        exactMainTerminalPage: selectedExactComparison.exactMainTerminalPage,
+        exactTextWordCount: selectedExactComparison.exactTextWordCount,
+        unrepresentedNonTextMassBlockCount: selectedExactComparison.unrepresentedNonTextMassBlockCount,
+        dynamicReservations: coarseSeedDecision.dynamicReservations,
+        pageMass: selectedExactComparison.pages.map(({ page, estimatedMassUnits, exactTextWords, blocks }) => ({
+          page,
+          estimatedMassUnits,
+          exactTextWords,
+          blocks: blocks?.map(({ blockId, estimatedMassUnits: estimatedWords, exactTextWords: exactWords, estimatedLineCount, exactLineCount, estimatedBySlot, exactBySlot }) => ({
+            blockId,
+            estimatedWords,
+            exactWords,
+            ...(estimatedLineCount === undefined ? {} : { estimatedLineCount }),
+            ...(exactLineCount === undefined ? {} : { exactLineCount }),
+            estimatedBySlot,
+            exactBySlot,
+          })),
+        })),
+      },
+    },
     qualityAlternatives: [result, tightQuoteResult].map((candidate) => ({
       template: candidate.template.id,
       score: candidate.evaluation.score,
       status: candidate.evaluation.status,
       qualitySignals: candidate.evaluation.scoreBreakdown
-        .filter((component) => ['main-start-delay', 'empty-regions', 'glyph-overlap', 'insertion-symmetry', 'insertion-distribution', 'spacing-rhythm'].includes(component.code))
+        .filter((component) => ['main-start-delay', 'empty-regions', 'glyph-overlap', 'insertion-symmetry', 'insertion-distribution', 'content-spread', 'page-load-balance', 'main-page-occupancy-balance', 'spacing-rhythm'].includes(component.code))
         .map(({ code, points }) => ({ code, points })),
       firstPageHeaderLines: candidate.plan.lines
         .filter((line) => line.page === 1 && line.flowId === 'header')
@@ -475,7 +859,40 @@ try {
     })),
     selectedTemplate: selectedTemplate.template.id,
     ...(comparisonArtifactPath === undefined ? {} : { comparisonArtifactPath }),
-    scoreBreakdown: selectedTemplate.evaluation.scoreBreakdown.map(({ code, value, points }) => ({ code, value, points })),
+    ...(terminalInsertionOracleArtifactPath === undefined ? {} : {
+      terminalInsertionOracleArtifactPath,
+      terminalInsertionOracleInk: {
+        lineChecks: terminalInsertionOracleInk.lineChecks.length,
+        occupiedLineChecks: terminalInsertionOracleInk.lineChecks.filter(({ status }) => status === 'occupied').length,
+        terminalPageLineCount: terminalInsertionOraclePlan.lines.filter(({ page, flowId, layer }) => page === Math.max(...terminalInsertionOraclePlan.pages.map(({ page: candidatePage }) => candidatePage)) && flowId === 'main' && layer !== 'insertion').length,
+      },
+    }),
+    ...(legacyComparisonEvidence === undefined ? {} : { legacyComparisonEvidence }),
+    dynamicChromeEvidence: {
+      template: dynamicChromeResult.template.id,
+      pages: dynamicChromeResult.plan.pages.length,
+      score: dynamicChromeResult.evaluation.score,
+      contentSpreadReward: dynamicChromeProgress.details.targetFitReward,
+      occupancyReward: dynamicChromeOccupancy.details.targetFitReward,
+      terminalPage: dynamicChromeOccupancy.details.terminalPage,
+      terminalPenalty: dynamicChromeOccupancy.details.terminalPenalty,
+      interiorPages: dynamicChromeOccupancy.details.pages,
+      renderedLineChecks: dynamicChromeInk.lineChecks.length,
+      occupiedLineChecks: dynamicChromeInk.lineChecks.filter(({ status }) => status === 'occupied').length,
+      artifactPath: dynamicChromeArtifactPath,
+    },
+    scoreBase: selectedTemplate.evaluation.scoreBase,
+    scoreUpperBound: selectedTemplate.evaluation.scoreUpperBound,
+    measuredRewardUpperBound: selectedTemplate.evaluation.measuredRewardUpperBound,
+    scoreBreakdown: selectedTemplate.evaluation.scoreBreakdown.map(({ code, value, points, details }) => ({
+      code,
+      value,
+      points,
+      ...(typeof details.targetFitReward === 'number' ? { targetFitReward: details.targetFitReward } : {}),
+      ...(code === 'content-spread' ? { gravityTargets: details.records.map(({ blockId, expectedProgress, actualProgress, visualLoad, deviation }) => ({ blockId, expectedProgress, actualProgress, visualLoad, deviation })) } : {}),
+      ...(code === 'spacing-rhythm' ? { spacingTargets: details.records.map(({ page, blockId, side, target, gap, deviation }) => ({ page, blockId, side, target, gap, deviation })) } : {}),
+      ...(code === 'main-page-occupancy-balance' ? { occupancyPages: details.pages, terminalPage: details.terminalPage, terminalPenalty: details.terminalPenalty } : {}),
+    })),
     glyphOverlapEvidence: selectedTemplate.evaluation.scoreBreakdown
       .find((component) => component.code === 'glyph-overlap')?.details.records.map((record) => ({
         page: record.page,

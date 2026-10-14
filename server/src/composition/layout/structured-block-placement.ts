@@ -19,7 +19,7 @@ import type {
   FlowTarget,
 } from '../contracts/flow-planning.js';
 import { advanceCursor } from './page-state.js';
-import { contentStartBottom, previousBlockInSlot } from './flow-space.js';
+import { calculateAtomicBlockTop, contentStartBottom, previousBlockInSlot } from './flow-space.js';
 import { growSlot } from './page-state.js';
 
 /**
@@ -61,10 +61,14 @@ export function placeAtomicBlock(
       height: measurement.image.height,
     };
     if (measurement.image.captionHeight > 0) {
+      const captionWidth = measurement.image.captionWidth ?? measurement.image.width;
+      const captionX = block.image?.wrap === 'left' ? slot.box.x
+        : block.image?.wrap === 'right' ? slot.box.x + slot.box.width - captionWidth
+        : slot.box.x + (slot.box.width - captionWidth) / 2;
       placement.captionBox = {
-        x: imageX,
+        x: captionX,
         y: top + measurement.image.height,
-        width: measurement.image.width,
+        width: captionWidth,
         height: measurement.image.captionHeight,
       };
     }
@@ -78,7 +82,12 @@ export function placeAtomicBlock(
         shape: 'rectangle',
         wrap: 'around',
         paint: false,
-        box: { x: imageX, y: top, width: measurement.image.width, height: measurement.height },
+        box: {
+          x: Math.min(imageX, placement.captionBox?.x ?? imageX), y: top,
+          width: Math.max(imageX + measurement.image.width, placement.captionBox ? placement.captionBox.x + placement.captionBox.width : imageX + measurement.image.width)
+            - Math.min(imageX, placement.captionBox?.x ?? imageX),
+          height: measurement.height,
+        },
       });
     }
   }
@@ -230,7 +239,7 @@ export function placeStructuredBlock(
   const slot = pageState.slots.get(definition.id)!;
   const previous = definition.kind === 'text' ? previousBlockInSlot(plan, slot.id, block.id, document) : undefined;
   const blockGap = previous ? metrics.blockGap?.(compositionStyleName(previous), compositionStyleName(block)) ?? 0 : 0;
-  const blockTop = definition.kind === 'text'
+  let blockTop = definition.kind === 'text'
     ? contentStartBottom(pageState, plan, slot, document) + blockGap
     : slot.box.y;
   const blockMeasureBottom = definition.grow?.axis === 'y'
@@ -252,6 +261,7 @@ export function placeStructuredBlock(
     cursor.startWord = 0;
     return true;
   }
+  blockTop = calculateAtomicBlockTop(pageState.page, slot, block.id, blockTop, measurement.height, plan.graphicPlacements);
   if (definition.grow?.axis === 'y') growSlot(context, runtime, target, blockTop + measurement.height);
   const availableBlockHeight = rectBottom(slot.box) - blockTop;
   if (measurement.height > availableBlockHeight + geometryTolerance) {

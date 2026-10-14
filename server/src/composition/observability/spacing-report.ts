@@ -312,8 +312,27 @@ function insertionIndex(placements: InsertionPlacement[], placement: InsertionPl
     && candidate.box.y === placement.box.y);
 }
 
-function insertionTextGaps(placement: InsertionPlacement, ordinaryLines: ReturnType<typeof plannedLines>): { before?: number; after?: number } {
-  const pageLines = ordinaryLines.filter((line) => line.page === placement.page);
+function normalizedSlotId(slotId: string): string {
+  return slotId.replace(/^\d+:/u, '');
+}
+
+function insertionTextGaps(
+  plan: CompositionPlan,
+  placement: InsertionPlacement,
+  insertionSlot: CompositionPlan['slots'][number],
+  ordinaryLines: ReturnType<typeof plannedLines>,
+): { before?: number; after?: number } {
+  const sameRegionSlots = plan.slots.filter((slot) => slot.page === placement.page
+    && slot.regionId === insertionSlot.regionId
+    && slot.flowId !== insertionSlot.flowId
+    && slot.flowId !== 'header'
+    && slot.flowId !== 'footer');
+  const sameRegionSlotIds = sameRegionSlots.map((slot) => normalizedSlotId(slot.id));
+  const pageLines = ordinaryLines.filter((line) => line.page === placement.page
+    && sameRegionSlotIds.some((slotId) => {
+      const lineSlotId = normalizedSlotId(line.slotId);
+      return lineSlotId === slotId || lineSlotId.startsWith(`${slotId}:`);
+    }));
   return {
     before: verticalGapBefore(placement.box, pageLines),
     after: verticalGapAfter(placement.box, pageLines),
@@ -368,7 +387,7 @@ function buildInsertionRhythmReport(
   ordinaryLines: ReturnType<typeof plannedLines>,
 ): CompositionSpacingObservation {
   const region = boxFromSegment(geometry.content);
-  const textGaps = insertionTextGaps(placement, ordinaryLines);
+  const textGaps = insertionTextGaps(plan, placement, slot, ordinaryLines);
   const neighbourGaps = insertionNeighbourGaps(placement, insertionsInRegion(plan, placement, slot.regionId));
   const explanations = insertionExplanations(placement, geometry, textGaps);
   const intervals = textIntervalsBeside(plan, placement.page, placement.box);

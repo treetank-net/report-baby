@@ -20,6 +20,8 @@ const suites = {
   ],
   composition: [
     ['composition engine contract', 'scripts/test-composition-engine-contract.mjs'],
+    ['coarse geometry planning', 'scripts/test-coarse-geometry-planning.mjs'],
+    ['coarse geometry template calibration', 'scripts/test-coarse-geometry-template-calibration.mjs'],
     ['composition input adapter', 'scripts/test-composition-report-data-adapter.mjs'],
     ['template flow contract', 'scripts/test-template-flow-contract.mjs'],
     ['report plan contract', 'scripts/test-report-plan.mjs'],
@@ -78,6 +80,8 @@ const suites = {
 // plan/process assertions and a smaller artifact proof to retain.
 const artifactDecisions = new Map([
   ['scripts/test-composition-engine-contract.mjs', 'not-generated'],
+  ['scripts/test-coarse-geometry-planning.mjs', 'not-generated'],
+  ['scripts/test-coarse-geometry-template-calibration.mjs', 'not-generated'],
   ['scripts/test-template-flow-contract.mjs', 'not-generated'],
   ['scripts/test-structure-scoring.mjs', 'not-generated'],
   ['scripts/test-composition-report-data-adapter.mjs', 'not-generated'],

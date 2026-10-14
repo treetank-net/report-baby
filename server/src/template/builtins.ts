@@ -19,6 +19,14 @@ export interface RenderConfig {
   compositionScore: Record<string, number>;
   compositionPriority: { default: number };
   compositionSearch: {
+    coarseGeometryFirst: boolean;
+    coarseAssignmentBeamWidth: number;
+    coarseAssignmentProgressWeight: number;
+    coarseAssignmentSpacingWeight: number;
+    coarseAssignmentPageLoadWeight: number;
+    coarseProjectionCandidateCount: number;
+    coarseExactCandidateCount: number;
+    coarseAssignmentBreakPenaltyWeight: number;
     maxInitialCandidates: number;
     maxRefinementRounds: number;
     maxCandidatesPerRefinement: number;
@@ -148,8 +156,10 @@ export function readRenderConfig(): RenderConfig {
     throw new Error(`Built-in template ${label} must be top, middle or bottom.`);
   };
   const legacy = Object.fromEntries(Object.entries(legacySource).map(([key, value]) => [key, numberAt(value, `render-config.legacy.${key}`)]));
-  const numberDictionary = (name: string): Record<string, number> => Object.fromEntries(Object.entries((source[name] ?? {}) as Record<string, unknown>).map(([key, value]) => [key, numberAt(value, `render-config.${name}.${key}`)]));
-  const camelDictionary = (name: string): Record<string, number> => Object.fromEntries(Object.entries(numberDictionary(name)).map(([key, value]) => [key.replace(/_([a-z0-9])/g, (_match, character: string) => character.toUpperCase()), value]));
+  const numberDictionary = (name: string, excludedKeys: readonly string[] = []): Record<string, number> => Object.fromEntries(Object.entries((source[name] ?? {}) as Record<string, unknown>)
+    .filter(([key]) => !excludedKeys.includes(key))
+    .map(([key, value]) => [key, numberAt(value, `render-config.${name}.${key}`)]));
+  const camelDictionary = (name: string, excludedKeys: readonly string[] = []): Record<string, number> => Object.fromEntries(Object.entries(numberDictionary(name, excludedKeys)).map(([key, value]) => [key.replace(/_([a-z0-9])/g, (_match, character: string) => character.toUpperCase()), value]));
   const lockupVariant = (name: string) => {
     const variant = lockup[name] as Record<string, unknown>;
     const getVariant = (key: string): number => numberAt(variant[key], `render-config.chrome.lockup.${name}.${key}`);
@@ -181,17 +191,38 @@ export function readRenderConfig(): RenderConfig {
     };
   };
   const compositionScore = camelDictionary('composition_score');
+  if (!(compositionScore.insertionTextContinuityBalanceTolerance > 0 && compositionScore.insertionTextContinuityBalanceTolerance <= 1)) {
+    throw new Error('Built-in template render-config.composition_score.insertion_text_continuity_balance_tolerance must be greater than zero and at most one.');
+  }
   for (const [key, value] of Object.entries(compositionScore)) {
-    if (key.endsWith('Penalty') && value < 0) {
+    if ((key.endsWith('Penalty') || key.endsWith('Reward')) && value < 0) {
       throw new Error(`Built-in template render-config.composition_score.${key} must be non-negative.`);
     }
   }
-  const compositionSearch = camelDictionary('composition_search');
-  if (!(compositionSearch.minimumGeometryStepMm > 0)) {
+  const compositionSearchSource = source.composition_search as Record<string, unknown>;
+  const compositionSearchNumbers = camelDictionary('composition_search', ['coarse_geometry_first']);
+  const compositionSearch: RenderConfig['compositionSearch'] = {
+    ...compositionSearchNumbers,
+    coarseGeometryFirst: booleanAt(compositionSearchSource.coarse_geometry_first, 'render-config.composition_search.coarse_geometry_first'),
+  } as RenderConfig['compositionSearch'];
+  if (!Number.isInteger(compositionSearch.coarseAssignmentBeamWidth) || compositionSearch.coarseAssignmentBeamWidth < 1) {
+    throw new Error('Built-in template render-config.composition_search.coarse_assignment_beam_width must be a positive integer.');
+  }
+  for (const key of ['coarseProjectionCandidateCount', 'coarseExactCandidateCount'] as const) {
+    if (!Number.isInteger(compositionSearch[key]) || compositionSearch[key] < 1) {
+      throw new Error(`Built-in template render-config.composition_search.${key} must be a positive integer.`);
+    }
+  }
+  for (const key of ['coarseAssignmentProgressWeight', 'coarseAssignmentSpacingWeight', 'coarseAssignmentPageLoadWeight', 'coarseAssignmentBreakPenaltyWeight'] as const) {
+    if (!Number.isFinite(compositionSearch[key]) || compositionSearch[key] < 0) {
+      throw new Error(`Built-in template render-config.composition_search.${key} must be finite and nonnegative.`);
+    }
+  }
+  if (!(compositionSearchNumbers.minimumGeometryStepMm > 0)) {
     throw new Error('Built-in template render-config.composition_search.minimum_geometry_step_mm must be greater than zero.');
   }
   for (const key of ['gravityDamping', 'gravitySourcePreferWeight', 'gravitySourceRequireWeight']) {
-    const value = compositionSearch[key];
+    const value = compositionSearchNumbers[key];
     if (typeof value !== 'number' || value < 0 || value > 1) {
       throw new Error(`Built-in template render-config.composition_search.${key} must be between zero and one.`);
     }
@@ -223,6 +254,11 @@ export function readRenderConfig(): RenderConfig {
 
 function numberAt(value: unknown, label: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Built-in template ${label} must be a finite number.`);
+  return value;
+}
+
+function booleanAt(value: unknown, label: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`Built-in template ${label} must be a boolean.`);
   return value;
 }
 

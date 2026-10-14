@@ -97,6 +97,8 @@ function drawCompositionImage(
   const imageBox = placement.imageBox ?? fallbackImageBox;
   pdf.addImage(asset.data, asset.format, imageBox.x, imageBox.y, imageBox.width, imageBox.height);
   if (image.chart && style.chart) drawRasterChartTextLayer(pdf, family, image.chart, imageBox, style.chart);
+  pdf.setFont(family, 'normal');
+  pdf.setFontSize(style.captionSize);
   const captionFrame = captionBox ?? placement.box;
   let y = captionLines.length > 0
     ? captionFrame.y + captionFrame.height / 2 + style.captionBaselineOffset
@@ -140,7 +142,9 @@ export function createJsPdfImageBlockCapabilities(
       if (!Number.isFinite(box.width) || box.width <= 0) throw new Error(`Image block '${block.id}' has no usable width.`);
       const width = imageWidth(block, box.width);
       const renderedHeight = asset.height * width / asset.width;
-      const captionLines = image.caption ? doc.splitTextToSize(image.caption, Math.max(1, box.width - style.captionPaddingX * 2)) as string[] : [];
+      doc.setFont(family, 'normal');
+      doc.setFontSize(style.captionSize);
+      const captionLines = image.caption ? doc.splitTextToSize(image.caption, Math.max(1, width - style.captionPaddingX * 2)) as string[] : [];
       const captionHeight = captionLines.length > 0 ? style.captionGap + captionLines.length * style.captionLineHeight + style.captionBottomGap : 0;
       if (captionHeight >= box.height) throw new Error(`Image block '${block.id}' has no room for its caption in the target slot.`);
       const fittedHeight = Math.min(renderedHeight, box.height - captionHeight);
@@ -151,6 +155,7 @@ export function createJsPdfImageBlockCapabilities(
           width: width * (fittedHeight / renderedHeight),
           height: fittedHeight,
           captionHeight,
+          ...(image.caption ? { captionWidth: width } : {}),
           scale: fittedHeight / renderedHeight,
         },
       };

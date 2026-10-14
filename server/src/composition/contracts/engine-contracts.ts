@@ -41,6 +41,8 @@ export interface CompositionBlockMeasurement {
     width: number;
     height: number;
     captionHeight: number;
+    /** Measured caption frame width, independent of contain scaling of the image. */
+    captionWidth?: number;
     scale: number;
   };
 }
@@ -236,6 +238,8 @@ export interface CompositionSpacingObservation {
   toBox?: CompositionBox;
   /** Whether the insertion has a declared legal movement capability. */
   movementAvailable?: boolean;
+  /** True when no other measured subject lies between this pair on its spacing axis. */
+  adjacent?: boolean;
   /** Axis along which this pair's spacing deficit was measured. */
   axis?: 'x' | 'y';
   /** Effective insertion policy that explains the observation's intended distribution. */
@@ -632,8 +636,20 @@ export interface CompositionCandidateSearchTrace {
   untestedAlternatives: boolean;
   /** Page-template variant evaluated by an application-level layout scheduler. */
   layoutVariant?: string;
+  /** Baseline and follow-up runs across application-level page-template variants. */
+  layoutVariantRuns?: CompositionLayoutVariantRun[];
   selectedCandidate: number;
   selectedProposalSignature?: string;
+}
+
+/** Cost and result evidence for one application-level page-template run. */
+export interface CompositionLayoutVariantRun {
+  layoutVariant: string;
+  stage: 'single-run' | 'baseline' | 'refinement';
+  evaluationStatus: CompositionEvaluation['status'];
+  score?: number;
+  fullPlanRecalculations?: number;
+  baselineExactMaterializationCount?: number;
 }
 
 export interface CompositionPlan {
@@ -674,6 +690,10 @@ export interface CompositionEvaluation {
   score: number;
   /** Configured base score; present for legal plans with attributed scoring. */
   scoreBase?: number;
+  /** Algebraic ceiling for this authored document; not an attainable optimum. */
+  scoreUpperBound?: number;
+  /** Ceiling using only reward components with evidence in this evaluated plan. */
+  measuredRewardUpperBound?: number;
   scoreBreakdown: CompositionScoreComponent[];
   /** Conserved placement-level decomposition of `score - scoreBase`. */
   placementScores?: CompositionPlacementScore[];
@@ -702,6 +722,11 @@ export interface CompositionScoreComponent {
   code: string;
   value: number;
   points: number;
+  /** Configured reward ceiling (zero for a penalty-only component). */
+  rewardCeiling?: number;
+  rewardEvidence?: 'measured' | 'not-measured' | 'not-applicable';
+  /** Distance to the ceiling, not a promise of recoverable points. */
+  ceilingGap?: number;
   details?: Record<string, unknown>;
 }
 
@@ -709,6 +734,8 @@ export interface CompositionPlanner {
   plan(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlan;
   /** Produce one deterministic baseline without pre-materializing alternatives. */
   planBaselineWithSignature?(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlanCandidate;
+  /** Materialize bounded complete coarse seeds; the engine selects by exact evaluation. */
+  planBaselineCandidatesWithSignatures?(document: CompositionDocument, metrics: CompositionTextMetrics, maximumCandidates: number): CompositionPlanCandidate[];
   /** Produce bounded corrections for an illegal selected plan. */
   planLegalityCorrectionsWithSignatures?(
     document: CompositionDocument,
@@ -747,6 +774,8 @@ export interface CompositionPlanResult {
 
 export interface CompositionEngine {
   plan(document: CompositionDocument, metrics: CompositionTextMetrics): CompositionPlanResult;
+  /** Continue search from a baseline that was already materialized and evaluated. */
+  continueFromBaseline?(document: CompositionDocument, metrics: CompositionTextMetrics, baseline: CompositionPlanResult): CompositionPlanResult;
 }
 
 export interface CompositionBackend<Artifact = unknown> {

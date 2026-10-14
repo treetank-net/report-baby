@@ -81,10 +81,10 @@ component while the evaluator still rejects genuine structural violations.
 | Field | Meaning and interactions |
 |---|---|
 | `composition_score.base` | Starting score for every legal plan. It keeps ordinary scores readable and has no effect on ordering when unchanged for every candidate. |
-| `composition_score.column_balance_weight` | Multiplier for the column-balance component. It interacts with `column_count` and the number of lines measured per column. |
+| `composition_score.column_balance_weight` | Multiplier for the column-balance component. It interacts with `column_count` and measured line counts; the natural terminal page of a multipage flow is excluded. |
 | `composition_score.column_count` | Number of columns included in balance scoring. It interacts with the actual page slots and `column_balance_weight`. |
 | `composition_score.heading_following_line_bonus` | Bonus for keeping usable text after a heading in the same placement. It interacts with heading detection and fragmentation, but cannot rescue an illegal placement. |
-| `composition_score.paragraph_fragmentation_penalty` | Penalty per paragraph split across pages or slots. It interacts with the candidate’s reflow result and source block boundaries. |
+| `composition_score.paragraph_fragmentation_penalty` | Penalty per paragraph split associated with a wrap obstacle intersecting its measured line envelope. Natural page/column continuations are reported separately without this cost; association does not prove that a split is avoidable. |
 | `composition_score.list_item_fragmentation_penalty` | Penalty per list item split across pages or slots. It interacts with list-item source boundaries and the keep-together planner policy. |
 | `composition_score.list_split_penalty` | Penalty for a list run that continues onto another page. It interacts with list continuity detection and is separate from per-item fragmentation. |
 | `composition_score.list_column_split_penalty` | Penalty when one list run crosses columns on the same page. It interacts with column geometry and list continuity; it does not reject the plan. |
@@ -106,6 +106,8 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.insertion_text_continuity_cross_stream_penalty` | Penalty for unequal total text mass between the columns crossed by one distributed insertion. It favors comparable text participation in each affected stream. |
 | `composition_score.insertion_text_continuity_edge_gap_penalty` | Penalty for normalized missing breathing room when a distributed insertion has usable text immediately above and below it. A zero measured edge remains visible in the report and is scored here without duplicating the legacy positive-gap asymmetry penalty. |
 | `composition_score.insertion_text_continuity_visual_load_weight` | Multiplier for the insertion's measured visual load when converting distributed-continuity deficits into points. Larger placements therefore need stronger continuity evidence. |
+| `composition_score.insertion_text_continuity_reward` | Maximum averaged reward for distributed insertions with usable text on both sides, balanced measured mass and profile-compatible edge gaps. Measured zero text on an insertion-only page remains coverage-deficit evidence when the document contains main text; missing stream measurements are omitted. Fixed/free dedicated pages do not acquire this distribution rule. |
+| `composition_score.insertion_text_continuity_balance_tolerance` | Positive normalized tolerance, at most one, for aggregate and cross-stream mass imbalance when calculating the continuity reward. Existing continuity penalties remain separately reported. |
 | `composition_score.header_content_gap_min_mm` | Minimum preferred gap, in millimetres, between the measured bottom of repeated header content and the first ordinary content line. It produces a soft score deficit when a legal plan leaves less room. |
 | `composition_score.header_content_gap_penalty` | Penalty multiplier applied to the header/content gap deficit. It changes candidate ranking only; slot containment and overlap remain hard planner checks. |
 | `composition_score.empty_region_ratio_threshold` | Maximum unexplained empty-area ratio before a material region contributes a soft penalty. It interacts with `empty_region_height_threshold_mm` and `empty_region_penalty`. |
@@ -115,21 +117,29 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.column_imbalance_penalty` | Penalty multiplier for sibling-column imbalance above its threshold. |
 | `composition_score.insertion_symmetry_tolerance_mm` | Allowed absolute difference between insertion before/after text gaps before a soft asymmetry penalty. |
 | `composition_score.insertion_symmetry_penalty` | Penalty multiplier for insertion text-gap asymmetry above tolerance. |
+| `composition_score.insertion_symmetry_reward` | Maximum bounded reward for symmetric measured text gaps around insertions. It is averaged over available observations and does not replace the out-of-tolerance penalty. |
 | `composition_score.insertion_distribution_tolerance_mm` | Allowed mean absolute dispersion among insertion outer and neighbour gaps. |
 | `composition_score.insertion_distribution_penalty` | Penalty multiplier for insertion-group distribution dispersion above tolerance. |
+| `composition_score.insertion_distribution_reward` | Maximum bounded reward for evenly distributed insertion gaps, averaged over measured page-region groups. |
 | `composition_score.content_spread_tolerance` | Normalized tolerance for the difference between authored insertion order and measured main-flow progress. |
 | `composition_score.content_spread_penalty` | Penalty multiplier for content-spread deviation above the configured tolerance. |
+| `composition_score.content_spread_reward` | Maximum bounded reward for insertions that align with measured main-flow progress, including a single insertion. An omitted rhythm group defaults to the owning flow. Targets use measured relative visual load without flooring loads to one; unmeasured main progress earns no reward. The current 60-point cap preserves the reference distribution preference against local footer/continuity penalties; it requires broader visual calibration. |
 | `composition_score.page_load_balance_tolerance` | Allowed normalized visual-load imbalance between eligible pages in a spread-across-pages group. |
 | `composition_score.page_load_balance_penalty` | Penalty multiplier for page visual-load imbalance above tolerance. |
+| `composition_score.page_load_balance_reward` | Maximum bounded reward for balanced visual load across eligible pages, averaged over measured groups. |
+| `composition_score.main_page_occupancy_target` | Target occupied-height ratio for interior main-flow pages. This uses exact planned line envelopes as a renderer-neutral ink proxy. |
+| `composition_score.main_page_occupancy_tolerance` | Absolute ratio deviation from `main_page_occupancy_target` that earns the full bounded reward. Beyond this interval the reward fades over one further tolerance span. |
+| `composition_score.main_page_occupancy_reward` | Maximum reward for interior main-flow pages whose measured occupancy approaches the configured target. First and terminal pages are excluded from this reward because their natural content mass differs. |
 | `composition_score.visual_load_area_weight` | Weight of insertion area share in the renderer-neutral visual-load estimate. |
 | `composition_score.visual_load_vertical_weight` | Weight of insertion vertical-span share in the renderer-neutral visual-load estimate. |
 | `composition_score.visual_load_text_weight` | Weight of the main-flow line share affected by an insertion in the visual-load estimate. |
 | `composition_score.source_relation_preference_penalty` | Penalty for a soft `prefer-same-page` source relation when the source page is known and differs from the insertion page. |
-| `composition_score.spacing_profile_compact_target_mm` | Reference gap used by the compact spacing profile. |
-| `composition_score.spacing_profile_normal_target_mm` | Reference gap used by the normal spacing profile and the default when no profile is declared. |
-| `composition_score.spacing_profile_open_target_mm` | Reference gap used by the open spacing profile. |
+| `composition_score.spacing_profile_compact_target_mm` | Reference gap used by the compact spacing profile, including as a soft clearance in the coarse rectangle projection. |
+| `composition_score.spacing_profile_normal_target_mm` | Reference gap used by the normal spacing profile and the default when no profile is declared, including as a soft clearance in the coarse rectangle projection. |
+| `composition_score.spacing_profile_open_target_mm` | Reference gap used by the open spacing profile, including as a soft clearance in the coarse rectangle projection. |
 | `composition_score.spacing_profile_tolerance_mm` | Allowed deviation from a resolved spacing-profile target before a soft penalty. |
 | `composition_score.spacing_profile_penalty` | Penalty multiplier for spacing-profile deviation above tolerance. |
+| `composition_score.spacing_profile_reward` | Maximum bounded reward for measured text-to-insertion gaps that fit their resolved spacing-profile targets. It is averaged over available gaps and does not replace the out-of-tolerance penalty. |
 | `composition_score.narrow_text_interval_min_mm` | Minimum usable text interval beside a wrapped insertion. It interacts with `narrow_text_interval_penalty`. |
 | `composition_score.narrow_text_interval_penalty` | Penalty multiplier for each narrow interval deficit. |
 | `composition_score.fit_content_unused_ratio_threshold` | Maximum unused fraction of a fit-content growth envelope before a soft penalty. |
@@ -138,6 +148,7 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.footer_content_gap_penalty` | Penalty multiplier for footer/content gap deficits. |
 | `composition_score.element_proximity_move_budget_mm` | Maximum distance the planner may propose for a local movement repair around a proximity conflict. It bounds repair candidates; it does not mutate a fixed placement. |
 | `composition_score.element_proximity_penalty` | Penalty multiplier for measured proximity deficits between material elements. It contributes to the total plan score together with the per-placement attribution. |
+| `composition_score.element_proximity_reward` | Maximum averaged reward for measured adjacent box pairs whose signed gap fits the resolved profile target within `spacing_profile_tolerance_mm`. Evidence includes both subjects, boxes, gap, target, adjacency and movement capability. Nonadjacent pairs do not earn this local reward; below-minimum deficits still contribute penalties. |
 | `composition_score.glyph_overlap_min_area_mm2` | Minimum intersecting glyph area that counts as a visible overlap. It filters numerical noise before applying `glyph_overlap_penalty`. |
 | `composition_score.glyph_overlap_penalty` | Penalty multiplier for each measured glyph overlap above `glyph_overlap_min_area_mm2`; the evaluator also reports the affected glyph boxes and measured area. |
 | `composition_score.contrast_penalty` | Maximum normalized penalty for measured text contrast across the complete corpus, including the supplied page background and variable graphic backgrounds. It interacts with normalized contrast quality and is part of the general plan score, not a separate legality gate. |
@@ -147,6 +158,20 @@ component while the evaluator still rejects genuine structural violations.
 | `composition_score.contrast_severe_ratio` | Raw contrast-ratio boundary below which a glyph's worst sampled point counts as severely affected. It is a scoring threshold, not a hard rule. |
 | `composition_score.contrast_affected_glyph_saturation` | Number of severely affected glyphs used as the breadth curve's scale; at this count the curve's input is `1`, before applying `contrast_quality_response`. It makes one affected glyph visible while still distinguishing broader damage. |
 | `composition_score.contrast_quality_response` | Positive response parameter for the asymptotic contrast-quality curve `x / (x + response)`. Lower values approach full quality faster; the curve never reaches 1 for finite contrast. It also controls the saturation curve for affected-glyph breadth. |
+
+Geometric target-fit rewards earn full credit throughout their configured
+tolerance interval. Outside it, credit fades over one further tolerance span;
+existing excess penalties remain independently visible. Rewards are averaged
+and capped per component, so the number of pages, pairs or insertions does not
+multiply the reward. Missing evidence earns no credit. The rewarded distribution,
+continuity, symmetry and spacing components can still contain a measured
+deficit: normal suggestions retain that evidence and `passedMetrics` does not
+classify them as fully passed.
+
+These scores inspect exact geometry, not agreement with the coarse seed alone.
+Heading keep rules and natural terminal-page whitespace remain governed by
+their existing planner and evaluator policies. No universal page-count penalty
+or exact-symmetry requirement is introduced.
 
 ## `contrast`
 
@@ -197,6 +222,15 @@ than its slot; otherwise there is no meaningful position to vary.
 
 | Field | Meaning and interactions |
 |---|---|
+| `composition_search.coarse_geometry_first` | Enables the aggregate rectangle estimate and displacement projection for the production baseline. Set to `false` as a rollback to the bounded legacy candidate seed path while comparing or diagnosing a release. Exact legality and scoring remain authoritative in both modes. |
+| `composition_search.coarse_page_prediction_error_tolerance_pages` | Maximum absolute whole-page difference accepted by the representative coarse-versus-exact terminal-page calibration fixture. The estimate and exact terminal page remain separately reported; this tolerance does not alter legality, page generation, or candidate selection. |
+| `composition_search.coarse_assignment_beam_width` | Positive integer limiting retained partial insertion configurations across all flows before complete configurations enter projection comparison. The public coarse decision reports pruning; a bounded result is not a guarantee of global optimality. This search does not consume exact-plan evaluation budget. |
+| `composition_search.coarse_assignment_progress_weight` | Nonnegative weight for deviation from the distribution policy's content/page targets; free and clustered policies retain route-order preference. Required coverage, total coverage and body-page preference take priority over this cost. |
+| `composition_search.coarse_assignment_spacing_weight` | Nonnegative weight for normalized pairwise clearance deficits between horizontally overlapping insertions on the same page, including different flows. Targets come from the existing spacing profiles; exact legality remains authoritative. |
+| `composition_search.coarse_assignment_page_load_weight` | Nonnegative weight for relative visual-load imbalance across eligible body pages in spread-across-pages groups. Estimated load uses body area and height; this seed cost is not added to the exact score. |
+| `composition_search.coarse_projection_candidate_count` | Positive integer limiting complete configurations compared after independent cut/push projections. Every projection starts from the same unobstructed estimate; achieved progress and sensitive breaks rank the shortlist without another assignment loop. |
+| `composition_search.coarse_exact_candidate_count` | Positive integer limiting projected macro seeds materialized for exact engine evaluation. Intersected with initial and full-plan budgets; the existing engine selects by exact total score. |
+| `composition_search.coarse_assignment_break_penalty_weight` | Nonnegative seed-cost weight for newly introduced paragraph, edge and heading cuts predicted by projection. It uses existing score penalty magnitudes; seed cost is never added to exact score. |
 | `composition_search.max_initial_candidates` | Maximum number of complete candidates produced by the initial bounded expansion. The seed remains first; the cap limits the combined insertion/graphic proposal product before evaluation. |
 | `composition_search.max_refinement_rounds` | Maximum number of local refinement rounds after the initial candidates. It is intersected with per-placement refinement policy and cannot make an authored fixed placement movable. |
 | `composition_search.max_candidates_per_refinement` | Maximum complete candidates retained from one refinement batch. It limits combined insertion/graphic alternatives while preserving deterministic generation order. |
@@ -207,11 +241,11 @@ than its slot; otherwise there is no meaningful position to vary.
 | `composition_search.movable_refinement_candidate_count` | Number of local positions sampled during each refinement pass. It interacts with refinement rounds and geometry tolerance used to compare positions. |
 | `composition_search.minimum_geometry_step_mm` | Smallest movement distance worth materializing as a refinement candidate. It prevents repeated sub-pixel reflows while allowing the evaluator to request bounded local repairs. |
 | `composition_search.max_page_local_refinement_rounds` | Maximum page-scoped micro-optimization rounds for each page. Stage G applies these rounds in page order, but every candidate is still reflowed and evaluated as a complete document. A non-positive value disables page-local rounds explicitly; omitted caller policy defaults to one round. |
-| `composition_search.gravity_iterations` | Maximum cheap geometry-only relaxation steps used to improve fluid insertion coordinates before the complete planner/evaluator pass. It never replaces legality or text reflow. |
-| `composition_search.gravity_damping` | Fraction of each calculated attraction/repulsion displacement applied per gravity step. Values are clamped to the inclusive range 0–1 by the planner. |
-| `composition_search.gravity_convergence_mm` | Maximum remaining geometry movement considered converged for the cheap gravity pass. A full plan is still evaluated after convergence. |
-| `composition_search.gravity_source_prefer_weight` | Attraction fraction toward a source block for a soft `prefer-same-page` relation during cheap gravity relaxation. It changes only the seed geometry; final placement remains evaluator-ranked. |
-| `composition_search.gravity_source_require_weight` | Attraction fraction toward a source block for a hard `require-same-page` relation after page compatibility has been established. The hard legality check remains authoritative. |
+| `composition_search.gravity_iterations` | Iteration limit for the retained low-level gravity helper. The normal baseline path uses the coarse rectangle projection and does not run this helper. |
+| `composition_search.gravity_damping` | Displacement fraction for the retained low-level gravity helper. The normal baseline path does not use it. |
+| `composition_search.gravity_convergence_mm` | Convergence tolerance for the retained low-level gravity helper. The normal baseline path does not use it. |
+| `composition_search.gravity_source_prefer_weight` | Source attraction weight for the retained low-level gravity helper. The normal baseline path does not use it. |
+| `composition_search.gravity_source_require_weight` | Source attraction weight for the retained low-level gravity helper. Exact source-relation legality remains authoritative. |
 
 ## PDF values that implement composition rules
 
@@ -279,3 +313,36 @@ The architecture check protects import cycles and broad layer violations. This
 documentation test protects the semantic side of the seam: when a policy
 field or hard rule is added, its owner and interactions must be described here
 or in the evaluator/planner documents.
+
+
+## Article calibration workflow
+
+`npm run score:corpus -- [OUTPUT_DIRECTORY] [CASE_ID]` generates source-shaped
+synthetic article comparisons. The runner reads `composition_calibration` from
+the same YAML as the renderer:
+
+| Field | Meaning |
+|---|---|
+| `composition_calibration.insertion_start_page` | First page eligible for the corpus's repeating insertion capabilities. This is a template capability, not an authored block assignment. |
+| `composition_calibration.max_full_plan_recalculations` | Exact complete-candidate budget for the coarse corpus mode. The legacy comparator deliberately evaluates its initial baseline only. |
+| `composition_calibration.max_refinement_rounds` | Maximum exact correction/refinement rounds for the coarse corpus mode. |
+
+A natural terminal main page remains measured but is exempt from density-only
+occupancy penalties, column balancing, and empty-column penalties. Ordinary
+paragraph continuations are exempt from fragmentation cost; obstacle-associated
+splits retain that cost. Association does not establish avoidability.
+
+Legal evaluations expose `scoreUpperBound` and `measuredRewardUpperBound`.
+Component `rewardCeiling` is a configured cap; `rewardEvidence` distinguishes
+measured, unmeasured and inapplicable rewards. Only measured components emit
+`ceilingGap`. These are diagnostic algebraic bounds, not attainable optima or
+quality percentages. The current loose bound is `260 + 4H` for `H` authored
+heading IDs; template eligibility and conflicting geometric targets constrain
+what can actually be achieved.
+
+
+Proximity observations treat an atomic/table insertion and its enclosing
+`insertion:<blockId>` graphic as one material subject. They must not produce a
+self-pair or block a genuine neighboring pair. Ordinary structured blocks
+without an insertion graphic remain measurable. This follows the existing
+planned-insertion identity query used by flow collision handling.

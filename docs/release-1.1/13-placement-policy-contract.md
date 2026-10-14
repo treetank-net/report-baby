@@ -10,6 +10,13 @@ bounded relocation source. The representative editorial artifact is visually
 accepted. Further mixed-flow calibration is a follow-up tuning task, not a
 missing implementation path for this contract.
 
+The higher-priority follow-up in
+[`15-coarse-geometry-first-planning.md`](15-coarse-geometry-first-planning.md)
+replaces the current heuristic seed and independent geometry-only gravity as
+the primary initial-distribution mechanism. This contract remains the owner of
+placement intent, legal candidate filtering, source relations, rhythm groups
+and exact evaluator scoring.
+
 ## Outcome
 
 Ordinary editorial input must not assign every quote, image, chart or table to

@@ -10,6 +10,7 @@ import { allLines } from './plan-queries.js';
 import { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './structure-scoring.js';
 import type { CompositionSpacingObservation } from '../contracts/engine-contracts.js';
 import { rectIntersection } from '../geometry/rectangles.js';
+import { wordsForBlock } from '../text/text-layout.js';
 
 /**
  * @planner-target composition/evaluation/scoring.ts
@@ -100,20 +101,37 @@ function insertionSlotForObservation(
 }
 
 function negativeComponent(code: string, value: number, penalty: number, details: Record<string, unknown>): CompositionScoreComponent {
-  return { code, value, points: -Math.max(0, value) * penalty, details };
+  return { code, value, points: value <= 0 ? 0 : -value * penalty, details };
+}
+
+function boundedTargetFitReward(deviations: number[], tolerance: number, maximumReward: number): number {
+  if (deviations.length === 0 || maximumReward <= 0) return 0;
+  if (tolerance <= 0) return deviations.every((deviation) => deviation === 0) ? maximumReward : 0;
+  // Every position in the acceptable interval earns full credit. Outside it,
+  // fade the reward over one further tolerance span while retaining penalties.
+  const fit = deviations.reduce((sum, deviation) => sum + Math.max(0, 1 - Math.max(0, deviation - tolerance) / tolerance), 0) / deviations.length;
+  return fit * maximumReward;
 }
 
 /** Penalize unexplained empty material regions in otherwise occupied slots. */
 export function scoreEmptyRegions(plan: CompositionPlan): CompositionScoreComponent {
   const threshold = scoreConfigNumber('emptyRegionRatioThreshold');
   const heightThreshold = scoreConfigNumber('emptyRegionHeightThresholdMm');
-  const finalPage = plan.pages.length > 0 ? Math.max(...plan.pages.map((page) => page.page)) : undefined;
+  const mainContentPages = [
+    ...plan.lines.filter((line) => line.flowId === 'main' && line.layer !== 'insertion').map((line) => line.page),
+    ...(plan.flowPlacements ?? []).filter((placement) => placement.flowId === 'main' && placement.hasContent).map((placement) => placement.page),
+  ];
+  const terminalMainPage = mainContentPages.length > 0
+    ? Math.max(...mainContentPages)
+    : plan.pages.length > 0 ? Math.max(...plan.pages.map((page) => page.page)) : undefined;
   const regions = (plan.spacing?.slots ?? [])
     .filter((slot) => slot.box.height >= heightThreshold
       // A terminal main-flow fragment is allowed to leave breathing room at
-      // the end of the document. Empty space on earlier pages remains a
-      // quality signal because it indicates a premature page break.
-      && !(finalPage !== undefined && slot.page === finalPage && slot.flowId === 'main'))
+      // the end of the document. An insertion-only page is not a terminal
+      // main-flow page and must not receive this exemption.
+      && !(terminalMainPage !== undefined
+        && slot.page === terminalMainPage
+        && slot.flowId === 'main'))
     .map((slot) => {
       const envelopeArea = slot.box.width * slot.box.height;
       const ratio = slot.occupiedHeight <= 0
@@ -161,7 +179,12 @@ export function scoreInsertionSymmetry(plan: CompositionPlan): CompositionScoreC
       && observation.metrics.textGapAsymmetry !== undefined)
     .map((observation) => ({ ...observationContext(observation), asymmetry: observation.metrics.textGapAsymmetry ?? 0 }));
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.asymmetry - tolerance), 0);
-  return negativeComponent('insertion-symmetry', excess, scoreConfigNumber('insertionSymmetryPenalty'), { tolerance, records });
+  const targetFitReward = boundedTargetFitReward(records.map((record) => record.asymmetry), tolerance, scoreConfigNumber('insertionSymmetryReward'));
+  return {
+    ...negativeComponent('insertion-symmetry', excess, scoreConfigNumber('insertionSymmetryPenalty'), { tolerance, records }),
+    points: targetFitReward - excess * scoreConfigNumber('insertionSymmetryPenalty'),
+    details: { tolerance, targetFitReward, records },
+  };
 }
 
 /** Penalize uneven outer and inter-insertion gaps within one page region. */
@@ -206,20 +229,54 @@ export function scoreInsertionDistribution(plan: CompositionPlan): CompositionSc
     return { key, mean, dispersion: group.values.reduce((sum, value) => sum + Math.abs(value - mean), 0) / group.values.length, sources: group.sources };
   });
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.dispersion - tolerance), 0);
-  return negativeComponent('insertion-distribution', excess, scoreConfigNumber('insertionDistributionPenalty'), { tolerance, records });
+  const targetFitReward = boundedTargetFitReward(records.map((record) => record.dispersion), tolerance, scoreConfigNumber('insertionDistributionReward'));
+  return {
+    ...negativeComponent('insertion-distribution', excess, scoreConfigNumber('insertionDistributionPenalty'), { tolerance, records }),
+    points: targetFitReward - excess * scoreConfigNumber('insertionDistributionPenalty'),
+    details: { tolerance, targetFitReward, records },
+  };
 }
 
-type MainPageProgress = { start: number; end: number; center: number };
+type MainPageProgress = {
+  start: number;
+  end: number;
+  center: number;
+  startWord: number;
+  endWord: number;
+  totalWords: number;
+  lines: ReturnType<typeof allLines>;
+};
 
-function mainPageProgress(plan: CompositionPlan): Map<number, MainPageProgress> {
-  const mainLines = allLines(plan).filter((line) => line.flowId === 'main' && line.layer !== 'insertion');
-  const totalWords = Math.max(1, ...mainLines.map((line) => line.endWord));
+function mainPageProgress(document: CompositionDocument, plan: CompositionPlan): Map<number, MainPageProgress> {
+  const blocks = document.flows.main?.blocks ?? [];
+  const blockOffsets = new Map<string, number>();
+  const blockWordCounts = new Map(blocks.map((block) => [block.id, wordsForBlock(block).length] as const));
+  let totalWords = 0;
+  for (const block of blocks) {
+    blockOffsets.set(block.id, totalWords);
+    totalWords += blockWordCounts.get(block.id) ?? 0;
+  }
+  totalWords = Math.max(1, totalWords);
+  const mainLines = allLines(plan).filter((line) => line.flowId === 'main' && line.layer !== 'insertion')
+    .flatMap((line) => {
+      const offset = blockOffsets.get(line.blockId);
+      if (offset === undefined || !blockWordCounts.has(line.blockId)) return [];
+      return [{ ...line, startWord: offset + line.startWord, endWord: offset + line.endWord }];
+    });
   const pages = new Map<number, MainPageProgress>();
   for (const page of new Set(mainLines.map((line) => line.page))) {
     const lines = mainLines.filter((line) => line.page === page);
     const start = Math.min(...lines.map((line) => line.startWord)) / totalWords;
     const end = Math.max(...lines.map((line) => line.endWord)) / totalWords;
-    pages.set(page, { start, end, center: (start + end) / 2 });
+    pages.set(page, {
+      start,
+      end,
+      center: (start + end) / 2,
+      startWord: Math.min(...lines.map((line) => line.startWord)),
+      endWord: Math.max(...lines.map((line) => line.endWord)),
+      totalWords,
+      lines,
+    });
   }
   return pages;
 }
@@ -246,8 +303,8 @@ function insertionPolicyRecords(plan: CompositionPlan): Array<{
 }
 
 function policyGroupKey(record: ReturnType<typeof insertionPolicyRecords>[number]): string | undefined {
-  if (!record.policy.rhythmGroup) return undefined;
-  return `${record.regionId ?? ''}:${record.policy.rhythmGroup}`;
+  const group = record.policy.rhythmGroup ?? record.flowId;
+  return group === undefined ? undefined : `${record.regionId ?? ''}:${group}`;
 }
 
 function progressForPage(progress: Map<number, MainPageProgress>, page: number): number {
@@ -263,9 +320,23 @@ function progressForPage(progress: Map<number, MainPageProgress>, page: number):
   return after?.[1].start ?? 0;
 }
 
+function mainProgressAtInsertion(plan: CompositionPlan, progress: Map<number, MainPageProgress>, graphic: CompositionPlan['graphicPlacements'][number]): number {
+  const pageProgress = progress.get(graphic.page);
+  if (!pageProgress) return progressForPage(progress, graphic.page);
+  const insertionTop = graphic.box.y;
+  const insertionBottom = graphic.box.y + graphic.box.height;
+  const before = pageProgress.lines
+    .filter((line) => line.box.y + line.box.height <= insertionTop)
+    .reduce((latest, line) => Math.max(latest, line.endWord), pageProgress.startWord);
+  const after = pageProgress.lines
+    .filter((line) => line.box.y >= insertionBottom)
+    .reduce((earliest, line) => Math.min(earliest, line.startWord), pageProgress.endWord);
+  return (before + after) / (2 * pageProgress.totalWords);
+}
+
 /** Compare insertion order with measured main-flow progress without reflowing the plan. */
 export function scoreContentSpread(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
-  const progress = mainPageProgress(plan);
+  const progress = mainPageProgress(document, plan);
   const groups = new Map<string, ReturnType<typeof insertionPolicyRecords>>();
   for (const record of insertionPolicyRecords(plan)) {
     if (record.policy.distribution !== 'spread-through-content') continue;
@@ -275,25 +346,27 @@ export function scoreContentSpread(document: CompositionDocument, plan: Composit
   }
   const records: Array<Record<string, unknown>> = [];
   for (const [key, group] of groups) {
-    if (group.length < 2) continue;
+    if (progress.size === 0) continue;
     const order = new Map<string, number>();
     for (const flowId of new Set(group.map((record) => record.flowId).filter((value): value is string => value !== undefined))) {
       for (const [index, block] of (document.flows[flowId]?.blocks ?? []).entries()) order.set(`${flowId}:${block.id}`, index);
     }
     const ordered = [...group].sort((left, right) => (order.get(`${left.flowId}:${left.blockId}`) ?? Number.MAX_SAFE_INTEGER) - (order.get(`${right.flowId}:${right.blockId}`) ?? Number.MAX_SAFE_INTEGER)
       || left.blockId.localeCompare(right.blockId));
-    const weighted = ordered.map((record) => ({ record, weight: Math.max(1, visualLoad(plan, record.graphic).weighted) }));
+    const weighted = ordered.map((record) => ({ record, weight: Math.max(Number.EPSILON, visualLoad(plan, record.graphic).weighted) }));
     const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
     let accumulatedWeight = 0;
     weighted.forEach(({ record, weight }) => {
-      const expected = (accumulatedWeight + weight / 2) / Math.max(1, totalWeight);
-      const actual = progressForPage(progress, record.graphic.page);
+      const expected = (accumulatedWeight + weight / 2) / Math.max(Number.EPSILON, totalWeight);
+      const actual = mainProgressAtInsertion(plan, progress, record.graphic);
       records.push({
         key,
         blockId: record.blockId,
         flowId: record.flowId,
         graphicId: record.graphic.graphicId,
         page: record.graphic.page,
+        box: record.graphic.box,
+        mainTextOnPage: progress.has(record.graphic.page),
         expectedProgress: expected,
         actualProgress: actual,
         visualLoad: weight,
@@ -305,7 +378,16 @@ export function scoreContentSpread(document: CompositionDocument, plan: Composit
   }
   const tolerance = scoreConfigNumber('contentSpreadTolerance');
   const excess = records.reduce((sum, record) => sum + Math.max(0, (record.deviation as number) - tolerance), 0);
-  return negativeComponent('content-spread', excess, scoreConfigNumber('contentSpreadPenalty'), { tolerance, records });
+  const targetFitReward = boundedTargetFitReward(
+    records.map((record) => record.deviation as number),
+    tolerance,
+    scoreConfigNumber('contentSpreadReward'),
+  );
+  return {
+    ...negativeComponent('content-spread', excess, scoreConfigNumber('contentSpreadPenalty'), { tolerance, records }),
+    points: targetFitReward - excess * scoreConfigNumber('contentSpreadPenalty'),
+    details: { tolerance, targetFitReward, records },
+  };
 }
 
 interface VisualLoadMetrics {
@@ -330,9 +412,14 @@ function visualLoad(plan: CompositionPlan, graphic: CompositionPlan['graphicPlac
     weighted: measured.metrics.visualLoad!,
   };
   const page = plan.spacing?.pages.find((candidate) => candidate.page === graphic.page);
-  const regionArea = Math.max(1, (page?.contentBox.width ?? graphic.box.width) * (page?.contentBox.height ?? graphic.box.height));
+  const mainSlots = plan.slots.filter((slot) => slot.page === graphic.page && slot.flowId === 'main');
+  const bodyWidth = mainSlots.length > 0
+    ? Math.max(...mainSlots.map((slot) => slot.box.x + slot.box.width)) - Math.min(...mainSlots.map((slot) => slot.box.x)) : graphic.box.width;
+  const bodyHeight = mainSlots.length > 0
+    ? Math.max(...mainSlots.map((slot) => slot.box.y + slot.box.height)) - Math.min(...mainSlots.map((slot) => slot.box.y)) : graphic.box.height;
+  const regionArea = Math.max(Number.EPSILON, (page?.contentBox.width ?? bodyWidth) * (page?.contentBox.height ?? bodyHeight));
   const areaShare = (graphic.box.width * graphic.box.height) / regionArea;
-  const verticalShare = graphic.box.height / Math.max(1, page?.contentBox.height ?? graphic.box.height);
+  const verticalShare = graphic.box.height / Math.max(Number.EPSILON, page?.contentBox.height ?? bodyHeight);
   const mainLines = allLines(plan).filter((line) => line.flowId === 'main' && line.layer !== 'insertion' && line.page === graphic.page);
   const affectedLines = mainLines.filter((line) => {
     const slot = plan.slots.find((candidate) => candidate.page === line.page && (candidate.id === line.slotId || line.slotId.startsWith(`${candidate.id}:`)));
@@ -358,7 +445,11 @@ export function scorePageLoadBalance(plan: CompositionPlan): CompositionScoreCom
     byGroup.set(key, [...(byGroup.get(key) ?? []), record]);
   }
   const records: Array<Record<string, unknown>> = [];
-  const finalPage = Math.max(0, ...plan.pages.map((page) => page.page));
+  const detachedGroups = new Set<string>();
+  const mainPages = new Set([
+    ...allLines(plan).filter((line) => line.flowId === 'main' && line.layer !== 'insertion').map((line) => line.page),
+    ...(plan.flowPlacements ?? []).filter((placement) => placement.flowId === 'main' && placement.hasContent).map((placement) => placement.page),
+  ]);
   for (const [key, group] of byGroup) {
     if (group.length < 2) continue;
     const first = group[0]!;
@@ -368,7 +459,7 @@ export function scorePageLoadBalance(plan: CompositionPlan): CompositionScoreCom
     const eligiblePages = [...new Set(plan.slots
       .filter((slot) => groupFlowIds.has(slot.flowId) && slot.regionId === firstSlot?.regionId && slot.placement?.mode === 'fluid-y')
       .map((slot) => slot.page))]
-      .filter((page) => page !== finalPage || allLines(plan).some((line) => line.page === page && line.flowId === 'main' && line.layer !== 'insertion'));
+      .filter((page) => mainPages.has(page));
     if (eligiblePages.length < 2) continue;
     const loads = eligiblePages.map((page) => {
       const pageRecords = group.filter((record) => record.graphic.page === page);
@@ -377,11 +468,23 @@ export function scorePageLoadBalance(plan: CompositionPlan): CompositionScoreCom
     });
     const target = loads.reduce((sum, item) => sum + item.load, 0) / loads.length;
     const imbalance = loads.reduce((sum, item) => sum + Math.abs(item.load - target), 0) / loads.length;
-    records.push({ key, rhythmGroup: first.policy.rhythmGroup, targetLoad: target, imbalance, loads });
+    const unassociatedGraphicIds = group.filter((record) => !eligiblePages.includes(record.graphic.page)).map((record) => record.graphic.graphicId);
+    if (unassociatedGraphicIds.length > 0) detachedGroups.add(key);
+    records.push({ key, rhythmGroup: first.policy.rhythmGroup, targetLoad: target, imbalance, loads, unassociatedGraphicIds });
   }
   const tolerance = scoreConfigNumber('pageLoadBalanceTolerance');
   const excess = records.reduce((sum, record) => sum + Math.max(0, (record.imbalance as number) - tolerance), 0);
-  return negativeComponent('page-load-balance', excess, scoreConfigNumber('pageLoadBalancePenalty'), { tolerance, records });
+  const associatedRecords = records.filter((record) => !detachedGroups.has(record.key as string));
+  const targetFitReward = boundedTargetFitReward(
+    associatedRecords.map((record) => record.imbalance as number),
+    tolerance,
+    scoreConfigNumber('pageLoadBalanceReward'),
+  ) * associatedRecords.length / Math.max(1, records.length);
+  return {
+    ...negativeComponent('page-load-balance', excess, scoreConfigNumber('pageLoadBalancePenalty'), { tolerance, records }),
+    points: targetFitReward - excess * scoreConfigNumber('pageLoadBalancePenalty'),
+    details: { tolerance, targetFitReward, records },
+  };
 }
 
 /** Penalize a soft source relation only when the source page is known. */
@@ -434,7 +537,59 @@ export function scoreSpacingRhythm(plan: CompositionPlan): CompositionScoreCompo
       }));
   });
   const excess = records.reduce((sum, record) => sum + Math.max(0, record.deviation - tolerance), 0);
-  return negativeComponent('spacing-rhythm', excess, scoreConfigNumber('spacingProfilePenalty'), { profile: records[0]?.profile ?? 'normal', target: records[0]?.target ?? defaultTarget, tolerance, records });
+  const targetFitReward = boundedTargetFitReward(
+    records.map((record) => record.deviation),
+    tolerance,
+    scoreConfigNumber('spacingProfileReward'),
+  );
+  return {
+    ...negativeComponent('spacing-rhythm', excess, scoreConfigNumber('spacingProfilePenalty'), { profile: records[0]?.profile ?? 'normal', target: records[0]?.target ?? defaultTarget, tolerance, records }),
+    points: targetFitReward - excess * scoreConfigNumber('spacingProfilePenalty'),
+    details: { profile: records[0]?.profile ?? 'normal', target: records[0]?.target ?? defaultTarget, tolerance, targetFitReward, records },
+  };
+}
+
+/** Reward consistent exact main-flow occupancy across interior document pages. */
+export function scoreMainPageOccupancyBalance(plan: CompositionPlan): CompositionScoreComponent {
+  const mainPages = [...new Set(allLines(plan)
+    .filter((line) => line.flowId === 'main' && line.layer !== 'insertion')
+    .map((line) => line.page))].sort((left, right) => left - right);
+  const interiorPages = mainPages.slice(1, -1);
+  const pages = interiorPages.flatMap((page) => {
+    const slots = (plan.spacing?.slots ?? []).filter((slot) => slot.page === page && slot.flowId === 'main');
+    const availableArea = slots.reduce((sum, slot) => sum + slot.box.width * slot.box.height, 0);
+    if (availableArea <= 0) return [];
+    const occupiedArea = slots.reduce((sum, slot) => sum + slot.box.width * Math.min(slot.box.height, slot.occupiedHeight), 0);
+    return [{ page, availableArea, occupiedArea, occupancy: occupiedArea / availableArea }];
+  });
+  const terminalPageNumber = mainPages.at(-1);
+  const terminalSlots = terminalPageNumber === undefined ? [] : (plan.spacing?.slots ?? []).filter((slot) => slot.page === terminalPageNumber && slot.flowId === 'main');
+  const terminalAvailableArea = terminalSlots.reduce((sum, slot) => sum + slot.box.width * slot.box.height, 0);
+  const terminalOccupiedArea = terminalSlots.reduce((sum, slot) => sum + slot.box.width * Math.min(slot.box.height, slot.occupiedHeight), 0);
+  const terminalOccupancy = terminalAvailableArea > 0 ? terminalOccupiedArea / terminalAvailableArea : undefined;
+  const tolerance = scoreConfigNumber('mainPageOccupancyTolerance');
+  const target = scoreConfigNumber('mainPageOccupancyTarget');
+  const deviations = pages.map((page) => Math.abs(page.occupancy - target));
+  const targetFitReward = pages.length >= 2
+    ? boundedTargetFitReward(deviations, tolerance, scoreConfigNumber('mainPageOccupancyReward'))
+    : 0;
+  // Density alone cannot establish that a terminal fragment is avoidable.
+  // Keep it observable; insertion-only pages and continuity retain their own scores.
+  const terminalPenalty = 0;
+  const terminalPage = terminalOccupancy === undefined ? undefined : {
+    page: terminalPageNumber,
+    availableArea: terminalAvailableArea,
+    occupiedArea: terminalOccupiedArea,
+    occupancy: terminalOccupancy,
+    penalty: terminalPenalty,
+    reason: 'natural-terminal-main-flow',
+  };
+  return {
+    code: 'main-page-occupancy-balance',
+    value: deviations.length > 0 ? deviations.reduce((sum, deviation) => sum + deviation, 0) / deviations.length : 0,
+    points: targetFitReward - terminalPenalty,
+    details: { target, tolerance, targetFitReward, terminalPage, terminalPenalty, measuredInteriorPageCount: pages.length, pages },
+  };
 }
 
 /** Penalize text intervals that become too narrow beside an insertion. */
@@ -550,7 +705,13 @@ export function scoreColumnBalance(plan: CompositionPlan): CompositionScoreCompo
     lineCounts.set(key, (lineCounts.get(key) ?? 0) + 1);
   }
   const routesByFlowPage = new Map<string, Set<number>>();
+  const pagesByFlow = new Map<string, Set<number>>();
   for (const placement of plan.flowPlacements ?? []) {
+    if (placement.hasContent) {
+      const pages = pagesByFlow.get(placement.flowId) ?? new Set<number>();
+      pages.add(placement.page);
+      pagesByFlow.set(placement.flowId, pages);
+    }
     if (placement.routeIndex >= columnCount) continue;
     const key = `${placement.flowId}:${placement.page}`;
     const routes = routesByFlowPage.get(key) ?? new Set<number>();
@@ -559,6 +720,9 @@ export function scoreColumnBalance(plan: CompositionPlan): CompositionScoreCompo
   }
   const pageBalances = [...routesByFlowPage.entries()].flatMap(([key, routes]) => {
     if (routes.size < 2) return [];
+    const placements = (plan.flowPlacements ?? []).filter((placement) => `${placement.flowId}:${placement.page}` === key);
+    const flowPages = pagesByFlow.get(placements[0]!.flowId);
+    if (flowPages && flowPages.size > 1 && placements[0]!.page === Math.max(...flowPages)) return [];
     const counts = [...routes].sort((left, right) => left - right).map((routeIndex) => lineCounts.get(`${key}:${routeIndex}`) ?? 0);
     const maximum = Math.max(...counts);
     return maximum > 0 ? [{ page: key, balance: Math.min(...counts) / maximum, counts }] : [];
@@ -596,10 +760,7 @@ export function scoreHeadingFollowingLine(document: CompositionDocument, plan: C
   };
 }
 
-/**
- * @planner-target composition/evaluation/scoring.ts
- * @planner-responsibility Keep the current scoreParagraphFragmentation implementation intact until its target seam is extracted.
- */
+/** Charge obstacle-associated fragmentation; natural column/page transitions are observed separately. */
 export function scoreParagraphFragmentation(document: CompositionDocument, plan: CompositionPlan): CompositionScoreComponent {
   const paragraphIds = new Set(Object.values(document.flows).flatMap((flow) => flow.blocks
     .filter((block: CompositionBlock) => block.kind === 'paragraph')
@@ -611,15 +772,29 @@ export function scoreParagraphFragmentation(document: CompositionDocument, plan:
     blockLocations.add(`${line.page}:${line.slotId}`);
     locations.set(line.blockId, blockLocations);
   }
-  const fragmentedIds = [...locations.entries()]
+  const splitIds = [...locations.entries()]
     .filter(([, blockLocations]) => blockLocations.size > 1)
     .map(([blockId]) => blockId)
     .sort();
+  const fragmentedIds = splitIds.filter((blockId) => {
+    const lines = plan.lines.filter((line) => line.blockId === blockId);
+    return (plan.graphicPlacements ?? []).some((graphic) => {
+      if (graphic.wrap !== 'around') return false;
+      const pageLines = lines.filter((line) => line.page === graphic.page);
+      if (pageLines.length === 0) return false;
+      const left = Math.min(...pageLines.map((line) => line.box.x));
+      const right = Math.max(...pageLines.map((line) => line.box.x + line.box.width));
+      const top = Math.min(...pageLines.map((line) => line.box.y));
+      const bottom = Math.max(...pageLines.map((line) => line.box.y + line.box.height));
+      return graphic.box.x < right && graphic.box.x + graphic.box.width > left
+        && graphic.box.y < bottom && graphic.box.y + graphic.box.height > top;
+    });
+  });
   return {
     code: 'paragraph-fragmentation',
     value: fragmentedIds.length,
     points: -fragmentedIds.length * scoreConfigNumber('paragraphFragmentationPenalty'),
-    details: { fragmentedBlockIds: fragmentedIds },
+    details: { fragmentedBlockIds: fragmentedIds, naturalFragmentedBlockIds: splitIds.filter((id) => !fragmentedIds.includes(id)) },
   };
 }
 
@@ -707,19 +882,21 @@ type InsertionTextStreamDetail = {
   hasBefore: boolean;
   hasAfter: boolean;
   edgeGapDeficit: number;
-  massBalance: number;
+  massBalance?: number;
 };
 
 type InsertionTextContinuityDetail = {
   blockId: string;
   page: number;
-  placementMass: number;
+  placementMass?: number;
+  edgeGapTarget: number;
   textMassBefore: number;
   textMassAfter: number;
   streamCount: number;
+  streamMeasurementComplete: boolean;
   streamCoverage: number;
   coverageDeficit: number;
-  massImbalance: number;
+  massImbalance?: number;
   crossStreamMassImbalance: number;
   streams: InsertionTextStreamDetail[];
 };
@@ -826,7 +1003,7 @@ export function scoreMainStartDelay(plan: CompositionPlan): CompositionScoreComp
 /** Penalize material elements that are closer than the configured breathing room. */
 export function scoreElementProximity(plan: CompositionPlan): CompositionScoreComponent {
   const minimumGap = scoreConfigNumber('spacingProfileNormalTargetMm');
-  const records = spacingObservations(plan)
+  const measured = spacingObservations(plan)
     .filter((observation) => observation.kind === 'element-proximity')
     .map((observation) => ({
       page: observation.page,
@@ -840,14 +1017,24 @@ export function scoreElementProximity(plan: CompositionPlan): CompositionScoreCo
       movementNeeded: observation.metrics.movementNeeded,
       movementBudget: observation.metrics.movementBudget,
       movementAvailable: observation.movementAvailable,
+      adjacent: observation.adjacent,
       axis: observation.axis,
       gapX: observation.metrics.gapX,
       gapY: observation.metrics.gapY,
       reasons: observation.reasons,
-    }))
-    .filter((record) => record.deficit > 0);
+    }));
+  const records = measured.filter((record) => record.deficit > 0);
+  const tolerance = scoreConfigNumber('spacingProfileToleranceMm');
+  const rewardRecords = measured.flatMap((record) => record.adjacent !== true || record.gap === undefined || record.minimumGap === undefined
+    || record.fromBox === undefined || record.toBox === undefined ? []
+    : [{ ...record, deviation: Math.abs(record.gap - record.minimumGap) }]);
+  const targetFitReward = boundedTargetFitReward(rewardRecords.map((record) => record.deviation), tolerance, scoreConfigNumber('elementProximityReward'));
   const deficit = records.reduce((sum, record) => sum + record.deficit, 0);
-  return negativeComponent('element-proximity', deficit, scoreConfigNumber('elementProximityPenalty'), { defaultMinimumGap: minimumGap, records });
+  return {
+    ...negativeComponent('element-proximity', deficit, scoreConfigNumber('elementProximityPenalty'), { defaultMinimumGap: minimumGap, records }),
+    points: targetFitReward - deficit * scoreConfigNumber('elementProximityPenalty'),
+    details: { defaultMinimumGap: minimumGap, tolerance, targetFitReward, records, rewardRecords },
+  };
 }
 
 /**
@@ -914,6 +1101,10 @@ export function scoreInsertionSpacing(plan: CompositionPlan): CompositionScoreCo
 export function scoreInsertionTextContinuity(plan: CompositionPlan): CompositionScoreComponent {
   const minimumMass = scoreConfigNumber('insertionTextContinuityMinMassRatio');
   const edgeGapTarget = scoreConfigNumber('spacingProfileNormalTargetMm');
+  const edgeGapTolerance = scoreConfigNumber('spacingProfileToleranceMm');
+  const balanceTolerance = scoreConfigNumber('insertionTextContinuityBalanceTolerance');
+  const maximumReward = scoreConfigNumber('insertionTextContinuityReward');
+  const mainTextExists = allLines(plan).some((line) => line.flowId === 'main' && line.layer !== 'insertion');
   const details: InsertionTextContinuityDetail[] = spacingObservations(plan)
     .filter((observation) => observation.kind === 'insertion-rhythm')
     .flatMap((observation) => {
@@ -925,23 +1116,25 @@ export function scoreInsertionTextContinuity(plan: CompositionPlan): Composition
       // global constraint.
       const distribution = observation.placementPolicy?.distribution;
       if (distribution !== 'spread-through-content' && distribution !== 'spread-across-pages') return [];
+      const target = observation.metrics.referenceGap ?? edgeGapTarget;
       const streamIds = [...new Set(Object.keys(observation.metrics)
         .filter((key) => key.startsWith('textStreamTotalLines:'))
         .map((key) => key.slice('textStreamTotalLines:'.length)))];
       const streams = streamIds.flatMap((slotId): InsertionTextStreamDetail[] => {
         const beforeGap = observation.metrics[`textStreamBefore:${slotId}`];
         const afterGap = observation.metrics[`textStreamAfter:${slotId}`];
-        const totalLines = observation.metrics[`textStreamTotalLines:${slotId}`] ?? 0;
-        const beforeMass = observation.metrics[`textStreamBeforeMass:${slotId}`] ?? 0;
-        const afterMass = observation.metrics[`textStreamAfterMass:${slotId}`] ?? 0;
-        const beforeLines = observation.metrics[`textStreamBeforeLines:${slotId}`] ?? 0;
-        const afterLines = observation.metrics[`textStreamAfterLines:${slotId}`] ?? 0;
+        const totalLines = observation.metrics[`textStreamTotalLines:${slotId}`];
+        const beforeMass = observation.metrics[`textStreamBeforeMass:${slotId}`];
+        const afterMass = observation.metrics[`textStreamAfterMass:${slotId}`];
+        const beforeLines = observation.metrics[`textStreamBeforeLines:${slotId}`];
+        const afterLines = observation.metrics[`textStreamAfterLines:${slotId}`];
+        if (totalLines === undefined || beforeMass === undefined || afterMass === undefined || beforeLines === undefined || afterLines === undefined) return [];
         const hasBefore = beforeMass >= minimumMass && beforeLines > 0;
         const hasAfter = afterMass >= minimumMass && afterLines > 0;
         const edgeGapDeficit = hasBefore && hasAfter
           ? [beforeGap, afterGap]
             .filter((gap): gap is number => gap !== undefined)
-            .reduce((sum, gap) => sum + Math.max(0, edgeGapTarget - gap) / Math.max(edgeGapTarget, Number.EPSILON), 0)
+            .reduce((sum, gap) => sum + Math.max(0, target - gap) / Math.max(target, Number.EPSILON), 0)
           : 0;
         const massTotal = beforeMass + afterMass;
         return [{
@@ -956,33 +1149,37 @@ export function scoreInsertionTextContinuity(plan: CompositionPlan): Composition
           hasBefore,
           hasAfter,
           edgeGapDeficit,
-          massBalance: massTotal > 0 ? Math.abs(beforeMass - afterMass) / massTotal : 0,
+          ...(massTotal > 0 ? { massBalance: Math.abs(beforeMass - afterMass) / massTotal } : {}),
         }];
       });
-      if (streams.length === 0 || streams.every((stream) => stream.totalLines === 0)) return [];
+      // Measured zero text is evidence of detachment, not missing measurement.
+      // Fixed/free layouts and documents without main text remain outside this policy.
+      if (streams.length === 0 || !mainTextExists && streams.every((stream) => stream.totalLines === 0)) return [];
       const coveredStreams = streams.filter((stream) => stream.hasBefore && stream.hasAfter).length;
       const coverage = coveredStreams / streams.length;
       const coverageDeficit = 1 - coverage;
       const textMassBefore = streams.reduce((sum, stream) => sum + stream.beforeMass, 0);
       const textMassAfter = streams.reduce((sum, stream) => sum + stream.afterMass, 0);
       const totalTextMass = textMassBefore + textMassAfter;
-      const massImbalance = totalTextMass > 0 ? Math.abs(textMassBefore - textMassAfter) / totalTextMass : 0;
+      const massImbalance = totalTextMass > 0 ? Math.abs(textMassBefore - textMassAfter) / totalTextMass : undefined;
       const streamMasses = streams.map((stream) => stream.beforeMass + stream.afterMass);
       const crossStreamMassImbalance = streamMasses.length > 1
         ? spread(streamMasses) / Math.max(...streamMasses, minimumMass)
         : 0;
-      const placementMass = observation.metrics.visualLoad ?? 0;
+      const placementMass = observation.metrics.visualLoad;
       return [{
         ...observationContext(observation),
         blockId,
         page: observation.page,
-        placementMass,
+        ...(placementMass === undefined ? {} : { placementMass }),
+        edgeGapTarget: target,
         textMassBefore,
         textMassAfter,
         streamCount: streams.length,
+        streamMeasurementComplete: streams.length === streamIds.length,
         streamCoverage: coverage,
         coverageDeficit,
-        massImbalance,
+        ...(massImbalance === undefined ? {} : { massImbalance }),
         crossStreamMassImbalance,
         streams,
       }];
@@ -996,17 +1193,25 @@ export function scoreInsertionTextContinuity(plan: CompositionPlan): Composition
     ...detail,
     edgeGapDeficit: detail.streams.reduce((sum, stream) => sum + stream.edgeGapDeficit, 0),
     weightedDeficit: detail.coverageDeficit * coveragePenalty
-      + detail.massImbalance * massPenalty
+      + (detail.massImbalance ?? 0) * massPenalty
       + detail.crossStreamMassImbalance * crossStreamPenalty
       + detail.streams.reduce((sum, stream) => sum + stream.edgeGapDeficit, 0) * edgeGapPenalty,
-    placementMassMultiplier: 1 + detail.placementMass * visualLoadWeight,
+    placementMassMultiplier: 1 + (detail.placementMass ?? 0) * visualLoadWeight,
+    targetFit: !detail.streamMeasurementComplete || detail.massImbalance === undefined ? 0 : detail.streamCoverage
+      * boundedTargetFitReward([detail.massImbalance, detail.crossStreamMassImbalance], balanceTolerance, 1)
+      * detail.streams.filter((stream) => stream.hasBefore && stream.hasAfter
+        && stream.beforeGap !== undefined && stream.afterGap !== undefined
+        && stream.beforeGap >= detail.edgeGapTarget - edgeGapTolerance
+        && stream.afterGap >= detail.edgeGapTarget - edgeGapTolerance).length / detail.streamCount,
   }));
-  const points = -records.reduce((sum, record) => sum + record.weightedDeficit * record.placementMassMultiplier, 0);
+  const targetFitReward = records.length === 0 ? 0 : maximumReward * records.reduce((sum, record) => sum + record.targetFit, 0) / records.length;
+  const penaltyPoints = records.reduce((sum, record) => sum + record.weightedDeficit * record.placementMassMultiplier, 0);
+  const points = targetFitReward - penaltyPoints;
   return {
     code: 'insertion-text-continuity',
-    value: records.reduce((sum, record) => sum + record.coverageDeficit + record.massImbalance + record.crossStreamMassImbalance + record.edgeGapDeficit, 0),
+    value: records.reduce((sum, record) => sum + record.coverageDeficit + (record.massImbalance ?? 0) + record.crossStreamMassImbalance + record.edgeGapDeficit, 0),
     points,
-    details: { minimumMass, edgeGapTarget, coveragePenalty, massPenalty, crossStreamPenalty, edgeGapPenalty, visualLoadWeight, records },
+    details: { minimumMass, edgeGapTarget, edgeGapTolerance, balanceTolerance, targetFitReward, penaltyPoints, coveragePenalty, massPenalty, crossStreamPenalty, edgeGapPenalty, visualLoadWeight, records },
   };
 }
 
@@ -1111,12 +1316,48 @@ export function scoreContrast(assessments: CompositionContrastAssessment[]): Com
  * @planner-target composition/evaluation/scoring.ts
  * @planner-responsibility Keep the current scoreLegalPlan implementation intact until its target seam is extracted.
  */
-export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; base: number; breakdown: CompositionScoreComponent[] } {
-  const breakdown = [scoreColumnBalance(plan), scoreSiblingColumnImbalance(plan), scoreEmptyRegions(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreInsertionTextContinuity(plan), scoreInsertionSymmetry(plan), scoreInsertionDistribution(plan), scoreContentSpread(document, plan), scorePageLoadBalance(plan), scoreSourceRelations(document, plan), scoreSpacingRhythm(plan), scoreNarrowTextIntervals(plan), scoreFitContentEnvelope(plan), scoreHeaderSpacing(plan), scoreMainStartDelay(plan), scoreElementProximity(plan), scoreFooterGap(plan), scoreGlyphOverlap(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
+/** Attach observable reward bounds without implying that competing targets can all be attained. */
+function recordScoreRewardBounds(document: CompositionDocument, plan: CompositionPlan, breakdown: CompositionScoreComponent[]): void {
+  const headingCount = new Set(Object.values(document.flows).flatMap((flow) => flow.blocks.filter((block) => block.kind === 'heading').map((block) => block.id))).size;
+  const rewardKeys: Record<string, string> = {
+    'column-balance': 'columnBalanceWeight',
+    'insertion-text-continuity': 'insertionTextContinuityReward',
+    'insertion-symmetry': 'insertionSymmetryReward',
+    'insertion-distribution': 'insertionDistributionReward',
+    'content-spread': 'contentSpreadReward',
+    'page-load-balance': 'pageLoadBalanceReward',
+    'main-page-occupancy-balance': 'mainPageOccupancyReward',
+    'spacing-rhythm': 'spacingProfileReward',
+    'element-proximity': 'elementProximityReward',
+  };
+  const policies = insertionPolicyRecords(plan).map((record) => record.policy.distribution);
+  for (const component of breakdown) {
+    const key = rewardKeys[component.code];
+    component.rewardCeiling = component.code === 'heading-following-line'
+      ? headingCount * scoreConfigNumber('headingFollowingLineBonus') : key ? scoreConfigNumber(key) : 0;
+    const details = component.details;
+    const evidence = component.code === 'column-balance' || component.code === 'main-page-occupancy-balance'
+      ? details?.pages : component.code === 'element-proximity' ? details?.rewardRecords : details?.records;
+    const policyApplies = component.code === 'content-spread' ? policies.includes('spread-through-content')
+      : component.code === 'page-load-balance' ? policies.includes('spread-across-pages')
+      : component.code === 'insertion-text-continuity' ? policies.some((policy) => policy === 'spread-through-content' || policy === 'spread-across-pages') : true;
+    const hasEvidence = component.code === 'heading-following-line' ? headingCount > 0
+      : Array.isArray(evidence) && evidence.length > 0
+        && (component.code !== 'main-page-occupancy-balance' || evidence.length > 1);
+    component.rewardEvidence = component.rewardCeiling === 0 || !policyApplies ? 'not-applicable' : hasEvidence ? 'measured' : 'not-measured';
+    if (component.rewardEvidence === 'measured') component.ceilingGap = Math.max(0, component.rewardCeiling - component.points);
+  }
+}
+
+export function scoreLegalPlan(document: CompositionDocument, plan: CompositionPlan, contrastAssessments: CompositionContrastAssessment[] = []): { score: number; base: number; scoreUpperBound: number; measuredRewardUpperBound: number; breakdown: CompositionScoreComponent[] } {
+  const breakdown = [scoreColumnBalance(plan), scoreSiblingColumnImbalance(plan), scoreEmptyRegions(plan), scoreHeadingFollowingLine(document, plan), scoreParagraphFragmentation(document, plan), scoreOrphanLines(document, plan), scoreInsertionSpacing(plan), scoreInsertionTextContinuity(plan), scoreInsertionSymmetry(plan), scoreInsertionDistribution(plan), scoreContentSpread(document, plan), scorePageLoadBalance(plan), scoreMainPageOccupancyBalance(plan), scoreSourceRelations(document, plan), scoreSpacingRhythm(plan), scoreNarrowTextIntervals(plan), scoreFitContentEnvelope(plan), scoreHeaderSpacing(plan), scoreMainStartDelay(plan), scoreElementProximity(plan), scoreFooterGap(plan), scoreGlyphOverlap(plan), scoreListContinuity(document, plan), scoreTableContinuity(document, plan), scoreTinyFragments(document, plan), ...(contrastAssessments.length > 0 ? [scoreContrast(contrastAssessments)] : [])];
   const base = scoreConfigNumber('base');
+  recordScoreRewardBounds(document, plan, breakdown);
   return {
     score: base + breakdown.reduce((sum, component) => sum + component.points, 0),
     base,
+    scoreUpperBound: base + breakdown.reduce((sum, component) => sum + (component.rewardCeiling ?? 0), 0),
+    measuredRewardUpperBound: base + breakdown.filter((component) => component.rewardEvidence === 'measured').reduce((sum, component) => sum + (component.rewardCeiling ?? 0), 0),
     breakdown,
   };
 }

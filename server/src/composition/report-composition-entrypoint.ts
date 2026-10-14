@@ -3,7 +3,7 @@ import type { PageGeometry } from '../template/geometry.js';
 import type { CompositionInput, DocumentLayoutInput, PlacementRequests } from '../contracts/input/schema.js';
 import type { CompiledTemplate } from '../template/contracts.js';
 import type { CompositionLayout } from './contracts/model.js';
-import type { CompositionEvaluation, CompositionPlan, CompositionPlanResult, CompositionTextMetrics } from './contracts/engine-contracts.js';
+import type { CompositionEvaluation, CompositionLayoutVariantRun, CompositionPlan, CompositionPlanResult, CompositionTextMetrics } from './contracts/engine-contracts.js';
 import type { CompositionContrastProvider } from './evaluation/contrast.js';
 import { compositionDocumentFromInput } from './adapters/input.js';
 import { compositionTemplateFromDocumentLayout, compositionTemplateFromPageGeometry, type PageTemplateSource } from './adapters/page-template.js';
@@ -146,32 +146,52 @@ export function planReportComposition(
     return pageTemplateSources.find((source) => source.templateRef === page.templateRef)?.geometry ?? geometry;
   };
   const preparedTemplates = templates.map((candidateTemplate) => applyDynamicInsertionRequests(candidateTemplate, document, options.insertionRequests));
-  const planVariant = (candidateTemplate: CompositionLayout, candidatePolicy: TextCompositionPlannerPolicy): PlannedTemplateVariant => {
-    const result = createTextCompositionEngine(candidateTemplate, candidatePolicy, {
+  const layoutVariantRuns: CompositionLayoutVariantRun[] = [];
+  const planVariant = (
+    candidateTemplate: CompositionLayout,
+    candidatePolicy: TextCompositionPlannerPolicy,
+    stage: CompositionLayoutVariantRun['stage'],
+    baseline?: CompositionPlanResult,
+  ): PlannedTemplateVariant => {
+    const engine = createTextCompositionEngine(candidateTemplate, candidatePolicy, {
         ...(options.contrastProvider ? { contrastProvider: options.contrastProvider } : {}),
         beforeEvaluate: (_document, candidatePlan) => attachPlanSpacingReport(candidatePlan, document, metrics, geometry, geometryForPage),
-      }).plan(document, metrics);
-    if (result.plan.trace?.candidateSearch) result.plan.trace.candidateSearch.layoutVariant = templateVariantIdentity(candidateTemplate);
+      });
+    const result = baseline && engine.continueFromBaseline
+      ? engine.continueFromBaseline(document, metrics, baseline)
+      : engine.plan(document, metrics);
+    const layoutVariant = templateVariantIdentity(candidateTemplate);
+    if (result.plan.trace?.candidateSearch) result.plan.trace.candidateSearch.layoutVariant = layoutVariant;
+    const coarseSeed = result.plan.decisions.find((decision) => decision.code === 'COARSE_GEOMETRY_SEED_SELECTED');
+    const baselineFullPlanRecalculations = baseline?.plan.trace?.candidateSearch?.fullPlanRecalculations ?? 0;
+    layoutVariantRuns.push({
+      layoutVariant,
+      stage,
+      evaluationStatus: result.evaluation.status,
+      ...(Number.isFinite(result.evaluation.score) ? { score: result.evaluation.score } : {}),
+      ...(result.plan.trace?.candidateSearch?.fullPlanRecalculations === undefined ? {} : { fullPlanRecalculations: Math.max(0, result.plan.trace.candidateSearch.fullPlanRecalculations - baselineFullPlanRecalculations) }),
+      ...(stage === 'refinement' || typeof coarseSeed?.baselineExactMaterializationCount !== 'number' ? {} : { baselineExactMaterializationCount: coarseSeed.baselineExactMaterializationCount }),
+    });
     return { template: candidateTemplate, result };
   };
   let planned: PlannedTemplateVariant[];
   if (preparedTemplates.length <= 1) {
-    planned = preparedTemplates.map((candidateTemplate) => planVariant(candidateTemplate, policy));
+    planned = preparedTemplates.map((candidateTemplate) => planVariant(candidateTemplate, policy, 'single-run'));
   } else {
-    const baselines = preparedTemplates.map((candidateTemplate) => planVariant(candidateTemplate, baselineOnlyPolicy(policy)));
+    const baselines = preparedTemplates.map((candidateTemplate) => planVariant(candidateTemplate, baselineOnlyPolicy(policy), 'baseline'));
     const legalBaselines = baselines.filter(({ result }) => result.evaluation.status !== 'rejected'
       && result.evaluation.hardViolations.length === 0
       && result.evaluation.residualContent.length === 0);
     if (legalBaselines.length > 0) {
       const bestBaseline = legalBaselines.reduce((best, candidate) => compareCompositionEvaluations(candidate.result.evaluation, best.result.evaluation) < 0 ? candidate : best);
-      const refined = planVariant(bestBaseline.template, policy);
+      const refined = planVariant(bestBaseline.template, policy, 'refinement', bestBaseline.result);
       const byTemplate = new Map(baselines.map((candidate) => [templateVariantIdentity(candidate.template), candidate]));
       byTemplate.set(templateVariantIdentity(refined.template), refined);
       planned = [...byTemplate.values()];
     } else {
       const byTemplate = new Map(baselines.map((candidate) => [templateVariantIdentity(candidate.template), candidate]));
       for (const baseline of baselines) {
-        const refined = planVariant(baseline.template, policy);
+        const refined = planVariant(baseline.template, policy, 'refinement', baseline.result);
         byTemplate.set(templateVariantIdentity(refined.template), refined);
         if (refined.result.evaluation.status !== 'rejected'
           && refined.result.evaluation.hardViolations.length === 0
@@ -183,6 +203,7 @@ export function planReportComposition(
   const selected = planned.reduce((best, candidate) => compareCompositionEvaluations(candidate.result.evaluation, best.result.evaluation) < 0 ? candidate : best);
   const template = selected.template;
   const result = selected.result;
+  if (result.plan.trace?.candidateSearch) result.plan.trace.candidateSearch.layoutVariantRuns = layoutVariantRuns;
   attachPlanSpacingReport(result.plan, document, metrics, geometry, geometryForPage);
   appendInlineDiagnostics(doc, options.family, document, result, options.inlineFontCoverage);
   return { document, template, metrics, plan: result.plan, evaluation: result.evaluation };

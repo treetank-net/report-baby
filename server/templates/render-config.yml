@@ -59,6 +59,8 @@ composition_score:
   insertion_text_continuity_cross_stream_penalty: 2
   insertion_text_continuity_edge_gap_penalty: 2
   insertion_text_continuity_visual_load_weight: 1
+  insertion_text_continuity_reward: 12
+  insertion_text_continuity_balance_tolerance: 0.25
   header_content_gap_min_mm: 4
   header_content_gap_penalty: 2
   list_item_fragmentation_penalty: 3
@@ -84,12 +86,19 @@ composition_score:
   column_imbalance_penalty: 4
   insertion_symmetry_tolerance_mm: 2
   insertion_symmetry_penalty: 1
+  insertion_symmetry_reward: 8
   insertion_distribution_tolerance_mm: 3
   insertion_distribution_penalty: 1
+  insertion_distribution_reward: 8
   content_spread_tolerance: 0.12
   content_spread_penalty: 8
+  content_spread_reward: 60
   page_load_balance_tolerance: 0.15
   page_load_balance_penalty: 8
+  page_load_balance_reward: 20
+  main_page_occupancy_target: 0.95
+  main_page_occupancy_tolerance: 0.25
+  main_page_occupancy_reward: 20
   visual_load_area_weight: 0.50
   visual_load_vertical_weight: 0.30
   visual_load_text_weight: 0.20
@@ -99,6 +108,7 @@ composition_score:
   spacing_profile_open_target_mm: 10
   spacing_profile_tolerance_mm: 2
   spacing_profile_penalty: 1
+  spacing_profile_reward: 10
   narrow_text_interval_min_mm: 18
   narrow_text_interval_penalty: 1
   fit_content_unused_ratio_threshold: 0.35
@@ -108,11 +118,25 @@ composition_score:
   main_start_delay_penalty: 2
   element_proximity_move_budget_mm: 8
   element_proximity_penalty: 1
+  element_proximity_reward: 10
   glyph_overlap_min_area_mm2: 0.25
   glyph_overlap_penalty: 4
+composition_calibration:
+  insertion_start_page: 1
+  max_full_plan_recalculations: 12
+  max_refinement_rounds: 1
 composition_priority:
   default: 100
 composition_search:
+  coarse_geometry_first: true
+  coarse_page_prediction_error_tolerance_pages: 1
+  coarse_assignment_beam_width: 64
+  coarse_assignment_progress_weight: 1
+  coarse_assignment_spacing_weight: 0.25
+  coarse_assignment_page_load_weight: 0.25
+  coarse_projection_candidate_count: 8
+  coarse_exact_candidate_count: 3
+  coarse_assignment_break_penalty_weight: 0.05
   max_initial_candidates: 64
   max_refinement_rounds: 2
   max_candidates_per_refinement: 16

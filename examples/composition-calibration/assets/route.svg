@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480">
+  <rect width="1200" height="480" fill="#eef5f3"/>
+  <path d="M80 330Q330 20 570 250T1100 160" fill="none" stroke="#267d75" stroke-width="18"/>
+  <path d="M80 330Q450 460 750 380T1100 160" fill="none" stroke="#d98b41" stroke-width="12" stroke-dasharray="30 20"/>
+  <g fill="#267d75"><circle cx="80" cy="330" r="28"/><circle cx="570" cy="250" r="28"/><circle cx="1100" cy="160" r="28"/></g>
+  <text x="40" y="55" font-family="sans-serif" font-size="30" fill="#183743">Synthetic route comparison / no geographic data</text>
+  <text x="70" y="405" font-family="sans-serif" font-size="26" fill="#183743">Origin</text>
+  <text x="500" y="330" font-family="sans-serif" font-size="26" fill="#183743">Transfer</text>
+  <text x="970" y="240" font-family="sans-serif" font-size="26" fill="#183743">Destination</text>
+</svg>

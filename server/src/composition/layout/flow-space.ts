@@ -38,7 +38,7 @@ function flowLineCollidesWithSlot(
  * Its exclusion geometry is handled by flow-barrier candidates, so the generic
  * structured-block collision guard must not treat it as an accidental overlap.
  */
-function isPlannedInsertionPlacement(plan: CompositionPlan, blockId: string, page: number): boolean {
+export function isPlannedInsertionPlacement(plan: CompositionPlan, blockId: string, page: number): boolean {
   return plan.graphicPlacements.some((graphic) => graphic.page === page && graphic.graphicId === `insertion:${blockId}`);
 }
 
@@ -276,6 +276,25 @@ export function contentStartBottom(
 ): number {
   const local = flowingTextBottom(plan, slot.id, slot.box.y, document);
   return occupiedBottomInOverlappingSlots(pageState, plan, slot, local);
+}
+
+/** Find the first vertical interval that holds an atomic block without crossing wrap obstacles. */
+export function calculateAtomicBlockTop(
+  page: number,
+  slot: CompositionSlot,
+  blockId: string,
+  start: number,
+  height: number,
+  graphics: CompositionGraphicPlacement[],
+): number {
+  let top = start;
+  const obstacles = graphics.filter((graphic) => graphic.page === page && graphic.wrap === 'around'
+    && graphic.graphicId !== `insertion:${blockId}` && horizontalOverlap(slot.box, graphic.box))
+    .sort((left, right) => left.box.y - right.box.y || left.graphicId.localeCompare(right.graphicId));
+  for (const obstacle of obstacles) {
+    if (rectsOverlap({ ...slot.box, y: top, height }, obstacle.box)) top = rectBottom(obstacle.box);
+  }
+  return top;
 }
 
 /**

@@ -23,6 +23,8 @@ export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
   const pdf = config.pdf;
   const search = config.compositionSearch;
   return {
+    coarseGeometryFirst: search.coarseGeometryFirst,
+    coarseExactCandidateCount: search.coarseExactCandidateCount,
     headingKeepWithNextLines: pdfNumber(pdf, 'headingKeepWithNextLines'),
     minimumLinesAtStart: pdfNumber(pdf, 'widowMinLines'),
     minimumLinesAtEnd: pdfNumber(pdf, 'orphanMinLines'),
@@ -38,6 +40,9 @@ export function plannerPolicyFromRenderConfig(): TextCompositionPlannerPolicy {
       movableRefinementRounds: search.movableRefinementRounds,
       minimumGeometryStepMm: search.minimumGeometryStepMm,
       maxPageLocalRefinementRounds: search.maxPageLocalRefinementRounds,
+      movableWindowRatio: search.movableWindowRatio,
+      movableCandidateCount: search.movableCandidateCount,
+      movableRefinementCandidateCount: search.movableRefinementCandidateCount,
       gravityIterations: search.gravityIterations,
       gravityDamping: search.gravityDamping,
       gravityConvergenceMm: search.gravityConvergenceMm,
@@ -56,6 +61,8 @@ export function createTextCompositionEngine(
 ): CompositionEngine {
   const configPolicy = plannerPolicyFromRenderConfig();
   const configuredPolicy: TextCompositionPlannerPolicy = {
+    coarseGeometryFirst: configPolicy.coarseGeometryFirst,
+    coarseExactCandidateCount: configPolicy.coarseExactCandidateCount,
     maxPlanningIterations: configPolicy.maxPlanningIterations,
     minimumFragmentLines: configPolicy.minimumFragmentLines,
     geometryTolerance: configPolicy.geometryTolerance,

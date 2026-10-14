@@ -330,6 +330,40 @@ try {
   const integrated = await renderReportCompositionPdf('pages/editorial-two-column', input);
   const integratedPath = join(temporary, 'integrated-composition.pdf');
   await writeFile(integratedPath, integrated.buffer);
+  const integratedLines = pdfWordsForPlannedLines(
+    extractPdfWords(integratedPath),
+    integrated.composition.plan.lines.filter(({ flowId, layer }) => flowId === 'main' && layer !== 'insertion'),
+    renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm,
+  );
+  const coarseSeed = integrated.composition.plan.decisions.find(({ code }) => code === 'COARSE_GEOMETRY_SEED_SELECTED');
+  const coarsePageComparison = coarseSeed?.baselineExactComparison;
+  assert.ok(coarsePageComparison && Array.isArray(coarsePageComparison.pages), 'the rendered integration fixture must retain its coarse page-map evidence');
+  const coarseBoxesByBlockSlot = new Map(coarsePageComparison.pages.flatMap(({ page, blocks = [] }) => blocks.flatMap((block) =>
+    block.estimatedBySlot.map((slot) => [`${page}:${block.blockId}:${slot.slotId}`, slot]))));
+  const pointsPerMm = 72 / 25.4;
+  const coarseToPdfWordBounds = integratedLines.flatMap((line) => {
+    const coarseSlotId = line.slotId.replace(/^\d+:/u, '');
+    const coarseBox = coarseBoxesByBlockSlot.get(`${line.page}:${line.blockId}:${coarseSlotId}`);
+    assert.ok(coarseBox, `the coarse map must provide a corresponding rectangle for rendered main block ${line.blockId} on page ${line.page}`);
+    return line.pdfWords.map((word) => ({
+      blockId: line.blockId,
+      page: line.page,
+      leftOverflow: Math.max(0, coarseBox.leftX - word.xMin / pointsPerMm),
+      rightOverflow: Math.max(0, word.xMax / pointsPerMm - coarseBox.rightX),
+      topOverflow: Math.max(0, coarseBox.topY - word.yMin / pointsPerMm),
+      bottomOverflow: Math.max(0, word.yMax / pointsPerMm - coarseBox.bottomY),
+    }));
+  });
+  assert.ok(coarseToPdfWordBounds.length > 0, 'the rendered oracle must compare coarse rectangles with PDF-extracted main text bounds');
+  const maxCoarseToPdfOverflow = Math.max(...coarseToPdfWordBounds.flatMap(({ leftOverflow, rightOverflow, topOverflow, bottomOverflow }) =>
+    [leftOverflow, rightOverflow, topOverflow, bottomOverflow]));
+  assert.ok(maxCoarseToPdfOverflow <= renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm,
+    `every rendered main-text word box must remain inside its coarse block rectangle within configured tolerance: ${maxCoarseToPdfOverflow} mm`);
+  report.renderedCoarseWordBoxes = {
+    compared: coarseToPdfWordBounds.length,
+    maxOverflowMm: maxCoarseToPdfOverflow,
+    toleranceMm: renderConfig.quality.pdf_pixel_qa.placement_tolerance_mm,
+  };
   const integratedText = extractPdfText(integratedPath, ['-layout']);
   assert.ok((tokenCounts(integratedText).get('lorem') ?? 0) > 0, 'the integrated report must contain natural Lorem Ipsum body text');
   assert.match(integratedText, /Oracle comparison fixture/u);

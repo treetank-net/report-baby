@@ -18,7 +18,7 @@ import { rectsOverlap } from '../geometry/rectangles.js';
 import { regionForSlot, relaxInsertionPlacementGravity, visualLoadWeightForPlacement } from './placement-gravity.js';
 import { resolvePlacementPolicy } from './placement-policy.js';
 
-type InsertionSlotCandidate = {
+export type InsertionSlotCandidate = {
   page: number;
   slotId: string;
   box: CompositionRect;
@@ -89,7 +89,7 @@ export function insertionBlocksForFlow(
   return blocks.filter((block) => definitions.some((definition) => insertionSlotAcceptsBlock(definition, flowId, block)));
 }
 
-function insertionSlotCandidates(
+export function insertionSlotCandidates(
   template: CompositionLayout,
   route: CompositionFlowRoute,
   flowId: string,
@@ -214,7 +214,7 @@ function candidateRespectsSourceRelation(
   return sourcePages.length === 0 || sourcePages.includes(candidate.page);
 }
 
-type MainProgress = { start: number; end: number; center: number };
+export type MainProgress = { start: number; end: number; center: number };
 
 type GroupAssignmentOption = {
   candidate: InsertionSlotCandidate;
@@ -354,8 +354,9 @@ function buildGroupAssignmentItems(
   plan: CompositionPlan,
   metrics: CompositionTextMetrics,
   current: Map<string, PlannedInsertion>,
+  predictedProgress?: ReadonlyMap<number, MainProgress>,
 ): Map<string, GroupAssignmentItem[]> {
-  const progress = mainProgressByPage(plan);
+  const progress = predictedProgress ? new Map(predictedProgress) : mainProgressByPage(plan);
   const measuredProposals = new Map<string, PlannedInsertion>();
   const groups = new Map<string, GroupAssignmentItem[]>();
   for (const [flowId, flow] of Object.entries(document.flows)) {
@@ -581,9 +582,10 @@ export function assignInsertionGroupsFromPlan(
   plan: CompositionPlan,
   metrics: CompositionTextMetrics,
   current: Map<string, PlannedInsertion>,
+  predictedProgress?: ReadonlyMap<number, MainProgress>,
 ): Map<string, PlannedInsertion> {
   const assigned = assignHardSourceRelations(document, template, plan, metrics, current);
-  const groups = buildGroupAssignmentItems(document, template, plan, metrics, assigned);
+  const groups = buildGroupAssignmentItems(document, template, plan, metrics, assigned, predictedProgress);
   for (const items of groups.values()) {
     const replacement = assignGroupItems(items);
     if (!replacement) continue;
@@ -592,7 +594,7 @@ export function assignInsertionGroupsFromPlan(
   return assigned;
 }
 
-function fitInsertionProposal(
+export function fitInsertionProposal(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
   template: CompositionLayout,

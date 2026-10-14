@@ -22,19 +22,20 @@ import {
   combineProposalCandidates,
   insertionKey,
 } from './planner-candidates.js';
+import type { PlannedInsertion } from './planner-candidates.js';
 import {
   assignInsertionGroupsFromPlan,
   insertionProposalCorrections,
   insertionProposalsFromPlan,
   seedInsertionProposalCandidates,
-  seedInsertionProposals,
 } from './insertion-layout.js';
 import { seedGraphicProposals } from './graphic-planning.js';
 import { createPlan, planDocumentOnce } from './document-layout.js';
-import { regionForSlot, relaxInsertionPlacementGravity } from './placement-gravity.js';
+import { assignCoarseInsertionProposals, planCoarseInsertionAssignments, type CoarseAssignmentSearch, compareCoarseEstimateToExactPlan, estimateCoarseMainGeometry, projectCoarseInsertionDisplacement, unassignedCoarseInsertionItems } from './coarse-geometry-planning.js';
+import { regionForSlot } from './placement-gravity.js';
 import type { MovableInsertionPolicy, TextCompositionPlannerPolicy } from '../contracts/planner-policy.js';
 import { routeLayout } from './page-state.js';
-import { readRenderConfig } from '../../template/builtins.js';
+import type { CoarseGeometryEstimate, CoarseInsertionConfiguration } from './coarse-geometry-planning.js';
 
 export type { MovableGraphicPolicy, MovableInsertionBounds } from '../contracts/planner-policy.js';
 export { lineHeight, styleFor, textPadding, wrapBlock, wordsForBlock } from '../text/text-layout.js';
@@ -52,12 +53,81 @@ function proposalSignature(
   return `${movableInsertionProposalSignature(insertionProposals)}||${movableGraphicProposalSignature(graphicProposals)}`;
 }
 
+function coarseInsertionSeed(
+  document: CompositionDocument,
+  metrics: CompositionTextMetrics,
+  template: CompositionLayout,
+  policy: TextCompositionPlannerPolicy,
+): Map<string, PlannedInsertion> {
+  const estimate = estimateCoarseMainGeometry(document, metrics, template, policy.minimumLinesAtEnd);
+  const assigned = assignCoarseInsertionProposals(document, metrics, template, estimate, new Map());
+  return assigned;
+}
+
+/** Accept exact fit geometry during stabilization without changing the coarse page/slot assignment. */
+function preserveCoarseInsertionAssignments(
+  coarseAssignments: ReadonlyMap<string, PlannedInsertion>,
+  exactProposals: ReadonlyMap<string, PlannedInsertion>,
+): { proposals: Map<string, PlannedInsertion>; exactAssignmentMismatchCount: number } {
+  const proposals = new Map(coarseAssignments);
+  let exactAssignmentMismatchCount = 0;
+  for (const [key, coarse] of coarseAssignments) {
+    const exact = exactProposals.get(key);
+    if (!exact || exact.page !== coarse.page || exact.slotId !== coarse.slotId) {
+      exactAssignmentMismatchCount += 1;
+      continue;
+    }
+    proposals.set(key, exact);
+  }
+  return { proposals, exactAssignmentMismatchCount };
+}
+
+function recordCoarseGeometrySelection(
+  document: CompositionDocument,
+  template: CompositionLayout,
+  plan: CompositionPlan,
+  unobstructed: ReturnType<typeof estimateCoarseMainGeometry>,
+  projected: ReturnType<typeof projectCoarseInsertionDisplacement>,
+  insertionProposals: ReadonlyMap<string, PlannedInsertion>,
+  baselineExactMaterializationCount: number,
+  exactAssignmentMismatchCount: number,
+  assignmentSearch: CoarseAssignmentSearch,
+): void {
+  const decision = recordPlanDecision(plan, 'COARSE_GEOMETRY_SEED_SELECTED');
+  decision.assignmentSearch = assignmentSearch;
+  decision.coarseBlockMeasurements = unobstructed.blockMeasurements;
+  decision.coarseBreakSensitiveRegions = unobstructed.breakSensitiveRegions;
+  decision.projectedBreakSensitiveRegions = projected.breakSensitiveRegions;
+  if (projected.terminalPage !== undefined) decision.estimatedPageCount = projected.terminalPage;
+  if (unobstructed.terminalPage !== undefined) decision.unobstructedTerminalPage = unobstructed.terminalPage;
+  decision.estimatedContentMassCount = projected.contentMass.length;
+  decision.estimatedUnplacedWordCount = projected.unplacedWordCount;
+  if (projected.missingMeasurements.length > 0) decision.missingMeasurements = projected.missingMeasurements;
+  if (projected.displacedWordCount !== undefined) decision.displacedWordCount = projected.displacedWordCount;
+  decision.insertionCount = insertionProposals.size;
+  decision.baselineExactMaterializationCount = baselineExactMaterializationCount;
+  decision.exactAssignmentMismatchCount = exactAssignmentMismatchCount;
+  decision.coarseMainRegions = unobstructed.regions.map(({ page, slotId, box }) => ({ page, slotId, box }));
+  if (unobstructed.dynamicReservations.length > 0) decision.dynamicReservations = unobstructed.dynamicReservations;
+  decision.progressByPage = [...projected.mainProgressByPage.values()]
+    .map(({ page, start, end, center }) => ({ page, start, end, center }));
+  decision.unobstructedProgressByPage = [...unobstructed.mainProgressByPage.values()]
+    .map(({ page, start, end, center }) => ({ page, start, end, center }));
+  decision.insertionAssignments = [...insertionProposals.values()]
+    .map(({ flowId, blockId, page, slotId, box }) => ({ flowId, blockId, page, slotId, box }));
+  const unassignedInsertions = unassignedCoarseInsertionItems(document, template, insertionProposals, unobstructed);
+  decision.unassignedInsertionCount = unassignedInsertions.length;
+  if (unassignedInsertions.length > 0) decision.unassignedInsertions = unassignedInsertions;
+  decision.baselineExactComparison = compareCoarseEstimateToExactPlan(document, projected, plan);
+}
+
 /** Materialize and stabilize the authored seed without generating alternatives. */
 function planBaselineCandidate(
   document: CompositionDocument,
   metrics: CompositionTextMetrics,
   template: CompositionLayout,
   policy: TextCompositionPlannerPolicy,
+  prepared?: { estimate: CoarseGeometryEstimate; assignment: CoarseInsertionConfiguration; rank: number },
 ): CompositionPlanCandidate {
   const maxIterations = policy.maxPlanningIterations ?? 1;
   if (!Number.isInteger(maxIterations) || maxIterations < 1) {
@@ -66,42 +136,35 @@ function planBaselineCandidate(
     return { signature: 'invalid-policy', plan };
   }
   const graphicProposals = seedGraphicProposals(document, template);
-  let insertionProposals = seedInsertionProposals(document, template, metrics);
-  let gravityTrace: ReturnType<typeof relaxInsertionPlacementGravity>['trace'] | undefined;
-  if (Object.keys(policy.movableInsertionBounds ?? {}).length === 0) {
-    const relaxed = relaxInsertionPlacementGravity(document, template, insertionProposals);
-    insertionProposals = relaxed.proposals;
-    gravityTrace = relaxed.trace;
-  }
+  const unobstructedCoarseGeometry = prepared?.estimate ?? estimateCoarseMainGeometry(document, metrics, template, policy.minimumLinesAtEnd);
+  const coarseAssignment = prepared?.assignment ?? planCoarseInsertionAssignments(
+    document,
+    metrics,
+    template,
+    unobstructedCoarseGeometry,
+    new Map(),
+  );
+  let insertionProposals = coarseAssignment.proposals;
+  const coarseGeometry = coarseAssignment.projected;
   let previousSignature: string | undefined;
-  let latestPlan = planDocumentOnce(document, metrics, template, policy, insertionProposals, graphicProposals);
-  if (gravityTrace && gravityTrace.movedCount > 0) {
-    const decision = recordPlanDecision(latestPlan, 'PLACEMENT_GRAVITY_RELAXED');
-    decision.iterations = gravityTrace.iterations;
-    decision.movedCount = gravityTrace.movedCount;
-    decision.maxDisplacement = gravityTrace.maxDisplacement;
-    decision.groupCount = gravityTrace.groupCount;
-    decision.anchorCount = gravityTrace.anchorCount;
-    decision.stoppedBy = gravityTrace.stoppedBy;
-  }
-  const groupedInsertionProposals = assignInsertionGroupsFromPlan(document, template, latestPlan, metrics, insertionProposals);
-  const changedGroupKeys = [...new Set([...insertionProposals.keys(), ...groupedInsertionProposals.keys()])]
-    .filter((key) => {
-      const before = insertionProposals.get(key);
-      const after = groupedInsertionProposals.get(key);
-      return before?.page !== after?.page || before?.slotId !== after?.slotId
-        || before?.box.x !== after?.box.x || before?.box.y !== after?.box.y
-        || before?.box.width !== after?.box.width || before?.box.height !== after?.box.height;
-    });
-  if (changedGroupKeys.length > 0) {
-    insertionProposals = groupedInsertionProposals;
-    latestPlan = planDocumentOnce(document, metrics, template, policy, insertionProposals, graphicProposals);
-    const decision = recordPlanDecision(latestPlan, 'PLACEMENT_GROUPS_ASSIGNED');
-    decision.insertionCount = insertionProposals.size;
-    decision.changedKeys = changedGroupKeys;
-  }
+  let baselineExactMaterializationCount = 0;
+  let exactAssignmentMismatchCount = 0;
+  const materializeBaseline = (): CompositionPlan => {
+    baselineExactMaterializationCount += 1;
+    const plan = planDocumentOnce(document, metrics, template, policy, insertionProposals, graphicProposals);
+    if (prepared) {
+      const decision = recordPlanDecision(plan, 'COARSE_GEOMETRY_CANDIDATE_MATERIALIZED');
+      decision.rank = prepared.rank;
+      decision.estimatedBreakPenalty = coarseAssignment.search.projectionAssessment.estimatedBreakPenalty;
+    }
+    return plan;
+  };
+  let latestPlan = materializeBaseline();
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const nextProposals = insertionProposalsFromPlan(document, template, latestPlan, metrics);
+    const exactProposals = insertionProposalsFromPlan(document, template, latestPlan, metrics);
+    const stabilized = preserveCoarseInsertionAssignments(insertionProposals, exactProposals);
+    const nextProposals = stabilized.proposals;
+    exactAssignmentMismatchCount += stabilized.exactAssignmentMismatchCount;
     const signature = movableInsertionProposalSignature(nextProposals);
     const passDecision = recordPlanDecision(latestPlan, 'PLANNER_PASS_COMPLETED');
     passDecision.iteration = iteration;
@@ -112,17 +175,20 @@ function planBaselineCandidate(
       const stabilizedDecision = recordPlanDecision(latestPlan, 'PLANNER_STABILIZED');
       stabilizedDecision.iteration = iteration;
       stabilizedDecision.insertionCount = nextProposals.size;
+      recordCoarseGeometrySelection(document, template, latestPlan, unobstructedCoarseGeometry, coarseGeometry, insertionProposals, baselineExactMaterializationCount, exactAssignmentMismatchCount, coarseAssignment.search);
       return { signature: proposalSignature(insertionProposals, graphicProposals), plan: latestPlan };
     }
     if (iteration === maxIterations) {
       recordPlanningPhase(latestPlan, 'reflow', 'failed', { insertionCount: nextProposals.size, signature, iterations: maxIterations }, iteration);
       latestPlan.diagnostics.push(diagnostic('error', 'PLANNER_DID_NOT_STABILIZE', `Planner did not stabilize after ${maxIterations} pass(es).`, { details: { iterations: maxIterations, insertionCount: nextProposals.size } }));
+      recordCoarseGeometrySelection(document, template, latestPlan, unobstructedCoarseGeometry, coarseGeometry, insertionProposals, baselineExactMaterializationCount, exactAssignmentMismatchCount, coarseAssignment.search);
       return { signature: proposalSignature(insertionProposals, graphicProposals), plan: latestPlan };
     }
     insertionProposals = nextProposals;
     previousSignature = signature;
-    latestPlan = planDocumentOnce(document, metrics, template, policy, insertionProposals, graphicProposals);
+    latestPlan = materializeBaseline();
   }
+  recordCoarseGeometrySelection(document, template, latestPlan, unobstructedCoarseGeometry, coarseGeometry, insertionProposals, baselineExactMaterializationCount, exactAssignmentMismatchCount, coarseAssignment.search);
   return { signature: proposalSignature(insertionProposals, graphicProposals), plan: latestPlan };
 }
 
@@ -152,7 +218,7 @@ function planLegalityCorrectionRecords(
   if (remainingBudget <= 0) return [];
   const affectedKeys = affectedInsertionKeys(rejectedEvaluation.hardViolations);
   if (affectedKeys.size === 0) return [];
-  const insertionSeeds = seedInsertionProposals(document, template, metrics);
+  const insertionSeeds = coarseInsertionSeed(document, metrics, template, policy);
   for (const decision of selected.decisions) {
     if (decision.code === 'OPTIONAL_INSERTION_OMITTED' && typeof decision.flowId === 'string' && typeof decision.blockId === 'string') {
       insertionSeeds.delete(insertionKey(decision.flowId, decision.blockId));
@@ -298,10 +364,11 @@ function automaticMovableInsertionBounds(
   document: CompositionDocument,
   template: CompositionLayout,
   proposals: Map<string, import('./planner-candidates.js').PlannedInsertion>,
+  policy: TextCompositionPlannerPolicy,
 ): MovableInsertionPolicy {
-  const search = readRenderConfig().compositionSearch;
-  const movementWindowRatio = search.movableWindowRatio;
-  const candidateCount = search.movableCandidateCount;
+  const search = policy.searchBudget;
+  const movementWindowRatio = search?.movableWindowRatio;
+  const candidateCount = search?.movableCandidateCount;
   if (movementWindowRatio === undefined || candidateCount === undefined
     || !(movementWindowRatio > 0) || !Number.isInteger(candidateCount) || candidateCount < 1) return {};
   const bounds: MovableInsertionPolicy = {};
@@ -332,8 +399,8 @@ function automaticMovableInsertionBounds(
       axis: 'y',
       preferred: { y: proposal.box.y },
       candidateCount,
-      refinementRounds: search.movableRefinementRounds,
-      ...(search.movableRefinementCandidateCount === undefined ? {} : { refinementCandidateCount: search.movableRefinementCandidateCount }),
+      refinementRounds: search?.movableRefinementRounds,
+      ...(search?.movableRefinementCandidateCount === undefined ? {} : { refinementCandidateCount: search.movableRefinementCandidateCount }),
     };
   }
   return bounds;
@@ -345,7 +412,7 @@ function policyWithAutomaticMovableInsertionBounds(
   proposals: Map<string, import('./planner-candidates.js').PlannedInsertion>,
   policy: TextCompositionPlannerPolicy,
 ): TextCompositionPlannerPolicy {
-  const automatic = automaticMovableInsertionBounds(document, template, proposals);
+  const automatic = automaticMovableInsertionBounds(document, template, proposals, policy);
   const explicit = policy.movableInsertionBounds ?? {};
   const movableInsertionBounds = { ...automatic, ...explicit };
   if (Object.keys(movableInsertionBounds).length === 0) return policy;
@@ -576,7 +643,7 @@ function planRefinedCandidateRecords(
   evaluation?: CompositionEvaluation,
   scope?: CompositionRefinementScope,
 ): CompositionPlanCandidate[] {
-  const seededProposals = seedInsertionProposals(document, template, metrics);
+  const seededProposals = coarseInsertionSeed(document, metrics, template, policy);
   for (const decision of selected.decisions) {
     if (decision.code === 'OPTIONAL_INSERTION_OMITTED' && typeof decision.flowId === 'string' && typeof decision.blockId === 'string') {
       seededProposals.delete(insertionKey(decision.flowId, decision.blockId));
@@ -591,6 +658,7 @@ function planRefinedCandidateRecords(
     .filter((graphic) => policy.movableGraphicBounds?.[graphic.graphicId] !== undefined)
     .filter((graphic) => !scope || scope.kind === 'document' || graphic.page === scope.page)
     .map(({ graphicId, page, slotId, box }) => ({ graphicId, page, slotId, box }));
+  const selectedGraphics = selectedGraphicSeeds(seededGraphicProposals, selected);
 
   const selectedSeeds = selectedInsertionSeeds(seededProposals, selected);
   const scopedSelectedSeeds = new Map([...selectedSeeds].filter(([, proposal]) => selectedPlacements.some((placement) =>
@@ -609,7 +677,7 @@ function planRefinedCandidateRecords(
   const defaultRefinementRounds = effectivePolicy.searchBudget?.movableRefinementRounds ?? 0;
   const minimumGeometryStep = effectivePolicy.searchBudget?.minimumGeometryStepMm;
   const insertionRefinements = movableInsertionProposalRefinements(
-    seededProposals,
+    selectedSeeds,
     selectedPlacements,
     effectivePolicy.movableInsertionBounds ?? {},
     round,
@@ -618,7 +686,7 @@ function planRefinedCandidateRecords(
     minimumGeometryStep,
   );
   const graphicRefinements = movableGraphicProposalRefinements(
-    seededGraphicProposals,
+    selectedGraphics,
     selectedGraphicPlacements,
     effectivePolicy.movableGraphicBounds ?? {},
     round,
@@ -626,8 +694,8 @@ function planRefinedCandidateRecords(
     defaultRefinementRounds,
     minimumGeometryStep,
   );
-  const insertionCandidates = insertionRefinements.length > 0 ? insertionRefinements : [seededProposals];
-  const graphicCandidates = graphicRefinements.length > 0 ? graphicRefinements : [seededGraphicProposals];
+  const insertionCandidates = insertionRefinements.length > 0 ? insertionRefinements : [selectedSeeds];
+  const graphicCandidates = graphicRefinements.length > 0 ? graphicRefinements : [selectedGraphics];
   const configuredRefinements: CompositionPlanCandidate[] = insertionRefinements.length === 0 && graphicRefinements.length === 0
     ? []
     : combineProposalCandidates(
@@ -673,9 +741,17 @@ export function createTextCompositionPlanner(
 ): CompositionPlanner {
   return {
     searchBudget: policy.searchBudget,
-    planBaselineWithSignature(document, metrics) {
-      return planBaselineCandidate(document, metrics, template, policy);
-    },
+    ...(policy.coarseGeometryFirst === false ? {} : {
+      planBaselineCandidatesWithSignatures(document: CompositionDocument, metrics: CompositionTextMetrics, maximumCandidates: number) {
+        const estimate = estimateCoarseMainGeometry(document, metrics, template, policy.minimumLinesAtEnd);
+        const assignment = planCoarseInsertionAssignments(document, metrics, template, estimate, new Map());
+        const limit = Math.min(maximumCandidates, policy.coarseExactCandidateCount ?? maximumCandidates);
+        return assignment.alternatives.slice(0, limit).map((alternative, rank) => planBaselineCandidate(document, metrics, template, policy, { estimate, assignment: alternative, rank }));
+      },
+      planBaselineWithSignature(document: CompositionDocument, metrics: CompositionTextMetrics) {
+        return planBaselineCandidate(document, metrics, template, policy);
+      },
+    }),
     planLegalityCorrectionsWithSignatures(document, metrics, selected, rejectedEvaluation, _round, remainingBudget) {
       return planLegalityCorrectionRecords(document, metrics, template, policy, selected, rejectedEvaluation, remainingBudget);
     },

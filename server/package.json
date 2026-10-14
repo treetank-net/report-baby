@@ -23,6 +23,7 @@
     "test:timings": "node scripts/test-timings.mjs",
     "test:quality": "node scripts/test-harness.mjs --suite quality",
     "score:calibrate": "node scripts/calibrate-composition-score.mjs",
+    "score:corpus": "node scripts/calibrate-article-composition.mjs",
     "planner:inventory": "node scripts/planner-function-dependency-report.mjs --annotate --write-report ../docs/release-1.0/planner-function-dependency-inventory.md",
     "planner:coverage-report": "node scripts/flow-planner-coverage-report.mjs",
     "dev": "tsc --watch --noEmit",

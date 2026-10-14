@@ -1,7 +1,9 @@
 # Release 1.1 — implementation plan
 
 Status: implementation checkpoint completed in 1.0.2 for items 04, 08–10 and
-11. Items 01, 03, 05 and 12 remain planned work for the later 1.1 release.
+11. Item 15's coarse assignment and geometry rewards are implemented; broader
+aesthetic calibration remains open (see its progress document). Items 01, 03,
+05, 12 and 14 remain planned work for the later 1.1 release.
 
 Release 1.1 changes existing procedural composition processes. It does not add
 service classes or parallel planner/evaluator abstractions. New TypeScript
@@ -21,6 +23,8 @@ needs to become explicit.
 | [11](11-document-layout-contract.md) | one public document `layout`; removal of route-owned template selection | implemented in 1.0.2 |
 | [12](12-constructive-planning-and-guided-micro-optimization.md) | legal baseline first, then bounded evaluator-guided local quality repairs | planned |
 | [13](13-placement-policy-contract.md) | automatic content-progress distribution, cross-flow rhythm, visual-load balancing, cheap gravity relaxation and optional placement-policy overrides | implementation checkpoint: policy evidence, measured score components, bounded stable group assignment, source-relation legality and weighted gravity implemented; representative PDF accepted, mixed-flow calibration remains |
+| [14](14-page-map-visual-verification.md) | post-materialization page geometry and rendered-PDF verification/calibration | planned; downstream of item 15 |
+| [15](15-coarse-geometry-first-planning.md) | coarse global assignment and rectangle displacement before exact planning, with measured geometry rewards | bounded global assignment, break-aware projections and exact macro comparison implemented; article preferences pending — [progress](15-implementation-progress.md) |
 
 Floats, RTL/CJK and broad visual calibration are deferred to
 [`docs/release-1.2`](../release-1.2/README.md). Runtime planner telemetry has no
@@ -87,16 +91,25 @@ Ownership remains procedural:
 8. **Contract and test consolidation (05 — planned).** The inventory and timing checks
    run during every preceding item; the final pass removes redundant tests and
    keeps one representative rendered-artifact check.
-9. **Constructive planning and guided micro-optimization (12 — planned).**
-   Replace broad complete-plan enumeration in the common path with one legal
-   baseline followed by bounded evaluator-guided repairs. Preserve a final
-   whole-document legality and score decision.
-10. **Content-aware placement policies (13 — implementation checkpoint).** Replace ambiguous
+9. **Content-aware placement policies (13 — implementation checkpoint).** Replace ambiguous
     page-local `balanced` insertion handling with automatic content-progress
     distribution, mixed-flow visual-load balancing and page-local rhythm. Use
-    bounded geometry-only gravity relaxation to stabilize equal spacing before
-    paying for complete reflow/evaluation. Keep ordinary input policy-free
-    while allowing narrow flow/block overrides.
+    the policy contract, source relations and complete-plan scoring as the
+    foundation for the coarse estimator.
+10. **Coarse geometry-first planning (15 — highest-priority composition
+    follow-up).** Estimate the unobstructed main-flow body using aggregate
+    rectangles, assign insertions across legal capacity, subtract their
+    occupied spans and push text mass forward in one pass. Replace duplicated
+    seed/gravity/reassignment stages, then seed exact line planning. Keep the
+    exact plan/evaluator authoritative.
+11. **Constructive planning and guided micro-optimization (12 — planned).**
+    Use the coarse seed to materialize one exact legal baseline, then run
+    bounded evaluator-guided page-local repairs. Preserve whole-document
+    legality and score decisions.
+12. **Page-map visual verification (14 — planned, downstream).** Compare exact
+    planned geometry and selected rendered PDFs, and use the resulting evidence
+    to calibrate coarse-estimate error. This remains a separate post-layout
+    verification responsibility; it is not the initial placement model.
 
 ## Definition of ready for implementation
 

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,7 +8,7 @@ import { runProcess } from './process.mjs';
  * @test-decision visual-gate
  * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.
  */
-function decodePpm(buffer) {
+export function decodePpm(buffer) {
   if (buffer.subarray(0, 2).toString('ascii') !== 'P6') throw new Error('raster output must be an RGB PPM');
   let offset = 2;
   /**
@@ -27,7 +27,11 @@ function decodePpm(buffer) {
   };
   const width = Number(token());
   const height = Number(token());
-  token();
+  if (Number(token()) !== 255) throw new Error('raster output must use 8-bit RGB samples');
+  if (!/\s/u.test(String.fromCharCode(buffer[offset]))) throw new Error('raster output is missing the header delimiter');
+  // Consume the header delimiter only: binary pixel values may themselves be
+  // whitespace bytes and must not be skipped.
+  offset += buffer[offset] === 13 && buffer[offset + 1] === 10 ? 2 : 1;
   const pixels = buffer.subarray(offset);
   if (!Number.isInteger(width) || !Number.isInteger(height) || pixels.length < width * height * 3) throw new Error('raster output is truncated');
   return { width, height, pixels };
@@ -120,7 +124,15 @@ export async function inspectPdfInk({ artifactPath, pages, lines, slots, pageSiz
     const prefix = join(rasterDirectory, 'page');
     const raster = runProcess('pdftoppm', ['-f', '1', '-l', String(pages.length), '-r', String(qa.raster_dpi), artifactPath, prefix], { timeout: 30_000 });
     if (raster.status !== 0) throw new Error(raster.stderr || raster.stdout || 'pdftoppm failed');
-    const images = pages.map((page) => ({ page: page.page, image: decodePpm(readFileSync(`${prefix}-${page.page}.ppm`)) }));
+    const rasterFiles = new Map((await readdir(rasterDirectory)).flatMap((filename) => {
+      const match = /^page-(\d+)\.ppm$/u.exec(filename);
+      return match ? [[Number(match[1]), join(rasterDirectory, filename)]] : [];
+    }));
+    const images = pages.map((page) => {
+      const path = rasterFiles.get(page.page);
+      if (!path) throw new Error(`missing raster page ${page.page}`);
+      return { page: page.page, image: decodePpm(readFileSync(path)) };
+    });
     /**
      * @test-decision visual-gate
      * @test-action Keep this backend/artifact helper behind one showcase or compatibility gate; plan assertions must not call it.

@@ -14,6 +14,21 @@ import type {
   CompositionRefinementScope,
 } from './contracts/engine-contracts.js';
 import type { CompositionDocument } from './contracts/model.js';
+import { recordPlanDecision } from './observability/planning-observability.js';
+import { compareExactPlanToCoarseBaseline } from './layout/coarse-geometry-planning.js';
+import type { CoarseExactPlanComparison } from './layout/coarse-geometry-planning.js';
+
+function preserveCoarseSeedEvidence(document: CompositionDocument, baseline: CompositionPlan, selected: CompositionPlan): void {
+  const coarseEvidence = baseline.decisions.find((decision) => decision.code === 'COARSE_GEOMETRY_SEED_SELECTED');
+  if (!coarseEvidence) return;
+  let selectedEvidence = selected.decisions.find((decision) => decision.code === coarseEvidence.code);
+  if (!selectedEvidence) {
+    selectedEvidence = recordPlanDecision(selected, coarseEvidence.code);
+    Object.assign(selectedEvidence, coarseEvidence);
+  }
+  const comparison = selectedEvidence.baselineExactComparison as CoarseExactPlanComparison | undefined;
+  if (comparison) selectedEvidence.selectedExactComparison = compareExactPlanToCoarseBaseline(document, comparison, selected);
+}
 
 /**
  * Orders two evaluated plans for a deterministic candidate-selection step.
@@ -88,6 +103,37 @@ function planTimingTotal(plans: CompositionPlan[], name: string): number {
   return plans.reduce((total, plan) => total + (plan.trace?.timings ?? [])
     .filter((timing) => timing.name === name)
     .reduce((planTotal, timing) => planTotal + timing.elapsedMs, 0), 0);
+}
+
+function mergeBaselineContinuationTrace(
+  continued: CompositionPlanResult,
+  baselineMaterializationMs: number,
+  priorSearch: CompositionCandidateSearchTrace | undefined,
+): void {
+  const search = continued.plan.trace?.candidateSearch;
+  if (!search || !priorSearch) return;
+  const addedEvaluations = Math.max(0, search.fullPlanRecalculations - 1);
+  const planningMs = priorSearch.phaseTimings.planningMs + search.phaseTimings.planningMs;
+  const materializationMs = priorSearch.phaseTimings.materializationMs
+    + Math.max(0, search.phaseTimings.materializationMs - baselineMaterializationMs);
+  const refinementMs = priorSearch.phaseTimings.refinementMs + search.phaseTimings.refinementMs;
+  search.rounds = [
+    ...priorSearch.rounds,
+    ...search.rounds.slice(1).map((round) => ({ ...round, round: round.round + Math.max(0, priorSearch.rounds.length - 1) })),
+  ];
+  search.generatedCandidates = priorSearch.generatedCandidates + Math.max(0, search.generatedCandidates - 1);
+  search.evaluatedCandidates = priorSearch.evaluatedCandidates + addedEvaluations;
+  search.fullPlanRecalculations = priorSearch.fullPlanRecalculations + addedEvaluations;
+  search.planningTimeMs = priorSearch.planningTimeMs + search.planningTimeMs;
+  search.phaseTimings = {
+    planningMs,
+    materializationMs,
+    proposalGenerationMs: Math.max(0, planningMs + refinementMs - materializationMs),
+    initialEvaluationMs: priorSearch.phaseTimings.initialEvaluationMs,
+    evaluationMs: priorSearch.phaseTimings.evaluationMs
+      + Math.max(0, search.phaseTimings.evaluationMs - search.phaseTimings.initialEvaluationMs),
+    refinementMs,
+  };
 }
 
 function testedRepairDistance(
@@ -232,14 +278,16 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
     plan(document, metrics) {
       const startedAt = Date.now();
       const planningStartedAt = Date.now();
-      const generatedRecords = planner.planBaselineWithSignature
+      const maxRecalculations = positiveBudget(planner.searchBudget?.maxFullPlanRecalculations);
+      const generatedRecords = planner.planBaselineCandidatesWithSignatures
+        ? planner.planBaselineCandidatesWithSignatures(document, metrics, Math.min(maxRecalculations, positiveBudget(planner.searchBudget?.maxInitialCandidates)))
+        : planner.planBaselineWithSignature
         ? [planner.planBaselineWithSignature(document, metrics)]
         : planner.planCandidatesWithSignatures?.(document, metrics)
           ?? (planner.planCandidates?.(document, metrics) ?? [planner.plan(document, metrics)]).map((plan, index) => ({ signature: index === 0 ? 'seed' : `compat-${index}`, plan }));
       const planningMs = Math.max(0, Date.now() - planningStartedAt);
       if (generatedRecords.length === 0) throw new Error('Composition planner returned no candidates.');
       const initialUnique = uniqueCandidateRecords(generatedRecords);
-      const maxRecalculations = positiveBudget(planner.searchBudget?.maxFullPlanRecalculations);
       const initialRecords = initialUnique.records.slice(0, maxRecalculations);
       const initialCandidates = initialRecords.map(({ plan }) => plan);
       if (initialCandidates.length === 0) throw new Error('Composition planner returned no candidates within its calculation budget.');
@@ -290,6 +338,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
       if (initialBudgetExhausted) {
         const plan = candidates[selectedCandidate];
         const evaluation = evaluations[selectedCandidate];
+        preserveCoarseSeedEvidence(document, candidates[0]!, plan);
         const candidateSearch: CompositionCandidateSearchTrace = {
           rounds: searchRounds,
           generatedCandidates: generatedRecords.length,
@@ -480,6 +529,7 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
       const refinementMs = Math.max(0, Date.now() - refinementStartedAt);
       const plan = candidates[selectedCandidate];
       const evaluation = evaluations[selectedCandidate];
+      preserveCoarseSeedEvidence(document, candidates[0]!, plan);
       const candidateSearch: CompositionCandidateSearchTrace = {
         rounds: searchRounds,
         generatedCandidates: searchRounds.reduce((total, round) => total + round.generatedCandidates, 0),
@@ -512,6 +562,29 @@ export function createCompositionEngine(planner: CompositionPlanner, evaluator: 
       });
       if (plan.trace) plan.trace.candidateSearch = candidateSearch;
       return { plan, evaluation };
+    },
+    continueFromBaseline(document, metrics, baseline) {
+      const priorSearch = baseline.plan.trace?.candidateSearch;
+      const priorSearchSnapshot = priorSearch === undefined ? undefined : {
+        ...priorSearch,
+        rounds: priorSearch.rounds.map((round) => ({ ...round })),
+        phaseTimings: { ...priorSearch.phaseTimings },
+      };
+      const baselineMaterializationMs = planTimingTotal([baseline.plan], 'document-materialization');
+      const signature = priorSearch?.selectedProposalSignature ?? 'selected-baseline';
+      const continuationPlanner: CompositionPlanner = {
+        ...planner,
+        planBaselineCandidatesWithSignatures: undefined,
+        planBaselineWithSignature: () => ({ signature, plan: baseline.plan }),
+      };
+      const continuationEvaluator: CompositionEvaluator = {
+        evaluate(input, plan) {
+          return plan === baseline.plan ? baseline.evaluation : evaluator.evaluate(input, plan);
+        },
+      };
+      const continued = createCompositionEngine(continuationPlanner, continuationEvaluator).plan(document, metrics);
+      mergeBaselineContinuationTrace(continued, baselineMaterializationMs, priorSearchSnapshot);
+      return continued;
     },
   };
 }

@@ -7,6 +7,7 @@ import type {
   CompositionSpacingSubject,
 } from '../contracts/engine-contracts.js';
 import { plannedLines } from '../layout/plan-lines.js';
+import { isPlannedInsertionPlacement } from '../layout/flow-space.js';
 
 /** Geometry-only proximity evidence; candidate generation remains in layout. */
 
@@ -72,6 +73,9 @@ function blockSubjects(plan: CompositionPlan, document: CompositionDocument): Pr
     });
   }
   for (const placement of [...plan.blockPlacements, ...plan.tablePlacements]) {
+    // An insertion's enclosing graphic already represents this material
+    // subject. Counting its atomic/table placement again invents a self-pair.
+    if (isPlannedInsertionPlacement(plan, placement.blockId, placement.page)) continue;
     const slot = slots.get(placement.slotId);
     if (!slot) continue;
     const flowId = flows.get(placement.blockId);
@@ -163,6 +167,18 @@ function graphicMovementAxis(plan: CompositionPlan, graphicId: string, page: num
   return (plan.movableGraphicFrames ?? []).find((frame) => frame.page === page && frame.graphicId === graphicId)?.axis;
 }
 
+/** Identify local spacing relations without rewarding distances across intervening boxes. */
+function areProximitySubjectsAdjacent(first: ProximitySubject, second: ProximitySubject, subjects: ProximitySubject[], axis: 'x' | 'y'): boolean {
+  const start = axis === 'y' ? Math.min(bottom(first.box), bottom(second.box)) : Math.min(right(first.box), right(second.box));
+  const end = axis === 'y' ? Math.max(first.box.y, second.box.y) : Math.max(first.box.x, second.box.x);
+  return !subjects.some((subject) => subject !== first && subject !== second && subject.page === first.page
+    && (axis === 'y'
+      ? subject.box.y >= start && bottom(subject.box) <= end
+        && Math.min(right(first.box), right(second.box), right(subject.box)) > Math.max(first.box.x, second.box.x, subject.box.x)
+      : subject.box.x >= start && right(subject.box) <= end
+        && Math.min(bottom(first.box), bottom(second.box), bottom(subject.box)) > Math.max(first.box.y, second.box.y, subject.box.y)));
+}
+
 function spacingTarget(profile: ProximitySubject['profile'], score: ReturnType<typeof readRenderConfig>['compositionScore']): number {
   if (profile === 'compact') return score.spacingProfileCompactTargetMm;
   if (profile === 'open') return score.spacingProfileOpenTargetMm;
@@ -205,7 +221,7 @@ function proximityObservation(
       movementBudget: moveBudget,
       ...(gap < 0 ? { overlap: Math.abs(gap) } : {}),
     },
-    reasons: [gap < 0 ? 'elements-overlap' : 'elements-too-close'],
+    reasons: gap < 0 ? ['elements-overlap'] : gap < minimumGap ? ['elements-too-close'] : [],
   };
 }
 
@@ -228,9 +244,9 @@ export function elementProximityReports(plan: CompositionPlan, document: Composi
       if (!measured) continue;
       const gap = measured.gap;
       const minimumGap = pairSpacingTarget(first, second, config);
-      if (gap >= minimumGap) continue;
       const report = proximityObservation(first, second, gap, minimumGap, moveBudget);
       report.axis = measured.axis;
+      report.adjacent = areProximitySubjectsAdjacent(first, second, subjects, measured.axis);
       report.movementAvailable = [first, second].some((subject) => subject.movementAxis === measured.axis);
       report.metrics.gapX = horizontalGap(first.box, second.box);
       report.metrics.gapY = verticalGap(first.box, second.box);

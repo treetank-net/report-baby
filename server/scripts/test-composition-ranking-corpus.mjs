@@ -77,6 +77,7 @@ function movableQuoteReachability() {
   };
   const policy = {
     maxPlanningIterations: 2,
+    coarseExactCandidateCount: 1,
     movableInsertionBounds: {
       'quotes:quote-a': { bounds: { x: 5, y: 20, width: 90, height: 50 }, axis: 'y', candidateCount: 3, refinementRounds: 1, refinementCandidateCount: 2 },
       'quotes:quote-b': { bounds: { x: 5, y: 50, width: 90, height: 55 }, axis: 'y', candidateCount: 3, refinementRounds: 1, refinementCandidateCount: 2 },
@@ -378,8 +379,8 @@ function productionCoupledMoveReachability() {
   const singles = candidateResults.filter((candidate) => (candidate.repairProposalIds?.length ?? 0) === 1);
   const baselineScore = rounds[0]?.bestScore;
   assert.equal(result.evaluation.status, 'accepted', JSON.stringify({ evaluation: result.evaluation, rounds }));
-  assert.equal(baselineScore, 63, `production coupled fixture baseline changed: ${JSON.stringify({ baselineScore, rounds })}`);
-  assert.equal(result.evaluation.score, 83, `production coupled fixture winner changed: ${JSON.stringify({ score: result.evaluation.score, rounds })}`);
+  assert.equal(baselineScore, 63, `the natural terminal-column exemption must preserve the coupled fixture baseline: ${JSON.stringify({ baselineScore, rounds })}`);
+  assert.equal(result.evaluation.score, 83, `the natural terminal-column exemption must preserve the coupled fixture winner: ${JSON.stringify({ score: result.evaluation.score, rounds })}`);
   assert.ok(pair && pair.score === 83, `production evaluator must expose the coupled winner: ${JSON.stringify({ pair, rounds })}`);
   assert.ok(singles.length > 0 && singles.every((candidate) => (candidate.score ?? Number.NEGATIVE_INFINITY) < pair.score), `each individual production repair must remain below the pair: ${JSON.stringify({ singles, pair })}`);
   assert.ok((result.plan.trace?.candidateSearch?.evaluatedCandidates ?? 0) <= policy.searchBudget.maxFullPlanRecalculations, 'production coupled repairs must remain inside the complete-plan budget');

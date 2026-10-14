@@ -33,9 +33,16 @@ import {
  * @planner-target composition/evaluation/evaluator.ts
  * @planner-responsibility Keep the current buildCompositionEvaluation implementation intact until its target seam is extracted.
  */
+function hasMeasuredScoreDeficit(component: CompositionScoreComponent): boolean {
+  return component.value > 0 && [
+    'element-proximity', 'content-spread', 'insertion-text-continuity',
+    'insertion-symmetry', 'insertion-distribution', 'spacing-rhythm', 'page-load-balance',
+  ].includes(component.code);
+}
+
 function suggestionsFromScore(breakdown: CompositionScoreComponent[]): CompositionSuggestion[] {
   return breakdown.flatMap((component): CompositionSuggestion[] => {
-    if (component.points >= 0) return [];
+    if (component.points >= 0 && !hasMeasuredScoreDeficit(component)) return [];
     if (component.code === 'header-spacing') {
       const details = component.details ?? {};
       const records = Array.isArray(details.pages)
@@ -124,7 +131,7 @@ function buildCompositionEvaluation(document: CompositionDocument, plan: Composi
     ? undefined
     : compositionRepairProposals(document, plan, scored.breakdown, placementScores);
   const suggestions = suggestionsFromScore(scored.breakdown);
-  const passedMetrics = scored.breakdown.filter((component) => component.points >= 0);
+  const passedMetrics = scored.breakdown.filter((component) => component.points >= 0 && !hasMeasuredScoreDeficit(component));
   if (suggestions.length > 0) plan.suggestions = suggestions;
   return {
     status: hasErrors ? 'rejected' : diagnostics.length > 0 ? 'accepted-with-warnings' : 'accepted',
@@ -132,6 +139,7 @@ function buildCompositionEvaluation(document: CompositionDocument, plan: Composi
     hardViolations,
     score: scored.score,
     ...('base' in scored ? { scoreBase: scored.base } : {}),
+    ...('scoreUpperBound' in scored ? { scoreUpperBound: scored.scoreUpperBound, measuredRewardUpperBound: scored.measuredRewardUpperBound } : {}),
     scoreBreakdown: scored.breakdown,
     ...(placementScores === undefined ? {} : { placementScores }),
     ...(repairProposals === undefined ? {} : { repairProposals }),

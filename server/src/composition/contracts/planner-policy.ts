@@ -27,6 +27,12 @@ export interface CompositionSearchBudget {
   minimumGeometryStepMm?: number;
   /** Maximum evaluator-directed micro-optimization rounds per page. */
   maxPageLocalRefinementRounds?: number;
+  /** Relative movement window for automatic fluid insertion refinement. */
+  movableWindowRatio?: number;
+  /** Number of coarse movement positions sampled for a fluid insertion. */
+  movableCandidateCount?: number;
+  /** Number of positions sampled per local movement refinement round. */
+  movableRefinementCandidateCount?: number;
   /** Maximum cheap geometry-only gravity iterations before full evaluation. */
   gravityIterations?: number;
   /** Damped fraction of the calculated gravity displacement applied per iteration. */
@@ -37,6 +43,10 @@ export interface CompositionSearchBudget {
 
 /** Configuration knobs shared by document and flow planning. */
 export interface TextCompositionPlannerPolicy {
+  /** Use aggregate coarse geometry for the production baseline; false restores the bounded legacy seed oracle. */
+  coarseGeometryFirst?: boolean;
+  /** Maximum projected macro seeds handed to the exact engine's initial batch. */
+  coarseExactCandidateCount?: number;
   minimumLinesAtStart?: number;
   minimumLinesAtEnd?: number;
   keepListItemsTogether?: boolean;

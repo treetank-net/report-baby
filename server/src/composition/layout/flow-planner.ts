@@ -405,6 +405,10 @@ function planTextBlockAttempt(
   const decision = applyTextPlacementDecisionRules(context, runtime, target, prepared, capacity);
   if (decision) return decision;
   const selected = selectTextLinesForPlacement(context, prepared, capacity.currentAvailableLines);
+  if (selected.length === 0) {
+    advanceTextBlockWhenNoLinesFit(context, runtime, target);
+    return { kind: 'continue' };
+  }
   const { completed } = commitSelectedTextLines(context, runtime, target, prepared, selected);
   advanceFlowAfterTextPlacement(context, runtime, target, completed);
   return { kind: 'done' };

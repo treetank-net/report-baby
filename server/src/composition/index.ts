@@ -87,7 +87,7 @@ export { evaluateCompositionPlan, type CompositionEvaluationOptions } from './ev
 export { attributeCompositionScore } from './evaluation/score-attribution.js';
 export { compositionRepairProposals } from './evaluation/repair-proposals.js';
 export { scoreListContinuity, scoreTableContinuity, scoreTinyFragments } from './evaluation/structure-scoring.js';
-export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSpacing, scoreInsertionTextContinuity, scoreInsertionSymmetry, scoreInsertionDistribution, scoreContentSpread, scorePageLoadBalance, scoreSourceRelations, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, scoreParagraphFragmentation, scoreOrphanLines, scoreLegalPlan } from './evaluation/scoring.js';
+export { scoreEmptyRegions, scoreSiblingColumnImbalance, scoreInsertionSpacing, scoreInsertionTextContinuity, scoreInsertionSymmetry, scoreInsertionDistribution, scoreContentSpread, scorePageLoadBalance, scoreMainPageOccupancyBalance, scoreSourceRelations, scoreSpacingRhythm, scoreNarrowTextIntervals, scoreFitContentEnvelope, scoreFooterGap, scoreGlyphOverlap, scoreElementProximity, scoreParagraphFragmentation, scoreOrphanLines, scoreLegalPlan } from './evaluation/scoring.js';
 export { elementProximityReports } from './observability/proximity-report.js';
 export { compositionDocumentFromInput } from './adapters/input.js';
 export { compositionTemplateFromPageGeometry, compositionTemplateFromDocumentLayout, type PageTemplateCompositionOptions, type PageTemplateSource } from './adapters/page-template.js';

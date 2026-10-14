@@ -222,7 +222,10 @@ try {
     { id: 'recoverable', frame: { x: 0.1, y: 0.5, width: 0.8, height: 0.45 }, allowed_roles: ['quote'], sizing: { mode: 'fixed', max_height: 0.45 } },
   ] }] };
   const recoveryTemplate = applyDynamicInsertionRequests(recovery.template, recovery.document, recovery.requests);
-  const recoveryResult = createTextCompositionEngine(recoveryTemplate).plan(recovery.document, recovery.metrics);
+  const macroRecovery = createTextCompositionEngine(recoveryTemplate).plan(recovery.document, recovery.metrics);
+  assert.equal(macroRecovery.evaluation.status, 'accepted', 'bounded initial macro comparison may avoid an illegal undersized seed');
+  assert.ok(macroRecovery.plan.insertionLines?.some((line) => line.blockId === 'recoverable-quote' && line.slotId === '1:recoverable'));
+  const recoveryResult = createTextCompositionEngine(recoveryTemplate, { searchBudget: { maxInitialCandidates: 1 } }).plan(recovery.document, recovery.metrics);
   assert.equal(recoveryResult.evaluation.status, 'accepted', JSON.stringify(recoveryResult.evaluation));
   assert.ok(recoveryResult.plan.insertionLines?.some((line) => line.blockId === 'recoverable-quote' && line.slotId === '1:recoverable'), 'legality recovery must select the later compatible insertion slot');
   assert.ok(recoveryResult.plan.trace?.candidateSearch?.rounds.some((round) => round.candidateResults?.some((candidate) => candidate.repairProposalIds?.some((id) => id.includes('legality:insertion-correction')))), 'legality recovery must expose the affected insertion correction in the search trace');
@@ -243,9 +246,10 @@ try {
   const impossibleSourceTemplate = applyDynamicInsertionRequests(impossibleSource.template, impossibleSource.document, impossibleSource.requests);
   const impossibleSourceResult = createTextCompositionEngine(impossibleSourceTemplate).plan(impossibleSource.document, impossibleSource.metrics);
   assert.equal(impossibleSourceResult.evaluation.status, 'rejected', 'a hard source relation without a compatible source page must reject the plan');
-  assert.ok(impossibleSourceResult.plan.diagnostics.some((diagnostic) => diagnostic.code === 'INSERTION_SOURCE_RELATION_VIOLATION'
-    && diagnostic.details?.details?.sourcePages?.length > 0
-    && diagnostic.details?.details?.remedy), JSON.stringify(impossibleSourceResult.plan.diagnostics));
+  const sourceConflict = impossibleSourceResult.plan.diagnostics.find((diagnostic) => diagnostic.code === 'INSERTION_SOURCE_RELATION_VIOLATION');
+  assert.ok(sourceConflict?.details?.details?.sourcePages?.length > 0
+    && sourceConflict.details.details.candidatePages?.includes(1)
+    && sourceConflict.details.details.remedy, JSON.stringify(impossibleSourceResult.plan.diagnostics));
 
   console.log(JSON.stringify({ status: 'passed', pages: result.plan.pages.length, quotes: result.plan.insertionLines?.length, slotsPerPage: 2 }, null, 2));
 } finally {
