@@ -8,10 +8,11 @@ with no network.
 
 ## Architecture
 
-The plugin is an MCP server over stdio. **Zero OAuth, zero safety/hooks, zero
+The plugin is an MCP server over stdio. **Zero OAuth, zero safety hooks, zero
 external mutations, zero account APIs, and zero runtime network access.** It
 takes data (label/value, KPIs, table rows) and returns a path to the rendered
-file.
+file. Its one hook is the read-only recipe capture hook described under
+"Report recipes"; it never blocks a tool call.
 
 ### Rendering engine — fully bundleable, zero runtime dependencies
 
@@ -104,6 +105,9 @@ for development.
 - `inspect_brand` `{ brand_ref, surface? }` — resolve one profile without rendering; returns the theme and diagnostics.
 - `list_brand_templates` `{ brand_ref }` — brand-owned page/slide templates.
 - `inspect_brand_template` `{ brand_ref, template_ref }` — compile and validate one brand-owned template without changing the brandbook.
+- `start_recipe_run` `{ recipe: "<client>/<name>", start?, end?, preset?, compare? }` — arm a run and return the exact calls.
+- `inspect_recipe_run` `{ run_id?, view: overview|sample|aggregate, step?, fields?, rows?, group_by?, metrics?, filters?, sort_by?, limit? }` — compact TSV views of captured data.
+- `finish_recipe_run` `{ run_id?, conclusions_markdown? }` — write `data.json`/`report.html`/`conclusions.md` and disarm.
 - `update_plugin` `{}` — check/install plugin updates. The only update path is `start-mcp.js`; it does not update on startup, because a stale CDN cache used to overwrite a newer installation. The gate compares semver, so a copy newer than the update server remains untouched.
 
 ### One-shot web/sandbox execution
@@ -141,6 +145,56 @@ subheading under the preceding chapter. Table cells cannot do either — markup 
 stripped and a cell needing a missing glyph is drawn wholly in DejaVu Sans, both
 reported as warnings in `structuredContent.warnings`. There is no italic face,
 so `*italic*` renders upright and reports a warning.
+
+## Report recipes
+
+A recipe is a saved report: data-fetching tool calls from any MCP server, with
+`{{start}}`/`{{end}}` style date placeholders (and `{{prev_*}}` for a
+comparison period), plus an optional HTML template. It exists so a recurring
+report can be refreshed without the fetched data entering the conversation.
+
+- Recipes are owned by `marketing-context-mcp` (`save_recipe`,
+  `list_recipes`) and stored at
+  `<context root>/clients/<client>/recipes/<name>.json`; the file format is
+  pinned in its `docs/report-recipe-contract.md`. report-baby only reads them
+  (`server/src/recipes/recipe.ts`), resolving the root from
+  `MARKETING_CONTEXT_DIR` or the locator file
+  `~/.config/marketing-context/root.json` (`MARKETING_CONTEXT_LOCATOR`
+  overrides its path) that marketing-context writes on start.
+- `period.ts` resolves presets (`yesterday`, `last_7_days`, `last_28_days`,
+  `last_week`, `last_month`, `month_to_date`) against the local date and the
+  comparison period: whole calendar months map to the preceding months,
+  other periods shift back by their length, `previous_year` by one year.
+  A recipe with `{{prev_*}}` placeholders defaults to `previous_period`.
+- `start_recipe_run` writes `<data>/recipe-runs/<run_id>/run.json` with the
+  resolved calls and arms the run through `<data>/recipe-runs/active.json`
+  (one armed run, expiring after `recipes.run_ttl_hours`).
+- `hooks.json` registers `server/recipe-hook-bundle.cjs` as a Claude Code
+  `PostToolUse` hook on `mcp__.*`. Without an armed run it exits silently. A
+  call whose tool name and recipe arguments match a step (extra call
+  arguments and the step's `page_params` are ignored) is stored as
+  `<step>.<n>.json` and replaced with a short receipt via `updatedToolOutput`.
+  A same-tool call with differing arguments is passed through with an
+  `additionalContext` notice. The hook bundle must not import the render
+  configuration or any renderer: it runs on every MCP call.
+- `records.ts` turns captured results into flat records: JSON documents
+  (record arrays under `results`/`rows`/`data`/`items`/`records`, HubSpot
+  `properties` hoisted) and the `google-ads-baby` TSV table documents.
+- `inspect_recipe_run` exposes `overview` (field profiles), `sample` and
+  `aggregate` (group-by with filters) so the agent understands the data before
+  writing conclusions; limits live in `render-config.yml` under `recipes`.
+- `finish_recipe_run` writes `data.json`, injects it into the template at
+  `<!--RECIPE_DATA-->` as `window.RECIPE_DATA`, inserts conclusions at
+  `<!--RECIPE_CONCLUSIONS-->`, writes `report.html` and `conclusions.md`, and
+  disarms the run. The agent then records the conclusions with
+  marketing-context `append_review { summary_path }` and closes a recurring
+  task with `mark_task_run`, so the text is not sent twice.
+- Captured data never leaves `<data>/recipe-runs/`; only the recipe
+  definition and the conclusions live in the (possibly shared) context root.
+
+The capture works only in Claude Code; other hosts receive the data as usual.
+Usage guidance for agents lives in `skills/recipe-setup/SKILL.md` (save/edit)
+and `skills/recipe-run/SKILL.md` (refresh + conclusions).
 
 ## Distribution — zero-dependency bundle
 
@@ -210,6 +264,9 @@ first-start download — the same model as `google-ads-baby`.
   `data` example, layout guardrails, table/chart shapes, and common mistakes.
   Loaded by Claude Code from the plugin root; update it whenever the
   `render_report` data shape or template layout changes.
+- `skills/recipe-setup/SKILL.md` and `skills/recipe-run/SKILL.md` — saving,
+  editing and re-running report recipes with the capture hook; update them
+  whenever a recipe tool or placeholder changes.
 - `skills/brand-authoring/SKILL.md` — creating external brandbooks, profiles,
   assets, and prototypes. Customer brandbooks and customer fixtures cannot be
   added here; only explicitly neutral synthetic
@@ -217,8 +274,9 @@ first-start download — the same model as `google-ads-baby`.
 
 ## Plugin manifests
 
-- Claude Code: `.claude-plugin/plugin.json` (no `hooks`; there is no safety
-  layer) + `.claude-plugin/marketplace.json`.
+- Claude Code: `.claude-plugin/plugin.json` (`hooks` → `./hooks.json`, the
+  recipe capture hook only; there is no safety layer) +
+  `.claude-plugin/marketplace.json`.
 - Codex: `.codex-plugin/plugin.json` + `.mcp.json`; marketplace
   `.agents/plugins/marketplace.json` → `./plugins/report-baby` (wrapper with a
   separate `start-mcp.js` downloading the bundle to `~/.report-baby`).

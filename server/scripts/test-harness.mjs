@@ -45,6 +45,7 @@ const suites = {
     ['public MCP contract', 'scripts/test-public-mcp-contract.mjs'],
     ['dynamic insertion public contract', 'scripts/test-dynamic-insertion-public.mjs'],
     ['public CLI behavior', 'scripts/test-cli.mjs'],
+    ['report recipes', 'scripts/test-recipes.mjs'],
     ['report chrome', 'scripts/test-report-chrome.mjs'],
     ['editorial flow', 'scripts/test-editorial-flow.mjs'],
     ['editorial parity', 'scripts/test-editorial-parity.mjs'],
@@ -124,6 +125,7 @@ const artifactDecisions = new Map([
   ['scripts/test-image-resolver.mjs', 'not-generated'],
   ['scripts/test-brand-assets.mjs', 'retain'],
   ['scripts/test-brand-release-template.mjs', 'not-generated'],
+  ['scripts/test-recipes.mjs', 'not-generated'],
 ]);
 
 /**

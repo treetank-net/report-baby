@@ -3,6 +3,7 @@ import { existsSync, statSync } from 'node:fs';
 import { configFromEnv } from '../../infrastructure/config.js';
 import { registerRenderTools } from '../mcp/render-tools.js';
 import { registerBrandTools } from '../mcp/brand-tools.js';
+import { registerRecipeTools } from '../mcp/recipe-tools.js';
 import { registerAuthTools } from '../mcp/update-tools.js';
 import { compositionQualityTextFromSummary } from '../mcp/responses.js';
 
@@ -127,6 +128,7 @@ async function main(): Promise<void> {
   registerAuthTools(collector, cfg);
   registerBrandTools(collector, cfg);
   registerRenderTools(collector, cfg);
+  registerRecipeTools(collector, cfg);
 
   if (options.batch) {
     await runBatch(options);

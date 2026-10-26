@@ -46,6 +46,7 @@ export interface RenderConfig {
   assets: Record<string, number>;
   sources: { zipMaxEntries: number; zipMaxFileBytes: number; zipMaxTotalBytes: number; zipMaxCompressionRatio: number; zipMaxNestedArchives: number };
   images: { maxAssetBytes: number; maxDecodedPixels: number; maxDimensionPx: number; maxPerDocument: number; remoteTimeoutMs: number; remoteMaxRedirects: number; decoderTimeoutMs: number };
+  recipes: { runTtlHours: number; sampleRows: number; maxSampleRows: number; topValues: number; maxAggregateRows: number; maxOverviewFields: number; maxCellChars: number; maxTopValuesDistinctRatio: number };
   pdf: Record<string, number>;
   compositionDebug: Record<string, number>;
   chart: Record<string, number>;
@@ -140,6 +141,7 @@ export function readRenderConfig(): RenderConfig {
   const quality = source.quality as Record<string, unknown>;
   const sources = source.sources as Record<string, unknown>;
   const images = source.images as Record<string, unknown>;
+  const recipes = source.recipes as Record<string, unknown>;
   const spacing = source.spacing as Record<string, unknown>;
   const typography = source.typography as Record<string, unknown>;
   const shapes = source.shapes as Record<string, unknown>;
@@ -236,6 +238,7 @@ export function readRenderConfig(): RenderConfig {
     assets: camelDictionary('assets'),
     sources: { zipMaxEntries: get(sources, 'zip_max_entries'), zipMaxFileBytes: get(sources, 'zip_max_file_bytes'), zipMaxTotalBytes: get(sources, 'zip_max_total_bytes'), zipMaxCompressionRatio: get(sources, 'zip_max_compression_ratio'), zipMaxNestedArchives: get(sources, 'zip_max_nested_archives') },
     images: { maxAssetBytes: get(images, 'max_asset_bytes'), maxDecodedPixels: get(images, 'max_decoded_pixels'), maxDimensionPx: get(images, 'max_dimension_px'), maxPerDocument: get(images, 'max_per_document'), remoteTimeoutMs: get(images, 'remote_timeout_ms'), remoteMaxRedirects: get(images, 'remote_max_redirects'), decoderTimeoutMs: get(images, 'decoder_timeout_ms') },
+    recipes: { runTtlHours: get(recipes, 'run_ttl_hours'), sampleRows: get(recipes, 'sample_rows'), maxSampleRows: get(recipes, 'max_sample_rows'), topValues: get(recipes, 'top_values'), maxAggregateRows: get(recipes, 'max_aggregate_rows'), maxOverviewFields: get(recipes, 'max_overview_fields'), maxCellChars: get(recipes, 'max_cell_chars'), maxTopValuesDistinctRatio: get(recipes, 'max_top_values_distinct_ratio') },
     pdf: camelDictionary('pdf'),
     compositionDebug: camelDictionary('composition_debug'),
     chart: camelDictionary('chart'),

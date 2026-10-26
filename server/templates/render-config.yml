@@ -180,6 +180,15 @@ images:
   remote_timeout_ms: 15000
   remote_max_redirects: 3
   decoder_timeout_ms: 15000
+recipes:
+  run_ttl_hours: 6
+  sample_rows: 5
+  max_sample_rows: 50
+  top_values: 5
+  max_aggregate_rows: 50
+  max_overview_fields: 40
+  max_cell_chars: 120
+  max_top_values_distinct_ratio: 0.5
 pdf:
   page_width: 210
   page_height: 297

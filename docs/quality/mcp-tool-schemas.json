@@ -1,5 +1,23 @@
 [
   {
+    "description": "Close a recipe run: write data.json and, with a template, report.html. Call again with conclusions_markdown to write conclusions.md and insert them at <!--RECIPE_CONCLUSIONS--> (paragraphs, \"- \" bullets, \"### \" headings, **bold**); record them with marketing-context append_review summary_path.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "conclusions_markdown": {
+          "type": "string"
+        },
+        "run_id": {
+          "description": "Defaults to the armed run, else the most recent run",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "finish_recipe_run"
+  },
+  {
     "description": "Resolve and inspect one brand profile without rendering an artifact. Use brand_source for a request-level directory/ZIP/Git source and a path-based reference such as brand://acme/profiles/primary.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -181,6 +199,131 @@
       "type": "object"
     },
     "name": "inspect_brand_template"
+  },
+  {
+    "description": "Look at captured recipe data without loading it: \"overview\" profiles each field per step (kind, min/max/sum, top values), \"aggregate\" groups and sums server-side, \"sample\" returns a few records. TSV output.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "description": "sample: fields to include",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "filters": {
+          "description": "aggregate: all filters must match",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "op": {
+                "enum": [
+                  "eq",
+                  "neq",
+                  "contains",
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "in"
+                ],
+                "type": "string"
+              },
+              "value": {
+                "description": "Comparison value; numeric strings compare numerically, ISO dates compare lexically",
+                "type": "string"
+              },
+              "values": {
+                "description": "Values for op \"in\"",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "field",
+              "op"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "group_by": {
+          "description": "aggregate: fields to group by; empty for one total row",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "description": "aggregate: maximum rows",
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "metrics": {
+          "description": "aggregate: defaults to count",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "description": "Field to aggregate; optional only for count",
+                "type": "string"
+              },
+              "op": {
+                "enum": [
+                  "count",
+                  "sum",
+                  "avg",
+                  "min",
+                  "max",
+                  "distinct"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "op"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "rows": {
+          "description": "sample: number of records",
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "description": "Defaults to the armed run, else the most recent run",
+          "type": "string"
+        },
+        "sort_by": {
+          "description": "aggregate: output column, e.g. \"sum(clicks)\"; prefix + for ascending (default descending)",
+          "type": "string"
+        },
+        "step": {
+          "description": "Step id; required for sample and aggregate",
+          "type": "string"
+        },
+        "view": {
+          "default": "overview",
+          "enum": [
+            "overview",
+            "sample",
+            "aggregate"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "inspect_recipe_run"
   },
   {
     "description": "List read-only brand-owned page and slide templates available in a brandbook or request-level directory/ZIP/Git source.",
@@ -5389,6 +5532,53 @@
       "type": "object"
     },
     "name": "render_svg"
+  },
+  {
+    "description": "Arm a report recipe (saved with marketing-context save_recipe) for a period and get the exact tool calls to make. While armed, a Claude Code hook stores each matching result on disk and shows a short receipt instead of the data. Make every call with exactly these arguments (extra per-call arguments such as chatInsights are fine), then finish_recipe_run.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "additionalProperties": false,
+      "properties": {
+        "compare": {
+          "description": "Comparison period for {{prev_*}} placeholders; defaults to previous_period when the recipe uses them",
+          "enum": [
+            "previous_period",
+            "previous_year"
+          ],
+          "type": "string"
+        },
+        "end": {
+          "$ref": "#/properties/start",
+          "description": "Calendar date, YYYY-MM-DD"
+        },
+        "preset": {
+          "description": "Relative period from today; alternative to start + end",
+          "enum": [
+            "yesterday",
+            "last_7_days",
+            "last_28_days",
+            "last_week",
+            "last_month",
+            "month_to_date"
+          ],
+          "type": "string"
+        },
+        "recipe": {
+          "description": "\"<client_slug>/<name>\", e.g. \"acme/weekly_leads\"",
+          "type": "string"
+        },
+        "start": {
+          "description": "Calendar date, YYYY-MM-DD",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recipe"
+      ],
+      "type": "object"
+    },
+    "name": "start_recipe_run"
   },
   {
     "description": "Check for plugin updates and download them. Reports the version installed on disk separately from the version this process is actually running, because a running MCP server cannot swap its own bundle — the download only takes effect after a session restart.",

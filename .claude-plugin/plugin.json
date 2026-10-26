@@ -1,7 +1,7 @@
 {
   "name": "report-baby",
   "description": "Render structured data into polished PNG charts and PDF reports locally — self-contained SVG+PDF engine, no browser, no accounts, no auth. Returns file paths. Feedback & bug reports: Jacek Mariański (jmarianski@trans.eu)",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "author": {
     "name": "Jacek Mariański",
     "email": "jmarianski@trans.eu",
@@ -9,6 +9,7 @@
   },
   "license": "MIT",
   "keywords": ["report", "pdf", "png", "chart", "svg", "render", "mcp"],
+  "hooks": "./hooks.json",
   "mcpServers": {
     "report": {
       "command": "node",

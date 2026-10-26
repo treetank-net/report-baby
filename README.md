@@ -45,6 +45,9 @@ data and receive a path to a finished PDF or PNG.
 | `list_templates` | list built-in templates |
 | `list_brand_templates` | read-only list of templates owned by a selected brand |
 | `inspect_brand_template` | read-only validation and inspection of a brand template |
+| `start_recipe_run` | arm a marketing-context recipe for a period (dates or preset, optional comparison); returns the exact calls to make |
+| `inspect_recipe_run` | overview / sample / aggregate TSV views of captured data |
+| `finish_recipe_run` | write `data.json` + `report.html`, insert conclusions |
 | `update_plugin` | update the plugin |
 
 ### Slide input
@@ -73,6 +76,21 @@ vocabulary as reports, while the slide layout remains the template's concern:
 are layout choices, not separate legacy data formats. For `columns`, use the
 named `left` and `right` flows. The internal renderer model is an adapter for
 the existing PDF/PNG/PPTX drawing capabilities and is not accepted as input.
+
+## Report recipes
+
+Recurring reports can be refreshed for new dates without the fetched data
+entering the conversation. A recipe stores the data-fetching tool calls (any
+MCP server, including claude.ai connectors such as HubSpot) with date
+placeholders. Recipes are saved and listed by `marketing-context-mcp`
+(`save_recipe`, `list_recipes`) next to the client's tasks and reviews;
+report-baby reads them from the same context root and keeps the captured data
+local. While a run is armed, a Claude Code `PostToolUse` hook shipped
+with the plugin stores each matching result under
+`~/.report-baby/recipe-runs/` and shows the agent a one-line receipt instead.
+The agent then studies the data through `inspect_recipe_run` and writes only
+the conclusions. Save or edit a recipe with `/recipe-setup` and refresh it
+with `/recipe-run <client>/<name> last_week`.
 
 ## Charts
 

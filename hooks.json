@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__.*",
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/server/recipe-hook-bundle.cjs\"", "timeout": 30 }]
+      }
+    ]
+  }
+}

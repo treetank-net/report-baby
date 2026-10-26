@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0
+
+- Added report recipes: `start_recipe_run` (dates or a preset, optional
+  comparison period), `inspect_recipe_run` (TSV overview/sample/aggregate) and
+  `finish_recipe_run` (writes `data.json`, `report.html`, `conclusions.md`),
+  plus a Claude Code `PostToolUse` hook that captures matching MCP results
+  (including claude.ai connectors) to disk and replaces them with a short
+  receipt, so refreshing a recurring report costs only the conclusions.
+  Recipes themselves are saved by marketing-context-mcp; captured data stays
+  local. Output that Claude Code saves to a file because it is too large is
+  read back from the session's `tool-results` directory. New skills
+  `/recipe-setup` and `/recipe-run`.
+- Composition: insertion placement is balanced with measured scoring, and
+  planning starts from a coarse geometry-first estimate (protected
+  rectangles, bounded cut/push assignment, reward ceilings) with a synthetic
+  calibration corpus.
+- `update_plugin` also downloads the recipe hook bundle, `hooks.json` and the
+  recipe skills.
+
 ## 1.0.2
 
 - Completed and verified the composition-quality slice covering reusable

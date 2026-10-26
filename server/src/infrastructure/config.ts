@@ -4,6 +4,7 @@ export interface ReportConfig {
   outputDir: string;
   brandDir: string;
   brandSourceRoots: string[];
+  recipeRunsDir: string;
 }
 
 function isValidEnv(val: string | undefined): val is string {
@@ -27,6 +28,10 @@ export function getOutputDir(): string {
   return join(getConfigDir(), 'out');
 }
 
+export function getRecipeRunsDir(): string {
+  return join(getConfigDir(), 'recipe-runs');
+}
+
 export function getBrandDir(): string {
   const store = env('REPORT_BABY_BRAND_STORE');
   if (store) return store;
@@ -48,5 +53,6 @@ export function configFromEnv(): ReportConfig {
     outputDir: getOutputDir(),
     brandDir: getBrandDir(),
     brandSourceRoots: getBrandSourceRoots(),
+    recipeRunsDir: getRecipeRunsDir(),
   };
 }

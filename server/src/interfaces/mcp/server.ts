@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { configFromEnv } from '../../infrastructure/config.js';
 import { registerRenderTools } from './render-tools.js';
 import { registerBrandTools } from './brand-tools.js';
+import { registerRecipeTools } from './recipe-tools.js';
 import { registerAuthTools } from './update-tools.js';
 import { SERVER_VERSION } from '../../infrastructure/version.js';
 
@@ -27,6 +28,7 @@ async function main() {
   registerAuthTools(server, cfg);
   registerBrandTools(server, cfg);
   registerRenderTools(server, cfg);
+  registerRecipeTools(server, cfg);
 
   const transport = new StdioServerTransport();
   setInterval(() => undefined, 2147483647);
